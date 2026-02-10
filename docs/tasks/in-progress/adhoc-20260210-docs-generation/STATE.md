@@ -30,7 +30,7 @@
 | Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | complete | 0 | af6e95b | pending | /sqlalchemy/sqlalchemy |
 | LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | complete | 0 | ab8ff53 | 3ab8b89 | - |
 | Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197 | - |
-| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | in-progress | 0 | pending | pending | /sqlalchemy/sqlalchemy |
+| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | complete | 0 | ae3d7c9 | 90b1bfa | /sqlalchemy/sqlalchemy |
 | Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | pending | 0 | pending | pending | /pydantic/pydantic |
