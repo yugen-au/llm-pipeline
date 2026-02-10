@@ -10,7 +10,7 @@
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: none
-## Last Updated: 2026-02-10 14:58
+## Last Updated: 2026-02-10 15:00
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -27,7 +27,7 @@
 | Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Step API | documentation-generation:api-documenter | implementation | 6 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic |
 | Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | complete | 0 | a5e2524 | 91ce10c | - |
-| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | in-progress | 0 | pending | pending | /sqlalchemy/sqlalchemy |
+| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | complete | 0 | af6e95b | pending | /sqlalchemy/sqlalchemy |
 | LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | complete | 0 | ab8ff53 | 3ab8b89 | - |
 | Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197 | - |
 | State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | in-progress | 0 | pending | pending | /sqlalchemy/sqlalchemy |
