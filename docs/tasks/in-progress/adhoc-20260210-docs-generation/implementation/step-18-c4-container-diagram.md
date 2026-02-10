@@ -95,10 +95,40 @@ Mermaid C4 Container diagram with:
 ## Verification
 
 - [x] 5 containers identified from architecture (Pipeline Orchestrator, LLM Integration, Prompt Management, State Tracking, Database Access)
-- [x] 18 internal components mapped from module structure
+- [x] 17 internal components (removed fabricated PromptCache)
 - [x] Container relationships show execution flow and data dependencies
 - [x] External systems properly bounded (User, LLM Service, Database, Prompt Files)
 - [x] Technology labels applied (Python, Pydantic, SQLAlchemy, SQLModel, PyYAML)
 - [x] Validated research corrections applied (LLMStep->ABC, two-phase write, strategy routing scope)
 - [x] Mermaid syntax valid and renders correctly
 - [x] Naming conventions match source code abstractions
+- [x] Review issues fixed (REVIEW.md Step 18):
+  - [x] Removed non-existent PromptCache component
+  - [x] Fixed data flows (StepExecution queries prompts, not Extraction/Transformation)
+  - [x] Corrected DB access (ExtractionEngine and PipelineStepState use _real_session, not ReadOnlySession)
+
+## Review Corrections Applied
+
+**Issue 1: Fabricated PromptCache component (MEDIUM)**
+- Removed: `PromptCache["<b>Prompt Cache</b><br/>In-memory prompt cache<br/>[Python]"]` and related flow
+- Removed from class list: `PromptCache` removed from component styling
+- Reason: PromptService queries DB each time; no in-memory caching exists in source code
+
+**Issue 2: Incorrect data flows - Extraction/Transformation query prompts (MEDIUM)**
+- Old arrows removed:
+  - `ExtractionEngine -->|Query prompts| PromptService`
+  - `TransformationEngine -->|Query prompts| PromptService`
+- New arrow added:
+  - `StepExecution -->|Query prompts| PromptService`
+- Reason: Extraction and transformation don't interact with prompts at all in source. Only LLMStep (via StepExecution) queries prompts during step execution.
+
+**Issue 3: Incorrect database access flows - _real_session vs ReadOnlySession (MEDIUM)**
+- Old arrows removed:
+  - `ExtractionEngine -->|Write extracted data| ReadOnlySession`
+  - `PipelineStepState -->|Persist state| ReadOnlySession`
+  - `ReadOnlySession -->|Read/Write| DBAccess`
+- New arrows added:
+  - `ExtractionEngine -->|Write extracted data<br/>via _real_session| DBAccess`
+  - `PipelineStepState -->|Persist state<br/>via _real_session| DBAccess`
+  - `ReadOnlySession -->|Read-only access| DBAccess`
+- Reason: Writes use `_real_session` (unwrapped session), not ReadOnlySession. ReadOnlySession only blocks write operations. DB access flows directly to SQLAlchemy ORM layer.
