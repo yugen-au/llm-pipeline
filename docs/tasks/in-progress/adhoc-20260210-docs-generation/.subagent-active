@@ -1,13 +1,6 @@
 {
-  "count": 2,
+  "count": 1,
   "holders": [
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:docs-architect",
-      "description": "Architecture Overview",
-      "spawned_at": "2026-02-10T03:34:14.163809+00:00",
-      "step": 1
-    },
     {
       "phase": "implementation",
       "agent": "documentation-generation:docs-architect",
