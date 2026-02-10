@@ -34,7 +34,7 @@
 | Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | complete | 0 | acc921b | ae83999 | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | in-progress | 1 | aface66 | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | in-progress | 0 | a7e8649 | pending | /pydantic/pydantic |
-| Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | in-progress | 0 | a217662 | pending | - |
+| Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | in-progress | 1 | a217662 | pending | - |
 | Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | complete | 0 | a48c3e2 | 54b38a1 | - |
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | pending | 0 | pending | pending | - |
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | pending | 0 | pending | pending | - |
