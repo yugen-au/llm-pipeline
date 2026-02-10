@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: main
 ## Task Branch: sam/adhoc/20260210-docs-generation
 ## Plugins: code-documentation, documentation-generation, c4-architecture
@@ -23,19 +23,19 @@
 | Architecture Overview | documentation-generation:docs-architect | implementation | 1 | - | A | complete | 0 | a49f5ad | 6f79966 | - |
 | Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | complete | 0 | acfe6ea | ae9c8b1,6f79966 | - |
 | Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | a14df39 | ae9c8b1,6f79966 | - |
-| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | complete | 0 | a5340ef | cb58897 | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | complete | 0 | a5340ef | cb58897,491068a | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | complete | 0 | acd3370 | 491068a | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
-| Step API | documentation-generation:api-documenter | implementation | 6 | - | B | complete | 0 | crashed | 3751197 | /pydantic/pydantic |
-| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | complete | 0 | a5e2524 | 91ce10c | - |
-| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | complete | 0 | af6e95b | pending | /sqlalchemy/sqlalchemy |
-| LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | complete | 0 | ab8ff53 | 3ab8b89 | - |
-| Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197 | - |
-| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | complete | 0 | ae3d7c9 | 90b1bfa | /sqlalchemy/sqlalchemy |
-| Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
-| Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
-| Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | pending | 0 | pending | pending | /pydantic/pydantic |
-| Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | pending | 0 | pending | pending | - |
-| Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | pending | 0 | pending | pending | - |
+| Step API | documentation-generation:api-documenter | implementation | 6 | - | B | complete | 0 | crashed | 3751197,491068a | /pydantic/pydantic |
+| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | complete | 0 | a5e2524 | 91ce10c,491068a | - |
+| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | complete | 0 | af6e95b | 491068a | /sqlalchemy/sqlalchemy |
+| LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | complete | 0 | ab8ff53 | 3ab8b89,491068a | - |
+| Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197,491068a | - |
+| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | complete | 0 | ae3d7c9 | 90b1bfa,491068a | /sqlalchemy/sqlalchemy |
+| Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic |
+| Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | in-progress | 0 | pending | pending | - |
+| Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | in-progress | 0 | pending | pending | - |
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | pending | 0 | pending | pending | - |
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | pending | 0 | pending | pending | - |
 | C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | pending | 0 | pending | pending | - |
