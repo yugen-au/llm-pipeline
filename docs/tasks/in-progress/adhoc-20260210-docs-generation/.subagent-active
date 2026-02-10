@@ -1,33 +1,12 @@
 {
-  "count": 4,
+  "count": 1,
   "holders": [
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:tutorial-engineer",
-      "description": "Getting Started Guide",
-      "spawned_at": "2026-02-10T04:30:53.503490+00:00",
-      "step": 12
-    },
     {
       "phase": "implementation",
       "agent": "documentation-generation:tutorial-engineer",
       "description": "Multi Strategy Example",
       "spawned_at": "2026-02-10T04:31:04.302090+00:00",
       "step": 14
-    },
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:tutorial-engineer",
-      "description": "Prompt Management Guide",
-      "spawned_at": "2026-02-10T04:31:08.617764+00:00",
-      "step": 15
-    },
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:docs-architect",
-      "description": "Known Limitations",
-      "spawned_at": "2026-02-10T04:31:09.571452+00:00",
-      "step": 16
     }
   ]
 }
