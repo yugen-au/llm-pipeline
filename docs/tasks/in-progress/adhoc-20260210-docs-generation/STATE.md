@@ -26,7 +26,7 @@
 | API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Step API | documentation-generation:api-documenter | implementation | 6 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic |
-| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | in-progress | 0 | pending | pending | - |
+| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | complete | 0 | a5e2524 | 91ce10c | - |
 | Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | in-progress | 0 | pending | pending | /sqlalchemy/sqlalchemy |
 | LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | in-progress | 0 | pending | pending | - |
 | Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197 | - |
