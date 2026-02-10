@@ -19,7 +19,6 @@ graph TB
             PromptService["<b>PromptService</b><br/>Prompt CRUD & retrieval<br/>[Python]"]
             PromptLoader["<b>Prompt Loader</b><br/>YAML-to-DB sync<br/>[Python/PyYAML]"]
             VariableResolver["<b>Variable Resolver</b><br/>Template variable extraction<br/>[Python]"]
-            PromptCache["<b>Prompt Cache</b><br/>In-memory prompt cache<br/>[Python]"]
         end
 
         subgraph "State Tracking Container"
@@ -56,11 +55,9 @@ graph TB
     RateLimiter -->|Call API| LLMService
 
     %% Prompt Management flows
-    ExtractionEngine -->|Query prompts| PromptService
-    TransformationEngine -->|Query prompts| PromptService
+    StepExecution -->|Query prompts| PromptService
     PromptService -->|Load from disk| PromptLoader
     PromptLoader -->|Read YAML| PromptFiles
-    PromptService -->|Cache prompts| PromptCache
     PromptLoader -->|Extract vars| VariableResolver
 
     %% State Tracking flows
@@ -72,10 +69,10 @@ graph TB
     %% Database Access flows
     PipelineConfig -->|Register models| PipelineRegistry
     PipelineRegistry -->|Validate FK order| DBAccess
-    ExtractionEngine -->|Write extracted data| ReadOnlySession
-    PipelineStepState -->|Persist state| ReadOnlySession
+    ExtractionEngine -->|Write extracted data<br/>via _real_session| DBAccess
+    PipelineStepState -->|Persist state<br/>via _real_session| DBAccess
     PromptService -->|Query prompts| DBAccess
-    ReadOnlySession -->|Read/Write| DBAccess
+    ReadOnlySession -->|Read-only access| DBAccess
     DBAccess -->|Connect| Database
 
     %% External interactions
@@ -88,6 +85,6 @@ graph TB
     classDef external fill:#D2ECFF,stroke:#003DA5,stroke-width:1px,color:#000
     classDef database fill:#F5F5F5,stroke:#666,stroke-width:2px,color:#000
 
-    class PipelineConfig,StrategySystem,StepExecution,ExtractionEngine,TransformationEngine,LLMProvider,GeminiProvider,SchemaFormatter,RateLimiter,PromptService,PromptLoader,VariableResolver,PromptCache,PipelineRunInstance,PipelineStepState,CacheKeyGen,PipelineRegistry,ReadOnlySession,DBAccess container
+    class PipelineConfig,StrategySystem,StepExecution,ExtractionEngine,TransformationEngine,LLMProvider,GeminiProvider,SchemaFormatter,RateLimiter,PromptService,PromptLoader,VariableResolver,PipelineRunInstance,PipelineStepState,CacheKeyGen,PipelineRegistry,ReadOnlySession,DBAccess container
     class User,LLMService,PromptFiles external
     class Database database

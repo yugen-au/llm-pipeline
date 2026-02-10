@@ -1,13 +1,13 @@
 graph TB
     subgraph "Pipeline Orchestrator Container"
         subgraph "Pipeline Configuration & Execution"
-            PC["<b>PipelineConfig</b><br/>━━━━━━━━━━━━━<br/>+ context: StepKeyDict<br/>+ data: StepKeyDict<br/>+ db_instances: Dict<br/>+ session: Session<br/>+ _real_session: Session<br/>━━━━━━━━━━━━━<br/>+ execute() -> Results<br/>+ get_raw_data()<br/>+ get_current_data()<br/>+ get_sanitized_data()<br/>+ save(session, tables)<br/>+ get_extractions(Model)"]
+            PC["<b>PipelineConfig</b><br/>━━━━━━━━━━━━━<br/>+ context: Dict<br/>+ data: StepKeyDict<br/>+ extractions: Dict[Type, List]<br/>+ session: ReadOnlySession<br/>+ _real_session: Session<br/>━━━━━━━━━━━━━<br/>+ execute() -> Results<br/>+ get_raw_data()<br/>+ get_current_data()<br/>+ get_sanitized_data()<br/>+ save(session, tables)<br/>+ get_extractions(Model)"]
 
-            SKD["<b>StepKeyDict</b><br/>━━━━━━━━━━━━━<br/>+ _normalize_key(key)<br/>+ __getitem__(key)<br/>+ __setitem__(key, val)<br/>+ get(key, default)"]
+            SKD["<b>StepKeyDict</b><br/>━━━━━━━━━━━━━<br/>+ _normalize_key(key)<br/>+ __getitem__(key)<br/>+ __setitem__(key, val)<br/>+ get(key, default)<br/>+ pop(key)"]
         end
 
         subgraph "Strategy System"
-            PS["<b>PipelineStrategies</b><br/>━━━━━━━━━━━━━<br/>get_strategies()"]
+            PS["<b>PipelineStrategies</b><br/>━━━━━━━━━━━━━<br/>+ STRATEGIES: List[Type]<br/>━━━━━━━━━━━━━<br/>+ create_instances()<br/>+ get_strategy_names()"]
 
             PST["<b>PipelineStrategy</b><br/>━━━━━━━━━━━━━<br/>+ can_handle(context) -> bool<br/>+ get_steps() -> List[Step]"]
 
@@ -15,9 +15,9 @@ graph TB
         end
 
         subgraph "Step Execution"
-            LS["<b>LLMStep</b> ⟵ ABC<br/>━━━━━━━━━━━━━<br/>+ pipeline: PipelineConfig<br/>+ instructions: T<br/>+ context: Optional<br/>━━━━━━━━━━━━━<br/>+ run() -> Results<br/>+ extract_data(results)<br/>+ apply_transformation()"]
+            LS["<b>LLMStep</b> ⟵ ABC<br/>━━━━━━━━━━━━━<br/>+ pipeline: PipelineConfig<br/>+ instructions: Type<br/>+ system_instruction_key: str<br/>+ user_prompt_key: str<br/>━━━━━━━━━━━━━<br/>+ prepare_calls() -> List[Params]<br/>+ process_instructions(List) -> Dict<br/>+ should_skip() -> bool<br/>+ log_instructions(List)<br/>+ extract_data(List)<br/>+ create_llm_call(Dict) -> Params<br/>+ store_extractions(Type, List)"]
 
-            LRM["<b>LLMResultMixin</b> ⟵ BaseModel<br/>━━━━━━━━━━━━━<br/>+ example: Dict<br/>━━━━━━━━━━━━━<br/>+ __init_subclass__()"]
+            LRM["<b>LLMResultMixin</b> ⟵ BaseModel<br/>━━━━━━━━━━━━━<br/>+ confidence_score: float<br/>+ notes: Optional[str]<br/>+ example: Dict<br/>━━━━━━━━━━━━━<br/>+ __init_subclass__()<br/>+ get_example()<br/>+ create_failure(reason)"]
 
             SD2["<b>@step_definition</b><br/>Decorator<br/>━━━━━━━━━━━━━<br/>+ Validates naming<br/>+ Creates factory<br/>+ Enforces config"]
         end

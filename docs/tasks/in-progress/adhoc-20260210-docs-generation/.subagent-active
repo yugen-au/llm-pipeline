@@ -1,25 +1,18 @@
 {
-  "count": 3,
+  "count": 2,
   "holders": [
     {
       "phase": "implementation",
       "agent": "documentation-generation:mermaid-expert",
-      "description": "C4 Context Diagram",
-      "spawned_at": "2026-02-10T04:41:59.561140+00:00",
-      "step": 17
-    },
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:mermaid-expert",
       "description": "C4 Container Diagram",
-      "spawned_at": "2026-02-10T04:42:02.443802+00:00",
+      "spawned_at": "2026-02-10T04:59:14.052041+00:00",
       "step": 18
     },
     {
       "phase": "implementation",
       "agent": "documentation-generation:mermaid-expert",
       "description": "C4 Component Diagram",
-      "spawned_at": "2026-02-10T04:42:08.725567+00:00",
+      "spawned_at": "2026-02-10T04:59:22.032567+00:00",
       "step": 19
     }
   ]

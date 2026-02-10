@@ -4,14 +4,15 @@
 
 ## Summary
 
-Created C4 Container diagram in Mermaid format showing internal containers of llm-pipeline system. Diagram visualizes 5 main containers (Pipeline Orchestrator, LLM Integration, Prompt Management, State Tracking, Database Access) with all 18 component abstractions and their relationships. Applied validated research corrections for accurate inheritance and data flows.
+Created and reviewed C4 Container diagram in Mermaid format showing internal containers of llm-pipeline system. Diagram visualizes 5 main containers (Pipeline Orchestrator, LLM Integration, Prompt Management, State Tracking, Database Access) with 17 component abstractions and their relationships. Applied validated research corrections for accurate inheritance and data flows. Fixed 3 review issues: removed fabricated PromptCache, corrected prompt query source, and fixed database write paths.
 
 ## Files
 
 **Created:**
 - `docs/architecture/diagrams/c4-container.mmd`
 
-**Modified:** none
+**Modified:**
+- `docs/architecture/diagrams/c4-container.mmd` (review corrections)
 
 **Deleted:** none
 
@@ -38,7 +39,6 @@ Mermaid C4 Container diagram with:
    - PromptService: Prompt CRUD and retrieval
    - Prompt Loader: YAML-to-DB sync
    - Variable Resolver: Template variable extraction
-   - Prompt Cache: In-memory caching
 
 4. **State Tracking Container**
    - PipelineRunInstance: Run execution traceability
