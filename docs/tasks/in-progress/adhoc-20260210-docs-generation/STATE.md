@@ -3,14 +3,14 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: main
 ## Task Branch: sam/adhoc/20260210-docs-generation
 ## Plugins: code-documentation, documentation-generation, c4-architecture
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: [2,18,19,20]
-## Last Updated: 2026-02-10 16:02
+## Last Updated: 2026-02-10 16:03
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -38,6 +38,6 @@
 | Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | complete | 0 | a48c3e2 | 54b38a1,a688000 | - |
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | complete | 0 | a63efe5 | fce99e8,8b280f6 | - |
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | complete | 1 | a1701e3 | 8b280f6 | - |
-| C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | in-progress | 1 | ad0b808 | 8b280f6 | - |
-| Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | pending | 0 | af2db7a | 412146f | - |
+| C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | complete | 1 | ad0b808 | 8b280f6 | - |
+| Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | in-progress | 0 | af2db7a | 412146f | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a855a0a | 7ada393 | - |
