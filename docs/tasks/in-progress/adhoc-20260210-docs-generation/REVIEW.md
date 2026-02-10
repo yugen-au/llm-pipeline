@@ -245,3 +245,42 @@ None
 ## Recommendation
 **Decision:** APPROVE
 All 10 originally-flagged issues are resolved. The two new LOW issues in c4-component.mmd (PipelineStepState field name, spurious edge) are cosmetic and do not affect developer understanding. No regressions detected in spot-checked unchanged files. Documentation is now accurate and comprehensive.
+
+---
+
+# Final Re-Review (Post-Fix Round 2)
+
+## Overall Assessment
+**Status:** complete
+All 12 issues across two review rounds are now resolved. Zero open issues remain. Documentation is accurate, comprehensive, and ready for merge.
+
+## Verification of Round 2 LOW Issues
+
+#### 1. C4 Component Diagram: PipelineStepState Field Names -- RESOLVED
+**Previous:** c4-component.mmd showed `+ output_data: JSON` and `+ cached_results`.
+**Current:** Line 37 now shows `+ pipeline_name: str`, `+ run_id: str`, `+ step_name: str`, `+ input_hash: str`, `+ result_data: dict`, `+ prompt_version: Optional[str]`.
+**Source (state.py):** `pipeline_name` (line 38), `run_id` (line 42), `step_name` (line 49), `input_hash` (line 58), `result_data` (line 62), `prompt_version` (line 82). All match.
+
+#### 2. C4 Component Diagram: Spurious PT-validates-PE Edge -- RESOLVED
+**Previous:** Line 72 had `PT -->|validates| PE`.
+**Current:** Edge removed entirely. Relationships section (lines 68-75) shows only `LS -->|produces| PS_`, `PS_ -->|tracked-by| PRI`, `PE -->|persists-to| PR`, `LS -->|calls| LP`, `PC -->|accesses| ROS`. No spurious cross-subsystem edges.
+
+## Spot-Check of Previously-Fixed Files (No Regressions)
+| File | Status | Notes |
+| --- | --- | --- |
+| docs/README.md | pass | Quick-start (lines 30-62) still correct: `PipelineConfig` with `registry=`, `strategies=`; `pipeline.execute(data=..., initial_context=...)` |
+| docs/architecture/concepts.md | pass | PipelineRunInstance fields still `model_type`/`model_id` (lines 1034-1035); `clear_cache()` still no params (line 1075); `extract_data` ordering still correct |
+| docs/architecture/diagrams/c4-container.mmd | pass | No PromptCache; data flows use `_real_session` (lines 72-73); no extraction->PromptService arrows |
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped
+
+## Recommendation
+**Decision:** APPROVE
+All issues resolved across two fix rounds (10 original + 2 found in re-review). Zero open issues. No regressions in previously-fixed files. Documentation accurately reflects source code at `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\llm_pipeline\`.
