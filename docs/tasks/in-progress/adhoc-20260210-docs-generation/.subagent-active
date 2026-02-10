@@ -1,12 +1,26 @@
 {
-  "count": 1,
+  "count": 3,
   "holders": [
     {
       "phase": "implementation",
-      "agent": "documentation-generation:tutorial-engineer",
-      "description": "Basic Pipeline Example",
-      "spawned_at": "2026-02-10T04:39:12.192451+00:00",
-      "step": 13
+      "agent": "documentation-generation:mermaid-expert",
+      "description": "C4 Context Diagram",
+      "spawned_at": "2026-02-10T04:41:59.561140+00:00",
+      "step": 17
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:mermaid-expert",
+      "description": "C4 Container Diagram",
+      "spawned_at": "2026-02-10T04:42:02.443802+00:00",
+      "step": 18
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:mermaid-expert",
+      "description": "C4 Component Diagram",
+      "spawned_at": "2026-02-10T04:42:08.725567+00:00",
+      "step": 19
     }
   ]
 }
