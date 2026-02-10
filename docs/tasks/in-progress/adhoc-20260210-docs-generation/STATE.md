@@ -8,7 +8,7 @@
 ## Task Branch: sam/adhoc/20260210-docs-generation
 ## Plugins: code-documentation, documentation-generation, c4-architecture
 ## Graphiti Group ID: llm-pipeline
-## Excluded Phases: none
+## Excluded Phases: testing
 ## Steps to Fix: none
 ## Last Updated: 2026-02-10 14:13
 
@@ -19,4 +19,24 @@
 | API Module Reference | documentation-generation:api-documenter | research | 2 | - | A | complete | 0 | a35a77e | f881dd3 | - |
 | C4 Architecture | c4-architecture:c4-code | research | 3 | - | A | complete | 0 | a35802a | f881dd3 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 0 | a1ce5a6 | ceb7113 | - |
-| Plan | planning | planning | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | in-progress | 0 | a2a738a | pending | - |
+| Architecture Overview | documentation-generation:docs-architect | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | pending | 0 | pending | pending | - |
+| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Step API | documentation-generation:api-documenter | implementation | 6 | - | B | pending | 0 | pending | pending | /pydantic/pydantic |
+| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | pending | 0 | pending | pending | - |
+| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | pending | 0 | pending | pending | /sqlalchemy/sqlalchemy |
+| LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | pending | 0 | pending | pending | - |
+| Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | pending | 0 | pending | pending | - |
+| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | pending | 0 | pending | pending | /sqlalchemy/sqlalchemy |
+| Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | pending | 0 | pending | pending | /pydantic/pydantic |
+| Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | pending | 0 | pending | pending | - |
+| Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | pending | 0 | pending | pending | - |
+| C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | pending | 0 | pending | pending | - |
+| C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | pending | 0 | pending | pending | - |
+| C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | pending | 0 | pending | pending | - |
+| Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | pending | 0 | pending | pending | - |
