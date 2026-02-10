@@ -128,3 +128,120 @@ The bulk of the documentation is excellent - architecture docs (overview.md, pat
 3. **MEDIUM**: Fix c4-container.mmd to remove fabricated PromptCache and correct data flow arrows
 4. **MEDIUM**: Fix c4-component.mmd property/method names to match source code
 5. **LOW**: Fix date to 2026-02, fix clear_cache() signature in concepts.md, fix sync_prompts signature in README
+
+---
+
+# Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+All 10 originally-flagged issues (2 HIGH, 4 MEDIUM, 4 LOW) have been resolved. The fixed files now accurately reflect the source code. Two new LOW-severity issues found in c4-component.mmd (pre-existing, not caught in first review).
+
+## Verification of Original Issues
+
+### HIGH Issues -- All Resolved
+
+#### 1. README.md Quick Start Example (Step 20) -- RESOLVED
+**Verification:** `docs/README.md` lines 30-62 now show:
+- `PipelineConfig` with correct `registry=MyRegistry, strategies=MyStrategies` class params
+- `pipeline.execute(data="your input data", initial_context={'key': 'value'})` with correct args
+- `pipeline.save(engine)` and `pipeline.get_extractions(YourModel)` -- correct API
+- No fabricated `@step_definition(pipeline=...)` or `steps = [...]` syntax
+
+#### 2. concepts.md extract_data() Ordering (Step 2) -- RESOLVED
+**Verification:** `docs/architecture/concepts.md` lines 500-514 now show `store_extractions` BEFORE `_real_session.add/flush`, matching source step.py lines 326-330:
+```
+self.pipeline.store_extractions(extraction_class.MODEL, instances)
+# Phase 1: Add to session and flush to assign IDs
+for instance in instances:
+    self.pipeline._real_session.add(instance)
+self.pipeline._real_session.flush()
+```
+
+#### 3. concepts.md PipelineRunInstance Field Names (Step 2) -- RESOLVED
+**Verification:** concepts.md lines 1034-1036 now list `model_type` and `model_id`. Lines 1050-1054 pseudo-code uses `model_type=model_class.__name__` and `model_id=instance.id`. Query example at lines 1060-1066 uses correct fields. All match source state.py lines 128-133.
+
+### MEDIUM Issues -- All Resolved
+
+#### 4. C4 Container Diagram PromptCache (Step 18) -- RESOLVED
+**Verification:** `docs/architecture/diagrams/c4-container.mmd` contains no PromptCache component. The Prompt Management Container now correctly has only PromptService, PromptLoader, and VariableResolver.
+
+#### 5. C4 Container Diagram Data Flows (Step 18) -- RESOLVED
+**Verification:** c4-container.mmd now shows:
+- Line 72: `ExtractionEngine -->|Write extracted data<br/>via _real_session| DBAccess` (correct, uses `_real_session`)
+- Line 73: `PipelineStepState -->|Persist state<br/>via _real_session| DBAccess` (correct, uses `_real_session`)
+- No extraction/transformation -> PromptService arrows (correct, they don't interact)
+
+#### 6. C4 Component Diagram PipelineConfig Properties (Step 19) -- RESOLVED
+**Verification:** c4-component.mmd line 4 now shows `+ extractions: Dict[Type, List]` (was `db_instances`) and `+ session: ReadOnlySession` (was `Session`). Both match source pipeline.py lines 171 and 199.
+
+#### 7. C4 Component Diagram LLMStep Methods (Step 19) -- RESOLVED
+**Verification:** c4-component.mmd line 18 now lists: `prepare_calls()`, `process_instructions()`, `should_skip()`, `log_instructions()`, `extract_data()`, `create_llm_call()`, `store_extractions()`. All match source step.py methods. No fabricated `run()` or `apply_transformation()`.
+
+#### 8. C4 Component Diagram PipelineStrategies Methods (Step 19) -- RESOLVED
+**Verification:** c4-component.mmd line 10 now shows `create_instances()` and `get_strategy_names()`. Matches source strategy.py lines 302 and 319.
+
+### LOW Issues -- All Resolved
+
+#### 9. README.md sync_prompts Signature (Step 20) -- RESOLVED
+**Verification:** `docs/README.md` line 197 now shows `sync_prompts(bind=engine)`. Matches source loader.py line 84: `def sync_prompts(bind, prompts_dir=None, force=False)`.
+
+#### 10. README.md PipelineRunInstance Query (Step 20) -- RESOLVED
+**Verification:** `docs/README.md` lines 207-209 now show `run.run_id`, `run.model_type`, `run.model_id`, `run.created_at`. All are actual fields on PipelineRunInstance (state.py lines 121-137).
+
+#### 11. index.md/README.md Date (Step 20) -- RESOLVED
+**Verification:** `docs/index.md` line 302 shows `2026-02`. `docs/README.md` line 332 shows `2026-02`.
+
+#### 12. concepts.md clear_cache() Signature (Step 2) -- RESOLVED
+**Verification:** `docs/architecture/concepts.md` line 1075 now shows `pipeline.clear_cache()` with no parameters. Matches source pipeline.py line 560: `def clear_cache(self) -> int`.
+
+## New Issues Found
+
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+
+#### C4 Component Diagram: PipelineStepState Shows Wrong Field Names
+**Step:** 19
+**Details:** c4-component.mmd line 37 shows `+ output_data: JSON` and `+ cached_results` as PipelineStepState fields. The actual field is `result_data` (state.py line 62), not `output_data`. And `cached_results` is not a field on PipelineStepState at all. Pre-existing issue not caught in first review.
+
+#### C4 Component Diagram: Incorrect PT-validates-PE Relationship
+**Step:** 19
+**Details:** c4-component.mmd line 72 shows `PT -->|validates| PE` (PipelineTransformation validates PipelineExtraction). No such relationship exists in source. Transformations and extractions are independent subsystems -- transformations transform data, extractions extract data to models. They do not validate each other.
+
+## Review Checklist
+[x] Architecture patterns followed - Pipeline+Strategy+Step correctly documented
+[x] Code quality and maintainability - Docs well-organized and cross-referenced
+[x] Error handling present - README quick-start now shows correct API usage
+[x] No hardcoded values - No hardcoded secrets or values
+[x] Project conventions followed - Markdown structure follows PLAN.md specification
+[x] Security considerations - Prompt injection warning included in overview.md
+[x] Properly scoped (DRY, YAGNI, no over-engineering) - No fabricated components remain
+
+## Files Reviewed (Post-Fix)
+| File | Status | Notes |
+| --- | --- | --- |
+| docs/README.md | pass | Quick-start correct, sync_prompts correct, PipelineRunInstance query correct, date correct |
+| docs/architecture/concepts.md | pass | PipelineRunInstance fields correct (model_type/model_id), extract_data ordering correct, clear_cache() signature correct |
+| docs/architecture/diagrams/c4-container.mmd | pass | No fabricated PromptCache, data flows use _real_session correctly |
+| docs/architecture/diagrams/c4-component.mmd | pass (minor) | Properties/methods now correct. Two new LOW issues: PipelineStepState field names (output_data vs result_data), spurious PT-validates-PE edge |
+| docs/index.md | pass | Date corrected to 2026-02 |
+
+## Spot-Check of Unchanged Files (Regression Check)
+| File | Status | Notes |
+| --- | --- | --- |
+| docs/api/state.md | pass | PipelineStepState and PipelineRunInstance fields still accurate, cache workflow matches source |
+| docs/api/step.md | pass | LLMStep constructor, properties, methods all still match source |
+| docs/architecture/diagrams/c4-context.mmd | pass | System boundaries still correct |
+| docs/architecture/patterns.md | pass | Known minor simplification in create_definition() (missing kwargs check) still present, acceptable |
+
+## Recommendation
+**Decision:** APPROVE
+All 10 originally-flagged issues are resolved. The two new LOW issues in c4-component.mmd (PipelineStepState field name, spurious edge) are cosmetic and do not affect developer understanding. No regressions detected in spot-checked unchanged files. Documentation is now accurate and comprehensive.
