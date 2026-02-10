@@ -21,7 +21,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 0 | a1ce5a6 | ceb7113 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2a738a | 3101d4f | - |
 | Architecture Overview | documentation-generation:docs-architect | implementation | 1 | - | A | complete | 0 | a49f5ad | 6f79966 | - |
-| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | in-progress | 0 | acfe6ea | ae9c8b1,6f79966 | - |
+| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | in-progress | 1 | acfe6ea | ae9c8b1,6f79966 | - |
 | Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | a14df39 | ae9c8b1,6f79966 | - |
 | API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | complete | 0 | a5340ef | cb58897,491068a | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | complete | 0 | acd3370 | 491068a | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
