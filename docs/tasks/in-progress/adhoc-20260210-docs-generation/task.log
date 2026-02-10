@@ -150,3 +150,9 @@ To proceed, either:
 [2026-02-10 15:30:41] [INFO] Auto-updated agent statuses: Getting Started Guide: pending -> in-progress, Basic Pipeline Example: pending -> in-progress, Multi Strategy Example: pending -> in-progress, Prompt Management Guide: pending -> in-progress, Known Limitations: pending -> in-progress
 [2026-02-10 15:30:41] [INFO] Deleted 8 old contract file(s)
 [2026-02-10 15:30:41] [DEBUG] STATE.md atomic write complete
+[2026-02-10 15:30:53] [INFO] Task call: documentation-generation:tutorial-engineer (phase: implementation)
+[2026-02-10 15:30:57] [INFO] Task call: documentation-generation:tutorial-engineer (phase: implementation)
+[2026-02-10 15:31:04] [INFO] Task call: documentation-generation:tutorial-engineer (phase: implementation)
+[2026-02-10 15:31:08] [INFO] Task call: documentation-generation:tutorial-engineer (phase: implementation)
+[2026-02-10 15:31:09] [INFO] Task call: documentation-generation:docs-architect (phase: implementation)
+[2026-02-10 15:35:31] [DEBUG] STATE.md atomic write complete

@@ -10,7 +10,7 @@
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: none
-## Last Updated: 2026-02-10 15:30
+## Last Updated: 2026-02-10 15:35
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -32,7 +32,7 @@
 | Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197,491068a | - |
 | State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | complete | 0 | ae3d7c9 | 90b1bfa,491068a | /sqlalchemy/sqlalchemy |
 | Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
-| Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | in-progress | 0 | aface66 | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic |
 | Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | in-progress | 0 | pending | pending | - |
 | Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | in-progress | 0 | pending | pending | - |
