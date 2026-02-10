@@ -31,7 +31,7 @@
 | LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | complete | 0 | ab8ff53 | 3ab8b89,491068a | - |
 | Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | complete | 0 | a1e1a77 | 3751197,491068a | - |
 | State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | complete | 0 | ae3d7c9 | 90b1bfa,491068a | /sqlalchemy/sqlalchemy |
-| Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | complete | 0 | acc921b | ae83999 | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | in-progress | 0 | aface66 | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic |
 | Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | in-progress | 0 | a217662 | pending | - |
