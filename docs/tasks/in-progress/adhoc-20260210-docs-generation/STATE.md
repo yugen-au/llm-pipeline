@@ -23,7 +23,7 @@
 | Architecture Overview | documentation-generation:docs-architect | implementation | 1 | - | A | complete | 0 | a49f5ad | 6f79966 | - |
 | Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | complete | 0 | acfe6ea | ae9c8b1,6f79966 | - |
 | Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | a14df39 | ae9c8b1,6f79966 | - |
-| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | complete | 0 | a5340ef | cb58897 | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Step API | documentation-generation:api-documenter | implementation | 6 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic |
 | Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | complete | 0 | a5e2524 | 91ce10c | - |
