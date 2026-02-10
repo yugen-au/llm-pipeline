@@ -305,3 +305,8 @@ To proceed, either:
 [2026-02-10 16:21:41] [INFO] Auto-updated agent statuses: Create summary: in-progress -> complete
 [2026-02-10 16:21:41] [INFO] Deleted 1 old contract file(s)
 [2026-02-10 16:21:41] [DEBUG] STATE.md atomic write complete
+[2026-02-10 16:22:16] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 16:22:24] [ERROR] BLOCKED: Cannot merge to protected branch 'main'
+[2026-02-10 16:23:06] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 16:27:32] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 16:29:22] [INFO] Moved task folder from in-progress/ to completed/
