@@ -156,3 +156,4 @@ To proceed, either:
 [2026-02-10 15:31:08] [INFO] Task call: documentation-generation:tutorial-engineer (phase: implementation)
 [2026-02-10 15:31:09] [INFO] Task call: documentation-generation:docs-architect (phase: implementation)
 [2026-02-10 15:35:31] [DEBUG] STATE.md atomic write complete
+[2026-02-10 15:36:08] [ERROR] BLOCKED: Invalid commit message format
