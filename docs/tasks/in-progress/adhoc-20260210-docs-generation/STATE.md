@@ -9,7 +9,7 @@
 ## Plugins: code-documentation, documentation-generation, c4-architecture
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
-## Steps to Fix: none
+## Steps to Fix: [2,18,19,20]
 ## Last Updated: 2026-02-10 15:49
 
 ## Agents
@@ -40,4 +40,4 @@
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | complete | 0 | a1701e3 | 8b280f6 | - |
 | C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | complete | 0 | ad0b808 | 8b280f6 | - |
 | Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | complete | 0 | af2db7a | 412146f | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | a855a0a | pending | - |
