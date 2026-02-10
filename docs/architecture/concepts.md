@@ -503,34 +503,31 @@ def extract_data(self, results: List[BaseModel]) -> None:
         extraction = extraction_class(self.pipeline)
         instances = extraction.extract(results)
 
+        # Store in pipeline.extractions FIRST
+        self.pipeline.store_extractions(extraction_class.MODEL, instances)
+
         # Phase 1: Add to session and flush to assign IDs
         for instance in instances:
             self.pipeline._real_session.add(instance)
 
         self.pipeline._real_session.flush()  # Assigns database IDs
-
-        # Store in pipeline.extractions
-        self.pipeline.store_extractions(extraction_class.MODEL, instances)
 ```
 
 Later, during save:
 
 ```python
 def save(self, session: Session = None, tables: Optional[List[Type[SQLModel]]] = None) -> None:
-    # Phase 2: Commit transaction and track instances
-    self._real_session.commit()
-
-    # Track instances in PipelineRunInstance
+    # Phase 2: Track instances and commit transaction
     for model_class, instances in self.extractions.items():
         for instance in instances:
             run_instance = PipelineRunInstance(
                 run_id=self.run_id,
-                model_name=model_class.__name__,
-                instance_id=instance.id
+                model_type=model_class.__name__,
+                model_id=instance.id
             )
-            self._real_session.add(run_instance)
+            session.add(run_instance)
 
-    self._real_session.commit()
+    session.commit()
 ```
 
 **Purpose of two-phase write:**
@@ -1034,8 +1031,8 @@ state1 = PipelineStepState(
 **Key fields:**
 
 - `run_id`: UUID of the pipeline run
-- `model_name`: Model class name (e.g., `Lane`)
-- `instance_id`: Primary key of the created instance
+- `model_type`: Model class name (e.g., `Lane`)
+- `model_id`: Primary key of the created instance
 - `created_at`: Timestamp
 
 **Use cases:**
@@ -1052,8 +1049,8 @@ for model_class, instances in pipeline.extractions.items():
     for instance in instances:
         run_instance = PipelineRunInstance(
             run_id=pipeline.run_id,
-            model_name=model_class.__name__,
-            instance_id=instance.id
+            model_type=model_class.__name__,
+            model_id=instance.id
         )
         session.add(run_instance)
 
@@ -1066,7 +1063,7 @@ instances = session.exec(
 ).all()
 
 for ri in instances:
-    print(f"{ri.model_name} ID {ri.instance_id} created at {ri.created_at}")
+    print(f"{ri.model_type} ID {ri.model_id} created at {ri.created_at}")
 ```
 
 ### Cache Invalidation
@@ -1075,7 +1072,7 @@ for ri in instances:
 
 1. **Input change:** Different data → different `input_hash`
 2. **Prompt update:** Prompt version incremented → cache miss
-3. **Manual clear:** Call `pipeline.clear_cache(step_name)` (known bug - see limitations)
+3. **Manual clear:** Call `pipeline.clear_cache()` (known bug - see limitations)
 
 **Known limitation:**
 
