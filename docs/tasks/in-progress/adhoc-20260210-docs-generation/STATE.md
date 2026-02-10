@@ -39,5 +39,5 @@
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | complete | 0 | a63efe5 | fce99e8,8b280f6 | - |
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | complete | 1 | a1701e3 | 8b280f6 | - |
 | C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | complete | 1 | ad0b808 | 8b280f6 | - |
-| Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | in-progress | 0 | af2db7a | 412146f | - |
+| Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | in-progress | 1 | af2db7a | 412146f | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a855a0a | 7ada393 | - |
