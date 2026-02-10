@@ -1,5 +1,5 @@
 {
-  "count": 8,
+  "count": 7,
   "holders": [
     {
       "phase": "implementation",
@@ -42,13 +42,6 @@
       "description": "LLM Provider API",
       "spawned_at": "2026-02-10T03:47:11.045719+00:00",
       "step": 9
-    },
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:api-documenter",
-      "description": "Prompt System API",
-      "spawned_at": "2026-02-10T03:47:17.008136+00:00",
-      "step": 10
     },
     {
       "phase": "implementation",
