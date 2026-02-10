@@ -9,7 +9,7 @@
 ## Plugins: code-documentation, documentation-generation, c4-architecture
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
-## Steps to Fix: [2,18,19,20]
+## Steps to Fix: [19]
 ## Last Updated: 2026-02-10 16:13
 
 ## Agents
