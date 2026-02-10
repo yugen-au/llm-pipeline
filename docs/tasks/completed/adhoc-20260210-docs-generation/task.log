@@ -310,3 +310,4 @@ To proceed, either:
 [2026-02-10 16:23:06] [INFO] Cleaned up stale semaphores: subagent, state, git
 [2026-02-10 16:27:32] [INFO] Cleaned up stale semaphores: subagent, state, git
 [2026-02-10 16:29:22] [INFO] Moved task folder from in-progress/ to completed/
+[2026-02-10 16:29:22] [DEBUG] STATE.md atomic write complete
