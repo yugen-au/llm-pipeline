@@ -34,7 +34,7 @@ graph TB
     subgraph "Registry & State Container"
         PR["<b>PipelineRegistry</b><br/>FK Ordering Validation"]
 
-        PS_["<b>PipelineStepState</b><br/>━━━━━━━━━━━━━<br/>+ step_name: str<br/>+ input_hash: str<br/>+ prompt_version: str<br/>+ output_data: JSON<br/>+ cached_results"]
+        PS_["<b>PipelineStepState</b><br/>━━━━━━━━━━━━━<br/>+ pipeline_name: str<br/>+ run_id: str<br/>+ step_name: str<br/>+ input_hash: str<br/>+ result_data: dict<br/>+ prompt_version: Optional[str]"]
 
         PRI["<b>PipelineRunInstance</b><br/>━━━━━━━━━━━━━<br/>+ run_id: UUID<br/>+ Traceability linking"]
     end
@@ -69,7 +69,6 @@ graph TB
     LS -->|produces| PS_
     PS_ -->|tracked-by| PRI
     PE -->|persists-to| PR
-    PT -->|validates| PE
 
     %% Relationships - Execution
     LS -->|calls| LP

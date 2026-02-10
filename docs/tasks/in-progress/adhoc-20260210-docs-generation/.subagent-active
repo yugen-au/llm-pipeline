@@ -1,18 +1,11 @@
 {
-  "count": 2,
+  "count": 1,
   "holders": [
     {
       "phase": "implementation",
       "agent": "documentation-generation:mermaid-expert",
-      "description": "C4 Container Diagram",
-      "spawned_at": "2026-02-10T04:59:14.052041+00:00",
-      "step": 18
-    },
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:mermaid-expert",
       "description": "C4 Component Diagram",
-      "spawned_at": "2026-02-10T04:59:22.032567+00:00",
+      "spawned_at": "2026-02-10T05:14:24.959689+00:00",
       "step": 19
     }
   ]
