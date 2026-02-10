@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260210-docs-generation
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-16-known-limitations.md (if already exists, APPEND to file)
+- Output Files: implementation\step-17-c4-context-diagram.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 16 - implement ONLY this step, not others
+- Step: 17 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-16-known-limitations.md
+4. Document decisions in implementation\step-17-c4-context-diagram.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 16: KNOWN LIMITATIONS
+# IMPLEMENTATION - STEP 17: C4 CONTEXT DIAGRAM
 **Status:** [completed/failed/blocked]
 
 ## Summary
