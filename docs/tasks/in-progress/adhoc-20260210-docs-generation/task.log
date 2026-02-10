@@ -280,3 +280,9 @@ To proceed, either:
 [2026-02-10 16:14:24] [INFO] Incremented Revisions: 1 -> 2
 [2026-02-10 16:14:24] [DEBUG] STATE.md atomic write complete
 [2026-02-10 16:17:02] [DEBUG] STATE.md atomic write complete
+[2026-02-10 16:17:19] [INFO] Already committed fixing-review-D: ['step-17-c4-context-diagram.md', 'step-18-c4-container-diagram.md', 'step-19-c4-component-diagram.md']
+[2026-02-10 16:17:22] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-02-10 16:17:22] [INFO] Auto-set Current Group -> A (entering review)
+[2026-02-10 16:17:22] [INFO] Auto-updated agent statuses: C4 Component Diagram: in-progress -> complete, Architecture review: pending -> in-progress
+[2026-02-10 16:17:22] [INFO] Deleted 1 old contract file(s)
+[2026-02-10 16:17:22] [DEBUG] STATE.md atomic write complete
