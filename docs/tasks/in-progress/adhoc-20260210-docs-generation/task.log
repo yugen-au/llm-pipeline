@@ -276,3 +276,6 @@ To proceed, either:
 [2026-02-10 16:14:13] [INFO] Auto-updated agent statuses: C4 Component Diagram: complete -> in-progress, Architecture review: complete -> pending
 [2026-02-10 16:14:13] [INFO] Deleted 1 old contract file(s)
 [2026-02-10 16:14:13] [DEBUG] STATE.md atomic write complete
+[2026-02-10 16:14:24] [INFO] Task call: documentation-generation:mermaid-expert (phase: fixing-review)
+[2026-02-10 16:14:24] [INFO] Incremented Revisions: 1 -> 2
+[2026-02-10 16:14:24] [DEBUG] STATE.md atomic write complete
