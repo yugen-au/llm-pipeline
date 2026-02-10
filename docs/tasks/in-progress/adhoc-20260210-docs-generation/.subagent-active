@@ -1,5 +1,5 @@
 {
-  "count": 7,
+  "count": 6,
   "holders": [
     {
       "phase": "implementation",
@@ -21,13 +21,6 @@
       "description": "Step API",
       "spawned_at": "2026-02-10T03:46:55.466331+00:00",
       "step": 6
-    },
-    {
-      "phase": "implementation",
-      "agent": "documentation-generation:api-documenter",
-      "description": "Strategy API",
-      "spawned_at": "2026-02-10T03:46:58.828110+00:00",
-      "step": 7
     },
     {
       "phase": "implementation",
