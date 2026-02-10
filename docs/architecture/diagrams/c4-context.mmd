@@ -1,0 +1,25 @@
+graph TB
+    subgraph "System Context"
+        User["👤 User/Application<br/>(Python Client)"]
+        YAML["📄 YAML Prompt Files<br/>(File System)"]
+        LLM["🤖 LLM Provider<br/>(Google Gemini API)"]
+        DB["🗄️ Database<br/>(SQLite/PostgreSQL)"]
+
+        subgraph "llm-pipeline Framework"
+            Pipeline["llm-pipeline<br/>Declarative Pipeline<br/>Orchestration Framework"]
+        end
+
+        User -->|"Defines pipeline config,<br/>executes steps,<br/>accesses results"| Pipeline
+        Pipeline -->|"Reads prompts,<br/>variables,<br/>templates"| YAML
+        Pipeline -->|"Sends LLM requests,<br/>receives responses"| LLM
+        Pipeline -->|"Persists state,<br/>stores results,<br/>manages caching"| DB
+        YAML -->|"Synced by<br/>PromptService"| DB
+    end
+
+    classDef external fill:#e1f5ff,stroke:#01579b,stroke-width:2px,color:#000
+    classDef system fill:#f3e5f5,stroke:#4a148c,stroke-width:3px,color:#000
+    classDef boundary fill:#ede7f6,stroke:#512da8,stroke-width:2px,stroke-dasharray: 5 5
+
+    class User,YAML,LLM,DB external
+    class Pipeline system
+    class "System Context" boundary

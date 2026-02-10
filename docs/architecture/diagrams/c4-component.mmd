@@ -1,0 +1,86 @@
+graph TB
+    subgraph "Pipeline Orchestrator Container"
+        subgraph "Pipeline Configuration & Execution"
+            PC["<b>PipelineConfig</b><br/>━━━━━━━━━━━━━<br/>+ context: Dict<br/>+ data: StepKeyDict<br/>+ extractions: Dict[Type, List]<br/>+ session: ReadOnlySession<br/>+ _real_session: Session<br/>━━━━━━━━━━━━━<br/>+ execute() -> Results<br/>+ get_raw_data()<br/>+ get_current_data()<br/>+ get_sanitized_data()<br/>+ save(session, tables)<br/>+ get_extractions(Model)"]
+
+            SKD["<b>StepKeyDict</b><br/>━━━━━━━━━━━━━<br/>+ _normalize_key(key)<br/>+ __getitem__(key)<br/>+ __setitem__(key, val)<br/>+ get(key, default)<br/>+ pop(key)"]
+        end
+
+        subgraph "Strategy System"
+            PS["<b>PipelineStrategies</b><br/>━━━━━━━━━━━━━<br/>+ STRATEGIES: List[Type]<br/>━━━━━━━━━━━━━<br/>+ create_instances()<br/>+ get_strategy_names()"]
+
+            PST["<b>PipelineStrategy</b><br/>━━━━━━━━━━━━━<br/>+ can_handle(context) -> bool<br/>+ get_steps() -> List[Step]"]
+
+            SD["<b>StepDefinition</b><br/>━━━━━━━━━━━━━<br/>+ step_class: Type<br/>+ instructions: Type<br/>+ system_instruction_key<br/>+ user_prompt_key<br/>+ extractions: List<br/>+ transformation: Optional<br/>+ context: Optional<br/>━━━━━━━━━━━━━<br/>+ create_step(pipeline)"]
+        end
+
+        subgraph "Step Execution"
+            LS["<b>LLMStep</b> ⟵ ABC<br/>━━━━━━━━━━━━━<br/>+ pipeline: PipelineConfig<br/>+ instructions: Type<br/>+ system_instruction_key: str<br/>+ user_prompt_key: str<br/>━━━━━━━━━━━━━<br/>+ prepare_calls() -> List[Params]<br/>+ process_instructions(List) -> Dict<br/>+ should_skip() -> bool<br/>+ log_instructions(List)<br/>+ extract_data(List)<br/>+ create_llm_call(Dict) -> Params<br/>+ store_extractions(Type, List)"]
+
+            LRM["<b>LLMResultMixin</b> ⟵ BaseModel<br/>━━━━━━━━━━━━━<br/>+ confidence_score: float<br/>+ notes: Optional[str]<br/>+ example: Dict<br/>━━━━━━━━━━━━━<br/>+ __init_subclass__()<br/>+ get_example()<br/>+ create_failure(reason)"]
+
+            SD2["<b>@step_definition</b><br/>Decorator<br/>━━━━━━━━━━━━━<br/>+ Validates naming<br/>+ Creates factory<br/>+ Enforces config"]
+        end
+
+        subgraph "Data Extraction"
+            PE["<b>PipelineExtraction</b> ⟵ ABC<br/>━━━━━━━━━━━━━<br/>+ model: Type[SQLModel]<br/>━━━━━━━━━━━━━<br/>+ extract() -> List[Model]<br/>+ _validate_instance()<br/>+ Smart method detection:<br/>  1. default()<br/>  2. strategy_name()<br/>  3. single method<br/>  4. error"]
+        end
+
+        subgraph "Data Transformation"
+            PT["<b>PipelineTransformation</b> ⟵ ABC<br/>━━━━━━━━━━━━━<br/>+ input_type: Type<br/>+ output_type: Type<br/>━━━━━━━━━━━━━<br/>+ transform() -> Any<br/>+ Smart method detection:<br/>  1. default()<br/>  2. single method<br/>  3. passthrough<br/>  4. error"]
+        end
+    end
+
+    subgraph "Registry & State Container"
+        PR["<b>PipelineRegistry</b><br/>FK Ordering Validation"]
+
+        PS_["<b>PipelineStepState</b><br/>━━━━━━━━━━━━━<br/>+ pipeline_name: str<br/>+ run_id: str<br/>+ step_name: str<br/>+ input_hash: str<br/>+ result_data: dict<br/>+ prompt_version: Optional[str]"]
+
+        PRI["<b>PipelineRunInstance</b><br/>━━━━━━━━━━━━━<br/>+ run_id: UUID<br/>+ Traceability linking"]
+    end
+
+    subgraph "LLM & Database"
+        LP["<b>LLMProvider</b> ⟵ ABC<br/>execute_llm_step()"]
+        ROS["<b>ReadOnlySession</b><br/>Blocks write ops"]
+    end
+
+    %% Relationships - Composition
+    PC -->|composes| SKD
+    PC -->|uses| PS
+    PC -->|uses| LS
+    PC -->|uses| PE
+    PC -->|uses| PT
+    PC -->|references| PR
+
+    %% Relationships - Strategy System
+    PS -->|contains| PST
+    PST -->|creates| SD
+    SD -->|references| LS
+    SD -->|references| PE
+    SD -->|references| PT
+
+    %% Relationships - Step Execution
+    SD2 -->|decorates| LS
+    LS -->|uses| LRM
+    LS -->|has-a| PE
+    LS -->|has-a| PT
+
+    %% Relationships - Data Flow
+    LS -->|produces| PS_
+    PS_ -->|tracked-by| PRI
+    PE -->|persists-to| PR
+
+    %% Relationships - Execution
+    LS -->|calls| LP
+    PC -->|accesses| ROS
+
+    style PC fill:#e1f5ff
+    style LS fill:#fff3e0
+    style LRM fill:#f3e5f5
+    style PE fill:#e8f5e9
+    style PT fill:#fce4ec
+    style PS fill:#f1f8e9
+    style PST fill:#e0f2f1
+    style SD fill:#ede7f6
+    style LP fill:#efebe9
+    style PR fill:#e0e0e0
