@@ -1,12 +1,61 @@
 {
-  "count": 1,
+  "count": 8,
   "holders": [
     {
       "phase": "implementation",
-      "agent": "documentation-generation:docs-architect",
-      "description": "Design Patterns",
-      "spawned_at": "2026-02-10T03:34:20.902095+00:00",
-      "step": 3
+      "agent": "documentation-generation:api-documenter",
+      "description": "API Reference Index",
+      "spawned_at": "2026-02-10T03:46:47.425293+00:00",
+      "step": 4
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "Pipeline API",
+      "spawned_at": "2026-02-10T03:46:52.275601+00:00",
+      "step": 5
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "Step API",
+      "spawned_at": "2026-02-10T03:46:55.466331+00:00",
+      "step": 6
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "Strategy API",
+      "spawned_at": "2026-02-10T03:46:58.828110+00:00",
+      "step": 7
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "Extraction Transform API",
+      "spawned_at": "2026-02-10T03:47:06.131882+00:00",
+      "step": 8
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "LLM Provider API",
+      "spawned_at": "2026-02-10T03:47:11.045719+00:00",
+      "step": 9
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "Prompt System API",
+      "spawned_at": "2026-02-10T03:47:17.008136+00:00",
+      "step": 10
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:api-documenter",
+      "description": "State Registry API",
+      "spawned_at": "2026-02-10T03:47:22.004524+00:00",
+      "step": 11
     }
   ]
 }
