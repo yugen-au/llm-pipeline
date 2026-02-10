@@ -10,7 +10,7 @@
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: none
-## Last Updated: 2026-02-10 15:35
+## Last Updated: 2026-02-10 15:36
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -35,7 +35,7 @@
 | Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | in-progress | 0 | aface66 | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic |
 | Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | in-progress | 0 | pending | pending | - |
-| Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | in-progress | 0 | pending | pending | - |
+| Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | complete | 0 | a48c3e2 | 54b38a1 | - |
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | pending | 0 | pending | pending | - |
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | pending | 0 | pending | pending | - |
 | C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | pending | 0 | pending | pending | - |
