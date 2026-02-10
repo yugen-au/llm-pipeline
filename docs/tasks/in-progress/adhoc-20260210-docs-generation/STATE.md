@@ -3,14 +3,14 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: A
+## Current Group: D
 ## Base Branch: main
 ## Task Branch: sam/adhoc/20260210-docs-generation
 ## Plugins: code-documentation, documentation-generation, c4-architecture
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: [2,18,19,20]
-## Last Updated: 2026-02-10 15:58
+## Last Updated: 2026-02-10 15:59
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,7 +21,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 0 | a1ce5a6 | ceb7113 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2a738a | 3101d4f | - |
 | Architecture Overview | documentation-generation:docs-architect | implementation | 1 | - | A | complete | 0 | a49f5ad | 6f79966 | - |
-| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | in-progress | 1 | acfe6ea | ae9c8b1,6f79966 | - |
+| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | complete | 1 | acfe6ea | ae9c8b1,6f79966 | - |
 | Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | a14df39 | ae9c8b1,6f79966 | - |
 | API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | complete | 0 | a5340ef | cb58897,491068a | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | complete | 0 | acd3370 | 491068a | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
@@ -37,7 +37,7 @@
 | Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | complete | 1 | a217662 | a688000 | - |
 | Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | complete | 0 | a48c3e2 | 54b38a1,a688000 | - |
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | complete | 0 | a63efe5 | fce99e8,8b280f6 | - |
-| C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | pending | 0 | a1701e3 | 8b280f6 | - |
-| C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | pending | 0 | ad0b808 | 8b280f6 | - |
+| C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | in-progress | 0 | a1701e3 | 8b280f6 | - |
+| C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | in-progress | 0 | ad0b808 | 8b280f6 | - |
 | Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | pending | 0 | af2db7a | 412146f | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a855a0a | 7ada393 | - |

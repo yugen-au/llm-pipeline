@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260210-docs-generation
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-2-core-concepts.md (if already exists, APPEND to file)
+- Output Files: implementation\step-18-c4-container-diagram.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 2
+- Step to fix: 18
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. [custom.context7_docs]
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 2
+1. Read REVIEW.md for issues assigned to Step 18
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-2-core-concepts.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-18-c4-container-diagram.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
