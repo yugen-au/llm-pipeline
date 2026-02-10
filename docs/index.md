@@ -299,7 +299,7 @@ For issues, questions, or improvements to the documentation, please see the proj
 ## Version Information
 
 **Framework Version**: 0.1.0
-**Documentation Last Updated**: 2025-02
+**Documentation Last Updated**: 2026-02
 **Python Version**: 3.11+
 
 ## License

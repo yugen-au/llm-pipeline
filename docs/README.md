@@ -25,39 +25,40 @@ pip install llm-pipeline
 
 ### First Pipeline (5 minutes)
 
+For a complete working example with all components, see [Basic Pipeline Example](guides/basic-pipeline.md).
+
+Here's the essential flow:
+
 ```python
-from llm_pipeline import PipelineConfig, LLMStep, step_definition
+from llm_pipeline import PipelineConfig
 from llm_pipeline.llm.gemini import GeminiProvider
-from pydantic import BaseModel
 import os
 
-# 1. Define your data structure
-class TextClassification(BaseModel):
-    label: str
-    confidence: float
+# 1. Define domain models, registry, strategies (see guides/basic-pipeline.md)
+# ...
 
-# 2. Create a step
-@step_definition(pipeline='ClassifyPipeline')
-class ClassifyStep(LLMStep):
-    def prepare_calls(self, **kwargs):
-        # Prepare LLM call
-        return [{"role": "user", "content": f"Classify: {self.context['text']}"}]
+# 2. Define pipeline with registry and strategies
+class MyPipeline(
+    PipelineConfig,
+    registry=MyRegistry,
+    strategies=MyStrategies
+):
+    def sanitize(self, data: str) -> str:
+        return data.strip()[:10000]
 
-    def process_instructions(self, instructions):
-        # Extract structured result
-        return TextClassification.model_validate_json(instructions[0])
-
-# 3. Build the pipeline
-class ClassifyPipeline(PipelineConfig):
-    steps = [ClassifyStep]
+# 3. Create provider
+provider = GeminiProvider(api_key=os.getenv('GEMINI_API_KEY'))
 
 # 4. Execute
-provider = GeminiProvider(api_key=os.getenv('GEMINI_API_KEY'))
-pipeline = ClassifyPipeline(
-    context={'text': 'This product is amazing!'},
-    provider=provider
+pipeline = MyPipeline(provider=provider)
+pipeline.execute(
+    data="your input data",
+    initial_context={'key': 'value'}
 )
-result = pipeline.execute()
+
+# 5. Access results
+results = pipeline.get_extractions(YourModel)
+pipeline.save(engine)  # Persist to database
 ```
 
 **Learn more**: [Getting Started Guide](guides/getting-started.md) | [Basic Pipeline Example](guides/basic-pipeline.md)
@@ -190,11 +191,10 @@ init_pipeline_db()  # Uses default location
 
 ```python
 from llm_pipeline.prompts import sync_prompts
-from sqlmodel import Session, create_engine
+from sqlmodel import create_engine
 
 engine = create_engine('sqlite:///pipeline.db')
-session = Session(engine)
-sync_prompts(session, engine)
+sync_prompts(bind=engine)  # Pass engine as bind parameter
 ```
 
 ### Query Results
@@ -206,7 +206,7 @@ from sqlmodel import Session, select
 with Session(engine) as session:
     runs = session.exec(select(PipelineRunInstance)).all()
     for run in runs:
-        print(f"Pipeline: {run.pipeline_name}, Status: {run.status}")
+        print(f"Run: {run.run_id}, Model: {run.model_type}#{run.model_id}, Created: {run.created_at}")
 ```
 
 ## Architecture at a Glance
@@ -329,7 +329,7 @@ Common ones:
 ## Version & Updates
 
 **Current Version**: 0.1.0
-**Documentation Updated**: 2025-02
+**Documentation Updated**: 2026-02
 **Python Support**: 3.11+
 
 ## Support & Contributions
