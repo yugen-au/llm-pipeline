@@ -5,3 +5,17 @@
 [2026-02-10 12:47:07] [INFO] Created: STATE.md
 [2026-02-10 12:47:07] [INFO] ============================================================
 [2026-02-10 12:47:08] [DEBUG] STATE.md atomic write complete
+[2026-02-10 12:48:08] [ERROR] BLOCKED: Invalid AgentRow 'Codebase Architecture Analysis': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-10 12:48:16] [ERROR] BLOCKED: Invalid AgentRow 'API & Module Documentation Research': agent: Agent must be 'planning' or 'plugin:subagent' format
+[2026-02-10 12:48:50] [ERROR] BLOCKED: Invalid agent 'code-documentation:docs-architect': subagent 'docs-architect' not found in 'code-documentation'
+[2026-02-10 12:51:05] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 12:52:47] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 12:58:23] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 12:58:40] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 12:59:27] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-10 13:00:34] [ERROR] BLOCKED: Agent plugin 'code-review-ai' not in selected Plugins: ['code-documentation', 'documentation-generation', 'c4-architecture']
+[2026-02-10 13:00:50] [ERROR] BLOCKED: Invalid agent 'c4-architecture:c4-architect': subagent 'c4-architect' not found in 'c4-architecture'
+[2026-02-10 13:00:58] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-10 13:01:05] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-10 13:01:05] [INFO] Auto-updated agent statuses: Codebase Architecture Analysis: pending -> in-progress, API and Module Reference Research: pending -> in-progress, C4 Architecture Mapping: pending -> in-progress
+[2026-02-10 13:01:05] [DEBUG] STATE.md atomic write complete
