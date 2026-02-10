@@ -1,0 +1,26 @@
+{
+  "count": 3,
+  "holders": [
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:docs-architect",
+      "description": "Architecture Overview",
+      "spawned_at": "2026-02-10T03:34:14.163809+00:00",
+      "step": 1
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:docs-architect",
+      "description": "Core Concepts",
+      "spawned_at": "2026-02-10T03:34:15.629451+00:00",
+      "step": 2
+    },
+    {
+      "phase": "implementation",
+      "agent": "documentation-generation:docs-architect",
+      "description": "Design Patterns",
+      "spawned_at": "2026-02-10T03:34:20.902095+00:00",
+      "step": 3
+    }
+  ]
+}
