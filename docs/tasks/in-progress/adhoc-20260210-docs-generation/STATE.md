@@ -40,4 +40,4 @@
 | C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | complete | 1 | a1701e3 | 8b280f6 | - |
 | C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | complete | 2 | ad0b808 | 8b280f6 | - |
 | Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | complete | 1 | af2db7a | 412146f | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | a213d9c | 7ada393,47455b2 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 2 | a213d9c | 7ada393,47455b2 | - |
