@@ -237,3 +237,6 @@ To proceed, either:
 [2026-02-10 15:59:01] [INFO] Auto-updated agent statuses: Core Concepts: in-progress -> complete, C4 Container Diagram: pending -> in-progress, C4 Component Diagram: pending -> in-progress
 [2026-02-10 15:59:01] [INFO] Deleted 1 old contract file(s)
 [2026-02-10 15:59:01] [DEBUG] STATE.md atomic write complete
+[2026-02-10 15:59:14] [INFO] Task call: documentation-generation:mermaid-expert (phase: fixing-review)
+[2026-02-10 15:59:14] [INFO] Incremented Revisions: 0 -> 1
+[2026-02-10 15:59:14] [DEBUG] STATE.md atomic write complete

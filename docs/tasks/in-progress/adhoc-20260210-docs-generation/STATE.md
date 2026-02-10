@@ -37,7 +37,7 @@
 | Prompt Management Guide | documentation-generation:tutorial-engineer | implementation | 15 | - | C | complete | 1 | a217662 | a688000 | - |
 | Known Limitations | documentation-generation:docs-architect | implementation | 16 | - | C | complete | 0 | a48c3e2 | 54b38a1,a688000 | - |
 | C4 Context Diagram | documentation-generation:mermaid-expert | implementation | 17 | - | D | complete | 0 | a63efe5 | fce99e8,8b280f6 | - |
-| C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | in-progress | 0 | a1701e3 | 8b280f6 | - |
+| C4 Container Diagram | documentation-generation:mermaid-expert | implementation | 18 | - | D | in-progress | 1 | a1701e3 | 8b280f6 | - |
 | C4 Component Diagram | documentation-generation:mermaid-expert | implementation | 19 | - | D | in-progress | 0 | ad0b808 | 8b280f6 | - |
 | Docs Navigation | documentation-generation:reference-builder | implementation | 20 | - | E | pending | 0 | af2db7a | 412146f | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a855a0a | 7ada393 | - |
