@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: main
 ## Task Branch: sam/adhoc/20260210-docs-generation
 ## Plugins: code-documentation, documentation-generation, c4-architecture
@@ -21,16 +21,16 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 0 | a1ce5a6 | ceb7113 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2a738a | 3101d4f | - |
 | Architecture Overview | documentation-generation:docs-architect | implementation | 1 | - | A | complete | 0 | a49f5ad | 6f79966 | - |
-| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | complete | 0 | acfe6ea | ae9c8b1 | - |
-| Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | a14df39 | ae9c8b1 | - |
-| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
-| Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
-| Step API | documentation-generation:api-documenter | implementation | 6 | - | B | pending | 0 | pending | pending | /pydantic/pydantic |
-| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | pending | 0 | pending | pending | - |
-| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | pending | 0 | pending | pending | /sqlalchemy/sqlalchemy |
-| LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | pending | 0 | pending | pending | - |
-| Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | pending | 0 | pending | pending | - |
-| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | pending | 0 | pending | pending | /sqlalchemy/sqlalchemy |
+| Core Concepts | documentation-generation:docs-architect | implementation | 2 | - | A | complete | 0 | acfe6ea | ae9c8b1,6f79966 | - |
+| Design Patterns | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | a14df39 | ae9c8b1,6f79966 | - |
+| API Reference Index | documentation-generation:api-documenter | implementation | 4 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Pipeline API | documentation-generation:api-documenter | implementation | 5 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
+| Step API | documentation-generation:api-documenter | implementation | 6 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic |
+| Strategy API | documentation-generation:api-documenter | implementation | 7 | - | B | in-progress | 0 | pending | pending | - |
+| Extraction Transform API | documentation-generation:api-documenter | implementation | 8 | - | B | in-progress | 0 | pending | pending | /sqlalchemy/sqlalchemy |
+| LLM Provider API | documentation-generation:api-documenter | implementation | 9 | - | B | in-progress | 0 | pending | pending | - |
+| Prompt System API | documentation-generation:api-documenter | implementation | 10 | - | B | in-progress | 0 | pending | pending | - |
+| State Registry API | documentation-generation:api-documenter | implementation | 11 | - | B | in-progress | 0 | pending | pending | /sqlalchemy/sqlalchemy |
 | Getting Started Guide | documentation-generation:tutorial-engineer | implementation | 12 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Basic Pipeline Example | documentation-generation:tutorial-engineer | implementation | 13 | - | C | pending | 0 | pending | pending | /pydantic/pydantic,/sqlalchemy/sqlalchemy |
 | Multi Strategy Example | documentation-generation:tutorial-engineer | implementation | 14 | - | C | pending | 0 | pending | pending | /pydantic/pydantic |
