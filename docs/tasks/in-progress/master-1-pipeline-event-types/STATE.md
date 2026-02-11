@@ -24,4 +24,4 @@
 | Events: Pipeline+Step+Cache+LLM | python-development:python-pro | implementation | 3 | - | C | complete | 0 | a4d0704 | 31e3a2f,44c1545 | - |
 | Events: Consensus+Instruct+Transform+Extract+State | python-development:python-pro | implementation | 4 | - | C | complete | 1 | a936353 | 44c1545,955fbf8 | - |
 | Exports: events+llm __init__ | python-development:python-pro | implementation | 5 | - | D | complete | 1 | a9f627d | b3d3164,5aada20 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | ad6d0f4 | 143c036 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | ad6d0f4 | 143c036 | - |
