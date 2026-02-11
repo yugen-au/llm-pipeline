@@ -64,3 +64,4 @@ node_modules/
 !docs/tasks/**/task.log
 docs/tasks/**/*.semaphore
 docs/tasks/**/*.lock
+nul
