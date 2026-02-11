@@ -1,9 +1,9 @@
 ## Task: master-1-pipeline-event-types
 ## Description: Create event system foundation with ~35 event dataclasses organized by category (Pipeline/Step Lifecycle, Cache, LLM Call, Consensus, Instructions/Context, Transformation, Extraction, State). Base PipelineEvent with inheritance hierarchy in llm_pipeline/events/types.py.
 
-## Phase: implementation
+## Phase: review
 ## Status: in-progress
-## Current Group: D
+## Current Group: A
 ## Base Branch: main
 ## Task Branch: sam/master/1-pipeline-event-types
 ## Plugins: python-development, backend-development
@@ -24,3 +24,4 @@
 | Events: Pipeline+Step+Cache+LLM | python-development:python-pro | implementation | 3 | - | C | complete | 0 | a4d0704 | 31e3a2f,44c1545 | - |
 | Events: Consensus+Instruct+Transform+Extract+State | python-development:python-pro | implementation | 4 | - | C | complete | 0 | a936353 | 44c1545 | - |
 | Exports: events+llm __init__ | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a9f627d | b3d3164 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
