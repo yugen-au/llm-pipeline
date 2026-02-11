@@ -75,3 +75,89 @@ None
 **Decision:** APPROVE
 
 Core architecture is sound. The frozen+slots+__init_subclass__ pattern is correctly implemented with proper CPython workarounds documented. All 31 events register, serialize, and deserialize correctly. Import dependency is one-way (events -> llm, never reverse). Field-level deviations from PLAN.md are the main concern but step-4 explicitly documents the rationale ("task spec over PLAN.md"). The medium-severity items (private symbols in __all__, undocumented LLMCallResult field changes) are housekeeping issues that don't affect correctness or runtime behavior.
+
+---
+
+# Architecture Re-Review (Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+
+All 3 MEDIUM and 4 LOW issues from initial review verified resolved. No regressions -- 32 tests pass, 31 events register, serialization roundtrips clean.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\.claude\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Python 3.11+ | pass | No changes to runtime code patterns |
+| Pydantic v2 | pass | N/A |
+| pytest testing | pass | 32 tests pass, 0 failures |
+| Hatchling build | pass | No build changes |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Previous Issue Resolution
+
+### MEDIUM - Step 1: LLMCallResult field divergence (RESOLVED)
+**Fix:** Added "LLMCallResult field definitions" decision to `implementation/step-1-llmcallresult-prototype.md` under "Review Fix Iteration 0". Documents PRD as source of truth over PLAN.md placeholder fields.
+**Verification:** Decision block present with choice, rationale, and PS-2 reference.
+
+### MEDIUM - Step 3, 4: Field-level deviations from PLAN.md (RESOLVED - accepted)
+**Fix:** Already documented in step-4 implementation doc ("Field names follow task spec over PLAN.md"). Step-1 now also documents its divergence. Combined, all field deviations are traceable to PRD spec decisions.
+**Verification:** No action needed beyond step-1 fix above.
+
+### MEDIUM - Step 5: _EVENT_REGISTRY and _derive_event_type in __all__ (RESOLVED)
+**Fix:** Removed from `__all__` in both `events/types.py` and `events/__init__.py`. Comment added: "Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)".
+**Verification:** Programmatic check confirms neither symbol in either module's `__all__`. Both still importable directly for internal use. `resolve_event` remains public API for registry access.
+
+### LOW - Step 3: PipelineCompleted.steps_executed not in PLAN (RESOLVED - accepted)
+**Fix:** Covered by step-4's "task spec over PLAN.md" rationale. Useful field, no action needed.
+**Verification:** Field present and functional.
+
+### LOW - Step 3: StepSelecting fields differ from PLAN (RESOLVED - accepted)
+**Fix:** Covered by same rationale. Implementation aligns with actual step selection mechanics.
+**Verification:** Fields present and functional.
+
+### LOW - Step 4: InstructionsLogged missing logged_keys (RESOLVED)
+**Fix:** Added `logged_keys: list[str] = field(default_factory=list)` field with docstring warning about mutable container convention.
+**Verification:** Programmatic check confirms field exists with type `list[str]`. Serialization roundtrip verified -- `to_dict()` includes `logged_keys` array.
+
+### LOW - Step 4: ExtractionError missing error_type and validation_errors (RESOLVED)
+**Fix:** Added `error_type: str` and `validation_errors: list[str] = field(default_factory=list)` fields. Docstring added documenting Pydantic validation detail capture and mutable container convention.
+**Verification:** Programmatic check confirms both fields present. Full field set: `extraction_class, error_type, error_message, validation_errors`. Serialization roundtrip verified.
+
+## Review Checklist
+[x] Architecture patterns followed - no regression in frozen+slots+__init_subclass__ pattern
+[x] Code quality and maintainability - new fields have docstrings, mutable container warnings added
+[x] Error handling present - unchanged, resolve_event still raises ValueError
+[x] No hardcoded values - unchanged
+[x] Project conventions followed - __all__ now correctly excludes private symbols
+[x] Security considerations - N/A
+[x] Properly scoped (DRY, YAGNI, no over-engineering) - fixes are minimal and targeted
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/events/types.py | pass | InstructionsLogged now has logged_keys, ExtractionError has error_type+validation_errors, _EVENT_REGISTRY/_derive_event_type removed from __all__ |
+| llm_pipeline/events/__init__.py | pass | _EVENT_REGISTRY/_derive_event_type removed from __all__, still imported for internal use |
+| llm_pipeline/llm/result.py | pass | Unchanged, verified still correct |
+| implementation/step-1-llmcallresult-prototype.md | pass | New "LLMCallResult field definitions" decision documenting PRD over PLAN divergence |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+All 7 issues from initial review resolved. Code fixes (InstructionsLogged, ExtractionError, __all__ cleanup) are minimal and correct. Documentation fix (step-1 rationale) properly traces field decisions to PRD. No regressions in tests or runtime behavior. 31 events register correctly, serialization roundtrips verified programmatically.
