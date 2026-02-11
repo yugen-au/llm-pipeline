@@ -37,3 +37,7 @@
 [2026-02-11 15:33:20] [INFO] Task call: backend-development:backend-architect (phase: research)
 [2026-02-11 15:33:20] [INFO] Incremented Revisions: 1 -> 2
 [2026-02-11 15:33:20] [DEBUG] STATE.md atomic write complete
+[2026-02-11 15:33:55] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-11 15:34:04] [INFO] Task call: python-development:python-pro (phase: research)
+[2026-02-11 15:34:04] [INFO] Incremented Revisions: 2 -> 3
+[2026-02-11 15:34:04] [DEBUG] STATE.md atomic write complete
