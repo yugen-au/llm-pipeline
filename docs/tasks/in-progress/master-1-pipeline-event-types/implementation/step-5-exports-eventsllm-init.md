@@ -47,3 +47,53 @@ __all__ = ["LLMProvider", "RateLimiter", "LLMCallResult", "flatten_schema", "for
 [x] resolve_event callable from events package
 [x] __all__ has 46 entries (2 base + 1 result + 9 constants + 3 helpers + 31 events)
 [x] All 32 existing tests pass
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] _EVENT_REGISTRY and _derive_event_type exported in __all__ despite underscore-prefix (mixed signals)
+[x] Verify Step 4 field additions (logged_keys on InstructionsLogged, error_type+validation_errors on ExtractionError) covered by existing exports
+
+### Changes Made
+#### File: `llm_pipeline/events/types.py`
+Removed _EVENT_REGISTRY and _derive_event_type from __all__. Added comment noting they are internal and consumers should use resolve_event().
+
+```
+# Before
+    "CATEGORY_STATE",
+    # Pipeline Lifecycle
+
+# After
+    "CATEGORY_STATE",
+    # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
+    # -- use PipelineEvent.resolve_event() for registry access
+    # Pipeline Lifecycle
+```
+
+#### File: `llm_pipeline/events/__init__.py`
+Removed _EVENT_REGISTRY and _derive_event_type from __all__. Kept imports so they remain accessible as llm_pipeline.events._EVENT_REGISTRY if needed.
+
+```
+# Before
+    # Helpers
+    "_EVENT_REGISTRY",
+    "_derive_event_type",
+    "resolve_event",
+
+# After
+    # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
+    "resolve_event",
+```
+
+### Verification
+[x] No private symbols in events/__init__.py __all__ (was 2, now 0)
+[x] No private symbols in events/types.py __all__ (was 0, confirmed)
+[x] _EVENT_REGISTRY still accessible via import (31 entries)
+[x] _derive_event_type still accessible via import
+[x] resolve_event still in __all__
+[x] events/__init__.py __all__ count: 44 (was 46, -2 private)
+[x] events/types.py __all__ count: 42 (unchanged, privates were never in it -- comment added for clarity)
+[x] Step 4 fields (logged_keys, error_type, validation_errors) are instance fields on already-exported classes -- no new __all__ entries needed
+[x] All 32 tests pass

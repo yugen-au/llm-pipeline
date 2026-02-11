@@ -546,6 +546,8 @@ __all__ = [
     "CATEGORY_TRANSFORMATION",
     "CATEGORY_EXTRACTION",
     "CATEGORY_STATE",
+    # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
+    # -- use PipelineEvent.resolve_event() for registry access
     # Pipeline Lifecycle
     "PipelineStarted",
     "PipelineCompleted",

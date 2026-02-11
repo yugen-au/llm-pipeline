@@ -89,9 +89,7 @@ __all__ = [
     "CATEGORY_TRANSFORMATION",
     "CATEGORY_EXTRACTION",
     "CATEGORY_STATE",
-    # Helpers
-    "_EVENT_REGISTRY",
-    "_derive_event_type",
+    # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
     "resolve_event",
     # Pipeline Lifecycle
     "PipelineStarted",
