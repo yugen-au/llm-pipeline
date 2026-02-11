@@ -8,7 +8,7 @@
 ## Task Branch: sam/master/1-pipeline-event-types
 ## Plugins: python-development, backend-development
 ## Graphiti Group ID: llm-pipeline
-## Excluded Phases: none
+## Excluded Phases: testing
 ## Steps to Fix: none
 ## Last Updated: 2026-02-11 15:55
 
@@ -18,4 +18,9 @@
 | Codebase Analysis | python-development:python-pro | research | 1 | - | A | complete | 3 | ab4ec7c | 7190c8f | - |
 | Event Architecture | backend-development:backend-architect | research | 2 | - | A | complete | 3 | a7493f8 | 7190c8f | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a4a3b0d | 63c20dd | - |
-| Plan | planning | planning | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a2006d4 | pending | - |
+| LLMCallResult + Prototype | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /llmstxt/pydantic_dev_llms-full_txt |
+| PipelineEvent + StepScoped | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Events: Pipeline+Step+Cache+LLM | python-development:python-pro | implementation | 3 | - | C | pending | 0 | pending | pending | - |
+| Events: Consensus+Instruct+Transform+Extract+State | python-development:python-pro | implementation | 4 | - | C | pending | 0 | pending | pending | - |
+| Exports: events+llm __init__ | python-development:python-pro | implementation | 5 | - | D | pending | 0 | pending | pending | - |
