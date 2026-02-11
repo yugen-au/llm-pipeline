@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: main
 ## Task Branch: sam/master/1-pipeline-event-types
 ## Plugins: python-development, backend-development
@@ -20,7 +20,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a4a3b0d | 63c20dd | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2006d4 | 9444e03 | - |
 | LLMCallResult + Prototype | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a29e035 | 33addef | /llmstxt/pydantic_dev_llms-full_txt |
-| PipelineEvent + StepScoped | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| PipelineEvent + StepScoped | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
 | Events: Pipeline+Step+Cache+LLM | python-development:python-pro | implementation | 3 | - | C | pending | 0 | pending | pending | - |
 | Events: Consensus+Instruct+Transform+Extract+State | python-development:python-pro | implementation | 4 | - | C | pending | 0 | pending | pending | - |
 | Exports: events+llm __init__ | python-development:python-pro | implementation | 5 | - | D | pending | 0 | pending | pending | - |
