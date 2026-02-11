@@ -170,3 +170,244 @@ class PipelineStarted(PipelineEvent):
     """Emitted when a pipeline run begins."""
 
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_PIPELINE_LIFECYCLE
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PipelineCompleted(PipelineEvent):
+    """Emitted when a pipeline run completes successfully."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_PIPELINE_LIFECYCLE
+
+    execution_time_ms: float
+    steps_executed: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PipelineError(StepScopedEvent):
+    """Emitted when a pipeline run fails with an error.
+
+    Inherits StepScopedEvent because errors may occur within a step scope
+    (step_name populated) or outside any step (step_name=None).
+    """
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_PIPELINE_LIFECYCLE
+
+    error_type: str
+    error_message: str
+    traceback: str | None = None
+
+
+# -- Step Lifecycle Events -----------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StepSelecting(StepScopedEvent):
+    """Emitted when step selection begins. step_name defaults to None."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_STEP_LIFECYCLE
+
+    step_index: int
+    strategy_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StepSelected(StepScopedEvent):
+    """Emitted when a step is selected for execution."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_STEP_LIFECYCLE
+
+    step_number: int
+    strategy_name: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StepSkipped(StepScopedEvent):
+    """Emitted when a step is skipped."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_STEP_LIFECYCLE
+
+    step_number: int
+    reason: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StepStarted(StepScopedEvent):
+    """Emitted when a step begins execution."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_STEP_LIFECYCLE
+
+    step_number: int
+    system_key: str | None = None
+    user_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StepCompleted(StepScopedEvent):
+    """Emitted when a step completes execution.
+
+    execution_time_ms is float for sub-ms precision; PipelineStepState
+    stores as int.
+    """
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_STEP_LIFECYCLE
+
+    step_number: int
+    execution_time_ms: float
+
+
+# -- Cache Events --------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CacheLookup(StepScopedEvent):
+    """Emitted when a cache lookup is initiated."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CACHE
+
+    input_hash: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CacheHit(StepScopedEvent):
+    """Emitted when a cache lookup finds a matching entry."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CACHE
+
+    input_hash: str
+    cached_at: datetime
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CacheMiss(StepScopedEvent):
+    """Emitted when a cache lookup finds no matching entry."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CACHE
+
+    input_hash: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CacheReconstruction(StepScopedEvent):
+    """Emitted when cached models are reconstructed from DB."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CACHE
+
+    model_count: int
+    instance_count: int
+
+
+# -- LLM Call Events -----------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMCallPrepared(StepScopedEvent):
+    """Emitted when LLM calls are prepared for a step."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_LLM_CALL
+
+    call_count: int
+    system_key: str | None = None
+    user_key: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMCallStarting(StepScopedEvent):
+    """Emitted when an individual LLM call begins."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_LLM_CALL
+
+    call_index: int
+    rendered_system_prompt: str
+    rendered_user_prompt: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMCallCompleted(StepScopedEvent):
+    """Emitted when an individual LLM call completes.
+
+    validation_errors contains any Pydantic validation errors from
+    parsing the response. Must not be mutated after creation.
+    """
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_LLM_CALL
+
+    call_index: int
+    raw_response: str | None
+    parsed_result: dict[str, Any] | None
+    model_name: str | None
+    attempt_count: int
+    validation_errors: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMCallRetry(StepScopedEvent):
+    """Emitted when an LLM call is retried after a failure."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_LLM_CALL
+
+    attempt: int
+    max_retries: int
+    error_type: str
+    error_message: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMCallFailed(StepScopedEvent):
+    """Emitted when an LLM call fails after exhausting retries."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_LLM_CALL
+
+    max_retries: int
+    last_error: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class LLMCallRateLimited(StepScopedEvent):
+    """Emitted when an LLM call is rate-limited and waiting."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_LLM_CALL
+
+    attempt: int
+    wait_seconds: float
+    backoff_type: str
+
+
+# -- Exports -------------------------------------------------------------------
+
+__all__ = [
+    # Base classes
+    "PipelineEvent",
+    "StepScopedEvent",
+    # Category constants
+    "CATEGORY_PIPELINE_LIFECYCLE",
+    "CATEGORY_STEP_LIFECYCLE",
+    "CATEGORY_CACHE",
+    "CATEGORY_LLM_CALL",
+    "CATEGORY_CONSENSUS",
+    "CATEGORY_INSTRUCTIONS_CONTEXT",
+    "CATEGORY_TRANSFORMATION",
+    "CATEGORY_EXTRACTION",
+    "CATEGORY_STATE",
+    # Pipeline Lifecycle
+    "PipelineStarted",
+    "PipelineCompleted",
+    "PipelineError",
+    # Step Lifecycle
+    "StepSelecting",
+    "StepSelected",
+    "StepSkipped",
+    "StepStarted",
+    "StepCompleted",
+    # Cache
+    "CacheLookup",
+    "CacheHit",
+    "CacheMiss",
+    "CacheReconstruction",
+    # LLM Call
+    "LLMCallPrepared",
+    "LLMCallStarting",
+    "LLMCallCompleted",
+    "LLMCallRetry",
+    "LLMCallFailed",
+    "LLMCallRateLimited",
+]
