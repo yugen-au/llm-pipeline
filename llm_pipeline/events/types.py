@@ -372,6 +372,152 @@ class LLMCallRateLimited(StepScopedEvent):
     backoff_type: str
 
 
+# -- Consensus Events ----------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConsensusStarted(StepScopedEvent):
+    """Emitted when consensus voting begins for a step."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
+
+    threshold: int
+    max_calls: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConsensusAttempt(StepScopedEvent):
+    """Emitted for each consensus voting attempt."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
+
+    attempt: int
+    group_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConsensusReached(StepScopedEvent):
+    """Emitted when consensus is successfully reached."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
+
+    attempt: int
+    threshold: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ConsensusFailed(StepScopedEvent):
+    """Emitted when consensus cannot be reached after exhausting calls."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
+
+    max_calls: int
+    largest_group_size: int
+
+
+# -- Instructions & Context Events ---------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class InstructionsStored(StepScopedEvent):
+    """Emitted when instructions are stored for a step."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_INSTRUCTIONS_CONTEXT
+
+    instruction_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class InstructionsLogged(StepScopedEvent):
+    """Emitted when instructions are logged during step execution."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_INSTRUCTIONS_CONTEXT
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ContextUpdated(StepScopedEvent):
+    """Emitted when pipeline context is updated with new keys.
+
+    new_keys and context_snapshot are mutable containers; must not be
+    mutated after creation (convention, not enforced at runtime).
+    """
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_INSTRUCTIONS_CONTEXT
+
+    new_keys: list[str]
+    context_snapshot: dict[str, Any]
+
+
+# -- Transformation Events -----------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TransformationStarting(StepScopedEvent):
+    """Emitted when a transformation step begins."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_TRANSFORMATION
+
+    transformation_class: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class TransformationCompleted(StepScopedEvent):
+    """Emitted when a transformation step completes."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_TRANSFORMATION
+
+    data_key: str
+    execution_time_ms: float
+
+
+# -- Extraction Events ---------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExtractionStarting(StepScopedEvent):
+    """Emitted when an extraction step begins."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_EXTRACTION
+
+    extraction_class: str
+    model_class: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExtractionCompleted(StepScopedEvent):
+    """Emitted when an extraction step completes successfully."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_EXTRACTION
+
+    extraction_class: str
+    model_class: str
+    instance_count: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExtractionError(StepScopedEvent):
+    """Emitted when an extraction step fails."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_EXTRACTION
+
+    extraction_class: str
+    error_message: str
+
+
+# -- State Events --------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StateSaved(StepScopedEvent):
+    """Emitted when step state is persisted to the database."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_STATE
+
+    step_number: int
+    input_hash: str
+    execution_time_ms: float
+
+
 # -- Exports -------------------------------------------------------------------
 
 __all__ = [
@@ -410,4 +556,22 @@ __all__ = [
     "LLMCallRetry",
     "LLMCallFailed",
     "LLMCallRateLimited",
+    # Consensus
+    "ConsensusStarted",
+    "ConsensusAttempt",
+    "ConsensusReached",
+    "ConsensusFailed",
+    # Instructions & Context
+    "InstructionsStored",
+    "InstructionsLogged",
+    "ContextUpdated",
+    # Transformation
+    "TransformationStarting",
+    "TransformationCompleted",
+    # Extraction
+    "ExtractionStarting",
+    "ExtractionCompleted",
+    "ExtractionError",
+    # State
+    "StateSaved",
 ]
