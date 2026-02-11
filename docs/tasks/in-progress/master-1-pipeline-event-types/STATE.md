@@ -10,7 +10,7 @@
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: none
-## Last Updated: 2026-02-11 16:14
+## Last Updated: 2026-02-11 16:20
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,6 +21,6 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2006d4 | 9444e03 | - |
 | LLMCallResult + Prototype | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a29e035 | 33addef | /llmstxt/pydantic_dev_llms-full_txt |
 | PipelineEvent + StepScoped | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a5ea146 | f640968 | - |
-| Events: Pipeline+Step+Cache+LLM | python-development:python-pro | implementation | 3 | - | C | in-progress | 0 | pending | pending | - |
+| Events: Pipeline+Step+Cache+LLM | python-development:python-pro | implementation | 3 | - | C | complete | 0 | a4d0704 | 31e3a2f | - |
 | Events: Consensus+Instruct+Transform+Extract+State | python-development:python-pro | implementation | 4 | - | C | in-progress | 0 | pending | pending | - |
 | Exports: events+llm __init__ | python-development:python-pro | implementation | 5 | - | D | pending | 0 | pending | pending | - |
