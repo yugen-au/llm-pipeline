@@ -22,6 +22,19 @@ from typing import Any, ClassVar
 from llm_pipeline.state import utc_now
 
 
+# -- Category constants -------------------------------------------------------
+
+CATEGORY_PIPELINE_LIFECYCLE = "pipeline_lifecycle"
+CATEGORY_STEP_LIFECYCLE = "step_lifecycle"
+CATEGORY_CACHE = "cache"
+CATEGORY_LLM_CALL = "llm_call"
+CATEGORY_CONSENSUS = "consensus"
+CATEGORY_INSTRUCTIONS_CONTEXT = "instructions_context"
+CATEGORY_TRANSFORMATION = "transformation"
+CATEGORY_EXTRACTION = "extraction"
+CATEGORY_STATE = "state"
+
+
 # -- Registry & helpers -------------------------------------------------------
 
 _EVENT_REGISTRY: dict[str, "type[PipelineEvent]"] = {}
@@ -51,7 +64,9 @@ class PipelineEvent:
     Subclasses must NOT override __init_subclass__ without calling super().
 
     Event fields containing mutable containers (dict, list) must not be
-    mutated after creation.
+    mutated after creation. This is a convention enforced by review, not
+    at runtime. Frozen dataclasses prevent reassignment of the field itself
+    but not mutation of the container's contents.
     """
 
     # init=True fields first (dataclass ordering)
@@ -71,11 +86,17 @@ class PipelineEvent:
         Uses explicit super(PipelineEvent, cls) because slots=True replaces
         the class object, breaking the implicit __class__ cell that zero-arg
         super() relies on.
+
+        Skips registration for:
+        - Classes with names starting with underscore (private bases)
+        - Classes with ``_skip_registry = True`` (public intermediate bases)
         """
         # Explicit form required: slots=True breaks zero-arg super()
         super(PipelineEvent, cls).__init_subclass__(**kwargs)
-        # Skip registration for intermediate bases (leading underscore)
+        # Skip registration for intermediate bases
         if cls.__name__.startswith("_"):
+            return
+        if "_skip_registry" in cls.__dict__:
             return
         derived = _derive_event_type(cls.__name__)
         _EVENT_REGISTRY[derived] = cls
@@ -122,11 +143,30 @@ class PipelineEvent:
         return event_cls(**cleaned)
 
 
-# -- Test event (prototype verification) --------------------------------------
+# -- Step-scoped intermediate --------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class StepScopedEvent(PipelineEvent):
+    """Intermediate base for events occurring within (or selecting) a step.
+
+    ``step_name`` is ``str | None`` rather than ``str`` to accommodate
+    events that fire before a step is chosen (e.g. StepSelecting) or
+    errors that occur outside any step scope (e.g. PipelineError).
+    Concrete subclasses should document whether they expect step_name
+    to be populated.
+    """
+
+    _skip_registry: ClassVar[bool] = True
+
+    step_name: str | None = None
+
+
+# -- Pipeline Lifecycle Events -------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class PipelineStarted(PipelineEvent):
     """Emitted when a pipeline run begins."""
 
-    pass
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_PIPELINE_LIFECYCLE
