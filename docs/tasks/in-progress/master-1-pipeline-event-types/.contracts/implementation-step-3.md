@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-1-pipeline-event-types
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-2-pipelineevent-stepscoped.md (if already exists, APPEND to file)
+- Output Files: implementation\step-3-events-pipelinestepcachellm.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 2 - implement ONLY this step, not others
+- Step: 3 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-2-pipelineevent-stepscoped.md
+4. Document decisions in implementation\step-3-events-pipelinestepcachellm.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 2: PIPELINEEVENT + STEPSCOPED
+# IMPLEMENTATION - STEP 3: EVENTS: PIPELINE+STEP+CACHE+LLM
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -73,7 +73,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-2-pipelineevent-stepscoped.md
+Created: implementation\step-[step]-[slug].md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
