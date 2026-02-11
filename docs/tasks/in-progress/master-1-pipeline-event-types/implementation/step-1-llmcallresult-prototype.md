@@ -57,3 +57,22 @@ New file with:
 [x] resolve_event roundtrip: serialize -> deserialize -> matching fields
 [x] resolve_event raises ValueError for unknown event_type
 [x] utc_now imported from llm_pipeline.state for timestamp default
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] LLMCallResult fields diverge from PLAN.md without documented decision
+
+### Changes Made
+#### File: `docs/tasks/in-progress/master-1-pipeline-event-types/implementation/step-1-llmcallresult-prototype.md`
+Added decision documenting field divergence rationale (this section).
+
+### Decisions Added
+#### LLMCallResult field definitions
+**Choice:** Fields follow PRD spec (parsed, raw_response, model_name, attempt_count, validation_errors) rather than PLAN.md Step 1 which listed placeholder fields (model_name, prompt, response, token_usage, metadata).
+**Rationale:** PRD is source of truth for field definitions. PLAN.md Step 1 was written before PRD field review and listed generic placeholder names. The implemented fields match the actual LLM call result pattern: parsed output (dict), raw LLM response text, model identifier, retry attempt count, and structured validation errors. These align with PRD Section 2 (PS-2) capturing raw responses, validation errors, and retry details.
+
+### Verification
+[x] No code changes required (documentation-only fix)
