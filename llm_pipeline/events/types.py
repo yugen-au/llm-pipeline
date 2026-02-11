@@ -429,9 +429,15 @@ class InstructionsStored(StepScopedEvent):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class InstructionsLogged(StepScopedEvent):
-    """Emitted when instructions are logged during step execution."""
+    """Emitted when instructions are logged during step execution.
+
+    logged_keys lists the instruction keys that were logged. Must not be
+    mutated after creation (convention, not enforced at runtime).
+    """
 
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_INSTRUCTIONS_CONTEXT
+
+    logged_keys: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -496,12 +502,18 @@ class ExtractionCompleted(StepScopedEvent):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ExtractionError(StepScopedEvent):
-    """Emitted when an extraction step fails."""
+    """Emitted when an extraction step fails.
+
+    validation_errors contains Pydantic validation details if applicable.
+    Must not be mutated after creation (convention, not enforced at runtime).
+    """
 
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_EXTRACTION
 
     extraction_class: str
+    error_type: str
     error_message: str
+    validation_errors: list[str] = field(default_factory=list)
 
 
 # -- State Events --------------------------------------------------------------
