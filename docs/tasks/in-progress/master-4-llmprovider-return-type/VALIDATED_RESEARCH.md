@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Both research documents are accurate on core findings: 3 GeminiProvider exit points, single production call site in executor.py:103, correct import path at llm_pipeline.llm.result, MockProvider needs updating, LLMCallCompleted.parsed_result vs LLMCallResult.parsed field asymmetry. All line numbers verified against source. One critical gap found: Task 4 changing MockProvider to return LLMCallResult will break ALL integration tests because executor.py (Task 5 scope) still expects Optional[Dict]. One minor contradiction between research docs on not-found exit construction approach. Pending CEO decision on test breakage strategy.
+Both research documents are accurate on core findings: 3 GeminiProvider exit points, single production call site in executor.py:103, correct import path at llm_pipeline.llm.result, MockProvider needs updating, LLMCallCompleted.parsed_result vs LLMCallResult.parsed field asymmetry. All line numbers verified against source. One critical gap found and resolved: Task 4 changing MockProvider to return LLMCallResult will break integration tests because executor.py (Task 5 scope) still expects Optional[Dict]. CEO decision: accept temporary breakage -- Task 5 follows immediately. Minor contradiction between research docs on not-found exit construction resolved in favor of plain constructor. All questions answered, ready for planning.
 
 ## Domain Findings
 
@@ -62,7 +62,7 @@ failure() requires `raw_response: str` (non-Optional). For the exhaustion exit w
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Task 4 changes MockProvider -> LLMCallResult, but executor.py (Task 5) still expects Dict. All integration tests break between Task 4 and Task 5. Strategy? Options: (A) merge Task 4+5 into single atomic change, (B) Task 4 includes minimal executor.py patch, (C) accept temporary test failure, (D) other? | PENDING | Determines Task 4 scope boundary and whether executor.py changes are in or out |
+| Task 4 changes MockProvider -> LLMCallResult, but executor.py (Task 5) still expects Dict. All integration tests break between Task 4 and Task 5. Strategy? Options: (A) merge Task 4+5 into single atomic change, (B) Task 4 includes minimal executor.py patch, (C) accept temporary test failure, (D) other? | (C) Accept temporary test breakage. Task 5 follows immediately. Test automator must be informed failures from Optional[Dict] -> LLMCallResult change are INTENTIONAL, resolved by Task 5 (executor.py update). Do NOT fix in Task 4 scope. | Task 4 scope stays clean: ABC + GeminiProvider + MockProvider only. executor.py untouched. Known-broken tests: test_full_execution, test_save_persists_to_db, test_step_state_saved. |
 
 ## Assumptions Validated
 
@@ -80,15 +80,20 @@ failure() requires `raw_response: str` (non-Optional). For the exhaustion exit w
 
 ## Open Items
 
-- **Test breakage strategy** -- PENDING CEO decision (see Q&A)
-- **Not-found construction approach** -- plain constructor vs failure() factory (recommend plain constructor per Step 2 reasoning)
-- **Exhaustion exit raw_response** -- use `last_raw or ""` fallback or plain constructor accepting None (recommend plain constructor)
+All resolved.
+
+- ~~Test breakage strategy~~ -- RESOLVED: accept temporary breakage, Task 5 follows immediately, do NOT fix in Task 4 scope
+- ~~Not-found construction approach~~ -- RESOLVED: use plain constructor `LLMCallResult(parsed=None, ...)` per Step 2 reasoning
+- ~~Exhaustion exit raw_response~~ -- RESOLVED: use plain constructor which accepts `str | None`, avoids failure() factory's str requirement
 
 ## Recommendations for Planning
 
-1. Resolve test breakage strategy before planning implementation steps -- this determines Task 4 scope
-2. Use plain constructor `LLMCallResult(parsed=None, ...)` for both not-found and exhaustion exits; reserve factory methods for clarity when the semantic is unambiguous
-3. Use `LLMCallResult.success(...)` for the validation-passed exit at line 184
-4. Initialize `last_raw_response: str | None = None` and `accumulated_errors: list[str] = []` before the retry loop in GeminiProvider
-5. Import via `from .result import LLMCallResult` in both provider.py and gemini.py (same package)
-6. Update Task 4 spec to correct the import path from `events.result` to `llm_pipeline.llm.result`
+1. **Scope:** ABC (provider.py) + GeminiProvider (gemini.py) + MockProvider (test_pipeline.py) only. Do NOT touch executor.py.
+2. **Known breakage:** TestPipelineExecution tests (test_full_execution, test_save_persists_to_db, test_step_state_saved) will fail after Task 4. Intentional -- resolved by Task 5.
+3. **Not-found exit (line 114):** Use plain constructor `LLMCallResult(parsed=None, raw_response=response_text, model_name=self.model_name, attempt_count=attempt+1, validation_errors=[])`.
+4. **Success exit (line 184):** Use `LLMCallResult.success(parsed=response_json, raw_response=response_text, model_name=self.model_name, attempt_count=attempt+1, validation_errors=accumulated_errors)`.
+5. **Exhaustion exit (line 216):** Use plain constructor `LLMCallResult(parsed=None, raw_response=last_raw_response, model_name=self.model_name, attempt_count=max_retries, validation_errors=accumulated_errors)`.
+6. **State tracking:** Initialize `last_raw_response: str | None = None` and `accumulated_errors: list[str] = []` before the retry loop.
+7. **Import path:** Use `from .result import LLMCallResult` in gemini.py (same package). Correct Task 4 spec from `events.result`.
+8. **MockProvider:** Wrap responses in `LLMCallResult(parsed=response)` or `LLMCallResult(parsed=None)` for None case.
+9. **New tests:** Task 4 unit tests should cover GeminiProvider returning LLMCallResult for all 3 exit paths. Do NOT expect integration tests to pass.
