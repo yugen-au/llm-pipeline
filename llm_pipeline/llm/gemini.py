@@ -189,12 +189,19 @@ class GeminiProvider(LLMProvider):
                         f"  Attempt {attempt + 1}/{max_retries}: "
                         f"Pydantic validation failed: {pydantic_error}"
                     )
+                    accumulated_errors.append(str(pydantic_error))
                     if attempt < max_retries - 1:
                         continue
                     continue
 
                 logger.info(f"  [OK] Validation passed on attempt {attempt + 1}")
-                return response_json
+                return LLMCallResult.success(
+                    parsed=response_json,
+                    raw_response=response_text,
+                    model_name=self.model_name,
+                    attempt_count=attempt + 1,
+                    validation_errors=accumulated_errors,
+                )
 
             except Exception as e:
                 error_str = str(e)
@@ -226,7 +233,13 @@ class GeminiProvider(LLMProvider):
                         continue
 
         logger.error(f"  [ERROR] All {max_retries} attempts failed")
-        return None
+        return LLMCallResult(
+            parsed=None,
+            raw_response=last_raw_response,
+            model_name=self.model_name,
+            attempt_count=max_retries,
+            validation_errors=accumulated_errors,
+        )
 
 
 __all__ = ["GeminiProvider"]
