@@ -116,3 +116,111 @@ None
 1. Task complete - all success criteria met, no issues found
 2. Ready to proceed to next task in master-3 (Task 4: Emit PipelineStepLLMCallCompleted event)
 3. Consider adding edge case tests for extreme values (very large dicts, nested structures) if LLMCallResult will store complex parsed objects in production use
+
+---
+
+# Review Fix Verification (Post-Review Cycle)
+
+## Summary
+**Status:** passed
+Review fixes applied and verified. All 19 LLMCallResult unit tests pass (1 new test added), full test suite (51 tests) passes with no regressions.
+
+## Fixes Applied
+### Fix 1: failure() factory validation (Step 1)
+**Issue:** failure() classmethod accepted parsed not None, asymmetric to success()
+**Fix:** Added ValueError raise if parsed is not None in failure() factory
+**Location:** llm_pipeline/llm/result.py
+
+### Fix 2: test_repr brittleness (Step 2)
+**Issue:** test_repr used exact string match, fragile to repr format changes
+**Fix:** Changed to partial assertions checking key=value pairs present
+**Location:** tests/test_llm_call_result.py
+
+### Fix 3: New test for failure() validation (Step 2)
+**Issue:** Missing test coverage for failure() parsed validation
+**Fix:** Added test_failure_factory_non_none_parsed_raises
+**Location:** tests/test_llm_call_result.py
+
+## Test Execution (Post-Fix)
+**Pass Rate:** 51/51 tests (19 new + 32 existing)
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\SamSG\Documents\claude_projects\llm-pipeline
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.9.0, langsmith-0.3.30, cov-7.0.0
+collected 51 items
+
+tests/test_llm_call_result.py::TestInstantiation::test_instantiation_defaults PASSED [  1%]
+tests/test_llm_call_result.py::TestInstantiation::test_instantiation_all_fields PASSED [  3%]
+tests/test_llm_call_result.py::TestFactories::test_success_factory PASSED [  5%]
+tests/test_llm_call_result.py::TestFactories::test_failure_factory PASSED [  7%]
+tests/test_llm_call_result.py::TestFactories::test_failure_factory_empty_errors PASSED [  9%]
+tests/test_llm_call_result.py::TestFactories::test_success_factory_none_parsed_raises PASSED [ 11%]
+tests/test_llm_call_result.py::TestFactories::test_failure_factory_non_none_parsed_raises PASSED [ 13%]
+tests/test_llm_call_result.py::TestSerialization::test_to_dict_all_none PASSED [ 15%]
+tests/test_llm_call_result.py::TestSerialization::test_to_dict_all_set PASSED [ 17%]
+tests/test_llm_call_result.py::TestSerialization::test_to_json_structure PASSED [ 19%]
+tests/test_llm_call_result.py::TestStatusProperties::test_is_success_true PASSED [ 21%]
+tests/test_llm_call_result.py::TestStatusProperties::test_is_success_false PASSED [ 23%]
+tests/test_llm_call_result.py::TestStatusProperties::test_partial_success PASSED [ 25%]
+tests/test_llm_call_result.py::TestStatusProperties::test_is_failure_true PASSED [ 27%]
+tests/test_llm_call_result.py::TestStatusProperties::test_is_failure_false PASSED [ 29%]
+tests/test_llm_call_result.py::TestDataclassBehavior::test_frozen_immutability PASSED [ 31%]
+tests/test_llm_call_result.py::TestDataclassBehavior::test_equality PASSED [ 33%]
+tests/test_llm_call_result.py::TestDataclassBehavior::test_inequality PASSED [ 35%]
+tests/test_llm_call_result.py::TestDataclassBehavior::test_repr PASSED   [ 37%]
+tests/test_pipeline.py::TestImports::test_core_imports PASSED            [ 39%]
+tests/test_pipeline.py::TestImports::test_llm_imports PASSED             [ 41%]
+tests/test_pipeline.py::TestImports::test_db_imports PASSED              [ 43%]
+tests/test_pipeline.py::TestImports::test_prompts_imports PASSED         [ 45%]
+tests/test_pipeline.py::TestLLMResultMixin::test_create_failure PASSED   [ 47%]
+tests/test_pipeline.py::TestLLMResultMixin::test_get_example PASSED      [ 49%]
+tests/test_pipeline.py::TestLLMResultMixin::test_example_not_required PASSED [ 50%]
+tests/test_pipeline.py::TestArrayValidationConfig::test_defaults PASSED  [ 52%]
+tests/test_pipeline.py::TestValidationContext::test_access PASSED        [ 54%]
+tests/test_pipeline.py::TestSchemaUtils::test_flatten_schema PASSED      [ 56%]
+tests/test_pipeline.py::TestSchemaUtils::test_format_schema_for_llm PASSED [ 58%]
+tests/test_pipeline.py::TestValidation::test_validate_structured_output_valid PASSED [ 60%]
+tests/test_pipeline.py::TestValidation::test_validate_structured_output_missing_field PASSED [ 62%]
+tests/test_pipeline.py::TestValidation::test_strip_number_prefix PASSED  [ 64%]
+tests/test_pipeline.py::TestRateLimiter::test_basic_usage PASSED         [ 66%]
+tests/test_pipeline.py::TestRateLimiter::test_reset PASSED               [ 68%]
+tests/test_pipeline.py::TestPipelineNaming::test_valid_pipeline_naming PASSED [ 70%]
+tests/test_pipeline.py::TestPipelineNaming::test_invalid_pipeline_name PASSED [ 72%]
+tests/test_pipeline.py::TestPipelineInit::test_auto_sqlite PASSED        [ 74%]
+tests/test_pipeline.py::TestPipelineInit::test_explicit_session PASSED   [ 76%]
+tests/test_pipeline.py::TestPipelineInit::test_explicit_engine PASSED    [ 78%]
+tests/test_pipeline.py::TestPipelineInit::test_requires_provider_for_execute PASSED [ 80%]
+tests/test_pipeline.py::TestPipelineExecution::test_full_execution PASSED [ 82%]
+tests/test_pipeline.py::TestPipelineExecution::test_save_persists_to_db PASSED [ 84%]
+tests/test_pipeline.py::TestPipelineExecution::test_step_state_saved PASSED [ 86%]
+tests/test_pipeline.py::TestPromptService::test_get_prompt PASSED        [ 88%]
+tests/test_pipeline.py::TestPromptService::test_prompt_not_found PASSED  [ 90%]
+tests/test_pipeline.py::TestPromptService::test_prompt_fallback PASSED   [ 92%]
+tests/test_pipeline.py::TestPromptService::test_format_user_prompt PASSED [ 94%]
+tests/test_pipeline.py::TestPromptLoader::test_extract_variables PASSED  [ 96%]
+tests/test_pipeline.py::TestPromptLoader::test_extract_no_variables PASSED [ 98%]
+tests/test_pipeline.py::TestInitPipelineDb::test_creates_tables PASSED   [100%]
+
+======================== 51 passed, 1 warning in 1.21s =======================
+```
+
+## Review Issues Resolved
+### Issue 1: failure() factory symmetry (LOW)
+**Status:** Resolved
+**Step:** Step 1
+**Verification:** test_failure_factory_non_none_parsed_raises passes, ValueError raised correctly
+
+### Issue 2: test_repr brittleness (LOW)
+**Status:** Resolved
+**Step:** Step 2
+**Verification:** test_repr passes with partial assertions, robust to format changes
+
+## Final Status
+- [x] All 19 LLMCallResult tests pass
+- [x] All 32 existing tests pass (no regressions)
+- [x] Review fixes verified in full test suite
+- [x] Factory validation symmetric (success/failure both enforce invariants)
+- [x] Test suite more robust to repr format changes
