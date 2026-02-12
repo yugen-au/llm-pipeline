@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/4-llmprovider-return-type
 ## Plugins: python-development, backend-development
@@ -20,6 +20,6 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a8a5bbd | 5ff3fb0 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a515181 | 23e21d7 | - |
 | Update LLMProvider ABC | python-development:python-pro | implementation | 1 | - | A | complete | 0 | ae7aaa3 | 600ad17 | - |
-| Update GeminiProvider | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
-| Update MockProvider | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
-| Update Exports | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| Update GeminiProvider | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
+| Update MockProvider | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
+| Update Exports | python-development:python-pro | implementation | 4 | - | B | in-progress | 0 | pending | pending | - |
