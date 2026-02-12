@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/2-pipeline-event-emitter
 ## Plugins: python-development, backend-development
@@ -20,5 +20,5 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | acc8ea0 | 2a8a069 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | abd7b6d | 8234f15 | - |
 | Create emitter.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a997ab6 | d74bd50 | /python/typing |
-| Export in events/__init__.py | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Export in events/__init__.py | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
 | Create unit tests | python-development:python-pro | implementation | 3 | - | C | pending | 0 | pending | pending | - |
