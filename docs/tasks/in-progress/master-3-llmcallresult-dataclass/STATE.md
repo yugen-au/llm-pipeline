@@ -1,7 +1,7 @@
 ## Task: master-3-llmcallresult-dataclass
 ## Description: Create LLMCallResult dataclass capturing full LLM call details (parsed, raw_response, model_name, attempt_count, validation_errors) to replace current Optional[Dict] return from call_structured()
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -22,4 +22,5 @@
 | Add Helper Methods | python-development:python-pro | implementation | 1 | - | A | complete | 1 | a92a8f8 | 5b49a3e,03c4c6e | - |
 | Create Unit Tests | python-development:python-pro | implementation | 2 | - | B | complete | 1 | a85b481 | 723eb3a,e58f96b | /pytest-dev/pytest |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a4ea303 | 608192e,86c9468 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | a893bbe | a1a4a16 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | a893bbe | a1a4a16,f319cd3 | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
