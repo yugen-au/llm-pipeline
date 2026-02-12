@@ -2,31 +2,32 @@
   "master": {
     "tasks": [
       {
-        "id": 1,
+        "id": "1",
         "title": "Define PipelineEvent Base and Event Types",
         "description": "Create the event system foundation with ~35 event dataclasses organized by category (Pipeline Lifecycle, Step Lifecycle, Cache, LLM Call, Consensus, Instructions/Context, Transformation, Extraction, State).",
         "details": "Create `llm_pipeline/events/types.py` with:\n\n1. Base `PipelineEvent` dataclass with fields: `event_type: str`, `run_id: str`, `timestamp: datetime`, `pipeline_name: str`\n\n2. Pipeline Lifecycle events (3): `PipelineStarted`, `PipelineCompleted`, `PipelineError`\n\n3. Step Lifecycle events (5): `StepSelecting`, `StepSelected`, `StepSkipped`, `StepStarted`, `StepCompleted`\n\n4. Cache events (4): `CacheLookup`, `CacheHit`, `CacheMiss`, `CacheReconstruction`\n\n5. LLM Call events (6): `LLMCallPrepared`, `LLMCallStarting`, `LLMCallCompleted`, `LLMCallRetry`, `LLMCallFailed`, `LLMCallRateLimited`\n\n6. Consensus events (4): `ConsensusStarted`, `ConsensusAttempt`, `ConsensusReached`, `ConsensusFailed`\n\n7. Instructions/Context events (3): `InstructionsStored`, `InstructionsLogged`, `ContextUpdated`\n\n8. Transformation events (2): `TransformationStarting`, `TransformationCompleted`\n\n9. Extraction events (3): `ExtractionStarting`, `ExtractionCompleted`, `ExtractionError`\n\n10. State event (1): `StateSaved`\n\nUse Python dataclasses with inheritance. Each event carries category-specific fields as defined in PRD EVT-* specifications.",
         "testStrategy": "Unit tests for each event type: verify field types, inheritance from PipelineEvent, JSON serialization/deserialization. Test that all ~35 events can be instantiated with valid data.",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-02-11T06:52:07.066Z"
       },
       {
-        "id": 2,
+        "id": "2",
         "title": "Implement PipelineEventEmitter Protocol and CompositeEmitter",
         "description": "Create the emitter protocol and composite handler that forwards events to multiple handlers with error isolation.",
         "details": "Create `llm_pipeline/events/emitter.py` with:\n\n1. `PipelineEventEmitter` as `typing.Protocol` (not ABC) with single method:\n```python\nclass PipelineEventEmitter(Protocol):\n    def emit(self, event: PipelineEvent) -> None: ...\n```\n\n2. `CompositeEmitter` class that:\n   - Accepts list of `PipelineEventEmitter` instances\n   - Calls each handler's `emit()` sequentially\n   - Catches and logs handler exceptions without blocking other handlers\n   - Thread-safe for concurrent access\n\n3. Export in `llm_pipeline/events/__init__.py`\n\nDesign for duck-typing compatibility - any object with `emit(event)` method works.",
         "testStrategy": "Test CompositeEmitter with multiple mock handlers, verify all receive events. Test error isolation: one handler raising shouldn't prevent others from receiving. Test thread-safety with concurrent emit calls.",
         "priority": "high",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 3,
+        "id": "3",
         "title": "Create LLMCallResult Dataclass",
         "description": "Define the LLMCallResult dataclass that captures full LLM call details including raw response, model name, attempt count, and validation errors.",
         "details": "Create `llm_pipeline/events/result.py` with:\n\n```python\n@dataclass\nclass LLMCallResult:\n    parsed: dict[str, Any] | None       # Validated JSON dict (same as current return)\n    raw_response: str | None             # Original LLM response text before JSON extraction\n    model_name: str | None               # Model identifier (e.g., 'gemini-2.0-flash-lite')\n    attempt_count: int                   # Number of attempts (1 = first try success)\n    validation_errors: list[str]         # Accumulated validation errors across attempts\n```\n\nThis replaces the current `Optional[Dict[str, Any]]` return type from `call_structured()`. The `parsed` field contains what was previously returned directly.",
@@ -37,730 +38,734 @@
         "subtasks": []
       },
       {
-        "id": 4,
+        "id": "4",
         "title": "Update LLMProvider ABC and GeminiProvider Return Type",
         "description": "Modify LLMProvider.call_structured() to return LLMCallResult instead of Optional[Dict]. Update GeminiProvider to build and return LLMCallResult with all captured data.",
         "details": "Modify `llm_pipeline/llm/provider.py`:\n- Change `call_structured()` return type from `Optional[Dict[str, Any]]` to `LLMCallResult`\n- Import LLMCallResult from events.result\n\nModify `llm_pipeline/llm/gemini.py`:\n1. Track `raw_response` from `response.text` at line ~106 before JSON extraction\n2. Track `attempt_count` through retry loop\n3. Accumulate `validation_errors` list from each failed attempt (JSON parse errors, schema validation, Pydantic errors)\n4. Capture `model_name` from `self.model_name`\n5. Build and return `LLMCallResult` at all exit points:\n   - Success: `LLMCallResult(parsed=response_json, raw_response=raw, model_name=..., attempt_count=..., validation_errors=[])`\n   - Failure: `LLMCallResult(parsed=None, raw_response=last_raw, model_name=..., attempt_count=max_retries, validation_errors=[...])`\n\nThis is a clean break - no backward compatibility shim needed per PRD.",
         "testStrategy": "Test GeminiProvider returns LLMCallResult with correct fields. Mock Gemini API to test: first-try success, retry success, all retries failed. Verify raw_response captured, validation_errors accumulated, attempt_count accurate.",
         "priority": "high",
         "dependencies": [
-          3
+          "3"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 5,
+        "id": "5",
         "title": "Update executor.py to Handle LLMCallResult",
         "description": "Modify execute_llm_step() to work with LLMCallResult return type and use result.parsed for the validated dict.",
         "details": "Modify `llm_pipeline/llm/executor.py`:\n\n1. Change line ~103 from:\n```python\nresult_dict = provider.call_structured(...)\n```\nto:\n```python\nresult = provider.call_structured(...)\n```\n\n2. Update line ~111 check from:\n```python\nif result_dict is None:\n```\nto:\n```python\nif result.parsed is None:\n```\n\n3. Update Pydantic validation to use `result.parsed` instead of `result_dict`\n\n4. Store `result` (LLMCallResult) for potential event emission in later tasks\n\nEnsure backward compatibility with existing pipeline execution flow.",
         "testStrategy": "Integration test execute_llm_step with mocked provider returning LLMCallResult. Verify successful parsing, failure handling, and Pydantic validation all work correctly.",
         "priority": "high",
         "dependencies": [
-          4
+          "4"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 6,
+        "id": "6",
         "title": "Implement Event Handlers (Logging, InMemory, SQLite)",
         "description": "Create three event handler implementations: LoggingEventHandler for Python logging, InMemoryEventHandler for UI/testing, and SQLiteEventHandler for persistence.",
         "details": "Create `llm_pipeline/events/handlers.py` with:\n\n1. `LoggingEventHandler`:\n   - Implements `emit(event)` by logging to Python logger\n   - Configurable log level per event category (INFO for lifecycle, DEBUG for details)\n   - Supplements existing `logger.info` calls, doesn't replace\n\n2. `InMemoryEventHandler`:\n   - Stores events in thread-safe list (use `threading.Lock`)\n   - Query methods: `get_events(run_id: str)`, `get_events_by_type(event_type: str)`\n   - Default handler when UI is active\n   - Clear method for testing\n\n3. `SQLiteEventHandler`:\n   - Persists to `pipeline_events` table (new table)\n   - Schema: `id, run_id, event_type, event_data (JSON), timestamp`\n   - Create indexes on `run_id` and `event_type`\n   - Opt-in handler, not default\n   - Uses same SQLite database as pipeline\n\nAll handlers implement `PipelineEventEmitter` protocol.",
         "testStrategy": "Unit tests for each handler: LoggingEventHandler captures to log, InMemoryEventHandler stores/retrieves correctly with thread-safety, SQLiteEventHandler persists to DB. Test query methods return correct filtered results.",
         "priority": "high",
         "dependencies": [
-          1,
-          2
+          "1",
+          "2"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 7,
+        "id": "7",
         "title": "Add event_emitter Parameter to PipelineConfig",
         "description": "Extend PipelineConfig.__init__() to accept optional event_emitter parameter with zero overhead when not provided.",
         "details": "Modify `llm_pipeline/pipeline.py`:\n\n1. Add `event_emitter: Optional[PipelineEventEmitter] = None` to `__init__()` signature (line ~127)\n\n2. Store as `self._event_emitter = event_emitter`\n\n3. Add helper method for conditional emission:\n```python\ndef _emit(self, event: PipelineEvent) -> None:\n    if self._event_emitter is not None:\n        self._event_emitter.emit(event)\n```\n\n4. Zero overhead requirement: when `event_emitter is None`, the `_emit()` call should be a single `if` check, no event construction.\n\n5. Update `__init__` docstring to document the new parameter.\n\nExisting pipelines work unchanged - event_emitter defaults to None.",
         "testStrategy": "Test pipeline instantiation with and without event_emitter. Benchmark overhead: verify <1ms per event point when no handler attached. Test that _emit() does nothing when event_emitter is None.",
         "priority": "high",
         "dependencies": [
-          2
+          "2"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 8,
+        "id": "8",
         "title": "Emit Pipeline Lifecycle Events in execute()",
         "description": "Add event emission for PipelineStarted, PipelineCompleted, and PipelineError at the appropriate points in the execute() method.",
         "details": "Modify `llm_pipeline/pipeline.py` execute() method:\n\n1. At start of execute() (~line 398), after validation:\n```python\nif self._event_emitter:\n    self._emit(PipelineStarted(\n        event_type='pipeline_started',\n        run_id=self.run_id,\n        pipeline_name=self.pipeline_name,\n        timestamp=datetime.now(timezone.utc),\n        strategy_count=len(self._strategies),\n        use_cache=use_cache,\n        use_consensus=use_consensus\n    ))\n```\n\n2. At end of execute() before `return self`:\n```python\nif self._event_emitter:\n    self._emit(PipelineCompleted(\n        ...,\n        steps_executed=len(self._executed_steps),\n        total_time_ms=int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)\n    ))\n```\n\n3. Wrap execute() body in try/except to emit PipelineError on exception:\n```python\nexcept Exception as e:\n    if self._event_emitter:\n        self._emit(PipelineError(..., error_type=type(e).__name__, error_message=str(e), step_name=current_step_name))\n    raise\n```\n\nTrack pipeline start_time for total_time_ms calculation.",
         "testStrategy": "Integration test with InMemoryEventHandler: verify PipelineStarted emitted at start, PipelineCompleted at end with correct counts/timing. Test PipelineError emitted on exception with correct error details.",
         "priority": "high",
         "dependencies": [
-          6,
-          7
+          "6",
+          "7"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 9,
+        "id": "9",
         "title": "Emit Step Lifecycle Events",
         "description": "Add event emission for StepSelecting, StepSelected, StepSkipped, StepStarted, and StepCompleted throughout the step execution loop.",
         "details": "Modify `llm_pipeline/pipeline.py` execute() step loop:\n\n1. At start of step loop (line ~433):\n```python\nself._emit(StepSelecting(step_index=step_index, strategy_count=len(self._strategies), ...))\n```\n\n2. After strategy selection (line ~444):\n```python\nself._emit(StepSelected(step_name=step.step_name, step_number=step_num, strategy_name=selected_strategy.name, ...))\n```\n\n3. When step.should_skip() returns true (line ~454):\n```python\nself._emit(StepSkipped(step_name=step.step_name, step_number=step_num, reason='should_skip returned true', ...))\n```\n\n4. Before step execution (after skip check):\n```python\nself._emit(StepStarted(step_name=step.step_name, step_number=step_num, system_key=step.system_instruction_key, user_key=step.user_prompt_key, ...))\n```\n\n5. After step added to executed_steps (line ~551):\n```python\nself._emit(StepCompleted(step_name=step.step_name, step_number=step_num, execution_time_ms=..., ...))\n```\n\nEnsure conditional emission pattern (if self._event_emitter) for zero overhead.",
         "testStrategy": "Integration test step lifecycle: verify correct sequence of events (Selecting -> Selected -> Started -> Completed). Test StepSkipped emitted when should_skip() returns true. Verify timing data accurate.",
         "priority": "high",
         "dependencies": [
-          8
+          "8"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 10,
+        "id": "10",
         "title": "Emit Cache Events",
         "description": "Add event emission for CacheLookup, CacheHit, CacheMiss, and CacheReconstruction in the caching logic.",
         "details": "Modify `llm_pipeline/pipeline.py`:\n\n1. Before cache check (line ~480):\n```python\nself._emit(CacheLookup(step_name=step.step_name, input_hash=input_hash, ...))\n```\n\n2. When cached_state found (line ~483):\n```python\nself._emit(CacheHit(step_name=step.step_name, input_hash=input_hash, cached_at=cached_state.created_at, ...))\n```\n\n3. When no cache found (inside `else` at line ~506):\n```python\nself._emit(CacheMiss(step_name=step.step_name, input_hash=input_hash, ...))\n```\n\n4. In _reconstruct_extractions_from_cache() (line ~640):\n```python\nself._emit(CacheReconstruction(step_name=step_def.step_class.__name__, model_count=len(extraction_classes), instance_count=total, ...))\n```\n\nEmit only when use_cache=True to avoid noise.",
         "testStrategy": "Test with use_cache=True: verify CacheLookup always emitted, CacheHit on cache found, CacheMiss on fresh run. Test CacheReconstruction includes correct counts.",
         "priority": "medium",
         "dependencies": [
-          9
+          "9"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 11,
+        "id": "11",
         "title": "Emit LLM Call Events with Rendered Prompts",
         "description": "Add event emission for LLMCallPrepared, LLMCallStarting (with rendered prompts), and LLMCallCompleted (with LLMCallResult data).",
         "details": "Modify `llm_pipeline/llm/executor.py` and `llm_pipeline/pipeline.py`:\n\n1. In executor.py, after prompts retrieved (lines 79-100), emit LLMCallStarting:\n```python\n# Capture rendered prompts before LLM call\nrendered_system = system_instruction  # Already formatted\nrendered_user = user_prompt  # Already formatted\n# Pass to event system (may need to pass event_emitter through call chain)\n```\n\n2. Add event_emitter parameter to execute_llm_step() to enable event emission\n\n3. In pipeline.py, before calling execute_llm_step (line ~529):\n```python\nself._emit(LLMCallStarting(\n    step_name=step.step_name,\n    call_index=idx,\n    rendered_system_prompt=rendered_system,\n    rendered_user_prompt=rendered_user,\n    ...\n))\n```\n\n4. After execute_llm_step returns:\n```python\nself._emit(LLMCallCompleted(\n    step_name=step.step_name,\n    call_index=idx,\n    raw_response=result.raw_response,\n    parsed_result=result.parsed,\n    model_name=result.model_name,\n    attempt_count=result.attempt_count,\n    validation_errors=result.validation_errors,\n    ...\n))\n```\n\nThis requires passing rendered prompts back from executor or restructuring to capture them at pipeline level.",
         "testStrategy": "Verify LLMCallStarting contains actual rendered prompts (not template keys). Verify LLMCallCompleted contains all LLMCallResult fields. Test that prompts are captured before LLM call, not after.",
         "priority": "high",
         "dependencies": [
-          5,
-          9
+          "5",
+          "9"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 12,
+        "id": "12",
         "title": "Emit LLM Retry and Rate Limit Events",
         "description": "Add event emission for LLMCallRetry, LLMCallFailed, and LLMCallRateLimited in the GeminiProvider retry loop.",
         "details": "Modify `llm_pipeline/llm/gemini.py` call_structured():\n\n1. Add optional event_emitter parameter to call_structured() signature\n\n2. On retry (line ~147 continue statements):\n```python\nif event_emitter:\n    event_emitter.emit(LLMCallRetry(\n        step_name=step_name,  # Need to pass through\n        attempt=attempt + 1,\n        max_retries=max_retries,\n        error_type='validation_error' or 'json_parse_error',\n        error_message=str(error),\n        ...\n    ))\n```\n\n3. On rate limit detection (lines ~186-206):\n```python\nif event_emitter:\n    event_emitter.emit(LLMCallRateLimited(\n        step_name=step_name,\n        attempt=attempt + 1,\n        wait_seconds=retry_delay or wait_time,\n        backoff_type='api_suggested' or 'exponential',\n        ...\n    ))\n```\n\n4. After all retries exhausted (line ~215):\n```python\nif event_emitter:\n    event_emitter.emit(LLMCallFailed(\n        step_name=step_name,\n        max_retries=max_retries,\n        last_error=str(last_error),\n        ...\n    ))\n```\n\nThread step_name through the call chain for event context.",
         "testStrategy": "Mock Gemini API to trigger retries: verify LLMCallRetry emitted per attempt with correct error details. Test rate limit path emits LLMCallRateLimited with wait time. Test LLMCallFailed after exhausting retries.",
         "priority": "medium",
         "dependencies": [
-          11
+          "11"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 13,
+        "id": "13",
         "title": "Emit Consensus Events",
         "description": "Add event emission for ConsensusStarted, ConsensusAttempt, ConsensusReached, and ConsensusFailed in the consensus polling logic.",
         "details": "Modify `llm_pipeline/pipeline.py` _execute_with_consensus():\n\n1. At method start (line ~813):\n```python\nself._emit(ConsensusStarted(\n    step_name=current_step_name,\n    threshold=consensus_threshold,\n    max_calls=maximum_step_calls,\n    ...\n))\n```\n\n2. Per consensus call attempt (inside loop ~818):\n```python\nself._emit(ConsensusAttempt(\n    step_name=current_step_name,\n    attempt=attempt + 1,\n    group_count=len(result_groups),\n    ...\n))\n```\n\n3. When threshold reached (line ~830):\n```python\nself._emit(ConsensusReached(\n    step_name=current_step_name,\n    attempt=attempt + 1,\n    threshold=consensus_threshold,\n    ...\n))\n```\n\n4. After loop exhausted without consensus (line ~836):\n```python\nself._emit(ConsensusFailed(\n    step_name=current_step_name,\n    max_calls=maximum_step_calls,\n    largest_group_size=len(largest_group),\n    ...\n))\n```\n\nPass current step name to _execute_with_consensus() for event context.",
         "testStrategy": "Test consensus path: verify ConsensusStarted at beginning, ConsensusAttempt per call, ConsensusReached when threshold met. Test failure case emits ConsensusFailed with largest group size.",
         "priority": "medium",
         "dependencies": [
-          9
+          "9"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 14,
+        "id": "14",
         "title": "Emit Extraction and Transformation Events",
         "description": "Add event emission for ExtractionStarting, ExtractionCompleted, ExtractionError in step.py and TransformationStarting, TransformationCompleted in pipeline.py.",
         "details": "Modify `llm_pipeline/step.py` extract_data():\n\n1. Before each extraction class loop (line ~322):\n```python\nif hasattr(self.pipeline, '_event_emitter') and self.pipeline._event_emitter:\n    self.pipeline._emit(ExtractionStarting(\n        step_name=self.step_name,\n        extraction_class=extraction_class.__name__,\n        model_class=extraction.MODEL.__name__,\n        ...\n    ))\n```\n\n2. After successful extraction and flush (line ~330):\n```python\nself.pipeline._emit(ExtractionCompleted(\n    step_name=self.step_name,\n    extraction_class=extraction_class.__name__,\n    model_class=extraction.MODEL.__name__,\n    instance_count=len(instances),\n    ...\n))\n```\n\n3. Wrap in try/except for ExtractionError:\n```python\nexcept Exception as e:\n    self.pipeline._emit(ExtractionError(\n        step_name=self.step_name,\n        extraction_class=extraction_class.__name__,\n        error_message=str(e),\n        ...\n    ))\n    raise\n```\n\nModify `llm_pipeline/pipeline.py` for transformation events around lines 493-497 and 536-540.",
         "testStrategy": "Test extraction events: verify ExtractionStarting before each extraction, ExtractionCompleted with instance count, ExtractionError on failure. Test transformation events similarly.",
         "priority": "medium",
         "dependencies": [
-          9
+          "9"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 15,
+        "id": "15",
         "title": "Emit Context and State Events",
         "description": "Add event emission for InstructionsStored, InstructionsLogged, ContextUpdated, and StateSaved at the appropriate points.",
         "details": "Modify `llm_pipeline/pipeline.py`:\n\n1. After instructions stored (line ~532):\n```python\nself._emit(InstructionsStored(\n    step_name=step.step_name,\n    instruction_count=len(instructions),\n    ...\n))\n```\n\n2. After log_instructions() called (line ~549):\n```python\nself._emit(InstructionsLogged(step_name=step.step_name, ...))\n```\n\n3. After context merge in _validate_and_merge_context() (line ~349):\n```python\nself._emit(ContextUpdated(\n    step_name=step_name,  # Need to pass through\n    new_keys=list(new_context.keys()),\n    context_snapshot=dict(self._context),\n    ...\n))\n```\n\n4. In _save_step_state() (line ~674):\n```python\nself._emit(StateSaved(\n    step_name=step.step_name,\n    step_number=step_number,\n    input_hash=input_hash,\n    execution_time_ms=execution_time_ms,\n    ...\n))\n```\n\nContextUpdated carries full context_snapshot for UI diff display.",
         "testStrategy": "Verify InstructionsStored count matches, ContextUpdated contains new keys and full snapshot, StateSaved has correct timing. Test context snapshot is a deep copy to prevent mutation issues.",
         "priority": "medium",
         "dependencies": [
-          9
+          "9"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 16,
+        "id": "16",
         "title": "Populate PipelineStepState.model Field",
         "description": "Update _save_step_state() to populate the existing model field from LLMCallResult.model_name.",
         "details": "Modify `llm_pipeline/pipeline.py` _save_step_state():\n\n1. Add model_name parameter to _save_step_state() signature:\n```python\ndef _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None):\n```\n\n2. Update PipelineStepState construction (line ~701) to include model:\n```python\nstate = PipelineStepState(\n    ...,\n    model=model_name,  # Add this line - field exists at state.py:87\n    ...\n)\n```\n\n3. Update call site in execute() to pass model_name from LLMCallResult:\n```python\nself._save_step_state(\n    step, step_num, instructions, input_hash, execution_time_ms,\n    model_name=result.model_name if hasattr(result, 'model_name') else None\n)\n```\n\nThis fixes the issue identified in PRD where model field exists but is never populated.",
         "testStrategy": "Integration test: execute pipeline with GeminiProvider, verify PipelineStepState.model field contains the model name (e.g., 'gemini-2.0-flash-lite'). Query database to confirm persistence.",
         "priority": "high",
         "dependencies": [
-          5
+          "5"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 17,
+        "id": "17",
         "title": "Create pipeline_events Database Table",
         "description": "Add SQLModel definition for pipeline_events table and integrate with init_pipeline_db() for automatic table creation.",
         "details": "Create or modify `llm_pipeline/state.py` to add:\n\n```python\nclass PipelineEvent(SQLModel, table=True):\n    __tablename__ = 'pipeline_events'\n    \n    id: Optional[int] = Field(default=None, primary_key=True)\n    run_id: str = Field(max_length=36, index=True)\n    event_type: str = Field(max_length=100, index=True)\n    event_data: dict = Field(sa_column=Column(JSON))\n    timestamp: datetime = Field(default_factory=utc_now)\n    \n    __table_args__ = (\n        Index('ix_pipeline_events_run_id', 'run_id'),\n        Index('ix_pipeline_events_event_type', 'event_type'),\n    )\n```\n\nModify `llm_pipeline/db/__init__.py` init_pipeline_db() to include the new table in automatic creation.\n\nUpdate exports in `llm_pipeline/__init__.py`.",
         "testStrategy": "Test table creation with init_pipeline_db(). Verify indexes exist. Test insert and query by run_id and event_type. Verify JSON serialization of event_data works correctly.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 18,
+        "id": "18",
         "title": "Export Event System in Package __init__",
         "description": "Update llm_pipeline/__init__.py to export all new event types, LLMCallResult, emitters, and handlers.",
         "details": "Modify `llm_pipeline/__init__.py`:\n\n1. Add imports:\n```python\nfrom llm_pipeline.events import (\n    PipelineEvent,\n    PipelineEventEmitter,\n    CompositeEmitter,\n    LoggingEventHandler,\n    InMemoryEventHandler,\n    SQLiteEventHandler,\n    LLMCallResult,\n    # All 35 event types...\n    PipelineStarted,\n    PipelineCompleted,\n    PipelineError,\n    # ... etc\n)\n```\n\n2. Add to `__all__`:\n```python\n__all__ = [\n    # ... existing exports ...\n    # Events\n    'PipelineEvent',\n    'PipelineEventEmitter',\n    'CompositeEmitter',\n    'LLMCallResult',\n    # Handlers\n    'LoggingEventHandler',\n    'InMemoryEventHandler',\n    'SQLiteEventHandler',\n    # Event types (optionally group under events submodule)\n]\n```\n\n3. Create `llm_pipeline/events/__init__.py` with proper exports.\n\nConsider grouping events under `llm_pipeline.events` submodule for cleaner imports.",
         "testStrategy": "Test that all exports are importable from llm_pipeline. Verify `from llm_pipeline import LLMCallResult, PipelineEventEmitter` works. Test submodule import `from llm_pipeline.events import PipelineStarted`.",
         "priority": "medium",
         "dependencies": [
-          1,
-          2,
-          3,
-          6
+          "1",
+          "2",
+          "3",
+          "6"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 19,
+        "id": "19",
         "title": "Create FastAPI Backend Application Factory",
         "description": "Set up the FastAPI application structure with route modules for the UI backend.",
         "details": "Create `llm_pipeline/ui/` package:\n\n1. `llm_pipeline/ui/__init__.py`:\n```python\ntry:\n    from fastapi import FastAPI\nexcept ImportError:\n    raise ImportError(\n        'FastAPI not installed. Install with: pip install llm-pipeline[ui]'\n    )\n```\n\n2. `llm_pipeline/ui/app.py`:\n```python\nfrom fastapi import FastAPI\nfrom fastapi.staticfiles import StaticFiles\nfrom fastapi.middleware.cors import CORSMiddleware\n\ndef create_app(db_path: str = None) -> FastAPI:\n    app = FastAPI(title='llm-pipeline UI', version='0.1.0')\n    \n    # CORS for dev mode\n    app.add_middleware(CORSMiddleware, allow_origins=['*'], ...)\n    \n    # Mount route modules\n    from llm_pipeline.ui.routes import runs, steps, events, prompts, pipelines, websocket\n    app.include_router(runs.router, prefix='/api')\n    app.include_router(steps.router, prefix='/api')\n    app.include_router(events.router, prefix='/api')\n    app.include_router(prompts.router, prefix='/api')\n    app.include_router(pipelines.router, prefix='/api')\n    app.include_router(websocket.router)\n    \n    # Static files (production)\n    # app.mount('/', StaticFiles(directory='dist', html=True))\n    \n    return app\n```\n\n3. Create empty route module files in `llm_pipeline/ui/routes/`",
         "testStrategy": "Test app creation, route mounting, CORS middleware. Verify import guard raises helpful error when FastAPI not installed. Test static file serving in production mode.",
         "priority": "high",
         "dependencies": [
-          18
+          "18"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 20,
+        "id": "20",
         "title": "Implement Runs API Endpoints",
         "description": "Create REST endpoints for listing and retrieving pipeline runs from pipeline_run_instances and pipeline_step_states tables.",
         "details": "Create `llm_pipeline/ui/routes/runs.py`:\n\n```python\nfrom fastapi import APIRouter, Query, Depends\nfrom sqlmodel import Session, select, func\nfrom llm_pipeline.state import PipelineStepState, PipelineRunInstance\n\nrouter = APIRouter(tags=['runs'])\n\n@router.get('/runs')\nasync def list_runs(\n    pipeline_name: str = None,\n    from_date: datetime = None,\n    to_date: datetime = None,\n    page: int = Query(1, ge=1),\n    page_size: int = Query(50, ge=1, le=100)\n):\n    # Query pipeline_step_states grouped by run_id\n    # Return: run_id, pipeline_name, started_at, completed_at, status, step_count, total_time_ms\n    # Paginated with total count\n    ...\n\n@router.get('/runs/{run_id}')\nasync def get_run(run_id: str):\n    # Return run summary with step list\n    # Join pipeline_step_states WHERE run_id\n    ...\n\n@router.post('/runs')\nasync def create_run(request: CreateRunRequest):\n    # Trigger pipeline execution asynchronously\n    # Return run_id immediately\n    # Use asyncio.to_thread() for sync pipeline execution\n    ...\n```\n\nUse <200ms target for 10k+ runs (paginated query with indexes).",
         "testStrategy": "Load test with 10k+ runs: verify <200ms response. Test pagination, filtering by pipeline_name and date range. Test run detail returns correct step summary.",
         "priority": "high",
         "dependencies": [
-          19
+          "19"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 21,
+        "id": "21",
         "title": "Implement Steps and Events API Endpoints",
         "description": "Create REST endpoints for retrieving step details and events for a specific run.",
         "details": "Create `llm_pipeline/ui/routes/steps.py`:\n\n```python\n@router.get('/runs/{run_id}/steps')\nasync def list_steps(run_id: str):\n    # Return all steps for run ordered by step_number\n    ...\n\n@router.get('/runs/{run_id}/steps/{step_number}')\nasync def get_step(run_id: str, step_number: int):\n    # Return full step detail including:\n    # result_data, context_snapshot, prompt keys, model, execution_time_ms\n    ...\n\n@router.get('/runs/{run_id}/context')\nasync def get_context_evolution(run_id: str):\n    # Return ordered array of context snapshots with step names\n    # For JSON diff display in UI\n    ...\n```\n\nCreate `llm_pipeline/ui/routes/events.py`:\n\n```python\n@router.get('/runs/{run_id}/events')\nasync def list_events(run_id: str, event_type: str = None):\n    # Return events from InMemoryEventHandler (active) or pipeline_events (persisted)\n    # Filter by event_type if provided\n    ...\n```\n\nTarget <100ms for step detail (single row lookup).",
         "testStrategy": "Test step list ordering, step detail completeness. Test context evolution returns snapshots in order. Test event filtering by type. Verify <100ms response for step detail.",
         "priority": "high",
         "dependencies": [
-          20
+          "20"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 22,
+        "id": "22",
         "title": "Implement Prompts API Endpoint",
         "description": "Create REST endpoint for listing and retrieving prompt templates from the prompts table.",
         "details": "Create `llm_pipeline/ui/routes/prompts.py`:\n\n```python\nfrom llm_pipeline.db.prompt import Prompt\n\n@router.get('/prompts')\nasync def list_prompts(\n    prompt_type: str = None,  # system or user\n    pipeline_name: str = None\n):\n    # Query prompts table\n    # Extract variables from content using regex {variable_name}\n    # Return: key, type, template_text, variables[], pipeline_name\n    ...\n\n@router.get('/prompts/{prompt_key}')\nasync def get_prompt(prompt_key: str):\n    # Return full prompt detail with both system and user variants\n    ...\n```\n\nReuse `extract_variables_from_content()` from `llm_pipeline/prompts/loader.py` for variable extraction.\n\nReturn prompt templates with highlighted variable placeholders for UI display.",
         "testStrategy": "Test prompt list with filtering. Verify variables extracted correctly from template content. Test that inactive prompts can be filtered.",
         "priority": "medium",
         "dependencies": [
-          19
+          "19"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 23,
+        "id": "23",
         "title": "Implement Pipeline Introspection Service",
         "description": "Create a service that extracts pipeline metadata via runtime introspection: strategies, step order, schemas, prompt keys, extraction models.",
         "details": "Create `llm_pipeline/ui/introspection.py`:\n\n```python\nfrom typing import Type, Dict, Any, List\nfrom llm_pipeline import PipelineConfig, PipelineStrategies\n\nclass PipelineIntrospector:\n    def __init__(self, pipeline_class: Type[PipelineConfig]):\n        self.pipeline_class = pipeline_class\n    \n    def get_metadata(self) -> Dict[str, Any]:\n        # Extract from class attributes without instantiating pipeline\n        strategies = self.pipeline_class.STRATEGIES\n        registry = self.pipeline_class.REGISTRY\n        \n        return {\n            'name': self._derive_pipeline_name(),\n            'strategies': self._extract_strategies(strategies),\n            'registry_models': self._extract_models(registry),\n            'step_order': self._build_step_order(strategies),\n        }\n    \n    def _extract_strategies(self, strategies_class) -> List[Dict]:\n        # Get steps from each strategy\n        # Extract prompt keys, extraction models, transformations\n        ...\n    \n    def _extract_schema(self, pydantic_model) -> Dict:\n        # Get field names, types, descriptions from Pydantic model\n        return pydantic_model.model_json_schema()\n```\n\nCache introspection results to avoid repeated reflection.",
         "testStrategy": "Test introspection against existing pipeline classes. Verify strategy extraction, step order matches _build_execution_order(), schema extraction works for Pydantic models.",
         "priority": "high",
         "dependencies": [
-          19
+          "19"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 24,
+        "id": "24",
         "title": "Implement Pipelines API Endpoints",
         "description": "Create REST endpoints for listing discovered pipelines and retrieving full introspection data.",
         "details": "Create `llm_pipeline/ui/routes/pipelines.py`:\n\n```python\nfrom llm_pipeline.ui.introspection import PipelineIntrospector\n\n# Registry of discoverable pipelines (configured at startup)\n_pipeline_registry: Dict[str, Type[PipelineConfig]] = {}\n\ndef register_pipeline(pipeline_class: Type[PipelineConfig]):\n    name = pipeline_class.__name__\n    _pipeline_registry[name] = pipeline_class\n\n@router.get('/pipelines')\nasync def list_pipelines():\n    # Return list of registered pipelines with summary metadata\n    return {\n        'pipelines': [\n            {\n                'name': name,\n                'strategy_count': len(cls.STRATEGIES.STRATEGIES),\n                'step_count': sum(len(s().get_steps()) for s in cls.STRATEGIES.STRATEGIES),\n                'has_input_schema': hasattr(cls, 'INPUT_DATA'),\n            }\n            for name, cls in _pipeline_registry.items()\n        ]\n    }\n\n@router.get('/pipelines/{pipeline_name}')\nasync def get_pipeline(pipeline_name: str):\n    # Return full introspection data\n    introspector = PipelineIntrospector(_pipeline_registry[pipeline_name])\n    return introspector.get_metadata()\n```\n\nGraceful error handling when introspection fails.",
         "testStrategy": "Test pipeline registration and listing. Test full introspection returns complete metadata. Test error handling when pipeline not found or introspection fails.",
         "priority": "medium",
         "dependencies": [
-          23
+          "23"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 25,
+        "id": "25",
         "title": "Implement WebSocket Handler for Live Events",
         "description": "Create WebSocket endpoint for real-time event streaming during pipeline execution.",
         "details": "Create `llm_pipeline/ui/routes/websocket.py`:\n\n```python\nfrom fastapi import WebSocket, WebSocketDisconnect\nimport asyncio\n\n# Per-run event queues\n_run_queues: Dict[str, asyncio.Queue] = {}\n_run_connections: Dict[str, List[WebSocket]] = {}\n\n@router.websocket('/ws/runs/{run_id}')\nasync def websocket_endpoint(websocket: WebSocket, run_id: str):\n    await websocket.accept()\n    \n    # Register connection\n    if run_id not in _run_connections:\n        _run_connections[run_id] = []\n    _run_connections[run_id].append(websocket)\n    \n    try:\n        # If run is complete, send all persisted events as batch\n        if is_run_complete(run_id):\n            events = get_persisted_events(run_id)\n            for event in events:\n                await websocket.send_json(event)\n            await websocket.close()\n            return\n        \n        # Stream live events\n        queue = get_or_create_queue(run_id)\n        while True:\n            event = await asyncio.wait_for(queue.get(), timeout=30)\n            if event is None:  # Sentinel for run complete\n                break\n            await websocket.send_json(event)\n            \n    except WebSocketDisconnect:\n        _run_connections[run_id].remove(websocket)\n```\n\nSupport 100+ concurrent connections per NFR-003. Heartbeat ping every 30 seconds.",
         "testStrategy": "Test WebSocket connection lifecycle. Test live event streaming with mock events. Load test 100+ concurrent connections. Test batch send for completed runs.",
         "priority": "high",
         "dependencies": [
-          21
+          "21"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 26,
+        "id": "26",
         "title": "Create UIBridge Event Handler",
         "description": "Create a special event handler that bridges sync pipeline execution to async WebSocket broadcasting.",
         "details": "Create `llm_pipeline/ui/bridge.py`:\n\n```python\nimport asyncio\nimport threading\nfrom llm_pipeline.events import PipelineEventEmitter, PipelineEvent\n\nclass UIBridge(PipelineEventEmitter):\n    '''Bridges sync pipeline events to async WebSocket clients.'''\n    \n    def __init__(self, run_id: str, loop: asyncio.AbstractEventLoop = None):\n        self.run_id = run_id\n        self._loop = loop or asyncio.get_event_loop()\n        self._queue = asyncio.Queue()\n    \n    def emit(self, event: PipelineEvent) -> None:\n        # Thread-safe: called from sync pipeline execution\n        # Schedule async queue put in event loop\n        asyncio.run_coroutine_threadsafe(\n            self._queue.put(event.to_dict()),\n            self._loop\n        )\n    \n    @property\n    def queue(self) -> asyncio.Queue:\n        return self._queue\n    \n    def complete(self):\n        # Send sentinel to signal run complete\n        asyncio.run_coroutine_threadsafe(\n            self._queue.put(None),\n            self._loop\n        )\n```\n\nThis allows `pipeline.execute()` (sync) to emit events that are broadcast to WebSocket clients (async).\n\nUse with `asyncio.to_thread()` for non-blocking pipeline execution.",
         "testStrategy": "Test thread-safe event emission from sync context. Test queue consumption from async WebSocket handler. Test completion sentinel handling.",
         "priority": "high",
         "dependencies": [
-          6,
-          25
+          "6",
+          "25"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 27,
+        "id": "27",
         "title": "Create CLI Entry Point",
         "description": "Implement the llm-pipeline ui command with --dev, --port, and --db flags.",
         "details": "Create `llm_pipeline/ui/cli.py`:\n\n```python\nimport argparse\nimport uvicorn\n\ndef main():\n    parser = argparse.ArgumentParser(description='llm-pipeline UI')\n    parser.add_argument('command', choices=['ui'])\n    parser.add_argument('--dev', action='store_true', help='Enable dev mode with Vite HMR')\n    parser.add_argument('--port', type=int, default=8642, help='Server port')\n    parser.add_argument('--db', type=str, help='SQLite database path')\n    \n    args = parser.parse_args()\n    \n    if args.command == 'ui':\n        from llm_pipeline.ui.app import create_app\n        app = create_app(db_path=args.db)\n        \n        if args.dev:\n            # Start Vite dev server in subprocess\n            # Proxy API requests to FastAPI\n            start_dev_mode(app, args.port)\n        else:\n            # Production: serve static files from dist/\n            uvicorn.run(app, host='0.0.0.0', port=args.port)\n\ndef start_dev_mode(app, port):\n    # Start Vite on port+1, FastAPI on port\n    # Configure Vite to proxy /api and /ws to FastAPI\n    ...\n```\n\nUpdate `pyproject.toml`:\n```toml\n[project.scripts]\nllm-pipeline = \"llm_pipeline.ui.cli:main\"\n```",
         "testStrategy": "Test CLI argument parsing. Test production mode starts uvicorn. Test dev mode starts both Vite and FastAPI. Verify --port and --db options work correctly.",
         "priority": "high",
         "dependencies": [
-          19
+          "19"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 28,
+        "id": "28",
         "title": "Update pyproject.toml with UI Dependencies",
         "description": "Add [ui] optional dependencies and CLI entry point to pyproject.toml.",
         "details": "Modify `pyproject.toml`:\n\n```toml\n[project.optional-dependencies]\ngemini = [\"google-generativeai>=0.3.0\"]\nui = [\n    \"fastapi>=0.115.0\",\n    \"uvicorn[standard]>=0.32.0\",\n    \"websockets>=13.0\",\n    \"python-multipart>=0.0.9\",  # For form data\n]\ndev = [\n    \"pytest>=7.0\",\n    \"pytest-cov>=4.0\",\n    \"pytest-asyncio>=0.24.0\",  # For async tests\n]\n\n[project.scripts]\nllm-pipeline = \"llm_pipeline.ui.cli:main\"\n\n[tool.hatch.build.targets.wheel]\npackages = [\"llm_pipeline\"]\n\n# Include frontend dist in package\n[tool.hatch.build.targets.wheel.shared-data]\n\"llm_pipeline/ui/frontend/dist\" = \"llm_pipeline/ui/frontend/dist\"\n```\n\nVersion pins based on current stable releases (FastAPI 0.115+, uvicorn 0.32+).",
         "testStrategy": "Test pip install llm-pipeline[ui] installs all dependencies. Verify CLI entry point registered. Test import guard in ui/__init__.py shows helpful error without [ui].",
         "priority": "high",
         "dependencies": [
-          27
+          "27"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 29,
+        "id": "29",
         "title": "Initialize Frontend Project Structure",
         "description": "Set up React 19 + TypeScript + Vite + TanStack Router frontend project with proper configuration.",
         "details": "Create `llm_pipeline/ui/frontend/`:\n\n1. Initialize with Vite:\n```bash\nnpm create vite@latest . -- --template react-ts\n```\n\n2. Install dependencies:\n```bash\nnpm install @tanstack/react-router @tanstack/react-query zustand\nnpm install tailwindcss postcss autoprefixer @shadcn/ui\nnpm install -D @tanstack/router-plugin\n```\n\n3. Configure `vite.config.ts`:\n```typescript\nimport { defineConfig } from 'vite'\nimport react from '@vitejs/plugin-react'\nimport { TanStackRouterVite } from '@tanstack/router-plugin/vite'\n\nexport default defineConfig({\n  plugins: [TanStackRouterVite(), react()],\n  server: {\n    proxy: {\n      '/api': 'http://localhost:8642',\n      '/ws': { target: 'ws://localhost:8642', ws: true }\n    }\n  },\n  build: { outDir: 'dist' }\n})\n```\n\n4. Configure TailwindCSS with dark mode default.\n\n5. Set up shadcn/ui components.",
         "testStrategy": "Verify npm install succeeds. Test npm run dev starts Vite. Test npm run build produces dist/ folder. Verify proxy configuration works with backend.",
         "priority": "high",
         "dependencies": [
-          28
+          "28"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 30,
+        "id": "30",
         "title": "Create TanStack Router File-Based Routes",
         "description": "Set up file-based routing with TanStack Router including root layout and all Phase 2 routes.",
         "details": "Create route files in `src/routes/`:\n\n1. `__root.tsx` - Root layout with sidebar:\n```typescript\nimport { Outlet, createRootRoute } from '@tanstack/react-router'\n\nexport const Route = createRootRoute({\n  component: () => (\n    <div className=\"flex h-screen bg-gray-900 text-gray-100\">\n      <Sidebar />\n      <main className=\"flex-1 overflow-auto\">\n        <Outlet />\n      </main>\n    </div>\n  ),\n})\n```\n\n2. `index.tsx` - Run List at \"/\"\n3. `runs/$runId.tsx` - Run Detail at \"/runs/$runId\"\n4. `live.tsx` - Live Execution at \"/live\"\n5. `prompts.tsx` - Prompt Browser at \"/prompts\"\n6. `pipelines/index.tsx` - Pipeline Structure at \"/pipelines\"\n\nConfigure `routeTree.gen.ts` auto-generation via TanStack Router plugin.\n\nSet up Zod search params for type-safe URL parameters.",
         "testStrategy": "Test route generation, navigation between routes. Verify URL params parsed correctly. Test route-level code splitting works.",
         "priority": "high",
         "dependencies": [
-          29
+          "29"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 31,
+        "id": "31",
         "title": "Implement TanStack Query API Hooks",
         "description": "Create React Query hooks for all API endpoints with proper caching and invalidation.",
         "details": "Create `src/api/` directory:\n\n1. `runs.ts`:\n```typescript\nimport { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'\n\nexport function useRuns(filters: RunFilters) {\n  return useQuery({\n    queryKey: ['runs', filters],\n    queryFn: () => fetch(`/api/runs?${new URLSearchParams(filters)}`).then(r => r.json()),\n    staleTime: 30_000,  // 30 seconds for active runs\n  })\n}\n\nexport function useRun(runId: string) {\n  return useQuery({\n    queryKey: ['runs', runId],\n    queryFn: () => fetch(`/api/runs/${runId}`).then(r => r.json()),\n  })\n}\n\nexport function useCreateRun() {\n  const queryClient = useQueryClient()\n  return useMutation({\n    mutationFn: (data: CreateRunRequest) => \n      fetch('/api/runs', { method: 'POST', body: JSON.stringify(data) }),\n    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['runs'] }),\n  })\n}\n```\n\n2. Similar hooks for steps.ts, events.ts, prompts.ts, pipelines.ts\n\n3. `websocket.ts` - WebSocket connection hook with reconnection logic",
         "testStrategy": "Test query caching and invalidation. Test mutation optimistic updates. Test WebSocket hook reconnection on disconnect.",
         "priority": "high",
         "dependencies": [
-          30
+          "30"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 32,
+        "id": "32",
         "title": "Create Zustand UI State Stores",
         "description": "Implement Zustand stores for UI-only state: filters, selected items, panel visibility, theme.",
         "details": "Create `src/stores/`:\n\n1. `ui.ts`:\n```typescript\nimport { create } from 'zustand'\nimport { persist } from 'zustand/middleware'\n\ninterface UIState {\n  sidebarCollapsed: boolean\n  theme: 'dark' | 'light'\n  selectedStepId: string | null\n  stepDetailOpen: boolean\n  toggleSidebar: () => void\n  setTheme: (theme: 'dark' | 'light') => void\n  selectStep: (stepId: string | null) => void\n}\n\nexport const useUIStore = create<UIState>()(persist(\n  (set) => ({\n    sidebarCollapsed: false,\n    theme: 'dark',\n    selectedStepId: null,\n    stepDetailOpen: false,\n    toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),\n    setTheme: (theme) => set({ theme }),\n    selectStep: (stepId) => set({ selectedStepId: stepId, stepDetailOpen: !!stepId }),\n  }),\n  { name: 'llm-pipeline-ui' }\n))\n```\n\n2. `filters.ts` - Run list filters (pipeline name, date range)",
         "testStrategy": "Test store state updates. Test persistence across page reloads. Test selector hooks work correctly with React components.",
         "priority": "medium",
         "dependencies": [
-          30
+          "30"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 33,
+        "id": "33",
         "title": "Implement Run List View Component",
         "description": "Create the main Run List view with table, filtering, and pagination.",
         "details": "Create `src/routes/index.tsx`:\n\n```typescript\nimport { useRuns } from '../api/runs'\nimport { useFiltersStore } from '../stores/filters'\n\nexport function RunList() {\n  const filters = useFiltersStore()\n  const { data, isLoading } = useRuns(filters)\n  \n  return (\n    <div className=\"p-6\">\n      <header className=\"mb-6\">\n        <h1 className=\"text-2xl font-bold\">Pipeline Runs</h1>\n        <FilterBar />\n      </header>\n      \n      <table className=\"w-full text-sm\">\n        <thead>\n          <tr className=\"border-b border-gray-700\">\n            <th>Run ID</th>\n            <th>Pipeline</th>\n            <th>Started</th>\n            <th>Status</th>\n            <th>Steps</th>\n            <th>Duration</th>\n          </tr>\n        </thead>\n        <tbody>\n          {data?.runs.map(run => (\n            <RunRow key={run.run_id} run={run} />\n          ))}\n        </tbody>\n      </table>\n      \n      <Pagination total={data?.total} />\n    </div>\n  )\n}\n```\n\nFeatures:\n- Run ID truncated to 8 chars, full on hover\n- Status color coding (pending/running/completed/failed)\n- Relative timestamps with full date tooltip\n- Click row navigates to Run Detail",
         "testStrategy": "Test table rendering with mock data. Test filtering updates query. Test pagination navigation. Test row click navigates to detail.",
         "priority": "high",
         "dependencies": [
-          31,
-          32
+          "31",
+          "32"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 34,
+        "id": "34",
         "title": "Implement Run Detail View with Step Timeline",
         "description": "Create the Run Detail view showing step timeline and context evolution panel.",
         "details": "Create `src/routes/runs/$runId.tsx`:\n\n```typescript\nimport { useRun, useContextEvolution } from '../api/runs'\nimport { StepTimeline } from '../components/StepTimeline'\nimport { ContextEvolution } from '../components/ContextEvolution'\n\nexport function RunDetail() {\n  const { runId } = Route.useParams()\n  const { data: run } = useRun(runId)\n  const { data: contexts } = useContextEvolution(runId)\n  \n  return (\n    <div className=\"flex flex-col h-full\">\n      <header className=\"p-4 border-b border-gray-700\">\n        <h1>{run?.pipeline_name}</h1>\n        <RunMeta run={run} />\n      </header>\n      \n      <div className=\"flex-1 flex\">\n        <div className=\"flex-1 p-4\">\n          <StepTimeline \n            steps={run?.steps} \n            onStepClick={(step) => selectStep(step.step_number)}\n          />\n        </div>\n        \n        <ContextEvolution contexts={contexts} />\n      </div>\n      \n      <StepDetailPanel />  {/* Slide-over */}\n    </div>\n  )\n}\n```\n\nComponents:\n- `StepTimeline`: Visual step sequence with status colors\n- `ContextEvolution`: JSON diff panel between steps\n- `StepDetailPanel`: Slide-over with 7 tabs",
         "testStrategy": "Test timeline rendering with various step states. Test step click opens detail panel. Test context diff highlights changes correctly.",
         "priority": "high",
         "dependencies": [
-          33
+          "33"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 35,
+        "id": "35",
         "title": "Implement Step Detail Panel with Tabs",
         "description": "Create the Step Detail slide-over panel with all 7 tabs: Input, Prompts, LLM Response, Instructions, Context Diff, Extractions, Meta.",
         "details": "Create `src/components/StepDetailPanel.tsx`:\n\n```typescript\nimport { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'\n\nexport function StepDetailPanel() {\n  const { selectedStepId, stepDetailOpen } = useUIStore()\n  const { data: step } = useStep(runId, selectedStepId)\n  const { data: events } = useStepEvents(runId, selectedStepId)\n  \n  // Find LLMCallStarting and LLMCallCompleted events for this step\n  const llmStarting = events?.find(e => e.event_type === 'llm_call_starting')\n  const llmCompleted = events?.find(e => e.event_type === 'llm_call_completed')\n  \n  return (\n    <Sheet open={stepDetailOpen} onOpenChange={close}>\n      <SheetContent className=\"w-[600px]\">\n        <Tabs defaultValue=\"prompts\">\n          <TabsList>\n            <TabsTrigger value=\"input\">Input</TabsTrigger>\n            <TabsTrigger value=\"prompts\">Prompts</TabsTrigger>\n            <TabsTrigger value=\"response\">LLM Response</TabsTrigger>\n            <TabsTrigger value=\"instructions\">Instructions</TabsTrigger>\n            <TabsTrigger value=\"context\">Context Diff</TabsTrigger>\n            <TabsTrigger value=\"extractions\">Extractions</TabsTrigger>\n            <TabsTrigger value=\"meta\">Meta</TabsTrigger>\n          </TabsList>\n          \n          <TabsContent value=\"prompts\">\n            <PromptViewer \n              system={llmStarting?.rendered_system_prompt}\n              user={llmStarting?.rendered_user_prompt}\n            />\n          </TabsContent>\n          \n          <TabsContent value=\"response\">\n            <div className=\"grid grid-cols-2 gap-4\">\n              <div>\n                <h3>Raw Response</h3>\n                <pre>{llmCompleted?.raw_response}</pre>\n              </div>\n              <div>\n                <h3>Parsed JSON</h3>\n                <JsonViewer data={llmCompleted?.parsed_result} />\n              </div>\n            </div>\n          </TabsContent>\n          {/* ... other tabs */}\n        </Tabs>\n      </SheetContent>\n    </Sheet>\n  )\n}\n```",
         "testStrategy": "Test all 7 tabs render correctly. Test Prompts tab shows rendered prompts from events. Test LLM Response shows raw + parsed side-by-side. Test Meta shows model, timing, validation errors.",
         "priority": "high",
         "dependencies": [
-          34
+          "34"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 36,
+        "id": "36",
         "title": "Implement JSON Diff Component",
         "description": "Create a reusable JSON diff component for context evolution display with additions, removals, and changes highlighted.",
         "details": "Create `src/components/JsonDiff.tsx`:\n\n```typescript\nimport { diff } from 'deep-diff'  // or jsondiffpatch\n\ninterface JsonDiffProps {\n  before: object\n  after: object\n  maxDepth?: number\n}\n\nexport function JsonDiff({ before, after, maxDepth = 3 }: JsonDiffProps) {\n  const differences = diff(before, after)\n  \n  return (\n    <div className=\"font-mono text-sm\">\n      {renderDiff(differences, maxDepth)}\n    </div>\n  )\n}\n\nfunction renderDiff(diffs, maxDepth) {\n  // Color coding:\n  // - Additions: green background\n  // - Removals: red background with strikethrough\n  // - Changes: yellow background, show before->after\n  // Collapsible nodes for deep objects\n}\n```\n\nCreate `src/components/ContextEvolution.tsx`:\n```typescript\nexport function ContextEvolution({ contexts }) {\n  return (\n    <div className=\"w-80 border-l border-gray-700 overflow-y-auto\">\n      {contexts?.map((ctx, i) => (\n        <div key={ctx.step_name}>\n          <h4>{ctx.step_name}</h4>\n          {i > 0 && (\n            <JsonDiff \n              before={contexts[i-1].context_snapshot}\n              after={ctx.context_snapshot}\n            />\n          )}\n        </div>\n      ))}\n    </div>\n  )\n}\n```",
         "testStrategy": "Test diff detection for additions, removals, changes. Test color coding matches spec. Test collapsible nodes for large objects. Test performance with large JSON objects.",
         "priority": "medium",
         "dependencies": [
-          34
+          "34"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 37,
+        "id": "37",
         "title": "Implement Live Execution View",
         "description": "Create the Live Execution view with pipeline selector, input form, WebSocket event stream, and auto-updating step timeline.",
         "details": "Create `src/routes/live.tsx`:\n\n```typescript\nimport { usePipelines } from '../api/pipelines'\nimport { useWebSocket } from '../api/websocket'\nimport { EventStream } from '../components/EventStream'\n\nexport function LiveExecution() {\n  const [selectedPipeline, setSelectedPipeline] = useState(null)\n  const [runId, setRunId] = useState(null)\n  const { events, status } = useWebSocket(runId)\n  \n  const handleRun = async (inputData) => {\n    const { run_id } = await createRun({\n      pipeline_name: selectedPipeline,\n      input_data: inputData\n    })\n    setRunId(run_id)\n  }\n  \n  return (\n    <div className=\"grid grid-cols-3 h-full\">\n      {/* Left: Pipeline selector + input form */}\n      <div className=\"border-r border-gray-700 p-4\">\n        <PipelineSelector onSelect={setSelectedPipeline} />\n        {selectedPipeline && (\n          <InputForm \n            pipeline={selectedPipeline}\n            onSubmit={handleRun}\n          />\n        )}\n      </div>\n      \n      {/* Center: Event stream */}\n      <div className=\"p-4 overflow-y-auto\">\n        <EventStream events={events} autoScroll />\n      </div>\n      \n      {/* Right: Live step timeline + detail */}\n      <div className=\"border-l border-gray-700\">\n        <StepTimeline steps={deriveStepsFromEvents(events)} live />\n        <StepDetailPanel />\n      </div>\n    </div>\n  )\n}\n```\n\nSupport both Python-initiated (auto-detect via WebSocket) and UI-initiated runs.",
         "testStrategy": "Test pipeline selection and input form generation. Test WebSocket connection and event streaming. Test live step timeline updates. Test auto-scroll behavior.",
         "priority": "high",
         "dependencies": [
-          35,
-          31
+          "35",
+          "31"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 38,
+        "id": "38",
         "title": "Implement Input Form Generation from PipelineInputData",
         "description": "Create a component that generates form fields from Pydantic schema with JSON editor fallback.",
         "details": "Create `src/components/InputForm.tsx`:\n\n```typescript\nimport { usePipeline } from '../api/pipelines'\n\nexport function InputForm({ pipeline, onSubmit }) {\n  const { data: pipelineData } = usePipeline(pipeline)\n  const schema = pipelineData?.input_schema\n  \n  if (!schema) {\n    // Fallback to JSON editor\n    return <JsonEditor onSubmit={onSubmit} />\n  }\n  \n  return (\n    <form onSubmit={handleSubmit}>\n      {Object.entries(schema.properties).map(([key, prop]) => (\n        <FormField key={key} name={key} schema={prop} />\n      ))}\n      <button type=\"submit\">Run Pipeline</button>\n    </form>\n  )\n}\n\nfunction FormField({ name, schema }) {\n  // Generate appropriate input based on schema type:\n  // - string: text input\n  // - number/integer: number input\n  // - boolean: checkbox\n  // - enum: select dropdown\n  // - object: nested fieldset\n  // - array: repeatable field group\n}\n```\n\nFile uploads deferred to future extension per PRD.",
         "testStrategy": "Test form generation from various Pydantic schemas. Test field type mapping (string, number, enum, nested). Test JSON editor fallback when no schema. Test form submission.",
         "priority": "medium",
         "dependencies": [
-          37
+          "37"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 39,
+        "id": "39",
         "title": "Implement Prompt Browser View",
         "description": "Create the Prompt Browser view with template listing, variable highlighting, and filtering.",
         "details": "Create `src/routes/prompts.tsx`:\n\n```typescript\nimport { usePrompts } from '../api/prompts'\n\nexport function PromptBrowser() {\n  const [filters, setFilters] = useState({ type: null, pipeline: null })\n  const { data: prompts } = usePrompts(filters)\n  const [selectedPrompt, setSelectedPrompt] = useState(null)\n  \n  return (\n    <div className=\"flex h-full\">\n      {/* Left: Prompt list */}\n      <div className=\"w-80 border-r border-gray-700 overflow-y-auto\">\n        <FilterBar filters={filters} onChange={setFilters} />\n        {prompts?.map(prompt => (\n          <PromptListItem \n            key={prompt.key}\n            prompt={prompt}\n            onClick={() => setSelectedPrompt(prompt)}\n            selected={selectedPrompt?.key === prompt.key}\n          />\n        ))}\n      </div>\n      \n      {/* Right: Template viewer */}\n      <div className=\"flex-1 p-4\">\n        {selectedPrompt && (\n          <PromptViewer prompt={selectedPrompt} />\n        )}\n      </div>\n    </div>\n  )\n}\n```\n\nCreate `src/components/PromptViewer.tsx`:\n```typescript\nexport function PromptViewer({ prompt }) {\n  // Highlight {variable_name} placeholders with distinct color\n  const highlightedContent = prompt.content.replace(\n    /\\{(\\w+)\\}/g,\n    '<span class=\"text-blue-400 bg-blue-900/30\">{$1}</span>'\n  )\n  \n  return (\n    <div>\n      <header>\n        <h2>{prompt.name}</h2>\n        <div>Type: {prompt.type}</div>\n        <div>Variables: {prompt.variables.join(', ')}</div>\n      </header>\n      <pre dangerouslySetInnerHTML={{ __html: highlightedContent }} />\n    </div>\n  )\n}\n```",
         "testStrategy": "Test prompt list filtering by type and pipeline. Test variable highlighting regex. Test prompt selection and display. Test monospace font for template content.",
         "priority": "medium",
         "dependencies": [
-          31
+          "31"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 40,
+        "id": "40",
         "title": "Implement Pipeline Structure View",
         "description": "Create the Pipeline Structure view showing introspected pipeline metadata: strategies, steps, schemas, prompts.",
         "details": "Create `src/routes/pipelines/index.tsx`:\n\n```typescript\nimport { usePipelines, usePipeline } from '../api/pipelines'\n\nexport function PipelineStructure() {\n  const { data: pipelines } = usePipelines()\n  const [selected, setSelected] = useState(null)\n  const { data: detail } = usePipeline(selected)\n  \n  return (\n    <div className=\"flex h-full\">\n      {/* Left: Pipeline list */}\n      <div className=\"w-64 border-r border-gray-700\">\n        {pipelines?.map(p => (\n          <div \n            key={p.name}\n            onClick={() => setSelected(p.name)}\n            className={selected === p.name ? 'bg-gray-800' : ''}\n          >\n            <div>{p.name}</div>\n            <div className=\"text-sm text-gray-400\">\n              {p.strategy_count} strategies, {p.step_count} steps\n            </div>\n          </div>\n        ))}\n      </div>\n      \n      {/* Right: Pipeline detail */}\n      <div className=\"flex-1 p-4 overflow-y-auto\">\n        {detail && (\n          <>\n            <StrategyList strategies={detail.strategies} />\n            <StepList steps={detail.step_order} />\n            <SchemaViewer schemas={detail.schemas} />\n          </>\n        )}\n      </div>\n    </div>\n  )\n}\n```\n\nVisualize:\n- Step order with strategy branches\n- Prompt keys per step (clickable to Prompt Browser)\n- Extraction models per step\n- Instruction schema fields with types",
         "testStrategy": "Test pipeline list loading. Test detail view shows complete introspection data. Test click-through to prompts. Test schema visualization for nested Pydantic models.",
         "priority": "medium",
         "dependencies": [
-          24,
-          31
+          "24",
+          "31"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 41,
+        "id": "41",
         "title": "Create Sidebar Navigation Component",
         "description": "Implement the collapsible sidebar with navigation links and active route highlighting.",
         "details": "Create `src/components/Sidebar.tsx`:\n\n```typescript\nimport { Link, useMatchRoute } from '@tanstack/react-router'\nimport { useUIStore } from '../stores/ui'\nimport { \n  ListBulletIcon, \n  PlayIcon, \n  DocumentTextIcon, \n  CubeIcon \n} from '@heroicons/react/24/outline'\n\nconst navItems = [\n  { to: '/', icon: ListBulletIcon, label: 'Runs' },\n  { to: '/live', icon: PlayIcon, label: 'Live' },\n  { to: '/prompts', icon: DocumentTextIcon, label: 'Prompts' },\n  { to: '/pipelines', icon: CubeIcon, label: 'Pipelines' },\n]\n\nexport function Sidebar() {\n  const { sidebarCollapsed, toggleSidebar } = useUIStore()\n  const matchRoute = useMatchRoute()\n  \n  return (\n    <aside className={`\n      bg-gray-800 border-r border-gray-700\n      ${sidebarCollapsed ? 'w-12' : 'w-60'}\n      transition-all duration-200\n    `}>\n      <div className=\"p-4 border-b border-gray-700\">\n        <button onClick={toggleSidebar}>...</button>\n        {!sidebarCollapsed && <span>llm-pipeline</span>}\n      </div>\n      \n      <nav className=\"p-2\">\n        {navItems.map(item => {\n          const isActive = matchRoute({ to: item.to })\n          return (\n            <Link\n              key={item.to}\n              to={item.to}\n              className={`\n                flex items-center p-2 rounded\n                ${isActive ? 'bg-gray-700' : 'hover:bg-gray-700/50'}\n              `}\n            >\n              <item.icon className=\"w-5 h-5\" />\n              {!sidebarCollapsed && <span className=\"ml-3\">{item.label}</span>}\n            </Link>\n          )\n        })}\n      </nav>\n    </aside>\n  )\n}\n```",
         "testStrategy": "Test sidebar collapse/expand. Test active route highlighting. Test navigation between routes. Test keyboard accessibility.",
         "priority": "medium",
         "dependencies": [
-          30,
-          32
+          "30",
+          "32"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 42,
+        "id": "42",
         "title": "Add Dark Mode Theme and Status Colors",
         "description": "Configure Tailwind CSS with dark mode default and step status color tokens.",
         "details": "Update `tailwind.config.ts`:\n\n```typescript\nexport default {\n  darkMode: 'class',  // or 'media' for system preference\n  theme: {\n    extend: {\n      colors: {\n        // Step status colors\n        'status-pending': '#9CA3AF',    // gray-400\n        'status-running': '#3B82F6',    // blue-500\n        'status-completed': '#22C55E',  // green-500\n        'status-failed': '#EF4444',     // red-500\n        'status-skipped': '#EAB308',    // yellow-500\n        'status-cached': '#A855F7',     // purple-500\n      },\n    },\n  },\n  plugins: [require('@tailwindcss/typography')],\n}\n```\n\nCreate `src/styles/globals.css`:\n```css\n@tailwind base;\n@tailwind components;\n@tailwind utilities;\n\n:root {\n  color-scheme: dark;\n}\n\nbody {\n  @apply bg-gray-900 text-gray-100;\n}\n\n/* Monospace for code/data */\n.font-mono {\n  font-family: 'JetBrains Mono', 'Fira Code', monospace;\n}\n```\n\nApply dark class to html element by default.",
         "testStrategy": "Test dark mode applied by default. Test status colors visible and distinguishable. Test theme toggle if implemented. Test monospace font loads correctly.",
         "priority": "medium",
         "dependencies": [
-          29
+          "29"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 43,
+        "id": "43",
         "title": "Define PipelineInputData Base Class",
         "description": "Create the PipelineInputData Pydantic base class for declaring pipeline input schemas that can be used for UI form generation.",
         "details": "Create or modify `llm_pipeline/context.py`:\n\n```python\nfrom pydantic import BaseModel\n\nclass PipelineInputData(BaseModel):\n    '''\n    Base class for declaring expected input shape for a pipeline.\n    \n    Pipelines that support UI-initiated runs subclass this to declare\n    input fields. The UI generates form fields from the Pydantic schema.\n    \n    Example:\n        class MyPipelineInput(PipelineInputData):\n            document_text: str\n            processing_mode: Literal['fast', 'accurate'] = 'fast'\n            options: Optional[ProcessingOptions] = None\n    '''\n    pass\n```\n\nModify `llm_pipeline/pipeline.py`:\n1. Add optional `INPUT_DATA: ClassVar[Type[PipelineInputData]] = None` to PipelineConfig\n2. Validate input data against schema when provided in execute()\n\nUpdate exports in `__init__.py`.",
         "testStrategy": "Test subclassing PipelineInputData. Test JSON schema generation from subclass. Test validation of input data against schema. Test introspection discovers INPUT_DATA class.",
         "priority": "medium",
         "dependencies": [
-          18
+          "18"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 44,
+        "id": "44",
         "title": "Build Frontend for Production",
         "description": "Configure production build and integrate built frontend into Python package.",
         "details": "1. Update `vite.config.ts` for production:\n```typescript\nbuild: {\n  outDir: 'dist',\n  emptyOutDir: true,\n  rollupOptions: {\n    output: {\n      manualChunks: {\n        vendor: ['react', 'react-dom'],\n        router: ['@tanstack/react-router'],\n        query: ['@tanstack/react-query'],\n      }\n    }\n  }\n}\n```\n\n2. Add build script to `package.json`:\n```json\n\"scripts\": {\n  \"build\": \"tsc && vite build\",\n  \"build:analyze\": \"vite build --mode analyze\"\n}\n```\n\n3. Update `llm_pipeline/ui/app.py` to serve static files:\n```python\nfrom pathlib import Path\n\ndef create_app(...):\n    # ...\n    dist_dir = Path(__file__).parent / 'frontend' / 'dist'\n    if dist_dir.exists():\n        app.mount('/', StaticFiles(directory=str(dist_dir), html=True))\n```\n\n4. Verify bundle size <500KB gzip target (NFR-009)",
         "testStrategy": "Test npm run build produces dist/ folder. Verify bundle size under 500KB gzip. Test static file serving works in production mode. Test SPA routing works with html=True.",
         "priority": "medium",
         "dependencies": [
-          41,
-          42
+          "41",
+          "42"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 45,
+        "id": "45",
         "title": "Create Meta-Pipeline for Step Generation (Phase 3)",
         "description": "Implement the 4-step meta-pipeline that generates step scaffolding from natural language descriptions.",
         "details": "Create `llm_pipeline/creator/` package:\n\n1. `meta_pipeline.py`:\n```python\nclass StepCreatorPipeline(PipelineConfig,\n                          registry=StepCreatorRegistry,\n                          strategies=StepCreatorStrategies):\n    pass\n```\n\n2. Define 4 steps:\n   - `RequirementsAnalysisStep`: NL description → structured requirements\n   - `CodeGenerationStep`: requirements → Python source\n   - `PromptGenerationStep`: requirements + code → YAML prompts\n   - `ValidationStep`: all artifacts → validation report\n\n3. Create instruction schemas for each step:\n```python\nclass RequirementsAnalysisInstructions(LLMResultMixin):\n    fields: List[FieldDefinition]\n    validation_rules: List[ValidationRule]\n    extraction_targets: List[ExtractionTarget]\n```\n\n4. Create Jinja2 templates in `creator/templates/`:\n   - `step.py.j2`: Step class template\n   - `instructions.py.j2`: Instructions class template\n   - `extraction.py.j2`: Extraction class template\n   - `prompts.yaml.j2`: Prompt template\n\n5. Create prompts in `creator/prompts/` for each meta-step",
         "testStrategy": "Test each meta-step produces valid output. Test end-to-end generation from NL description. Test generated code is syntactically valid Python. Test generated YAML is valid.",
         "priority": "low",
         "dependencies": [
-          18
+          "18"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 46,
+        "id": "46",
         "title": "Implement Docker Sandbox for Code Testing (Phase 3)",
         "description": "Create a secure Docker sandbox for testing generated step code with strict resource limits and security constraints.",
         "details": "Create `llm_pipeline/creator/sandbox.py`:\n\n```python\nimport docker\nimport tempfile\nfrom pathlib import Path\n\nclass StepSandbox:\n    CONSTRAINTS = {\n        'network_mode': 'none',  # --network none\n        'mem_limit': '512m',     # 512MB memory\n        'cpu_count': 1,          # 1 CPU\n        'timeout': 60,           # 60 seconds\n    }\n    \n    DANGEROUS_IMPORTS = [\n        'os.system', 'subprocess', 'eval', 'exec', '__import__',\n        'importlib', 'builtins', 'ctypes'\n    ]\n    \n    def __init__(self):\n        self.client = docker.from_env()\n    \n    def validate_code(self, code: str) -> List[str]:\n        '''Pre-scan for dangerous imports.'''\n        errors = []\n        for pattern in self.DANGEROUS_IMPORTS:\n            if pattern in code:\n                errors.append(f'Dangerous pattern detected: {pattern}')\n        return errors\n    \n    def run(self, code: str, sample_data: dict) -> SandboxResult:\n        '''Execute code in isolated container.'''\n        errors = self.validate_code(code)\n        if errors:\n            return SandboxResult(success=False, errors=errors)\n        \n        with tempfile.TemporaryDirectory() as tmpdir:\n            # Write code and data to tmpdir\n            # Mount as read-only, /workspace writable\n            container = self.client.containers.run(\n                'python:3.11-slim',\n                volumes={tmpdir: {'bind': '/code', 'mode': 'ro'}},\n                **self.CONSTRAINTS,\n                detach=True\n            )\n            # Wait for completion or timeout\n            # Capture output\n```\n\nGraceful error if Docker not available.",
         "testStrategy": "Test sandbox enforces network isolation. Test memory/CPU limits work. Test timeout kills long-running code. Test dangerous import detection. Test graceful handling when Docker unavailable.",
         "priority": "low",
         "dependencies": [
-          45
+          "45"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 47,
+        "id": "47",
         "title": "Implement Auto-Integration for Generated Steps (Phase 3)",
         "description": "Create the integrator that writes generated files and updates strategy, registry, and prompt configurations.",
         "details": "Create `llm_pipeline/creator/integrator.py`:\n\n```python\nfrom pathlib import Path\nfrom llm_pipeline.db.prompt import Prompt\n\nclass StepIntegrator:\n    def __init__(self, target_dir: Path, session):\n        self.target_dir = target_dir\n        self.session = session\n    \n    def integrate(self, generated: GeneratedStep, \n                  target_pipeline: str = None,\n                  target_strategy: str = None) -> IntegrationResult:\n        files_written = []\n        \n        # Write Python files\n        step_file = self.target_dir / f'{generated.name}_step.py'\n        step_file.write_text(generated.step_code)\n        files_written.append(str(step_file))\n        \n        # Register prompts in database\n        for prompt in generated.prompts:\n            db_prompt = Prompt(\n                prompt_key=prompt.key,\n                prompt_name=prompt.name,\n                prompt_type=prompt.type,\n                content=prompt.content,\n                step_name=generated.name,\n            )\n            self.session.add(db_prompt)\n        \n        # Update strategy definition (AST manipulation or append)\n        if target_strategy:\n            self._update_strategy(target_strategy, generated)\n        \n        # Update registry (add model to MODELS list)\n        if generated.extraction_model:\n            self._update_registry(target_pipeline, generated.extraction_model)\n        \n        self.session.commit()\n        return IntegrationResult(files_written=files_written, ...)\n```",
         "testStrategy": "Test file writing to target directory. Test prompt registration in database. Test strategy update adds step definition. Test registry update adds model. Test rollback on failure.",
         "priority": "low",
         "dependencies": [
-          45,
-          46
+          "45",
+          "46"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 48,
+        "id": "48",
         "title": "Create Creator API Endpoints (Phase 3)",
         "description": "Implement REST endpoints for step generation, testing, and acceptance workflow.",
         "details": "Create `llm_pipeline/ui/routes/creator.py`:\n\n```python\nfrom llm_pipeline.creator import StepCreatorPipeline, StepSandbox, StepIntegrator\n\n@router.post('/api/creator/generate')\nasync def generate_step(request: GenerateRequest):\n    '''Run meta-pipeline to generate step scaffolding.'''\n    pipeline = StepCreatorPipeline(provider=get_provider())\n    result = await asyncio.to_thread(\n        pipeline.execute,\n        data={'description': request.description},\n        initial_context={'step_name': request.step_name}\n    )\n    \n    # Save draft to database\n    draft = DraftStep(\n        name=request.step_name,\n        generated_code=result.extractions,\n        status='draft'\n    )\n    session.add(draft)\n    \n    return {'draft_id': draft.id, 'generated_code': result.extractions}\n\n@router.post('/api/creator/test/{draft_id}')\nasync def test_step(draft_id: int, request: TestRequest):\n    '''Test generated step in sandbox.'''\n    draft = get_draft(draft_id)\n    sandbox = StepSandbox()\n    result = await asyncio.to_thread(\n        sandbox.run,\n        code=request.code_overrides or draft.generated_code,\n        sample_data=request.sample_data\n    )\n    return result\n\n@router.post('/api/creator/accept/{draft_id}')\nasync def accept_step(draft_id: int, request: AcceptRequest):\n    '''Integrate accepted step into pipeline.'''\n    draft = get_draft(draft_id)\n    integrator = StepIntegrator(target_dir, session)\n    return integrator.integrate(draft, request.target_pipeline)\n\n@router.get('/api/creator/drafts')\nasync def list_drafts():\n    return session.query(DraftStep).all()\n```",
         "testStrategy": "Test generate endpoint runs meta-pipeline. Test test endpoint uses sandbox correctly. Test accept endpoint integrates files. Test draft persistence across sessions.",
         "priority": "low",
         "dependencies": [
-          47
+          "47"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 49,
+        "id": "49",
         "title": "Create Step Creator Frontend View (Phase 3)",
         "description": "Implement the Step Creator UI with input form, Monaco editor for generated code, and results panel.",
         "details": "Create `src/routes/creator.tsx`:\n\n```typescript\nimport { lazy, Suspense } from 'react'\n\n// Lazy load Monaco to meet bundle size target\nconst MonacoEditor = lazy(() => import('@monaco-editor/react'))\n\nexport function StepCreator() {\n  const [step, setStep] = useState({ name: '', description: '' })\n  const [generated, setGenerated] = useState(null)\n  const [testResults, setTestResults] = useState(null)\n  \n  const generateMutation = useGenerateStep()\n  const testMutation = useTestStep()\n  const acceptMutation = useAcceptStep()\n  \n  return (\n    <div className=\"grid grid-cols-3 h-full\">\n      {/* Left: Input form */}\n      <div className=\"border-r border-gray-700 p-4\">\n        <h2>Create New Step</h2>\n        <input placeholder=\"Step name\" onChange={...} />\n        <textarea placeholder=\"Describe what this step should do\" />\n        <button onClick={() => generateMutation.mutate(step)}>Generate</button>\n      </div>\n      \n      {/* Center: Monaco editor with tabs */}\n      <div className=\"p-4\">\n        <Tabs>\n          <Tab label=\"Step\">\n            <Suspense fallback={<div>Loading editor...</div>}>\n              <MonacoEditor\n                language=\"python\"\n                value={generated?.step}\n                onChange={handleCodeChange}\n              />\n            </Suspense>\n          </Tab>\n          <Tab label=\"Instructions\">...</Tab>\n          <Tab label=\"Extractions\">...</Tab>\n          <Tab label=\"Prompts\">\n            <MonacoEditor language=\"yaml\" value={generated?.prompts} />\n          </Tab>\n        </Tabs>\n        <button onClick={() => testMutation.mutate(generated)}>Test</button>\n        <button onClick={() => acceptMutation.mutate(generated)}>Accept</button>\n      </div>\n      \n      {/* Right: Results panel (reuse StepDetail) */}\n      <div className=\"border-l border-gray-700\">\n        <StepDetailPanel results={testResults} />\n      </div>\n    </div>\n  )\n}\n```",
         "testStrategy": "Test Monaco lazy loading works. Test generate/test/accept button flow. Test code editing persists. Test results display reuses StepDetail component.",
         "priority": "low",
         "dependencies": [
-          48,
-          35
+          "48",
+          "35"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 50,
+        "id": "50",
         "title": "Create Draft Steps Database Tables (Phase 3)",
         "description": "Add SQLModel definitions for draft_steps and draft_pipelines tables for cross-session persistence.",
         "details": "Add to `llm_pipeline/state.py` or create `llm_pipeline/creator/models.py`:\n\n```python\nclass DraftStep(SQLModel, table=True):\n    __tablename__ = 'draft_steps'\n    \n    id: Optional[int] = Field(default=None, primary_key=True)\n    name: str = Field(max_length=100)\n    description: Optional[str] = None\n    generated_code: dict = Field(sa_column=Column(JSON))  # {instructions, step, extractions, prompts}\n    test_results: Optional[dict] = Field(default=None, sa_column=Column(JSON))\n    validation_errors: Optional[dict] = Field(default=None, sa_column=Column(JSON))\n    status: str = Field(default='draft', max_length=20)  # draft, tested, accepted, error\n    created_at: datetime = Field(default_factory=utc_now)\n    updated_at: datetime = Field(default_factory=utc_now)\n\nclass DraftPipeline(SQLModel, table=True):\n    __tablename__ = 'draft_pipelines'\n    \n    id: Optional[int] = Field(default=None, primary_key=True)\n    name: str = Field(max_length=100)\n    structure: dict = Field(sa_column=Column(JSON))  # step order, strategy config\n    compilation_errors: Optional[dict] = Field(default=None, sa_column=Column(JSON))\n    status: str = Field(default='draft', max_length=20)\n    created_at: datetime = Field(default_factory=utc_now)\n    updated_at: datetime = Field(default_factory=utc_now)\n```\n\nUpdate init_pipeline_db() to create these tables.",
         "testStrategy": "Test table creation. Test draft CRUD operations. Test JSON serialization of generated_code. Test status transitions. Test persistence across process restart.",
         "priority": "low",
         "dependencies": [
-          17
+          "17"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 51,
+        "id": "51",
         "title": "Implement Visual Pipeline Editor View (Phase 3)",
         "description": "Create the Visual Editor view showing pipeline as linear step sequence with add/remove/reorder and compile-to-validate.",
         "details": "Create `src/routes/editor.tsx`:\n\n```typescript\nimport { DndContext, closestCenter } from '@dnd-kit/core'\nimport { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'\n\nexport function VisualEditor() {\n  const [pipeline, setPipeline] = useState(null)\n  const [steps, setSteps] = useState([])\n  const [errors, setErrors] = useState([])\n  \n  const compileMutation = useCompilePipeline()\n  \n  const handleDragEnd = (event) => {\n    // Reorder steps\n    const { active, over } = event\n    if (active.id !== over.id) {\n      setSteps(reorder(steps, active.id, over.id))\n    }\n  }\n  \n  const handleCompile = async () => {\n    const result = await compileMutation.mutateAsync({ structure: steps })\n    if (!result.success) {\n      setErrors(result.errors)\n    }\n  }\n  \n  return (\n    <div className=\"flex h-full\">\n      {/* Center: Visual step sequence */}\n      <div className=\"flex-1 p-4\">\n        <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>\n          <SortableContext items={steps} strategy={verticalListSortingStrategy}>\n            {steps.map(step => (\n              <SortableStep \n                key={step.id} \n                step={step}\n                error={errors.find(e => e.stepId === step.id)}\n              />\n            ))}\n          </SortableContext>\n        </DndContext>\n        \n        <button onClick={() => addStep()}>Add Step</button>\n        <button onClick={handleCompile}>Compile</button>\n      </div>\n      \n      {/* Right: Step properties panel */}\n      <StepPropertiesPanel />\n    </div>\n  )\n}\n```\n\nStrategy branches shown visually but editing is linear per strategy per PRD.",
         "testStrategy": "Test drag-and-drop reordering. Test add/remove steps. Test compile triggers validation. Test errors displayed inline with step highlighting. Test draft persistence.",
         "priority": "low",
         "dependencies": [
-          50,
-          40
+          "50",
+          "40"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 52,
+        "id": "52",
         "title": "Create Visual Editor API Endpoints (Phase 3)",
         "description": "Implement REST endpoints for compiling visual pipeline definitions and validating structure.",
         "details": "Create `llm_pipeline/ui/routes/editor.py`:\n\n```python\nfrom llm_pipeline import PipelineConfig\n\n@router.post('/api/editor/compile')\nasync def compile_pipeline(request: CompileRequest):\n    '''Validate pipeline structure by attempting instantiation.'''\n    try:\n        # Build pipeline class dynamically from structure\n        pipeline_class = build_pipeline_class(request.pipeline_structure)\n        \n        # Instantiate to trigger validation:\n        # - _validate_foreign_key_dependencies()\n        # - _validate_registry_order()\n        # - _build_execution_order()\n        pipeline = pipeline_class(provider=None)  # No provider needed for validation\n        \n        # Save draft\n        draft = DraftPipeline(\n            name=request.name,\n            structure=request.pipeline_structure,\n            status='valid'\n        )\n        session.add(draft)\n        \n        return {'success': True, 'draft_id': draft.id}\n        \n    except ValueError as e:\n        # Parse validation error for structured display\n        errors = parse_validation_error(str(e))\n        \n        # Save draft with errors (cross-session persistence)\n        draft = DraftPipeline(\n            name=request.name,\n            structure=request.pipeline_structure,\n            compilation_errors=errors,\n            status='error'\n        )\n        session.add(draft)\n        \n        return {'success': False, 'errors': errors, 'draft_id': draft.id}\n\n@router.get('/api/editor/drafts')\nasync def list_pipeline_drafts():\n    return session.query(DraftPipeline).all()\n```",
         "testStrategy": "Test compile with valid structure succeeds. Test compile with FK violations returns structured error. Test compile with registry order error returns structured error. Test draft saved even with errors.",
         "priority": "low",
         "dependencies": [
-          50,
-          24
+          "50",
+          "24"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 53,
+        "id": "53",
         "title": "Write Phase 1 Integration Tests",
         "description": "Create comprehensive integration tests for the event system covering all event types and handlers.",
         "details": "Create `tests/test_events.py`:\n\n```python\nimport pytest\nfrom llm_pipeline import PipelineConfig\nfrom llm_pipeline.events import (\n    InMemoryEventHandler, CompositeEmitter,\n    PipelineStarted, PipelineCompleted, LLMCallCompleted\n)\n\nclass TestEventSystem:\n    def test_pipeline_lifecycle_events(self, sample_pipeline):\n        handler = InMemoryEventHandler()\n        pipeline = sample_pipeline(event_emitter=handler)\n        \n        pipeline.execute(data='test', initial_context={})\n        \n        events = handler.get_events(pipeline.run_id)\n        event_types = [e.event_type for e in events]\n        \n        assert 'pipeline_started' in event_types\n        assert 'pipeline_completed' in event_types\n        assert event_types[0] == 'pipeline_started'\n        assert event_types[-1] == 'pipeline_completed'\n    \n    def test_llm_call_events_capture_prompts(self, sample_pipeline, mock_provider):\n        handler = InMemoryEventHandler()\n        pipeline = sample_pipeline(\n            event_emitter=handler,\n            provider=mock_provider\n        )\n        \n        pipeline.execute(...)\n        \n        llm_starting = handler.get_events_by_type('llm_call_starting')[0]\n        assert llm_starting.rendered_system_prompt is not None\n        assert '{' not in llm_starting.rendered_system_prompt  # No template vars\n    \n    def test_composite_emitter_error_isolation(self):\n        failing_handler = FailingHandler()\n        working_handler = InMemoryEventHandler()\n        \n        composite = CompositeEmitter([failing_handler, working_handler])\n        composite.emit(PipelineStarted(...))\n        \n        # Working handler should still receive event\n        assert len(working_handler.events) == 1\n```",
         "testStrategy": "Run pytest with event system tests. Verify all event types tested. Test error isolation. Test handler thread-safety. Target >90% coverage for events package.",
         "priority": "high",
         "dependencies": [
-          15,
-          16
+          "15",
+          "16"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 54,
+        "id": "54",
         "title": "Write Phase 2 Backend Integration Tests",
         "description": "Create integration tests for all REST API endpoints and WebSocket functionality.",
         "details": "Create `tests/test_ui_backend.py`:\n\n```python\nimport pytest\nfrom fastapi.testclient import TestClient\nfrom llm_pipeline.ui.app import create_app\n\n@pytest.fixture\ndef client():\n    app = create_app(db_path=':memory:')\n    return TestClient(app)\n\nclass TestRunsAPI:\n    def test_list_runs_pagination(self, client, populated_db):\n        response = client.get('/api/runs?page=1&page_size=10')\n        assert response.status_code == 200\n        data = response.json()\n        assert len(data['runs']) <= 10\n        assert 'total' in data\n    \n    def test_list_runs_filter_by_pipeline(self, client, populated_db):\n        response = client.get('/api/runs?pipeline_name=test_pipeline')\n        assert all(r['pipeline_name'] == 'test_pipeline' for r in response.json()['runs'])\n    \n    def test_run_detail_includes_steps(self, client, populated_db):\n        response = client.get(f'/api/runs/{run_id}')\n        assert 'steps' in response.json()\n\nclass TestWebSocket:\n    def test_live_event_streaming(self, client):\n        with client.websocket_connect(f'/ws/runs/{run_id}') as ws:\n            # Trigger pipeline execution in another thread\n            # Verify events received via WebSocket\n            data = ws.receive_json()\n            assert 'event_type' in data\n```",
         "testStrategy": "Test all API endpoints with various inputs. Test pagination, filtering, error cases. Test WebSocket connection and event streaming. Load test with concurrent connections.",
         "priority": "high",
         "dependencies": [
-          26
+          "26"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 55,
+        "id": "55",
         "title": "Write Frontend Component Tests",
         "description": "Create React Testing Library tests for key frontend components.",
         "details": "Create `src/__tests__/` directory:\n\n```typescript\n// src/__tests__/RunList.test.tsx\nimport { render, screen, waitFor } from '@testing-library/react'\nimport { QueryClient, QueryClientProvider } from '@tanstack/react-query'\nimport { RunList } from '../routes/index'\n\ntest('displays run list from API', async () => {\n  const queryClient = new QueryClient()\n  \n  render(\n    <QueryClientProvider client={queryClient}>\n      <RunList />\n    </QueryClientProvider>\n  )\n  \n  await waitFor(() => {\n    expect(screen.getByText('Pipeline Runs')).toBeInTheDocument()\n  })\n})\n\n// src/__tests__/JsonDiff.test.tsx\ntest('highlights additions in green', () => {\n  const before = { a: 1 }\n  const after = { a: 1, b: 2 }\n  \n  render(<JsonDiff before={before} after={after} />)\n  \n  const addition = screen.getByText('b')\n  expect(addition).toHaveClass('bg-green')\n})\n```\n\nConfigure Vitest for frontend testing:\n```typescript\n// vitest.config.ts\nexport default {\n  test: {\n    environment: 'jsdom',\n    globals: true,\n    setupFiles: './src/test-setup.ts',\n  }\n}\n```",
         "testStrategy": "Run npm test for frontend tests. Target key user flows: run list, run detail, step detail tabs. Test JSON diff highlighting. Test form generation.",
         "priority": "medium",
         "dependencies": [
-          44
+          "44"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 56,
+        "id": "56",
         "title": "Performance Benchmarking and Optimization",
         "description": "Benchmark event system overhead and API response times against NFR targets.",
         "details": "Create `tests/benchmarks/`:\n\n```python\nimport pytest\nimport time\n\nclass TestPerformance:\n    def test_event_emission_overhead_no_handler(self, benchmark):\n        '''NFR-001: <1ms per event point when no handler.'''\n        pipeline = TestPipeline(event_emitter=None)\n        \n        def emit_cycle():\n            for _ in range(1000):\n                pipeline._emit(MockEvent())\n        \n        result = benchmark(emit_cycle)\n        assert result.mean / 1000 < 0.001  # <1ms per emit\n    \n    def test_run_list_response_time(self, client, large_db):\n        '''NFR-004: <200ms for 10k+ runs.'''\n        # Populate with 10k runs\n        start = time.time()\n        response = client.get('/api/runs?page=1&page_size=50')\n        elapsed = time.time() - start\n        \n        assert response.status_code == 200\n        assert elapsed < 0.2  # 200ms\n    \n    def test_step_detail_response_time(self, client, populated_db):\n        '''NFR-005: <100ms for step detail.'''\n        start = time.time()\n        response = client.get(f'/api/runs/{run_id}/steps/1')\n        elapsed = time.time() - start\n        \n        assert response.status_code == 200\n        assert elapsed < 0.1  # 100ms\n```\n\nOptimize queries with proper indexes if benchmarks fail.",
         "testStrategy": "Run benchmarks in CI. Verify all NFR targets met. Profile and optimize any slow paths. Test with realistic data volumes.",
         "priority": "medium",
         "dependencies": [
-          54
+          "54"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 57,
+        "id": "57",
         "title": "Documentation and Examples",
         "description": "Update README and create usage examples for the event system and UI.",
         "details": "Update `README.md` with:\n\n1. Event System usage:\n```python\nfrom llm_pipeline import PipelineConfig\nfrom llm_pipeline.events import InMemoryEventHandler, CompositeEmitter\n\n# Subscribe to events\nhandler = InMemoryEventHandler()\npipeline = MyPipeline(event_emitter=handler, provider=provider)\npipeline.execute(data, context)\n\n# Query events\nfor event in handler.get_events(pipeline.run_id):\n    print(f'{event.event_type}: {event.timestamp}')\n```\n\n2. UI usage:\n```bash\n# Install UI dependencies\npip install llm-pipeline[ui]\n\n# Start the UI\nllm-pipeline ui\n\n# Development mode with hot reload\nllm-pipeline ui --dev --port 8642\n```\n\n3. LLMCallResult changes:\n```python\n# Before (0.1.x)\nresult_dict = provider.call_structured(...)\n\n# After (0.2.x)\nresult = provider.call_structured(...)\nprint(result.parsed)           # Same as before\nprint(result.raw_response)     # NEW: original text\nprint(result.model_name)       # NEW: model used\nprint(result.validation_errors)  # NEW: any errors\n```",
         "testStrategy": "Verify all code examples run without errors. Test documentation links work. Review for completeness and accuracy.",
         "priority": "medium",
         "dependencies": [
-          53,
-          54
+          "53",
+          "54"
         ],
         "status": "pending",
         "subtasks": []
       }
     ],
     "metadata": {
-      "created": "2026-02-11T03:53:55.761Z",
-      "updated": "2026-02-11T04:07:58.835Z",
-      "description": "Tasks for master context"
+      "version": "1.0.0",
+      "lastModified": "2026-02-11T06:52:07.072Z",
+      "taskCount": 57,
+      "completedCount": 1,
+      "tags": [
+        "master"
+      ]
     }
   }
 }

@@ -4,7 +4,7 @@
 ## Phase: summary
 ## Status: in-progress
 ## Current Group: A
-## Base Branch: main
+## Base Branch: dev
 ## Task Branch: sam/master/1-pipeline-event-types
 ## Plugins: python-development, backend-development
 ## Graphiti Group ID: llm-pipeline

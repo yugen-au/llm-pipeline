@@ -178,3 +178,5 @@
 [2026-02-11 17:48:19] [DEBUG] STATE.md atomic write complete
 [2026-02-11 17:48:33] [INFO] Task call: code-documentation:docs-architect (phase: summary)
 [2026-02-11 17:51:59] [DEBUG] STATE.md atomic write complete
+[2026-02-12 10:46:11] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-12 10:46:22] [INFO] Cleaned up stale semaphores: subagent, state, git
