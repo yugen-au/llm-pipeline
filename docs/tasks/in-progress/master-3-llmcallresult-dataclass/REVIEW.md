@@ -63,3 +63,68 @@ None
 **Decision:** APPROVE
 
 Implementation is clean, minimal, and consistent with established codebase patterns. Both LOW issues are non-blocking observations. The failure() runtime guard asymmetry is a valid future improvement but not required given type-checker coverage and no existing callers. All 50 tests pass with no regressions.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+
+Both LOW issues from initial review have been addressed. `failure()` now has symmetric ValueError guard; `test_repr` uses sentinel strings instead of fragile dict formatting. New test added for the guard. All 51 tests pass (19 LLMCallResult + 32 pipeline), no regressions.
+
+## Changes Verified
+
+### Fix 1: `failure()` runtime guard (result.py lines 95-96)
+- `if parsed is not None: raise ValueError("parsed must be None for a failure result")`
+- Symmetric to `success()` guard at line 68-69
+- Docstring updated with `Raises:` section
+- **Verdict:** Resolved correctly
+
+### Fix 2: `test_repr` sentinel approach (test_llm_call_result.py lines 211-225)
+- Replaced fragile dict key/value substring matching with unique sentinel strings
+- Checks class name `"LLMCallResult"`, field name `"attempt_count"`, and 3 sentinel values
+- No CPython dict repr format dependency
+- **Verdict:** Resolved correctly
+
+### Fix 3: New test `test_failure_factory_non_none_parsed_raises` (lines 95-104)
+- Passes `parsed={"data": "value"}` to `failure()`, asserts `ValueError` with match
+- Properly placed in `TestFactories` class alongside symmetric success guard test
+- **Verdict:** Correct coverage for new guard
+
+## Issues Found
+
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present - both factories now have symmetric runtime guards
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations - N/A
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/llm/result.py | pass | failure() guard added, docstring updated, symmetric to success() |
+| tests/test_llm_call_result.py | pass | 19 tests; repr test uses sentinels; new guard test added |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+All prior LOW issues resolved. Implementation is complete, clean, and fully tested. 51/51 tests pass.
