@@ -19,3 +19,6 @@
 | Python Protocol & Thread Safety | python-development:python-pro | research | 2 | - | A | complete | 0 | a3d6aca | fc1a4fe | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | acc8ea0 | 2a8a069 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | abd7b6d | pending | - |
+| Create emitter.py | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /python/typing |
+| Export in events/__init__.py | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Create unit tests | python-development:python-pro | implementation | 3 | - | C | pending | 0 | pending | pending | - |
