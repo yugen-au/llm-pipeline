@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from llm_pipeline.llm.provider import LLMProvider
 from llm_pipeline.llm.rate_limiter import RateLimiter
+from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.llm.schema import format_schema_for_llm
 from llm_pipeline.llm.validation import (
     validate_structured_output,
@@ -76,12 +77,15 @@ class GeminiProvider(LLMProvider):
         array_validation: Optional[Any] = None,
         validation_context: Optional[Any] = None,
         **kwargs,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> LLMCallResult:
         """Call Gemini with structured output validation and retry logic."""
         self._ensure_configured()
         import google.generativeai as genai
 
         expected_schema = result_class.model_json_schema()
+
+        last_raw_response: str | None = None
+        accumulated_errors: list[str] = []
 
         for attempt in range(max_retries):
             try:
@@ -104,6 +108,7 @@ class GeminiProvider(LLMProvider):
                     continue
 
                 response_text = response.text
+                last_raw_response = response_text
 
                 if not_found_indicators and check_not_found_response(
                     response_text, not_found_indicators
@@ -111,7 +116,13 @@ class GeminiProvider(LLMProvider):
                     logger.info(
                         f"  LLM indicated information not found: {response_text[:100]}..."
                     )
-                    return None
+                    return LLMCallResult(
+                        parsed=None,
+                        raw_response=response_text,
+                        model_name=self.model_name,
+                        attempt_count=attempt + 1,
+                        validation_errors=[],
+                    )
 
                 # Extract JSON from response
                 cleaned_text = response_text.strip()
@@ -144,6 +155,7 @@ class GeminiProvider(LLMProvider):
                     )
                     for error in errors:
                         logger.warning(f"    - {error}")
+                    accumulated_errors.extend(errors)
                     if attempt < max_retries - 1:
                         continue
                     continue
@@ -159,6 +171,7 @@ class GeminiProvider(LLMProvider):
                         )
                         for error in array_errors:
                             logger.warning(f"    - {error}")
+                        accumulated_errors.extend(array_errors)
                         if attempt < max_retries - 1:
                             continue
                         continue
