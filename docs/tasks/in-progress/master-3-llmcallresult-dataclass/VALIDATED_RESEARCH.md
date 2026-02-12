@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-LLMCallResult already exists at `llm_pipeline/llm/result.py` with all 5 fields specified by Task 3, created during Task 1. Research findings on stdlib dataclass choice, serialization patterns, and factory methods are technically sound and codebase-verified. Three architectural questions require CEO input before planning can proceed: (1) Task 3 remaining scope given existing implementation, (2) canonical file location, (3) is_success semantics for partial-success cases.
+LLMCallResult already exists at `llm_pipeline/llm/result.py` with all 5 fields specified by Task 3, created during Task 1. Task 3 scope confirmed: add helper methods (to_dict, to_json, is_success/is_failure, success/failure factories) + unit tests. File stays at llm/result.py (LLM domain, not event). is_success = parsed is not None (validation_errors are diagnostic only). All research findings validated and ready for planning.
 
 ## Domain Findings
 
@@ -46,7 +46,9 @@ LLMCallResult already exists at `llm_pipeline/llm/result.py` with all 5 fields s
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| (awaiting CEO input) | | |
+| Task 3 scope: what remains given existing 5-field dataclass? | Add methods (to_dict, to_json, is_success/is_failure, success/failure factories) + unit tests. Task 1 created bare fields, Task 3 adds behavior. | Scope is clear: enhance llm/result.py + create test file. No relocation needed. |
+| Canonical location: llm/result.py vs events/result.py? | Keep llm/result.py. LLM domain, not an event. Update downstream task import paths. | Task 4 spec needs import path correction (no events/result.py). Re-exports from events/__init__ and llm/__init__ remain valid. |
+| is_success semantics: should non-empty validation_errors affect is_success? | is_success = parsed is not None. Validation errors are diagnostic/informational from prior attempts only. | Simple None-check. No compound condition needed. Partial-success (parsed + errors) counts as success. |
 
 ## Assumptions Validated
 
@@ -60,19 +62,23 @@ LLMCallResult already exists at `llm_pipeline/llm/result.py` with all 5 fields s
 - [x] Task 3 changes do not break existing tests (no code depends on LLMCallResult yet)
 - [x] from __future__ import annotations is safe (no __init_subclass__, no slots+super() issue)
 - [x] Unhashable frozen dataclass is acceptable (dict/list fields, no hashing use case)
+- [x] Task 3 scope = add helper methods + unit tests to existing bare dataclass (CEO confirmed)
+- [x] Canonical location = llm/result.py, not events/result.py (CEO confirmed: LLM domain)
+- [x] is_success = parsed is not None; validation_errors are diagnostic only (CEO confirmed)
 
 ## Open Items
 
-- **Task 3 scope definition** -- CEO must decide what Task 3 delivers given existing implementation (see Q1 below)
-- **Canonical file location** -- CEO must decide llm/result.py vs events/result.py (see Q2 below)
-- **is_success semantics** -- Whether is_success should account for non-empty validation_errors on successful parse (see Q3 below)
-- **Task 4 import path** -- Task 4 details reference `from events.result` which doesn't exist; needs spec update if file stays at llm/result.py
-- **failure() factory edge case** -- failure() requires validation_errors param but timeout/network failures may have empty list; acceptable but worth documenting
+- ~~Task 3 scope definition~~ -- RESOLVED: enhance + test
+- ~~Canonical file location~~ -- RESOLVED: keep llm/result.py
+- ~~is_success semantics~~ -- RESOLVED: parsed is not None
+- **Task 4 import path** -- Task 4 details reference `from events.result` which doesn't exist; needs spec update to use `from llm_pipeline.llm.result` or `from llm_pipeline.events` (re-export)
+- **failure() factory edge case** -- failure() requires validation_errors param but timeout/network failures may have empty list; acceptable, document in docstring
 
 ## Recommendations for Planning
 
-1. **Pending Q1 answer**: If scope is "enhance + test", add to_dict, to_json, success(), failure(), is_success, is_failure to existing llm/result.py + create tests/test_llm_call_result.py
-2. **Pending Q2 answer**: If file stays at llm/result.py, update Task 4 spec to use `from llm_pipeline.llm.result import LLMCallResult` or `from llm_pipeline.events import LLMCallResult` (re-export)
-3. Test file should cover: instantiation, field defaults, success/failure factory invariants, to_dict/to_json roundtrip, is_success/is_failure for success/failure/partial-success cases, equality, frozen immutability, empty constructor validity
+1. Add to_dict, to_json, success(), failure(), is_success, is_failure to existing `llm_pipeline/llm/result.py`
+2. Create `tests/test_llm_call_result.py` covering: instantiation, field defaults, success/failure factory invariants, to_dict/to_json output, is_success/is_failure for success/failure/partial-success (parsed + errors), equality, frozen immutability, empty constructor validity
+3. Update Task 4 spec import path from `from events.result` to `from llm_pipeline.llm.result` or `from llm_pipeline.events` (re-export)
 4. Keep convention-based immutability (no deep-copy) -- matches PipelineEvent pattern, zero overhead
 5. Defer custom __repr__ truncation until log noise is observed in practice
+6. Document in failure() docstring that empty validation_errors list is valid (timeout/network failures)
