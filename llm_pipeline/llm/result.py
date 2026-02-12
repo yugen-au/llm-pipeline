@@ -88,7 +88,12 @@ class LLMCallResult:
 
         An empty validation_errors list is valid for timeout or network
         failures where no validation was attempted.
+
+        Raises:
+            ValueError: If parsed is not None.
         """
+        if parsed is not None:
+            raise ValueError("parsed must be None for a failure result")
         return cls(
             parsed=parsed,
             raw_response=raw_response,

@@ -53,3 +53,43 @@ from dataclasses import asdict, dataclass, field
 [x] Partial success (parsed + validation_errors) counts as is_success=True
 [x] All 32 existing tests still pass
 [x] Import smoke test passes
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] `failure()` factory does not guard against non-None `parsed` at runtime (LOW, Step 1)
+
+### Changes Made
+#### File: `llm_pipeline/llm/result.py`
+Added symmetric runtime ValueError guard to failure() classmethod.
+
+```python
+# Before
+        """Create a failed result with no parsed output.
+
+        An empty validation_errors list is valid for timeout or network
+        failures where no validation was attempted.
+        """
+        return cls(
+
+# After
+        """Create a failed result with no parsed output.
+
+        An empty validation_errors list is valid for timeout or network
+        failures where no validation was attempted.
+
+        Raises:
+            ValueError: If parsed is not None.
+        """
+        if parsed is not None:
+            raise ValueError("parsed must be None for a failure result")
+        return cls(
+```
+
+### Verification
+[x] failure() with parsed=None works normally
+[x] failure() with parsed=non-None raises ValueError
+[x] success() guard unchanged and still works
+[x] All 50 tests pass (no regressions)
