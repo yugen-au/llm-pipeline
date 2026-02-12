@@ -19,3 +19,7 @@
 | LLMCallResult & Event System Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a8184ff | 28943be | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a8a5bbd | 5ff3fb0 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a515181 | pending | - |
+| Update LLMProvider ABC | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Update GeminiProvider | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Update MockProvider | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Update Exports | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
