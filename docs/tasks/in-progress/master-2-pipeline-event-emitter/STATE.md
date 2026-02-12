@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/master/2-pipeline-event-emitter
 ## Plugins: python-development, backend-development
@@ -21,4 +21,4 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | abd7b6d | 8234f15 | - |
 | Create emitter.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a997ab6 | d74bd50 | /python/typing |
 | Export in events/__init__.py | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a62092a | b884ac0 | - |
-| Create unit tests | python-development:python-pro | implementation | 3 | - | C | pending | 0 | pending | pending | - |
+| Create unit tests | python-development:python-pro | implementation | 3 | - | C | in-progress | 0 | pending | pending | - |
