@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/3-llmcallresult-dataclass
 ## Plugins: python-development, backend-development
@@ -20,4 +20,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | ab4126f | 85eae8d | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a0fb690 | 8fb1d97 | - |
 | Add Helper Methods | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a92a8f8 | 5b49a3e | - |
-| Create Unit Tests | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest |
+| Create Unit Tests | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | /pytest-dev/pytest |
