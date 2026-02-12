@@ -1,13 +1,15 @@
-"""Pipeline event system - typed, immutable event dataclasses.
+"""Pipeline event system - typed, immutable event dataclasses and emitters.
 
 Re-exports all event types, base classes, category constants, and helpers
 from :mod:`llm_pipeline.events.types`, plus :class:`LLMCallResult` from
-:mod:`llm_pipeline.llm.result`.
+:mod:`llm_pipeline.llm.result`, and :class:`PipelineEventEmitter` /
+:class:`CompositeEmitter` from :mod:`llm_pipeline.events.emitter`.
 
 Usage::
 
     from llm_pipeline.events import PipelineStarted, StepCompleted, LLMCallResult
     from llm_pipeline.events import CATEGORY_LLM_CALL, resolve_event
+    from llm_pipeline.events import PipelineEventEmitter, CompositeEmitter
 """
 
 from llm_pipeline.events.types import (
@@ -68,6 +70,7 @@ from llm_pipeline.events.types import (
     # State
     StateSaved,
 )
+from llm_pipeline.events.emitter import CompositeEmitter, PipelineEventEmitter
 from llm_pipeline.llm.result import LLMCallResult
 
 # Convenience alias for resolve_event on PipelineEvent
@@ -77,6 +80,9 @@ __all__ = [
     # Base Classes
     "PipelineEvent",
     "StepScopedEvent",
+    # Emitters
+    "PipelineEventEmitter",
+    "CompositeEmitter",
     # LLM Results
     "LLMCallResult",
     # Category Constants
