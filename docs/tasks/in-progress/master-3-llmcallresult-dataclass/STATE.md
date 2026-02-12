@@ -19,3 +19,5 @@
 | Python Dataclass Patterns | python-development:python-pro | research | 2 | - | A | complete | 0 | ad4cd0e | c0542e5 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | ab4126f | 85eae8d | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a0fb690 | pending | - |
+| Add Helper Methods | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Create Unit Tests | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest |
