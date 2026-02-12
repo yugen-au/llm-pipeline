@@ -1,9 +1,9 @@
 ## Task: master-4-llmprovider-return-type
 ## Description: Update LLMProvider.call_structured() return type to LLMCallResult; update GeminiProvider to build/return LLMCallResult with raw_response, attempt_count, validation_errors
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: B
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/4-llmprovider-return-type
 ## Plugins: python-development, backend-development
@@ -20,6 +20,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a8a5bbd | 5ff3fb0 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a515181 | 23e21d7 | - |
 | Update LLMProvider ABC | python-development:python-pro | implementation | 1 | - | A | complete | 0 | ae7aaa3 | 600ad17 | - |
-| Update GeminiProvider | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a542cf7 | dc07961 | - |
+| Update GeminiProvider | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a542cf7 | dc07961,541473b | - |
 | Update MockProvider | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad4e579 | 541473b | - |
-| Update Exports | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a737e9a | 12fc4de | - |
+| Update Exports | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a737e9a | 12fc4de,541473b | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
