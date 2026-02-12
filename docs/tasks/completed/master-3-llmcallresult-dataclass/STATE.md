@@ -1,7 +1,7 @@
 ## Task: master-3-llmcallresult-dataclass
 ## Description: Create LLMCallResult dataclass capturing full LLM call details (parsed, raw_response, model_name, attempt_count, validation_errors) to replace current Optional[Dict] return from call_structured()
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
