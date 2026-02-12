@@ -4,8 +4,10 @@ Abstract base class for LLM providers.
 Defines the interface that all LLM provider implementations must follow.
 """
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, List, Optional, Type
 from pydantic import BaseModel
+
+from llm_pipeline.llm.result import LLMCallResult
 
 
 class LLMProvider(ABC):
@@ -38,7 +40,7 @@ class LLMProvider(ABC):
         array_validation: Optional[Any] = None,
         validation_context: Optional[Any] = None,
         **kwargs,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> LLMCallResult:
         """
         Call the LLM with structured output validation and retry logic.
 
@@ -53,7 +55,8 @@ class LLMProvider(ABC):
             validation_context: Optional ValidationContext for Pydantic validators
 
         Returns:
-            Validated JSON response dict, or None if all retries failed
+            LLMCallResult containing parsed output, raw response, model
+            metadata, attempt count, and any validation errors.
         """
         ...
 
