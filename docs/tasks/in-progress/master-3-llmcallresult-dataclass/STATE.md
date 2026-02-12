@@ -9,7 +9,7 @@
 ## Plugins: python-development, backend-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [1,2]
 ## Last Updated: 2026-02-12 13:19
 
 ## Agents
