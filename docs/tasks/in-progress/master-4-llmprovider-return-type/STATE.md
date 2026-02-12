@@ -1,17 +1,19 @@
 ## Task: master-4-llmprovider-return-type
-## Description: pending
+## Description: Update LLMProvider.call_structured() return type to LLMCallResult; update GeminiProvider to build/return LLMCallResult with raw_response, attempt_count, validation_errors
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/4-llmprovider-return-type
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: python-development, backend-development
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Last Updated: 2026-02-12 16:35
+## Last Updated: 2026-02-12 16:37
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Provider Architecture Research | python-development:python-pro | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| LLMCallResult & Event System Research | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | - | pending | - |
