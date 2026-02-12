@@ -92,6 +92,17 @@ class TestFactories:
                 model_name="gemini-2.0-flash",
             )
 
+    def test_failure_factory_non_none_parsed_raises(self):
+        """failure(parsed=non-None) raises ValueError."""
+        with pytest.raises(ValueError, match="parsed must be None"):
+            LLMCallResult.failure(
+                parsed={"data": "value"},
+                raw_response="text",
+                model_name="gemini-2.0-flash",
+                attempt_count=1,
+                validation_errors=[],
+            )
+
 
 # ---------- Serialization ----------
 
@@ -198,18 +209,17 @@ class TestDataclassBehavior:
         assert a != b
 
     def test_repr(self):
-        """repr contains class name and field values."""
+        """repr contains class name and key field values (partial, not exact match)."""
         result = LLMCallResult(
             parsed={"k": "v"},
-            raw_response="raw",
-            model_name="m",
+            raw_response="raw_resp_sentinel",
+            model_name="model_sentinel",
             attempt_count=2,
-            validation_errors=["e"],
+            validation_errors=["err_sentinel"],
         )
         r = repr(result)
         assert "LLMCallResult" in r
-        assert "'k': 'v'" in r or '"k": "v"' in r or "k" in r
-        assert "raw" in r
-        assert "m" in r
-        assert "2" in r
-        assert "e" in r
+        assert "raw_resp_sentinel" in r
+        assert "model_sentinel" in r
+        assert "err_sentinel" in r
+        assert "attempt_count" in r

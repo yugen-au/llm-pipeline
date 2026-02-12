@@ -53,3 +53,49 @@ assert result.is_success is True
 [x] success(parsed=None) raises ValueError
 [x] failure(validation_errors=[]) accepted
 [x] Frozen immutability enforced via FrozenInstanceError
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Fragile test_repr: used sentinel values and partial field-name assertions instead of exact string match
+[x] Missing test_failure_factory_non_none_parsed_raises: added test covering failure() ValueError guard for non-None parsed
+
+### Changes Made
+#### File: `tests/test_llm_call_result.py`
+Made test_repr resilient to formatting changes; added missing factory guard test.
+
+```python
+# Before - test_repr used short values that could false-positive match
+assert "'k': 'v'" in r or '"k": "v"' in r or "k" in r
+assert "raw" in r
+assert "m" in r
+assert "2" in r
+assert "e" in r
+
+# After - sentinel values, checks field name presence
+assert "raw_resp_sentinel" in r
+assert "model_sentinel" in r
+assert "err_sentinel" in r
+assert "attempt_count" in r
+```
+
+```python
+# New test added
+def test_failure_factory_non_none_parsed_raises(self):
+    """failure(parsed=non-None) raises ValueError."""
+    with pytest.raises(ValueError, match="parsed must be None"):
+        LLMCallResult.failure(
+            parsed={"data": "value"},
+            raw_response="text",
+            model_name="gemini-2.0-flash",
+            attempt_count=1,
+            validation_errors=[],
+        )
+```
+
+### Verification
+[x] test_repr passes with sentinel-based partial assertions
+[x] test_failure_factory_non_none_parsed_raises passes
+[x] 51 total tests pass (19 LLMCallResult + 32 existing), no regressions
