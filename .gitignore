@@ -64,4 +64,5 @@ node_modules/
 !docs/tasks/**/task.log
 docs/tasks/**/*.semaphore
 docs/tasks/**/*.lock
+docs/tasks/**/.subagent-active
 nul
