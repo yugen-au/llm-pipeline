@@ -12,6 +12,10 @@ import logging
 import threading
 from typing import TYPE_CHECKING
 
+from sqlalchemy import Engine
+from sqlmodel import Session, SQLModel
+
+from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.events.types import (
     CATEGORY_CACHE,
     CATEGORY_CONSENSUS,
@@ -132,8 +136,52 @@ class InMemoryEventHandler:
         return f"InMemoryEventHandler(events={len(self._events)})"
 
 
+class SQLiteEventHandler:
+    """Persist pipeline events to a SQLite ``pipeline_events`` table.
+
+    Uses a session-per-emit pattern: a new :class:`sqlmodel.Session` is
+    created for each :meth:`emit` call and closed in a ``finally`` block
+    to prevent session leaks.
+
+    Table creation is idempotent -- :meth:`SQLModel.metadata.create_all`
+    is called with an explicit ``tables`` list so it never conflicts with
+    existing pipeline DB initialisation.
+
+    No try/except beyond session cleanup -- CompositeEmitter handles
+    isolation.
+    """
+
+    __slots__ = ("_engine",)
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+        SQLModel.metadata.create_all(
+            engine, tables=[PipelineEventRecord.__table__]
+        )
+
+    def emit(self, event: "PipelineEvent") -> None:
+        """Persist a single event as a :class:`PipelineEventRecord` row."""
+        session = Session(self._engine)
+        try:
+            record = PipelineEventRecord(
+                run_id=event.run_id,
+                event_type=event.event_type,
+                pipeline_name=event.pipeline_name,
+                timestamp=event.timestamp,
+                event_data=event.to_dict(),
+            )
+            session.add(record)
+            session.commit()
+        finally:
+            session.close()
+
+    def __repr__(self) -> str:
+        return f"SQLiteEventHandler(engine={self._engine.url})"
+
+
 __all__ = [
     "DEFAULT_LEVEL_MAP",
     "LoggingEventHandler",
     "InMemoryEventHandler",
+    "SQLiteEventHandler",
 ]
