@@ -118,3 +118,62 @@ None.
 2. Verify all GeminiProvider exit points in code review (Step 2 human validation above)
 3. After Task 5 complete, re-run full test suite - expect all 71 tests to pass
 4. Consider adding unit tests for GeminiProvider exit points (success, not-found, exhaustion) for explicit validation coverage
+
+---
+
+## Re-Test After Review Fixes (2026-02-13)
+
+### Summary
+**Status:** passed (with expected failures)
+
+Re-ran test suite after GeminiProvider review fixes (accumulated_errors now includes JSON decode errors and no-response errors - 2 lines added in gemini.py). Test results identical to initial testing: 68/71 passed, 3 intentional failures unchanged.
+
+### Test Execution
+**Pass Rate:** 68/71 tests (95.8%)
+**Test Time:** 1.25s (improved from 1.79s)
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
+collected 71 items
+
+All test categories - same results as initial run:
+- tests/test_emitter.py: 20/20 passed
+- tests/test_llm_call_result.py: 20/20 passed
+- tests/test_pipeline.py: 28/31 passed (3 intentional failures)
+
+FAILED tests/test_pipeline.py::TestPipelineExecution::test_full_execution
+FAILED tests/test_pipeline.py::TestPipelineExecution::test_save_persists_to_db
+FAILED tests/test_pipeline.py::TestPipelineExecution::test_step_state_saved
+
+=================== 3 failed, 68 passed, 1 warning in 1.25s ===================
+```
+
+### Failed Tests - Re-Test
+Same 3 intentional failures, identical error signatures. No new failures introduced by review fixes.
+
+##### test_full_execution (re-test)
+**Error:** Same - `argument after ** must be a mapping, not LLMCallResult`
+**Status:** INTENTIONAL - Task 5 scope
+
+##### test_save_persists_to_db (re-test)
+**Error:** Same - executor.py dict unpacking issue
+**Status:** INTENTIONAL - Task 5 scope
+
+##### test_step_state_saved (re-test)
+**Error:** Same - executor.py dict unpacking issue
+**Status:** INTENTIONAL - Task 5 scope
+
+### UNINTENTIONAL FAILURES - Re-Test
+None. Review fixes (accumulated_errors expansion) did not introduce new failures.
+
+### Review Fix Verification
+- [x] GeminiProvider accumulated_errors now includes JSON decode errors (review fix applied)
+- [x] GeminiProvider accumulated_errors now includes no-response errors (review fix applied)
+- [x] No new test failures introduced by review changes
+- [x] All 68 passing tests remain passing
+- [x] Test execution time improved (1.79s → 1.25s)
+
+### Final Recommendations - Re-Test
+1. Task 4 implementation complete and stable - review fixes validated
+2. Proceed to Task 5 with confidence - no regressions detected
+3. GeminiProvider error accumulation now comprehensive (validation, array, JSON, no-response, Pydantic)
