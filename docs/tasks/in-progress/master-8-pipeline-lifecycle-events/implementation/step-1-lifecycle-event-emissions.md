@@ -123,3 +123,40 @@ except Exception as e:
 [x] current_step_name tracked locally, updated each iteration from step.step_name
 [x] Existing 107 tests pass (no regressions)
 [x] Validation errors (lines 418-441) NOT wrapped by try/except (fire before PipelineStarted)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - _current_step not reset on error path: added `self._current_step = None` in except block before `raise`
+[x] LOW - steps_executed comment unclear: updated inline comment to clarify unique-class counting behavior
+[x] LOW - Double guard observation: no code change needed (intentional zero-overhead pattern) - skipped per instructions
+
+### Changes Made
+#### File: `llm_pipeline/pipeline.py`
+Reset _current_step on error path so it never remains stale after exception.
+```python
+# Before
+            ))
+            raise
+
+# After
+            ))
+            self._current_step = None
+            raise
+```
+
+Clarified steps_executed comment to document unique-class counting semantics.
+```python
+# Before
+                    steps_executed=len(self._executed_steps),  # includes skipped steps
+
+# After
+                    steps_executed=len(self._executed_steps),  # unique step classes (includes skipped, deduplicates repeated)
+```
+
+### Verification
+[x] 110 tests pass (no regressions)
+[x] _current_step reset on both success path (line 596) and error path (except block)
+[x] Comment accurately describes set-based counting behavior

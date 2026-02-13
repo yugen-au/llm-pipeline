@@ -590,7 +590,7 @@ class PipelineConfig(ABC):
                     run_id=self.run_id,
                     pipeline_name=self.pipeline_name,
                     execution_time_ms=pipeline_execution_time_ms,
-                    steps_executed=len(self._executed_steps),  # includes skipped steps
+                    steps_executed=len(self._executed_steps),  # unique step classes (includes skipped, deduplicates repeated)
                 ))
 
             self._current_step = None
@@ -607,6 +607,7 @@ class PipelineConfig(ABC):
                     error_message=str(e),
                     traceback=traceback.format_exc(),
                 ))
+            self._current_step = None
             raise
 
     def clear_cache(self) -> int:
