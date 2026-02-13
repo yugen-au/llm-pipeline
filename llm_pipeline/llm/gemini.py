@@ -105,6 +105,7 @@ class GeminiProvider(LLMProvider):
                     logger.warning(
                         f"  Attempt {attempt + 1}/{max_retries}: No response from Gemini"
                     )
+                    accumulated_errors.append("Empty/no response from model")
                     continue
 
                 response_text = response.text
@@ -143,6 +144,7 @@ class GeminiProvider(LLMProvider):
                     logger.warning(
                         f"  Attempt {attempt + 1}/{max_retries}: JSON parse error: {e}"
                     )
+                    accumulated_errors.append(f"JSON decode error: {e}")
                     continue
 
                 # Validate structure

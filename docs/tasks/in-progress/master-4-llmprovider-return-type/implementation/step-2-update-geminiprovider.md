@@ -87,3 +87,41 @@ Error accumulation added at 3 points: structural validation errors (extend), arr
 [x] Not-found exit uses empty validation_errors (no validation was attempted)
 [x] Success exit uses success() factory with accumulated_errors from prior attempts
 [x] Exhaustion exit uses plain constructor with last_raw_response (str|None) and accumulated_errors
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] JSON decode failure not accumulated - JSONDecodeError at ~line 142 did not append to accumulated_errors
+[x] No-response case not accumulated - empty/None response at ~line 104 did not append to accumulated_errors
+
+### Changes Made
+#### File: `llm_pipeline/llm/gemini.py`
+Added 1-line error accumulation before `continue` in both cases.
+
+```
+# Before - no-response case
+logger.warning(...)
+continue
+
+# After - no-response case
+logger.warning(...)
+accumulated_errors.append("Empty/no response from model")
+continue
+```
+
+```
+# Before - JSON decode failure
+logger.warning(...)
+continue
+
+# After - JSON decode failure
+logger.warning(...)
+accumulated_errors.append(f"JSON decode error: {e}")
+continue
+```
+
+### Verification
+[x] Both error paths now accumulate into accumulated_errors before continue
+[x] Exhaustion exit will correctly report all encountered errors including JSON parse and no-response failures
