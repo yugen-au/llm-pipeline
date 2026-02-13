@@ -60,3 +60,37 @@ None
 2. Monitor execution_time_ms in production logs to verify performance baseline
 3. Consider adding test case for exception during PipelineCompleted emission itself (edge case: datetime calculation fails) - out of scope for current task
 4. Document steps_executed semantics in event type docstrings (set of unique step CLASSES, not instances, includes skipped steps) - clarify for future maintainers
+
+---
+
+## Regression Test After Review Fixes (Commit 7e1394c)
+
+### Summary
+**Status:** passed
+**Date:** 2026-02-14
+Full test suite passed after review fixes - 110 tests, 0 failures. Review fixes (_current_step reset in finally block, improved steps_executed comment) introduced no regressions.
+
+### Changes Tested
+- Step 1: _current_step = None moved to finally block for guaranteed cleanup on error path
+- Step 1: steps_executed comment clarified to "count of unique step classes (includes skipped steps)"
+
+### Test Execution
+**Pass Rate:** 110/110 tests
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
+110 passed, 1 warning in 1.32s
+======================= 110 passed, 1 warning in 1.32s ========================
+```
+
+### Verification
+- [x] All 3 pipeline lifecycle event tests still pass (test_pipeline_lifecycle_success, test_pipeline_lifecycle_error, test_pipeline_lifecycle_no_emitter)
+- [x] All 105 existing pipeline tests still pass
+- [x] No new warnings introduced (same single PytestCollectionWarning as before)
+- [x] Test execution time stable (1.32s vs 1.30s baseline, within normal variance)
+
+### Issues Found
+None
+
+### Conclusion
+Review fixes applied successfully with zero regressions. Ready for merge.
