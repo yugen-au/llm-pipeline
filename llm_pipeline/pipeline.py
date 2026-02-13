@@ -32,6 +32,8 @@ from sqlmodel import SQLModel, Session
 
 logger = logging.getLogger(__name__)
 
+from llm_pipeline.events.types import PipelineStarted, PipelineCompleted, PipelineError
+
 if TYPE_CHECKING:
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
     from llm_pipeline.registry import PipelineDatabaseRegistry
@@ -442,135 +444,171 @@ class PipelineConfig(ABC):
         self.data = {"raw": data, "sanitized": self.sanitize(data)}
         self.extractions = {}
 
-        max_steps = max(len(s.get_steps()) for s in self._strategies)
+        start_time = datetime.now(timezone.utc)
+        current_step_name: str | None = None
 
-        for step_index in range(max_steps):
-            step_num = step_index + 1
-            selected_strategy = None
-            step_def = None
+        if self._event_emitter:
+            self._emit(PipelineStarted(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+            ))
 
-            for strategy in self._strategies:
-                if strategy.can_handle(self.context):
-                    steps = strategy.get_steps()
-                    if step_index < len(steps):
-                        selected_strategy = strategy
-                        step_def = steps[step_index]
-                        break
+        try:
+            max_steps = max(len(s.get_steps()) for s in self._strategies)
 
-            if not step_def:
-                break
+            for step_index in range(max_steps):
+                step_num = step_index + 1
+                selected_strategy = None
+                step_def = None
 
-            self._current_strategy = selected_strategy
-            step = step_def.create_step(pipeline=self)
-            step_class = type(step)
-            self._current_step = step_class
+                for strategy in self._strategies:
+                    if strategy.can_handle(self.context):
+                        steps = strategy.get_steps()
+                        if step_index < len(steps):
+                            selected_strategy = strategy
+                            step_def = steps[step_index]
+                            break
 
-            if step.should_skip():
-                logger.info(f"\nSTEP {step_num}: {step.step_name} SKIPPED")
-                self._executed_steps.add(step_class)
-                continue
+                if not step_def:
+                    break
 
-            logger.info(f"\nSTEP {step_num}: {step.step_name}...")
-            if selected_strategy:
-                logger.info(f"  -> Strategy: {selected_strategy.display_name}")
-                logger.info(
-                    f"  -> Prompts: system={step.system_instruction_key}, "
-                    f"user={step.user_prompt_key}"
-                )
+                self._current_strategy = selected_strategy
+                step = step_def.create_step(pipeline=self)
+                step_class = type(step)
+                self._current_step = step_class
+                current_step_name = step.step_name
 
-            current_data = self.get_current_data()
-            sanitized_data = self.get_sanitized_data()
-            if current_data is not None:
-                try:
-                    logger.info(f"  -> Data preview:\n{current_data.to_string()}")
-                    logger.info(f"  -> Sanitized preview:\n{sanitized_data}")
-                except AttributeError:
-                    pass  # Not a DataFrame
+                if step.should_skip():
+                    logger.info(f"\nSTEP {step_num}: {step.step_name} SKIPPED")
+                    self._executed_steps.add(step_class)
+                    continue
 
-            step_start = datetime.now(timezone.utc)
-            input_hash = self._hash_step_inputs(step, step_num)
-
-            cached_state = None
-            if use_cache:
-                cached_state = self._find_cached_state(step, input_hash)
-
-            if cached_state:
-                logger.info(
-                    f"  [CACHED] Using result from "
-                    f"{cached_state.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
-                )
-                instructions = self._load_from_cache(cached_state, step)
-                self._instructions[step.step_name] = instructions
-                new_context = step.process_instructions(instructions)
-                self._validate_and_merge_context(step, new_context)
-
-                if hasattr(step, "_transformation") and step._transformation:
-                    transformation = step._transformation(self)
-                    current_data = self.get_data("current")
-                    transformed_data = transformation.transform(current_data, instructions)
-                    self.set_data(transformed_data, step_name=step.step_name)
-
-                step.log_instructions(instructions)
-                reconstructed_count = self._reconstruct_extractions_from_cache(
-                    cached_state, step_def
-                )
-                if reconstructed_count == 0 and step_def.extractions:
-                    logger.info("  [PARTIAL CACHE] Re-running extraction")
-                    step.extract_data(instructions)
-            else:
-                if use_cache:
-                    logger.info("  [FRESH] No cache found, running fresh")
-                if use_consensus:
+                logger.info(f"\nSTEP {step_num}: {step.step_name}...")
+                if selected_strategy:
+                    logger.info(f"  -> Strategy: {selected_strategy.display_name}")
                     logger.info(
-                        f"  [CONSENSUS POLLING] threshold={consensus_threshold}, "
-                        f"max_calls={maximum_step_calls}"
+                        f"  -> Prompts: system={step.system_instruction_key}, "
+                        f"user={step.user_prompt_key}"
                     )
 
-                call_params = step.prepare_calls()
-                instructions = []
+                current_data = self.get_current_data()
+                sanitized_data = self.get_sanitized_data()
+                if current_data is not None:
+                    try:
+                        logger.info(f"  -> Data preview:\n{current_data.to_string()}")
+                        logger.info(f"  -> Sanitized preview:\n{sanitized_data}")
+                    except AttributeError:
+                        pass  # Not a DataFrame
 
-                for params in call_params:
-                    call_kwargs = step.create_llm_call(**params)
-                    # Inject provider and prompt_service
-                    call_kwargs["provider"] = self._provider
-                    call_kwargs["prompt_service"] = prompt_service
+                step_start = datetime.now(timezone.utc)
+                input_hash = self._hash_step_inputs(step, step_num)
 
+                cached_state = None
+                if use_cache:
+                    cached_state = self._find_cached_state(step, input_hash)
+
+                if cached_state:
+                    logger.info(
+                        f"  [CACHED] Using result from "
+                        f"{cached_state.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+                    )
+                    instructions = self._load_from_cache(cached_state, step)
+                    self._instructions[step.step_name] = instructions
+                    new_context = step.process_instructions(instructions)
+                    self._validate_and_merge_context(step, new_context)
+
+                    if hasattr(step, "_transformation") and step._transformation:
+                        transformation = step._transformation(self)
+                        current_data = self.get_data("current")
+                        transformed_data = transformation.transform(current_data, instructions)
+                        self.set_data(transformed_data, step_name=step.step_name)
+
+                    step.log_instructions(instructions)
+                    reconstructed_count = self._reconstruct_extractions_from_cache(
+                        cached_state, step_def
+                    )
+                    if reconstructed_count == 0 and step_def.extractions:
+                        logger.info("  [PARTIAL CACHE] Re-running extraction")
+                        step.extract_data(instructions)
+                else:
+                    if use_cache:
+                        logger.info("  [FRESH] No cache found, running fresh")
                     if use_consensus:
-                        instruction = self._execute_with_consensus(
-                            call_kwargs, consensus_threshold, maximum_step_calls
+                        logger.info(
+                            f"  [CONSENSUS POLLING] threshold={consensus_threshold}, "
+                            f"max_calls={maximum_step_calls}"
                         )
-                    else:
-                        instruction = execute_llm_step(**call_kwargs)
-                    instructions.append(instruction)
 
-                self._instructions[step.step_name] = instructions
-                new_context = step.process_instructions(instructions)
-                self._validate_and_merge_context(step, new_context)
+                    call_params = step.prepare_calls()
+                    instructions = []
 
-                if hasattr(step, "_transformation") and step._transformation:
-                    transformation = step._transformation(self)
-                    current_data = self.get_data("current")
-                    transformed_data = transformation.transform(current_data, instructions)
-                    self.set_data(transformed_data, step_name=step.step_name)
+                    for params in call_params:
+                        call_kwargs = step.create_llm_call(**params)
+                        # Inject provider and prompt_service
+                        call_kwargs["provider"] = self._provider
+                        call_kwargs["prompt_service"] = prompt_service
 
-                step.extract_data(instructions)
-                execution_time_ms = int(
-                    (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
-                )
-                model_name = getattr(self._provider, 'model_name', None)
-                self._save_step_state(
-                    step, step_num, instructions, input_hash, execution_time_ms, model_name
-                )
-                step.log_instructions(instructions)
+                        if use_consensus:
+                            instruction = self._execute_with_consensus(
+                                call_kwargs, consensus_threshold, maximum_step_calls
+                            )
+                        else:
+                            instruction = execute_llm_step(**call_kwargs)
+                        instructions.append(instruction)
 
-            self._executed_steps.add(step_class)
-            if step_def.action_after:
-                action_method = getattr(self, f"_{step_def.action_after}", None)
-                if action_method and callable(action_method):
-                    action_method(self.context)
+                    self._instructions[step.step_name] = instructions
+                    new_context = step.process_instructions(instructions)
+                    self._validate_and_merge_context(step, new_context)
 
-        self._current_step = None
-        return self
+                    if hasattr(step, "_transformation") and step._transformation:
+                        transformation = step._transformation(self)
+                        current_data = self.get_data("current")
+                        transformed_data = transformation.transform(current_data, instructions)
+                        self.set_data(transformed_data, step_name=step.step_name)
+
+                    step.extract_data(instructions)
+                    execution_time_ms = int(
+                        (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
+                    )
+                    model_name = getattr(self._provider, 'model_name', None)
+                    self._save_step_state(
+                        step, step_num, instructions, input_hash, execution_time_ms, model_name
+                    )
+                    step.log_instructions(instructions)
+
+                self._executed_steps.add(step_class)
+                if step_def.action_after:
+                    action_method = getattr(self, f"_{step_def.action_after}", None)
+                    if action_method and callable(action_method):
+                        action_method(self.context)
+
+            if self._event_emitter:
+                pipeline_execution_time_ms = (
+                    datetime.now(timezone.utc) - start_time
+                ).total_seconds() * 1000
+                self._emit(PipelineCompleted(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    execution_time_ms=pipeline_execution_time_ms,
+                    steps_executed=len(self._executed_steps),  # unique step classes (includes skipped, deduplicates repeated)
+                ))
+
+            self._current_step = None
+            return self
+
+        except Exception as e:
+            if self._event_emitter:
+                import traceback
+                self._emit(PipelineError(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    step_name=current_step_name,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    traceback=traceback.format_exc(),
+                ))
+            self._current_step = None
+            raise
 
     def clear_cache(self) -> int:
         from llm_pipeline.state import PipelineStepState
