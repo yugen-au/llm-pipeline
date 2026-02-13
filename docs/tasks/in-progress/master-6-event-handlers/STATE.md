@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/master/6-event-handlers
 ## Plugins: python-development, backend-development, database-design
@@ -21,7 +21,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a6dd7dc | 6115539 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7a6d92 | b0b15fe | - |
 | PipelineEventRecord Model | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a940328 | 84c743d | /websites/sqlmodel_tiangolo |
-| LoggingEventHandler | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a05e3f5 | fce27e3 | - |
+| LoggingEventHandler | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a05e3f5 | fce27e3,8c310be | - |
 | InMemoryEventHandler | python-development:python-pro | implementation | 3 | - | B | complete | 0 | acc865e | 8c310be | - |
-| SQLiteEventHandler | python-development:python-pro | implementation | 4 | - | C | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo |
+| SQLiteEventHandler | python-development:python-pro | implementation | 4 | - | C | in-progress | 0 | pending | pending | /websites/sqlmodel_tiangolo |
 | Comprehensive Tests | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | pending | pending | - |
