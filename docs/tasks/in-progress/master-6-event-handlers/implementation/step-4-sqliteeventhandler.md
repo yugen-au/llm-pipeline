@@ -88,3 +88,37 @@ None -- all decisions already made in PLAN.md (session-per-emit, try/finally, ex
 [x] Session closed in finally block (no leaks)
 [x] __repr__ returns engine URL
 [x] All 76 existing tests pass
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] handlers.py __all__ has 4 entries but plan specifies 5 -- missing PipelineEventRecord re-export
+
+### Changes Made
+#### File: `llm_pipeline/events/handlers.py`
+Added PipelineEventRecord to __all__ (import already present on line 18).
+```
+# Before
+__all__ = [
+    "DEFAULT_LEVEL_MAP",
+    "LoggingEventHandler",
+    "InMemoryEventHandler",
+    "SQLiteEventHandler",
+]
+
+# After
+__all__ = [
+    "DEFAULT_LEVEL_MAP",
+    "LoggingEventHandler",
+    "InMemoryEventHandler",
+    "SQLiteEventHandler",
+    "PipelineEventRecord",
+]
+```
+
+### Verification
+[x] __all__ now contains all 5 exports per PLAN.md
+[x] PipelineEventRecord re-export works: `from llm_pipeline.events.handlers import PipelineEventRecord`
+[x] All 107 tests pass

@@ -184,4 +184,5 @@ __all__ = [
     "LoggingEventHandler",
     "InMemoryEventHandler",
     "SQLiteEventHandler",
+    "PipelineEventRecord",
 ]
