@@ -19,3 +19,5 @@
 | Event Models & Emission Patterns | python-development:python-pro | research | 2 | - | A | complete | 0 | a45c895 | 8f12297 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a7ea2db | 867572b | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2e938f | pending | - |
+| Step Event Emissions | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Step Lifecycle Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest,/pydantic/pydantic |
