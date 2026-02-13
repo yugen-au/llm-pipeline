@@ -9,6 +9,8 @@ from typing import Any, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
+from llm_pipeline.llm.provider import LLMProvider
+from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 
 logger = logging.getLogger(__name__)
@@ -21,7 +23,7 @@ def execute_llm_step(
     user_prompt_key: str,
     variables: Any,
     result_class: Type[T],
-    provider: Any = None,
+    provider: Optional[LLMProvider] = None,
     prompt_service: Any = None,
     context: Optional[Dict[str, Any]] = None,
     array_validation: Optional[ArrayValidationConfig] = None,
@@ -33,7 +35,7 @@ def execute_llm_step(
 
     Handles the common pattern of:
     1. Retrieving prompts from database via prompt_service
-    2. Calling LLM via provider with structured output
+    2. Calling LLM via provider with structured output (returns LLMCallResult)
     3. Validating response with Pydantic
     4. Returning result or calling create_failure()
 
@@ -100,7 +102,7 @@ def execute_llm_step(
     )
 
     # Call LLM via provider
-    result_dict = provider.call_structured(
+    result: LLMCallResult = provider.call_structured(
         prompt=user_prompt,
         system_instruction=system_instruction,
         result_class=result_class,
@@ -108,17 +110,21 @@ def execute_llm_step(
         validation_context=validation_context,
     )
 
-    if result_dict is None:
-        return result_class.create_failure("LLM call failed")
+    if result.parsed is None:
+        if result.validation_errors:
+            failure_msg = f"LLM call failed: {'; '.join(result.validation_errors)}"
+        else:
+            failure_msg = "LLM call failed"
+        return result_class.create_failure(failure_msg)
 
     # Validate with Pydantic
     try:
         if validation_context:
             return result_class.model_validate(
-                result_dict, context=validation_context.to_dict()
+                result.parsed, context=validation_context.to_dict()
             )
         else:
-            return result_class(**result_dict)
+            return result_class(**result.parsed)
     except Exception as e:
         logger.error(f"[ERROR] Pydantic validation failed: {e}")
         return result_class.create_failure(f"Validation failed: {str(e)}")
