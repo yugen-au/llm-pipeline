@@ -112,3 +112,58 @@ def test_logging_handler_satisfies_protocol(self):
 [x] DEFAULT_LEVEL_MAP contains all 9 categories
 [x] Session isolation verified (no lingering state between emits)
 [x] Test patterns match existing codebase conventions (fixtures, caplog, Mock usage)
+
+---
+
+## Review Fix Iteration 1
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] test_logging_handler_unknown_category doesn't exercise unknown-category fallback path (inherited EVENT_CATEGORY from PipelineStarted resolves to known category)
+
+### Changes Made
+#### File: `tests/events/test_handlers.py`
+Fixed test_logging_handler_unknown_category to properly test fallback to INFO for unknown categories.
+
+```python
+# Before
+def test_logging_handler_unknown_category(self, caplog):
+    """Unknown category falls back to INFO level."""
+    logger = logging.getLogger("test.unknown_category")
+    logger.setLevel(logging.INFO)
+    handler = LoggingEventHandler(logger=logger)
+
+    # Create custom event with no EVENT_CATEGORY
+    class _UnknownEvent(PipelineStarted):
+        pass
+
+    event = _UnknownEvent(run_id="run-1", pipeline_name="test")
+    # Problem: _UnknownEvent inherits EVENT_CATEGORY = CATEGORY_PIPELINE_LIFECYCLE
+    # from PipelineStarted, so it never triggers fallback
+
+# After
+def test_logging_handler_unknown_category(self, caplog):
+    """Unknown category falls back to INFO level."""
+    logger = logging.getLogger("test.unknown_category")
+    logger.setLevel(logging.INFO)
+    handler = LoggingEventHandler(logger=logger)
+
+    # Create custom event with EVENT_CATEGORY not in DEFAULT_LEVEL_MAP
+    class _UnknownCategoryEvent(PipelineStarted):
+        EVENT_CATEGORY = "unknown_test_category"
+
+    event = _UnknownCategoryEvent(run_id="run-1", pipeline_name="test")
+    # Now triggers: level = self._level_map.get(category, logging.INFO)
+    #                                                    ^^^^^^^^^^^^
+```
+
+**Root Cause:** Original test subclassed PipelineStarted without overriding EVENT_CATEGORY, so it inherited `CATEGORY_PIPELINE_LIFECYCLE` (a known category in DEFAULT_LEVEL_MAP). The `.get(category, logging.INFO)` fallback was never exercised.
+
+**Fix:** Override EVENT_CATEGORY with value not in DEFAULT_LEVEL_MAP (`"unknown_test_category"`), forcing fallback path in `LoggingEventHandler.emit()` line 70.
+
+### Verification
+[x] test_logging_handler_unknown_category passes (exercises getattr + .get fallback)
+[x] All 31 tests still pass
+[x] No warnings
+[x] Verified fallback path: category="unknown_test_category" → level_map.get(..., logging.INFO) → INFO

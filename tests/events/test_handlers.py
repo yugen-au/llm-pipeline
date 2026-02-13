@@ -143,11 +143,11 @@ class TestLoggingEventHandler:
         logger.setLevel(logging.INFO)
         handler = LoggingEventHandler(logger=logger)
 
-        # Create custom event with no EVENT_CATEGORY
-        class _UnknownEvent(PipelineStarted):
-            pass
+        # Create custom event with EVENT_CATEGORY not in DEFAULT_LEVEL_MAP
+        class _UnknownCategoryEvent(PipelineStarted):
+            EVENT_CATEGORY = "unknown_test_category"
 
-        event = _UnknownEvent(run_id="run-1", pipeline_name="test")
+        event = _UnknownCategoryEvent(run_id="run-1", pipeline_name="test")
 
         with caplog.at_level(logging.DEBUG):
             handler.emit(event)
