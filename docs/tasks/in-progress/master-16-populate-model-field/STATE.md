@@ -10,7 +10,7 @@
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Last Updated: 2026-02-13 18:56
+## Last Updated: 2026-02-13 18:58
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,4 +20,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a31fc41 | 045f140 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a4bca43 | fe1ad1d | - |
 | Add model_name param | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a52adfb | 1c47087 | - |
-| Pass model_name at call site | python-development:python-pro | implementation | 2 | - | A | in-progress | 0 | pending | pending | - |
+| Pass model_name at call site | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a058c3d | 3f54dc6 | - |
