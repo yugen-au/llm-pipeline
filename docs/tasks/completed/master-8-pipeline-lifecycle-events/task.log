@@ -134,3 +134,4 @@
 [2026-02-14 00:52:40] [ERROR] BLOCKED: Subagents cannot modify STATE.md
 [2026-02-14 00:53:31] [ERROR] BLOCKED: Bash not allowed in task dir
 [2026-02-14 00:54:01] [INFO] Moved task folder from in-progress/ to completed/
+[2026-02-14 00:54:04] [DEBUG] STATE.md atomic write complete
