@@ -26,4 +26,4 @@
 | SQLiteEventHandler | python-development:python-pro | implementation | 4 | - | C | complete | 1 | a98bb0e | 96279e8,d9260ab | /websites/sqlmodel_tiangolo |
 | Comprehensive Tests | backend-development:test-automator | implementation | 5 | - | D | complete | 1 | a4ee5a1 | 39b86ab,3c8e2ec | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a1edb28 | c903127,1f46ed2 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | a3e08d2 | 6cd8376 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | a3e08d2 | 6cd8376 | - |
