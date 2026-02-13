@@ -1,7 +1,7 @@
 ## Task: master-8-pipeline-lifecycle-events
 ## Description: Emit PipelineStarted, PipelineCompleted, PipelineError events in execute() method of pipeline.py
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
