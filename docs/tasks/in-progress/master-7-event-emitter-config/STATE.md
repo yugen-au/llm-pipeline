@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/7-event-emitter-config
 ## Plugins: python-development, backend-development
@@ -20,4 +20,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a7b1c8c | 147277c | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a94e01c | 3eefe7b | - |
 | Modify PipelineConfig | python-development:python-pro | implementation | 1 | - | A | complete | 0 | ab4519c | 41c1dbf | - |
-| Add Unit Tests | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest/latest |
+| Add Unit Tests | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | /pytest/latest |
