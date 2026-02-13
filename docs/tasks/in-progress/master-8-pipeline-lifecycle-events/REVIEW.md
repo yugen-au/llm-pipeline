@@ -61,3 +61,54 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is correct, minimal, and follows established patterns. The two low-severity observations are documentation-level concerns, not code defects. All tests pass including full regression suite (110/110).
+
+---
+
+# Re-Review (post-fix)
+
+## Overall Assessment
+**Status:** complete
+Fixes from commit 7e1394c verified. Both previously raised issues (MEDIUM and LOW) are resolved. No new issues introduced. 110/110 tests pass.
+
+## Previous Issues Resolution
+
+| Issue | Severity | Status | Verification |
+| --- | --- | --- | --- |
+| _current_step not reset on error path | MEDIUM | RESOLVED | `self._current_step = None` added at line 610 in except block before `raise`. Both success (line 596) and error (line 610) paths now reset _current_step. |
+| steps_executed comment unclear | LOW | RESOLVED | Comment at line 593 now reads `# unique step classes (includes skipped, deduplicates repeated)` which fully describes the counting semantics. |
+| Double guard on _emit calls | LOW | ACCEPTED | Not a defect, no fix needed. Intentional zero-overhead pattern acknowledged in original review. |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present - both try/except paths reset _current_step
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/pipeline.py | pass | Line 610: _current_step reset in except block. Line 593: improved comment. No other changes. |
+| tests/events/test_pipeline_lifecycle_events.py | pass | 3 tests unchanged, all pass. |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previously identified issues resolved. Clean fixes with no side effects. Full test suite passes (110/110).
