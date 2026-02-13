@@ -19,3 +19,5 @@
 | LLMCallResult Model Field | backend-development:backend-architect | research | 2 | - | A | complete | 0 | ae90882 | 6d3f988 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a31fc41 | 045f140 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a4bca43 | pending | - |
+| Add model_name param | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Pass model_name at call site | python-development:python-pro | implementation | 2 | - | A | pending | 0 | pending | pending | - |
