@@ -24,4 +24,4 @@
 | Update MockProvider | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad4e579 | 541473b | - |
 | Update Exports | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a737e9a | 12fc4de,541473b | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | ab71157 | 97891c2,3f86028 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | a0d4452 | 17cd7f4 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | a0d4452 | 17cd7f4 | - |
