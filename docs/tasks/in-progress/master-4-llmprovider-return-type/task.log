@@ -101,3 +101,7 @@
 [2026-02-13 12:42:15] [INFO] Auto-updated agent statuses: Update GeminiProvider: complete -> in-progress, Architecture review: complete -> pending
 [2026-02-13 12:42:15] [INFO] Deleted 1 old contract file(s)
 [2026-02-13 12:42:15] [DEBUG] STATE.md atomic write complete
+[2026-02-13 12:42:30] [ERROR] BLOCKED: Invalid Task description format
+[2026-02-13 12:42:39] [INFO] Task call: python-development:python-pro (phase: fixing-review)
+[2026-02-13 12:42:39] [INFO] Incremented Revisions: 0 -> 1
+[2026-02-13 12:42:39] [DEBUG] STATE.md atomic write complete
