@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Validated 3 domain research outputs (codebase architecture, Python event patterns, SQLite schema) against actual codebase on `dev` branch. All 31 event types, 9 categories, Protocol/CompositeEmitter patterns, PipelineConfig integration, and DB patterns verified correct. Found 1 contradiction requiring CEO input (consensus log level), 2 internally-resolvable contradictions (logger name default, index duplication), 3 gaps (missing `__all__` entries, undefined SQLiteEventHandler query scope, missing Engine import), and 5 validated hidden assumptions. Research is sound for planning; gaps are minor and addressable during implementation.
+Validated 3 domain research outputs (codebase architecture, Python event patterns, SQLite schema) against actual codebase on `dev` branch. All 31 event types, 9 categories, Protocol/CompositeEmitter patterns, PipelineConfig integration, and DB patterns verified correct. Found 3 contradictions (all resolved: consensus log level per CEO=INFO, logger name=__name__, optimized 2-index set), 3 gaps (missing `__all__` entries, undefined SQLiteEventHandler query scope, missing Engine import), and 9 validated assumptions. All contradictions resolved. Research is sound for planning; gaps are minor and addressable during implementation.
 
 ## Domain Findings
 
@@ -44,11 +44,12 @@ Validated 3 domain research outputs (codebase architecture, Python event pattern
 
 ## Contradictions Found
 
-### 1. CATEGORY_CONSENSUS Log Level (REQUIRES CEO INPUT)
+### 1. CATEGORY_CONSENSUS Log Level (RESOLVED - CEO Decision)
 - **Step-1** (line 98-99): Groups consensus under "DEBUG: detail events"
 - **Step-2** DEFAULT_LEVEL_MAP (line 99): Maps `CATEGORY_CONSENSUS` to `logging.INFO`
 - **Task 6 spec**: "INFO for lifecycle, DEBUG for details" -- does not explicitly classify consensus
-- **Impact**: Determines whether consensus voting events show at INFO or DEBUG verbosity
+- **CEO Decision**: INFO. Consensus events are lifecycle-significant pipeline events, not implementation details.
+- **Resolution**: Step-2 was correct. Step-1 must be overridden. DEFAULT_LEVEL_MAP maps CATEGORY_CONSENSUS -> logging.INFO.
 
 ### 2. Logger Name Default (RESOLVED)
 - **Step-1** (line 127): Constructor default `logger_name="llm_pipeline.events"`
@@ -82,7 +83,7 @@ Validated 3 domain research outputs (codebase architecture, Python event pattern
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should CATEGORY_CONSENSUS be logged at INFO or DEBUG? Research step-1 says DEBUG, step-2 says INFO. Consensus events (Started/Attempt/Reached/Failed) represent voting outcomes. | PENDING | Determines DEFAULT_LEVEL_MAP value for consensus category |
+| Should CATEGORY_CONSENSUS be logged at INFO or DEBUG? Research step-1 says DEBUG, step-2 says INFO. Consensus events (Started/Attempt/Reached/Failed) represent voting outcomes. | INFO -- consensus events are lifecycle-significant, not implementation details (CEO decision) | Step-2 DEFAULT_LEVEL_MAP confirmed correct. Step-1 category grouping corrected. |
 
 ## Assumptions Validated
 
@@ -98,8 +99,7 @@ Validated 3 domain research outputs (codebase architecture, Python event pattern
 
 ## Open Items
 
-- CATEGORY_CONSENSUS log level: awaiting CEO decision (INFO vs DEBUG)
-- SQLiteEventHandler write-only confirmation: assumed per spec but not explicitly stated
+- SQLiteEventHandler write-only confirmation: assumed per spec but not explicitly stated (low risk, spec is clear that query methods are InMemoryEventHandler-only)
 - Step-2 `from __future__ import annotations` rationale is incorrect (cites events package consistency/slots reason; actual reason is SQLModel compatibility) -- cosmetic, doesn't affect implementation
 
 ## Recommendations for Planning
