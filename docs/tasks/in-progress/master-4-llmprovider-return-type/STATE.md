@@ -1,9 +1,9 @@
 ## Task: master-4-llmprovider-return-type
 ## Description: Update LLMProvider.call_structured() return type to LLMCallResult; update GeminiProvider to build/return LLMCallResult with raw_response, attempt_count, validation_errors
 
-## Phase: fixing-review
+## Phase: testing
 ## Status: in-progress
-## Current Group: B
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/4-llmprovider-return-type
 ## Plugins: python-development, backend-development
@@ -23,5 +23,5 @@
 | Update GeminiProvider | python-development:python-pro | implementation | 2 | - | B | complete | 1 | a542cf7 | dc07961,541473b,26a322f | - |
 | Update MockProvider | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad4e579 | 541473b | - |
 | Update Exports | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a737e9a | 12fc4de,541473b | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | ab71157 | 97891c2 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | ab71157 | 97891c2 | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a0d4452 | 17cd7f4 | - |
