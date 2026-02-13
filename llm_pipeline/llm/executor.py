@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
+from llm_pipeline.llm.provider import LLMProvider
 from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 
@@ -22,7 +23,7 @@ def execute_llm_step(
     user_prompt_key: str,
     variables: Any,
     result_class: Type[T],
-    provider: Any = None,
+    provider: Optional[LLMProvider] = None,
     prompt_service: Any = None,
     context: Optional[Dict[str, Any]] = None,
     array_validation: Optional[ArrayValidationConfig] = None,
@@ -110,7 +111,10 @@ def execute_llm_step(
     )
 
     if result.parsed is None:
-        failure_msg = f"LLM call failed: {'; '.join(result.validation_errors)}" if result.validation_errors else "LLM call failed"
+        if result.validation_errors:
+            failure_msg = f"LLM call failed: {'; '.join(result.validation_errors)}"
+        else:
+            failure_msg = "LLM call failed"
         return result_class.create_failure(failure_msg)
 
     # Validate with Pydantic

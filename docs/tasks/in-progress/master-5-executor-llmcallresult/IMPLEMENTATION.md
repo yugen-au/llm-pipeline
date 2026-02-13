@@ -66,3 +66,42 @@ result_class(**result.parsed)
 [x] Failure message includes validation_errors when present
 [x] Docstring mentions LLMCallResult
 [x] Full pytest suite: 71 passed, 0 failures
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - Line 113 too long (~120 chars): split ternary into if/else block
+[x] LOW - provider parameter typed as Any: changed to Optional[LLMProvider] with import
+
+### Changes Made
+#### File: `llm_pipeline/llm/executor.py`
+Split failure_msg ternary into explicit if/else block for readability. Added LLMProvider import, typed provider param as Optional[LLMProvider].
+
+```
+# Before (line 113)
+failure_msg = f"LLM call failed: {'; '.join(result.validation_errors)}" if result.validation_errors else "LLM call failed"
+
+# After (lines 113-116)
+if result.validation_errors:
+    failure_msg = f"LLM call failed: {'; '.join(result.validation_errors)}"
+else:
+    failure_msg = "LLM call failed"
+```
+
+```
+# Before (line 12, 25)
+from llm_pipeline.llm.result import LLMCallResult
+provider: Any = None,
+
+# After (lines 12-13, 26)
+from llm_pipeline.llm.provider import LLMProvider
+from llm_pipeline.llm.result import LLMCallResult
+provider: Optional[LLMProvider] = None,
+```
+
+### Verification
+[x] pytest: 71 passed, 0 failures
+[x] Line length reduced to ~72 chars per line
+[x] provider type annotation consistent with result: LLMCallResult annotation
