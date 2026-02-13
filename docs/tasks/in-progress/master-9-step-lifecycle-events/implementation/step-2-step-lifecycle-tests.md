@@ -65,3 +65,112 @@ events emitted by Pipeline.execute() via InMemoryEventHandler.
 - [x] Tests reuse fixtures from conftest: engine, seeded_session, in_memory_handler
 - [x] SkippableStep should_skip returns True, triggers StepSkipped emission
 - [x] No hardcoded secrets (warning false positive - test data only)
+
+---
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] LOW - Duplicate test fixtures across test files (MockProvider, SimpleInstructions, SimpleContext, SimpleStep, SuccessStrategy, SuccessRegistry, SuccessStrategies, SuccessPipeline, engine, seeded_session, in_memory_handler duplicated between test_pipeline_lifecycle_events.py and test_step_lifecycle_events.py)
+
+### Changes Made
+#### File: `tests/events/conftest.py`
+Created shared conftest.py with all duplicated fixtures and test helpers. Extracted from both test files:
+- MockProvider class (mock LLM provider)
+- Instruction models: SimpleInstructions, FailingInstructions, SkippableInstructions
+- Context models: SimpleContext, SkippableContext
+- Step classes: SimpleStep, FailingStep, SkippableStep (with @step_definition decorators)
+- Strategy classes: SuccessStrategy, FailureStrategy, SkipStrategy
+- Registry classes: SuccessRegistry, FailureRegistry, SkipRegistry
+- Strategies classes: SuccessStrategies, FailureStrategies, SkipStrategies
+- Pipeline classes: SuccessPipeline, FailurePipeline, SkipPipeline
+- Pytest fixtures: engine, seeded_session (with all 6 prompts), in_memory_handler
+
+```python
+# Before
+(no conftest.py - fixtures duplicated in both test files)
+
+# After
+"""Shared fixtures and test helpers for event emission tests.
+
+Provides common mock providers, instruction models, context classes, steps,
+strategies, pipelines, and pytest fixtures used across event test modules.
+"""
+# ... 319 lines defining all shared test infrastructure
+```
+
+#### File: `tests/events/test_pipeline_lifecycle_events.py`
+Removed all duplicated code (lines 1-224), replaced with minimal imports from conftest.py. Reduced from 347 lines to 123 lines (-224 lines, -64%).
+
+```python
+# Before
+"""Integration tests for pipeline lifecycle event emissions."""
+import pytest
+from sqlmodel import SQLModel, Session, create_engine
+from typing import Any, Dict, List, Optional, Type, ClassVar
+# ... full imports ...
+
+class MockProvider(LLMProvider):
+    # ... 27 lines ...
+
+class SimpleInstructions(LLMResultMixin):
+    # ... duplicated classes ...
+# ... 224 lines of duplicated code ...
+
+# After
+"""Integration tests for pipeline lifecycle event emissions."""
+import pytest
+
+from llm_pipeline.events.types import PipelineStarted, PipelineCompleted, PipelineError
+from conftest import (
+    MockProvider,
+    SuccessPipeline,
+    FailurePipeline,
+)
+# ... test classes unchanged ...
+```
+
+#### File: `tests/events/test_step_lifecycle_events.py`
+Removed all duplicated code (lines 1-248), replaced with minimal imports from conftest.py. Reduced from 481 lines to 233 lines (-248 lines, -51%).
+
+```python
+# Before
+"""Integration tests for step lifecycle event emissions."""
+import pytest
+from sqlmodel import SQLModel, Session, create_engine
+from typing import Any, Dict, List, Optional, Type, ClassVar
+# ... full imports ...
+
+class MockProvider(LLMProvider):
+    # ... 27 lines ...
+
+class SimpleInstructions(LLMResultMixin):
+    # ... duplicated classes ...
+# ... 248 lines of duplicated code ...
+
+# After
+"""Integration tests for step lifecycle event emissions."""
+import pytest
+
+from llm_pipeline.events.types import (
+    StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
+)
+from conftest import (
+    MockProvider,
+    SuccessPipeline,
+    SkipPipeline,
+)
+# ... test classes unchanged ...
+```
+
+### Verification
+- [x] All 11 tests pass (3 pipeline lifecycle + 8 step lifecycle)
+- [x] conftest.py created with all shared fixtures and helpers
+- [x] test_pipeline_lifecycle_events.py imports from conftest.py
+- [x] test_step_lifecycle_events.py imports from conftest.py
+- [x] No code duplication between test files
+- [x] Pytest automatically loads conftest.py fixtures (engine, seeded_session, in_memory_handler)
+- [x] All test classes and helpers available via imports (MockProvider, pipelines, strategies)
+- [x] Test file size reduced by 51-64%, improving maintainability
