@@ -51,3 +51,46 @@ from llm_pipeline.events.types import (
 [x] StepStarted emitted at L531-539, guarded
 [x] StepCompleted emitted at L617-624, guarded, execution_time_ms as float
 [x] All 110 existing tests pass (pytest -x -q)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - StepCompleted execution_time_ms on cached path: added inline comment near emission explaining timing includes cache-lookup or LLM-call depending on path, CEO-approved design
+[x] LOW - StepSelecting without StepSelected: added docstring note to StepSelecting class explaining consumers should handle receiving StepSelecting without subsequent StepSelected
+
+### Changes Made
+#### File: `llm_pipeline/pipeline.py`
+Added inline comment above StepCompleted emission.
+```python
+# Before
+                if self._event_emitter:
+                    self._emit(StepCompleted(
+
+# After
+                if self._event_emitter:
+                    # Timing includes cache-lookup or LLM-call depending on path;
+                    # CEO-approved: step_start stays after logging block (L541).
+                    self._emit(StepCompleted(
+```
+
+#### File: `llm_pipeline/events/types.py`
+Extended StepSelecting docstring with consumer guidance.
+```python
+# Before
+    """Emitted when step selection begins. step_name defaults to None."""
+
+# After
+    """Emitted when step selection begins. step_name defaults to None.
+
+    Note: Consumers should handle receiving StepSelecting without a subsequent
+    StepSelected -- this occurs when no strategy provides a step at the given
+    step_index, causing the loop to break before selection completes.
+    """
+```
+
+### Verification
+[x] All 118 tests pass (pytest -x -q)
+[x] Comment is brief and references CEO decision
+[x] Docstring note explains the edge case for consumers

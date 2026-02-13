@@ -202,7 +202,12 @@ class PipelineError(StepScopedEvent):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class StepSelecting(StepScopedEvent):
-    """Emitted when step selection begins. step_name defaults to None."""
+    """Emitted when step selection begins. step_name defaults to None.
+
+    Note: Consumers should handle receiving StepSelecting without a subsequent
+    StepSelected -- this occurs when no strategy provides a step at the given
+    step_index, causing the loop to break before selection completes.
+    """
 
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_STEP_LIFECYCLE
 
