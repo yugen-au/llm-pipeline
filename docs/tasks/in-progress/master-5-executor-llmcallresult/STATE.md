@@ -21,4 +21,4 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a4453d4 | e6b41bb | - |
 | Update Executor | python-development:python-pro | implementation | 1 | - | A | complete | 1 | acf9a3a | 40a3d0e,6d3deb7 | /python/pydantic |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a1fac75 | 040d93e,33437bf | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | ab0bccd | a2040ba | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | ab0bccd | a2040ba | - |
