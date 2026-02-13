@@ -32,7 +32,10 @@ from sqlmodel import SQLModel, Session
 
 logger = logging.getLogger(__name__)
 
-from llm_pipeline.events.types import PipelineStarted, PipelineCompleted, PipelineError
+from llm_pipeline.events.types import (
+    PipelineStarted, PipelineCompleted, PipelineError,
+    StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
+)
 
 if TYPE_CHECKING:
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
@@ -457,6 +460,14 @@ class PipelineConfig(ABC):
             max_steps = max(len(s.get_steps()) for s in self._strategies)
 
             for step_index in range(max_steps):
+                if self._event_emitter:
+                    self._emit(StepSelecting(
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_index=step_index,
+                        strategy_count=len(self._strategies),
+                    ))
+
                 step_num = step_index + 1
                 selected_strategy = None
                 step_def = None
@@ -478,8 +489,25 @@ class PipelineConfig(ABC):
                 self._current_step = step_class
                 current_step_name = step.step_name
 
+                if self._event_emitter:
+                    self._emit(StepSelected(
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_name=step.step_name,
+                        step_number=step_num,
+                        strategy_name=selected_strategy.name,
+                    ))
+
                 if step.should_skip():
                     logger.info(f"\nSTEP {step_num}: {step.step_name} SKIPPED")
+                    if self._event_emitter:
+                        self._emit(StepSkipped(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            step_number=step_num,
+                            reason="should_skip returned True",
+                        ))
                     self._executed_steps.add(step_class)
                     continue
 
@@ -499,6 +527,16 @@ class PipelineConfig(ABC):
                         logger.info(f"  -> Sanitized preview:\n{sanitized_data}")
                     except AttributeError:
                         pass  # Not a DataFrame
+
+                if self._event_emitter:
+                    self._emit(StepStarted(
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_name=step.step_name,
+                        step_number=step_num,
+                        system_key=step.system_instruction_key,
+                        user_key=step.user_prompt_key,
+                    ))
 
                 step_start = datetime.now(timezone.utc)
                 input_hash = self._hash_step_inputs(step, step_num)
@@ -575,6 +613,15 @@ class PipelineConfig(ABC):
                         step, step_num, instructions, input_hash, execution_time_ms, model_name
                     )
                     step.log_instructions(instructions)
+
+                if self._event_emitter:
+                    self._emit(StepCompleted(
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_name=step.step_name,
+                        step_number=step_num,
+                        execution_time_ms=(datetime.now(timezone.utc) - step_start).total_seconds() * 1000,
+                    ))
 
                 self._executed_steps.add(step_class)
                 if step_def.action_after:
