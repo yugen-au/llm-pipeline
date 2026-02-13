@@ -65,3 +65,88 @@ None
 **Decision:** APPROVE
 
 Implementation is architecturally sound, follows established patterns exactly, and all CEO decisions are correctly honored. The two low-severity observations are documentation/cleanup opportunities, not blocking issues. The medium-severity timing note is an acknowledged trade-off from the CEO-approved design. Code is ready for merge.
+
+---
+
+# Architecture Re-Review (Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+
+All 3 issues from the initial review have been addressed. Fixes are clean, correctly scoped, and introduce no regressions. 118 tests pass.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Pipeline + Strategy + Step pattern | pass | No structural changes in fixes |
+| Test with pytest | pass | 118 tests pass, shared conftest.py works correctly |
+| No hardcoded values | pass | No new hardcoded values introduced |
+| Error handling present | pass | Unchanged from initial review |
+| Project conventions followed | pass | conftest.py follows pytest convention, docstring and comment style consistent |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Fix Verification
+
+### Fix 1: MEDIUM - StepCompleted cached timing comment
+**Original Issue:** StepCompleted execution_time_ms measures different workloads on cached vs fresh path
+**Fix Applied:** Inline comment added at L617-619 in pipeline.py
+**Verified:** Comment at L618-619 reads: `# Timing includes cache-lookup or LLM-call depending on path; CEO-approved: step_start stays after logging block (L541).` Accurately documents the trade-off. Concise, references the CEO decision and the relevant line number. Placed directly above the emission, exactly where a maintainer would look.
+**Status:** RESOLVED
+
+### Fix 2: LOW - StepSelecting docstring
+**Original Issue:** StepSelecting can fire without subsequent StepSelected at end of step loop
+**Fix Applied:** Docstring added to StepSelecting in events/types.py
+**Verified:** Docstring at L205-209 reads: `Emitted when step selection begins. step_name defaults to None. Note: Consumers should handle receiving StepSelecting without a subsequent StepSelected -- this occurs when no strategy provides a step at the given step_index, causing the loop to break before selection completes.` Clear, actionable guidance for consumers. Explains what happens and why.
+**Status:** RESOLVED
+
+### Fix 3: LOW - Test fixture duplication
+**Original Issue:** MockProvider, domain classes, strategies, pipelines, and pytest fixtures duplicated across test files
+**Fix Applied:** tests/events/conftest.py created with all shared fixtures; both test files import from conftest
+**Verified:**
+- `tests/events/conftest.py` (291 lines) contains: MockProvider, SimpleInstructions, SimpleContext, FailingInstructions, SkippableInstructions, SkippableContext, SimpleStep, FailingStep, SkippableStep, SuccessStrategy, FailureStrategy, SkipStrategy, SuccessRegistry, FailureRegistry, SkipRegistry, SuccessStrategies, FailureStrategies, SkipStrategies, SuccessPipeline, FailurePipeline, SkipPipeline, engine, seeded_session (with all prompt keys), in_memory_handler
+- `test_pipeline_lifecycle_events.py` imports MockProvider, SuccessPipeline, FailurePipeline from conftest. No local fixture definitions remain.
+- `test_step_lifecycle_events.py` imports MockProvider, SuccessPipeline, SkipPipeline from conftest. No local fixture definitions remain.
+- conftest.py also adds SkippableStep, SkipStrategy, SkipPipeline, FailingStep, FailureStrategy, FailurePipeline which consolidate the domain objects needed by both test files
+- Seeded session includes prompts for all three step types (simple, failing, skippable)
+- 118 tests pass with no fixture resolution errors
+**Status:** RESOLVED
+
+## Review Checklist
+[x] Architecture patterns followed -- conftest.py is standard pytest fixture sharing pattern
+[x] Code quality and maintainability -- DRY improvement, single source of truth for test fixtures
+[x] Error handling present -- unchanged
+[x] No hardcoded values -- unchanged
+[x] Project conventions followed -- conftest.py naming, import style consistent
+[x] Security considerations -- no concerns
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- fixes are minimal and targeted
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/pipeline.py L617-619 | pass | Inline comment accurately documents cached-vs-fresh timing trade-off |
+| llm_pipeline/events/types.py L204-210 | pass | StepSelecting docstring clearly documents consumer expectation |
+| tests/events/conftest.py | pass | Clean shared fixture module, all domain objects and pytest fixtures consolidated |
+| tests/events/test_pipeline_lifecycle_events.py | pass | Local fixtures removed, imports from conftest, 3 tests pass |
+| tests/events/test_step_lifecycle_events.py | pass | Local fixtures removed, imports from conftest, 8 tests pass |
+
+## New Issues Introduced
+- None detected. All 118 tests pass. No new warnings. No regressions.
+
+## Recommendation
+**Decision:** APPROVE
+
+All 3 issues resolved cleanly. No new issues introduced. Implementation is complete and ready for merge.
