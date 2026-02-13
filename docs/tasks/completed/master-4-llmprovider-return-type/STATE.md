@@ -1,7 +1,7 @@
 ## Task: master-4-llmprovider-return-type
 ## Description: Update LLMProvider.call_structured() return type to LLMCallResult; update GeminiProvider to build/return LLMCallResult with raw_response, attempt_count, validation_errors
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
