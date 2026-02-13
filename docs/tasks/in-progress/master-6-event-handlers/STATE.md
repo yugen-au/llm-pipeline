@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/master/6-event-handlers
 ## Plugins: python-development, backend-development, database-design
@@ -24,6 +24,6 @@
 | LoggingEventHandler | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a05e3f5 | fce27e3,8c310be | - |
 | InMemoryEventHandler | python-development:python-pro | implementation | 3 | - | B | complete | 0 | acc865e | 8c310be | - |
 | SQLiteEventHandler | python-development:python-pro | implementation | 4 | - | C | complete | 1 | a98bb0e | 96279e8,d9260ab | /websites/sqlmodel_tiangolo |
-| Comprehensive Tests | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | a4ee5a1 | 39b86ab | - |
+| Comprehensive Tests | backend-development:test-automator | implementation | 5 | - | D | in-progress | 0 | a4ee5a1 | 39b86ab | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a1edb28 | c903127 | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a3e08d2 | 6cd8376 | - |
