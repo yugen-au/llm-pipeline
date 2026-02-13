@@ -30,6 +30,7 @@ from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
+from llm_pipeline.events import PipelineEventEmitter, PipelineEvent, PipelineStarted
 
 
 # ---------- Mock Provider ----------
@@ -464,3 +465,67 @@ class TestInitPipelineDb:
         assert "pipeline_step_states" in tables
         assert "pipeline_run_instances" in tables
         assert "prompts" in tables
+
+
+# ---------- Mock Event Emitter ----------
+
+class MockEmitter:
+    """Captures emitted events for test assertions."""
+
+    def __init__(self):
+        self.events: List[PipelineEvent] = []
+
+    def emit(self, event: PipelineEvent) -> None:
+        self.events.append(event)
+
+
+# ---------- Event Emitter Tests ----------
+
+class TestEventEmitter:
+    """Tests for event_emitter parameter and _emit() on PipelineConfig."""
+
+    def test_no_emitter_defaults_to_none(self):
+        """PipelineConfig without event_emitter -> _event_emitter is None."""
+        pipeline = TestPipeline(
+            session=Session(create_engine("sqlite:///:memory:")),
+            provider=MockProvider(),
+        )
+        assert pipeline._event_emitter is None
+
+    def test_emitter_stored(self):
+        """PipelineConfig with mock emitter -> _event_emitter is the mock."""
+        emitter = MockEmitter()
+        pipeline = TestPipeline(
+            session=Session(create_engine("sqlite:///:memory:")),
+            provider=MockProvider(),
+            event_emitter=emitter,
+        )
+        assert pipeline._event_emitter is emitter
+
+    def test_emit_noop_when_none(self):
+        """_emit() with no emitter configured does not raise."""
+        pipeline = TestPipeline(
+            session=Session(create_engine("sqlite:///:memory:")),
+            provider=MockProvider(),
+        )
+        event = PipelineStarted(run_id="test-run", pipeline_name="test")
+        pipeline._emit(event)  # should not raise
+
+    def test_emit_forwards_to_emitter(self):
+        """_emit() forwards event to mock emitter's emit()."""
+        emitter = MockEmitter()
+        pipeline = TestPipeline(
+            session=Session(create_engine("sqlite:///:memory:")),
+            provider=MockProvider(),
+            event_emitter=emitter,
+        )
+        event = PipelineStarted(run_id="test-run", pipeline_name="test")
+        pipeline._emit(event)
+
+        assert len(emitter.events) == 1
+        assert emitter.events[0] is event
+
+    def test_mock_emitter_satisfies_protocol(self):
+        """MockEmitter satisfies PipelineEventEmitter protocol (runtime_checkable)."""
+        emitter = MockEmitter()
+        assert isinstance(emitter, PipelineEventEmitter)

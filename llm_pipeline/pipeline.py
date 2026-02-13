@@ -38,6 +38,8 @@ if TYPE_CHECKING:
     from llm_pipeline.state import PipelineStepState
     from llm_pipeline.llm.provider import LLMProvider
     from llm_pipeline.prompts.variables import VariableResolver
+    from llm_pipeline.events.emitter import PipelineEventEmitter
+    from llm_pipeline.events.types import PipelineEvent
 
 TModel = TypeVar("TModel", bound=SQLModel)
 
@@ -131,6 +133,7 @@ class PipelineConfig(ABC):
         engine: Optional[Engine] = None,
         provider: Optional["LLMProvider"] = None,
         variable_resolver: Optional["VariableResolver"] = None,
+        event_emitter: Optional["PipelineEventEmitter"] = None,
     ):
         """
         Initialize pipeline.
@@ -141,12 +144,14 @@ class PipelineConfig(ABC):
             engine: Optional SQLAlchemy engine. Auto-SQLite if both session and engine are None.
             provider: LLMProvider instance for LLM calls (required for execute()).
             variable_resolver: Optional VariableResolver for prompt variable classes.
+            event_emitter: Optional PipelineEventEmitter for lifecycle/LLM/extraction events. None disables events.
         """
         from llm_pipeline.db import init_pipeline_db, get_session as db_get_session
         from llm_pipeline.session import ReadOnlySession
 
         self._provider = provider
         self._variable_resolver = variable_resolver
+        self._event_emitter = event_emitter
 
         # Validate REGISTRY and STRATEGIES
         if self.REGISTRY is None:
@@ -197,6 +202,15 @@ class PipelineConfig(ABC):
             self._real_session = Session(engine)
 
         self.session = ReadOnlySession(self._real_session)
+
+    def _emit(self, event: "PipelineEvent") -> None:
+        """Forward event to emitter if configured.
+
+        Args:
+            event: PipelineEvent instance to emit.
+        """
+        if self._event_emitter is not None:
+            self._event_emitter.emit(event)
 
     @property
     def instructions(self) -> MappingProxyType:
