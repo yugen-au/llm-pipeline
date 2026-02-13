@@ -3,14 +3,14 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/6-event-handlers
 ## Plugins: python-development, backend-development, database-design
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Last Updated: 2026-02-13 21:08
+## Last Updated: 2026-02-13 21:09
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,7 +21,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a6dd7dc | 6115539 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7a6d92 | b0b15fe | - |
 | PipelineEventRecord Model | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a940328 | 84c743d | /websites/sqlmodel_tiangolo |
-| LoggingEventHandler | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
-| InMemoryEventHandler | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| LoggingEventHandler | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
+| InMemoryEventHandler | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
 | SQLiteEventHandler | python-development:python-pro | implementation | 4 | - | C | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo |
 | Comprehensive Tests | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | pending | pending | - |
