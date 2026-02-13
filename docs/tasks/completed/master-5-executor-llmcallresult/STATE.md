@@ -1,7 +1,7 @@
 ## Task: master-5-executor-llmcallresult
 ## Description: Update executor.py execute_llm_step() to handle LLMCallResult return type from provider.call_structured(), use result.parsed for validated dict
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
