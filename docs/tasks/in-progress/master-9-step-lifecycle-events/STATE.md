@@ -1,17 +1,19 @@
 ## Task: master-9-step-lifecycle-events
-## Description: pending
+## Description: Emit StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted events in execute() step loop of pipeline.py
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/9-step-lifecycle-events
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: backend-development, python-development
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Last Updated: 2026-02-14 00:55
+## Last Updated: 2026-02-14 01:03
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Step Execution Flow | backend-development:backend-architect | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| Event Models & Emission Patterns | python-development:python-pro | research | 2 | - | A | in-progress | 0 | - | pending | - |
