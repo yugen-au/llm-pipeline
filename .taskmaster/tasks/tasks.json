@@ -78,9 +78,9 @@
           "1",
           "2"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-02-13T09:11:55.453Z"
+        "updatedAt": "2026-02-13T11:09:43.874Z"
       },
       {
         "id": "7",
@@ -767,9 +767,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-02-13T09:11:55.454Z",
+      "lastModified": "2026-02-13T11:09:43.875Z",
       "taskCount": 57,
-      "completedCount": 7,
+      "completedCount": 8,
       "tags": [
         "master"
       ]
