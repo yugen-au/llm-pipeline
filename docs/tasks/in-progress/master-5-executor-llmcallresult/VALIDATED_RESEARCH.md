@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Both research agents' findings are accurate and complete. All 4 touchpoints in executor.py verified against source. LLMCallResult.parsed containing pre-validated dict confirmed via GeminiProvider's triple-validation pipeline. The proposed 4-line change set is minimal, correct, and sufficient to fix the 3 failing tests from task 4. Two minor questions surfaced during validation regarding failure message enrichment and optional type annotation.
+Both research agents' findings are accurate and complete. All 4 touchpoints in executor.py verified against source. LLMCallResult.parsed containing pre-validated dict confirmed via GeminiProvider's triple-validation pipeline. CEO decisions: enrich failure message with validation_errors, add explicit LLMCallResult type annotation + import. Final change set: 6 lines changed (4 functional + 1 import + 1 enriched error message), docstring update. Sufficient to fix 3 failing tests from task 4.
 
 ## Domain Findings
 
@@ -52,30 +52,31 @@ Note: Task 16 references `result.model_name` at pipeline.py level, implying pipe
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should failure message at line 112 be enriched with result.validation_errors? | pending | Could improve debugging by surfacing provider-level errors in create_failure() message |
-| Should we add `result: LLMCallResult` type annotation (requires import)? | pending | Improves IDE support and code clarity but technically optional |
+| Should failure message at line 112 be enriched with result.validation_errors? | YES - use `f"LLM call failed: {'; '.join(result.validation_errors)}"` | Adds 1 line change. Failure messages now surface provider-level validation errors for better debugging. Must handle empty list case. |
+| Should we add `result: LLMCallResult` type annotation (requires import)? | YES - add explicit annotation + import | Adds 1 import line. Improves IDE support, code clarity, and makes the LLMCallResult dependency explicit in executor.py. |
 
 ## Assumptions Validated
 - [x] provider.call_structured() never returns None -- returns LLMCallResult with parsed=None for failures (verified via LLMProvider ABC return type and GeminiProvider 3 exit points)
 - [x] LLMCallResult.parsed contains dict that already passed Pydantic validation (verified via GeminiProvider lines 182-197)
 - [x] Executor re-validation with same dict is safe -- model_validate() does not mutate input (Pydantic v2 behavior)
 - [x] Return type of execute_llm_step() remains T, no signature change needed
-- [x] No new imports required for functional correctness (LLMCallResult type implicit via provider return)
+- [x] LLMCallResult import needed per CEO decision for explicit type annotation (from llm_pipeline.llm.result import LLMCallResult)
 - [x] All 3 failing tests are caused by executor receiving LLMCallResult where dict expected
 - [x] Task 4 completed with no deviations that affect task 5 scope
 - [x] Downstream tasks 11 and 16 are out of scope -- they will add their own plumbing for LLMCallResult data
 
 ## Open Items
-- Failure message enrichment (line 112): currently hardcoded "LLM call failed", could include `result.validation_errors` and `result.raw_response` for better diagnostics. Deferred to CEO decision.
-- Optional type annotation on result variable. Deferred to CEO decision.
 - executor.py has no try/except around `provider.call_structured()` call itself (pre-existing, not introduced by task 5). Provider catches internally but uncaught exceptions would propagate. Not in task 5 scope.
-- executor.py docstring (lines 33-53) should be updated to mention LLMCallResult. Minor cleanup.
+- executor.py docstring (lines 33-53) should be updated to mention LLMCallResult. Minor cleanup, in scope for task 5.
 
 ## Recommendations for Planning
-1. Implementation is 4 lines changed, no new files. Straightforward mechanical change.
-2. Keep executor Pydantic re-validation as defensive safety net -- do not optimize it away.
-3. Update executor.py docstring to reference LLMCallResult in the flow description.
-4. Run all 3 previously-failing tests plus full test suite to verify fix.
-5. Consider enriching failure message with validation_errors (CEO decision).
-6. Consider adding LLMCallResult type annotation for IDE/readability (CEO decision).
-7. No changes to pipeline.py, step.py, or any other files needed for task 5.
+1. Implementation is 6 lines changed in executor.py only (1 import, 4 functional, 1 enriched error). No new files.
+2. Add `from llm_pipeline.llm.result import LLMCallResult` import.
+3. Add explicit `result: LLMCallResult` type annotation on the provider.call_structured() assignment.
+4. Change null check from `result is None` to `result.parsed is None`.
+5. Replace `result_dict` with `result.parsed` in both Pydantic validation paths.
+6. Enrich failure message: `f"LLM call failed: {'; '.join(result.validation_errors)}"` (handle empty list).
+7. Keep executor Pydantic re-validation as defensive safety net -- do not optimize it away.
+8. Update executor.py docstring to reference LLMCallResult in the flow description.
+9. Run all 3 previously-failing tests plus full test suite to verify fix.
+10. No changes to pipeline.py, step.py, or any other files needed for task 5.
