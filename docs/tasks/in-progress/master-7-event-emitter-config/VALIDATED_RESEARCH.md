@@ -51,7 +51,7 @@ Both research files (step-1 pipeline architecture, step-2 event emitter patterns
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should _emit() docstring explicitly state the call-site gating convention (construct events inside `if self._event_emitter:` guard)? | [pending CEO response] | Determines whether Task 7 documents the zero-overhead convention or defers to Task 8 |
+| Should _emit() docstring explicitly state the call-site gating convention (construct events inside `if self._event_emitter:` guard)? | Defer to Task 8. Task 7 scope is _emit() helper + event_emitter param + __init__ docstring only. Task 8 uses the guard pattern in execute(), so gating docs belong there. | Task 7 _emit() docstring stays minimal (just describes forwarding behavior). Call-site gating convention documented in Task 8 when pattern is introduced. |
 
 ## Assumptions Validated
 [x] PipelineConfig is ABC, not Pydantic -- no type adapter or validator concerns
@@ -73,4 +73,4 @@ Both research files (step-1 pipeline architecture, step-2 event emitter patterns
 1. Implementation is straightforward: 4 changes to pipeline.py (TYPE_CHECKING imports, __init__ param, attribute storage, _emit method)
 2. Test plan should cover: instantiation with/without event_emitter, _emit forwarding, _emit no-op when None, type checking with mock emitter
 3. No circular import risk: TYPE_CHECKING guard prevents runtime import of events modules
-4. Consider adding a brief docstring to _emit() noting the call-site gating convention for zero-overhead
+4. _emit() docstring should only describe forwarding behavior; call-site gating convention docs deferred to Task 8
