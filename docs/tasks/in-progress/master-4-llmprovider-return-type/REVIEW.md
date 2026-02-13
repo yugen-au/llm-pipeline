@@ -70,3 +70,39 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve with condition: the 2 HIGH issues (JSON decode and no-response error accumulation) should be addressed before merging. Both are 1-line fixes (append error string to accumulated_errors before continue). The MEDIUM and LOW issues are acceptable as-is and can be deferred to future cleanup. The implementation is architecturally sound and achieves the task goal of replacing Optional[Dict] with LLMCallResult at all provider boundaries.
+
+---
+
+# Re-Review (commit 26a322f)
+
+## Overall Assessment
+**Status:** complete
+Both HIGH issues from prior review resolved. Error accumulation now covers all failure paths within the retry loop: no-response, JSON decode, structural validation, array validation, and Pydantic validation. Exhaustion exit will always carry full diagnostic history. Implementation approved.
+
+## Fixes Verified
+
+### HIGH: JSON decode failure - RESOLVED
+**Line 147:** `accumulated_errors.append(f"JSON decode error: {e}")` added before `continue`. Error message includes the JSONDecodeError details via f-string interpolation, consistent with Pydantic error accumulation pattern at line 194 (`accumulated_errors.append(str(pydantic_error))`). Correct.
+
+### HIGH: No-response case - RESOLVED
+**Line 108:** `accumulated_errors.append("Empty/no response from model")` added before `continue`. Static string is appropriate -- there is no error object to interpolate. Correctly placed after logger.warning and before continue. If all attempts return empty responses, exhaustion exit at line 238-244 will carry N accumulated error strings.
+
+## Remaining Items (accepted as-is per prior review)
+- MEDIUM: Transport/rate-limit errors not accumulated -- accepted, field is `validation_errors` not `all_errors`
+- MEDIUM: MockProvider missing return annotation -- test-only code, type inferred from ABC
+- LOW: Redundant continue pattern -- pre-existing, not introduced by Task 4
+
+## Error Accumulation Coverage (post-fix)
+| Failure Path | Accumulated | Line |
+| --- | --- | --- |
+| No response | yes | 108 |
+| Not-found indicator | n/a (early return, not a failure) | 120-126 |
+| JSON decode error | yes | 147 |
+| Structural validation | yes | 160 |
+| Array validation | yes | 176 |
+| Pydantic validation | yes | 194 |
+| Rate limit / exception | no (by design) | 208-235 |
+
+## Recommendation
+**Decision:** APPROVE
+All required fixes applied. Error accumulation is now comprehensive across validation-related failure paths. The 3 exit points construct LLMCallResult correctly. MEDIUM/LOW items are accepted deferrals. Implementation is ready for Task 5 (executor.py update).
