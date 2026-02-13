@@ -22,4 +22,4 @@
 | Lifecycle Event Emissions | python-development:python-pro | implementation | 1 | - | A | complete | 1 | adbafe1 | c78dd80,7e1394c | - |
 | Integration Tests | backend-development:test-automator | implementation | 2 | - | B | complete | 0 | acf806d | 0cce06a | /pytest-dev/pytest,/pydantic/pydantic |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a3566ba | a804476,6aecbc0 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | a37e1aa | 9ace07c | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | a37e1aa | 9ace07c | - |
