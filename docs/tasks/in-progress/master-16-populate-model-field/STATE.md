@@ -1,7 +1,7 @@
 ## Task: master-16-populate-model-field
 ## Description: Update _save_step_state() to populate PipelineStepState.model from LLMCallResult.model_name
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -21,4 +21,5 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a4bca43 | fe1ad1d | - |
 | Add model_name param | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a52adfb | 1c47087,3f54dc6 | - |
 | Pass model_name at call site | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a058c3d | 3f54dc6 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a749e8e | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a749e8e | 09412d8 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
