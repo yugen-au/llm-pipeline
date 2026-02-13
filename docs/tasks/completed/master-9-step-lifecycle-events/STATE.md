@@ -1,7 +1,7 @@
 ## Task: master-9-step-lifecycle-events
 ## Description: Emit StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted events in execute() step loop of pipeline.py
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
