@@ -19,3 +19,5 @@
 | Event Emitter Patterns | backend-development:backend-architect | research | 2 | - | A | complete | 0 | afddb25 | f5f1146 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a7b1c8c | 147277c | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a94e01c | pending | - |
+| Modify PipelineConfig | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Add Unit Tests | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest/latest |
