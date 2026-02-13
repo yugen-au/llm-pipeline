@@ -54,3 +54,66 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve with one required fix: rename or rewrite `test_logging_handler_unknown_category` to either (a) actually test the unknown-category fallback by using an event class without `EVENT_CATEGORY` in its MRO, or (b) rename to `test_logging_handler_inherited_category` to accurately describe what it tests. Current state creates false confidence that the fallback path is tested when it is not. The low-severity __all__ deviation is acceptable as-is (better module boundary design than the plan specified).
+
+---
+
+# Architecture Re-Review (Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+Both issues from initial review resolved correctly. 31/31 tests pass. No new issues introduced by the fixes.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Tests pass | pass | 31/31 pass, 0 warnings (re-verified) |
+| No hardcoded values | pass | `"unknown_test_category"` in test is intentional test data, not a hardcoded config value |
+| Project conventions followed | pass | Re-export pattern in `__all__` is valid Python convention |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Fix Verification
+
+### MEDIUM - Step 5: test_logging_handler_unknown_category (RESOLVED)
+**Previous issue:** Test subclassed `PipelineStarted` without overriding `EVENT_CATEGORY`, so inherited `CATEGORY_PIPELINE_LIFECYCLE` was resolved -- never hitting the fallback path.
+**Fix applied:** `_UnknownCategoryEvent` now explicitly sets `EVENT_CATEGORY = "unknown_test_category"` (line 148). This string is NOT in `DEFAULT_LEVEL_MAP`, so `_level_map.get(category, logging.INFO)` correctly exercises the fallback to `logging.INFO`. The test now validates the exact code path it claims to test.
+**Verdict:** Correctly fixed.
+
+### LOW - Step 4: handlers.py __all__ missing PipelineEventRecord (RESOLVED)
+**Previous issue:** `__all__` had 4 entries, plan specified 5 including `PipelineEventRecord`.
+**Fix applied:** `"PipelineEventRecord"` added to `__all__` (line 187), now 5 entries. `PipelineEventRecord` is already imported at module level (line 18), so the re-export is valid.
+**Verdict:** Correctly fixed. Aligns with plan spec. Acceptable as convenience re-export since handlers.py already imports the model.
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/events/handlers.py | pass | `__all__` now 5 entries, PipelineEventRecord re-exported |
+| tests/events/test_handlers.py | pass | Unknown category test now uses `EVENT_CATEGORY = "unknown_test_category"`, properly exercises fallback |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+Both previous issues resolved. Implementation is clean, tests are accurate, all 31 pass. No remaining issues at any severity level.
