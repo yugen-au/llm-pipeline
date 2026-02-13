@@ -15,5 +15,5 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Pipeline State Flow | python-development:python-pro | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| Pipeline State Flow | python-development:python-pro | research | 1 | - | A | needs-input | 0 | a15b6a0 | pending | - |
 | LLMCallResult Model Field | backend-development:backend-architect | research | 2 | - | A | needs-input | 0 | ae90882 | pending | - |
