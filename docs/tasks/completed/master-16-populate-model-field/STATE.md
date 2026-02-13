@@ -1,7 +1,7 @@
 ## Task: master-16-populate-model-field
 ## Description: Update _save_step_state() to populate PipelineStepState.model from LLMCallResult.model_name
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
