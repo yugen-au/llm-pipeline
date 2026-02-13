@@ -108,3 +108,70 @@ None
 3. No regressions in existing test suite (107/107 tests pass)
 4. Thread safety, SQLite persistence, logging levels, and protocol conformance all verified
 5. Consider integration testing with CompositeEmitter in downstream tasks
+
+---
+
+## Re-Test After Review Fixes (2026-02-13)
+
+### Summary
+**Status:** passed
+
+Re-test after fixing-review phase. Two minor fixes applied and verified:
+1. handlers.py __all__ now exports PipelineEventRecord (re-export from models.py)
+2. test_logging_handler_unknown_category improved to use mock event with truly unknown EVENT_CATEGORY
+
+All tests pass. No regressions.
+
+### Test Execution Results
+**Pass Rate:** 107/107 tests (100%)
+**Event Handler Tests:** 31/31 passed
+**Full Suite:** 107/107 passed
+**Runtime:** 1.43s (full suite), 0.74s (event handlers only)
+
+### Fixes Verified
+
+#### Fix 1: PipelineEventRecord Re-Export
+**Step:** Step 4 (SQLiteEventHandler implementation)
+**Change:** Added `from llm_pipeline.events.models import PipelineEventRecord` and included in `__all__` list
+**Verification:** Import test successful - all 5 names export correctly
+```python
+from llm_pipeline.events.handlers import DEFAULT_LEVEL_MAP, LoggingEventHandler, InMemoryEventHandler, SQLiteEventHandler, PipelineEventRecord
+# All imports successful
+```
+
+#### Fix 2: Improved Unknown Category Test
+**Step:** Step 5 (Comprehensive Tests - Group C)
+**Change:** test_logging_handler_unknown_category now creates mock event class with `EVENT_CATEGORY = "unknown_test_category"` instead of relying on existing event types
+**Verification:** Test passes and correctly validates INFO level fallback for truly unknown categories
+```python
+class _UnknownCategoryEvent(PipelineStarted):
+    EVENT_CATEGORY = "unknown_test_category"
+# Test validates fallback to INFO level
+```
+
+### Test Output (Event Handlers)
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
+cachedir: .pytest_cache
+rootdir: C:\Users\SamSG\Documents\claude_projects\llm-pipeline
+configfile: pyproject.toml
+collected 31 items
+
+tests/events/test_handlers.py::TestLoggingEventHandler::test_logging_handler_default_levels PASSED
+tests/events/test_handlers.py::TestLoggingEventHandler::test_logging_handler_custom_logger PASSED
+tests/events/test_handlers.py::TestLoggingEventHandler::test_logging_handler_custom_level_map PASSED
+tests/events/test_handlers.py::TestLoggingEventHandler::test_logging_handler_extra_data PASSED
+tests/events/test_handlers.py::TestLoggingEventHandler::test_logging_handler_unknown_category PASSED
+[... all 31 tests passed in 0.74s ...]
+```
+
+### Issues Found
+None
+
+### Recommendations
+1. Both fixes validated - implementation ready for final approval
+2. PipelineEventRecord re-export improves API consistency (single import point)
+3. Improved test robustness with explicit unknown category mock
+4. All success criteria remain met post-fixes
+5. Ready to proceed to next phase
