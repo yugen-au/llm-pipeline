@@ -1,6 +1,8 @@
 """
 Tests for llm-pipeline using MockProvider and in-memory SQLite.
 """
+import json
+
 import pytest
 from typing import Any, Dict, List, Optional, Type, ClassVar
 from pydantic import BaseModel
@@ -24,6 +26,7 @@ from llm_pipeline import (
     init_pipeline_db,
 )
 from llm_pipeline.llm.provider import LLMProvider
+from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
@@ -42,8 +45,19 @@ class MockProvider(LLMProvider):
         if self._call_count < len(self._responses):
             response = self._responses[self._call_count]
             self._call_count += 1
-            return response
-        return None
+            return LLMCallResult.success(
+                parsed=response,
+                raw_response=json.dumps(response),
+                model_name="mock-model",
+                attempt_count=1,
+            )
+        return LLMCallResult(
+            parsed=None,
+            raw_response="",
+            model_name="mock-model",
+            attempt_count=1,
+            validation_errors=[],
+        )
 
 
 # ---------- Test Domain Models ----------
