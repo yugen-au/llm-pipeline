@@ -20,3 +20,8 @@
 | SQLite Event Schema | database-design:database-architect | research | 3 | - | A | complete | 0 | ab8222d | 438a8c6 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a6dd7dc | 6115539 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7a6d92 | pending | - |
+| PipelineEventRecord Model | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo |
+| LoggingEventHandler | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| InMemoryEventHandler | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| SQLiteEventHandler | python-development:python-pro | implementation | 4 | - | C | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo |
+| Comprehensive Tests | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | pending | pending | - |
