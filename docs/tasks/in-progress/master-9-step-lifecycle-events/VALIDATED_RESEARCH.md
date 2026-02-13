@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Cross-referenced both research documents (step-1-step-execution-flow.md, step-2-event-models-emission-patterns.md) against actual source code in pipeline.py (L407-611), events/types.py, step.py, and strategy.py. All 5 event model field signatures verified correct against types.py. Line numbers accurate. Data availability confirmed at every emission point. No conflicts with Task 8 pipeline-level events. One inconsistency found between the two research docs (StepCompleted placement relative to _executed_steps.add). Two gaps identified: step_start timing side-effect and action_after hook interaction. Two questions require CEO input before planning.
+Cross-referenced both research documents (step-1-step-execution-flow.md, step-2-event-models-emission-patterns.md) against actual source code in pipeline.py (L407-611), events/types.py, step.py, and strategy.py. All 5 event model field signatures verified correct against types.py. Line numbers accurate. Data availability confirmed at every emission point. No conflicts with Task 8 pipeline-level events. One inconsistency found between the two research docs (StepCompleted placement relative to _executed_steps.add) -- resolved via CEO decision: BEFORE. Two gaps identified and resolved: step_start stays at L503 (no side-effects), StepCompleted fires before action_after hook. Research is validated and ready for planning.
 
 ## Domain Findings
 
@@ -20,7 +20,7 @@ Cross-referenced both research documents (step-1-step-execution-flow.md, step-2-
 - _executed_steps.add at L579 -- verified
 - action_after hook L580-583 -- verified
 
-All 5 emission points map cleanly to described locations. No ambiguity in placement except the StepCompleted position inconsistency noted below.
+All 5 emission points map cleanly to described locations. StepCompleted placement inconsistency between research docs resolved: BEFORE `_executed_steps.add` (CEO decision).
 
 ### Event Model Field Signatures
 **Source:** research/step-2-event-models-emission-patterns.md, events/types.py
@@ -81,7 +81,7 @@ Verified all downstream task scopes are correctly excluded:
 - step-1 (line 129): "Just before `self._executed_steps.add(step_class)` (L579)" -- i.e., BEFORE the add
 - step-2 (line 248-281): "After `self._executed_steps.add(step_class)` at line 579" -- i.e., AFTER the add
 
-These contradict each other. Both are valid positions (negligible timing difference). The semantic question is whether StepCompleted should fire before or after bookkeeping. See Q&A below.
+**RESOLVED:** CEO decision -- BEFORE `_executed_steps.add`. Emit when step work is done, then bookkeeping. Also before action_after hook (L580-583).
 
 ### Gap: step_start Timing Side-Effect
 **Source:** step-1 lines 104-108, step-2 lines 346-353
@@ -90,17 +90,21 @@ Both research docs recommend moving `step_start = datetime.now(timezone.utc)` fr
 
 Hidden side-effect: The existing fresh path at L570-571 calculates `execution_time_ms = int((datetime.now(timezone.utc) - step_start).total_seconds() * 1000)` for `_save_step_state`. Moving step_start earlier would include logging overhead (L486-501) in _save_step_state's execution_time_ms, changing existing behavior. Neither research doc acknowledges this.
 
+**RESOLVED:** CEO decision -- keep step_start at L503. No side effects on existing _save_step_state timing. Accept microsecond gap between StepStarted emission and step_start capture.
+
 ### Gap: action_after Hook Interaction
 **Source:** pipeline.py L580-583
 
-Neither research doc discusses whether StepCompleted fires before or after the action_after hook. action_after (L580-583) calls a pipeline method based on step_def.action_after string. This is pipeline-level post-step cleanup, not step execution work. StepCompleted should fire before it.
+Neither research doc discusses whether StepCompleted fires before or after the action_after hook. action_after (L580-583) calls a pipeline method based on step_def.action_after string. This is pipeline-level post-step cleanup, not step execution work.
+
+**RESOLVED:** StepCompleted fires BEFORE both `_executed_steps.add` and `action_after`. Ordering: StepCompleted -> _executed_steps.add -> action_after.
 
 ## Q&A History
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| StepCompleted placement: before or after _executed_steps.add (L579)? Research docs disagree. Recommendation: BEFORE (L579), since add is bookkeeping not step work. Also before action_after (L580-583). | Pending | Determines exact insertion line for StepCompleted emission |
-| step_start timing: move earlier (changes _save_step_state timing on fresh path) or keep at L503? Recommendation: keep at L503, emit StepStarted just before it. Microsecond gap is negligible, avoids changing existing _save_step_state behavior. | Pending | Determines whether existing _save_step_state timing changes |
+| StepCompleted placement: before or after _executed_steps.add (L579)? Research docs disagree. Recommendation: BEFORE (L579), since add is bookkeeping not step work. Also before action_after (L580-583). | BEFORE _executed_steps.add -- emit when step work done, then bookkeeping | StepCompleted emits at L578 (before L579 _executed_steps.add and L580 action_after). Final ordering: StepCompleted -> _executed_steps.add -> action_after |
+| step_start timing: move earlier (changes _save_step_state timing on fresh path) or keep at L503? Recommendation: keep at L503, emit StepStarted just before it. Microsecond gap is negligible, avoids changing existing _save_step_state behavior. | Keep at L503 -- no side effects, accept microsecond gap | step_start stays at L503. StepStarted emits between L502 and L503. Existing _save_step_state timing unchanged. |
 
 ## Assumptions Validated
 
@@ -123,15 +127,15 @@ Neither research doc discusses whether StepCompleted fires before or after the a
 ## Open Items
 
 - Minor line number discrepancies between the two research docs (off-by-one on end lines for event definitions). Non-blocking, all start lines correct.
-- Import strategy (module-level vs inline) not decided. Task 8 used module-level import at L35 for PipelineStarted/Completed/Error. Research correctly proposes extending that same import. Consistent approach.
+- Import strategy: extend module-level import at L35 (consistent with Task 8 pattern). No decision needed.
 
 ## Recommendations for Planning
 
 1. Emit StepSelecting at top of for loop body (after L459, before L461), guarded by `if self._event_emitter:`
 2. Emit StepSelected after L479 (current_step_name = step.step_name), before L481 (should_skip check)
 3. Emit StepSkipped inside should_skip branch, after L482 logger.info, before L483 _executed_steps.add, before L484 continue
-4. Emit StepStarted between L502 and L503 (after logging block, before step_start capture) -- keep step_start at L503 to avoid changing _save_step_state timing (pending CEO confirmation)
-5. Emit StepCompleted before L579 _executed_steps.add (pending CEO confirmation on placement)
+4. Emit StepStarted between L502 and L503 (after logging block, before step_start capture) -- step_start stays at L503 (CEO confirmed)
+5. Emit StepCompleted before L579 _executed_steps.add, before L580 action_after (CEO confirmed). Order: StepCompleted -> _executed_steps.add -> action_after
 6. Extend module-level import at L35 to include all 5 step event types
 7. All emissions follow `if self._event_emitter:` zero-overhead guard pattern
 8. StepCompleted.execution_time_ms calculated as float: `(datetime.now(timezone.utc) - step_start).total_seconds() * 1000`
