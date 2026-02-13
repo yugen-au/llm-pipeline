@@ -1,7 +1,7 @@
 ## Task: master-7-event-emitter-config
 ## Description: Add optional event_emitter param to PipelineConfig with zero overhead when None
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
