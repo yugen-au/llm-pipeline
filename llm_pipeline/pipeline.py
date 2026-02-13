@@ -557,8 +557,9 @@ class PipelineConfig(ABC):
                 execution_time_ms = int(
                     (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
                 )
+                model_name = getattr(self._provider, 'model_name', None)
                 self._save_step_state(
-                    step, step_num, instructions, input_hash, execution_time_ms
+                    step, step_num, instructions, input_hash, execution_time_ms, model_name
                 )
                 step.log_instructions(instructions)
 
@@ -685,7 +686,7 @@ class PipelineConfig(ABC):
                 )
         return total
 
-    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None):
+    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None):
         from llm_pipeline.state import PipelineStepState
         from llm_pipeline.db.prompt import Prompt
         from sqlmodel import select
@@ -724,6 +725,7 @@ class PipelineConfig(ABC):
             prompt_user_key=prompt_user_key,
             prompt_version=prompt_version,
             execution_time_ms=execution_time_ms,
+            model=model_name,
         )
         self._real_session.add(state)
         self._real_session.flush()
