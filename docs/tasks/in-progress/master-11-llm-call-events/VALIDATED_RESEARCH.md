@@ -2,9 +2,9 @@
 
 ## Executive Summary
 
-Cross-referenced both research documents against actual source code in executor.py (L21-131), pipeline.py (L571-615 fresh path, L916-942 consensus path), events/types.py (L304-344), result.py, and provider.py. All three LLM call event type definitions verified correct. LLMCallResult field mapping to LLMCallCompleted confirmed. Core data-visibility problem (executor discards rendered prompts + LLMCallResult) confirmed.
+Cross-referenced both research documents against actual source code in executor.py (L21-131), pipeline.py (L571-615 fresh path, L916-942 consensus path), events/types.py (L304-344), result.py, and emitter.py. All three LLM call event type definitions verified correct. LLMCallResult field mapping to LLMCallCompleted confirmed. Core data-visibility problem (executor discards rendered prompts + LLMCallResult) confirmed.
 
-Critical finding: the two research documents **contradict each other** on architecture. Step-1 recommends Option D (enriched return from executor, all emission in pipeline.py). Step-2 recommends Option B (pass emitter into executor, emit LLMCallStarting/Completed inside executor). Additionally, Option D has a semantic timing flaw: LLMCallStarting would fire AFTER the LLM call completes because pipeline only gets data back after execute_llm_step returns. Four questions require CEO resolution before planning.
+Critical finding resolved: research docs contradicted on architecture (Option B vs D). CEO chose **HYBRID**: LLMCallPrepared from pipeline.py, LLMCallStarting+Completed from executor.py via passed event_emitter. call_index = params loop index. Always fire LLMCallCompleted (even on exception). All gaps analyzed and resolved -- research is validated and ready for planning.
 
 ## Domain Findings
 
@@ -46,88 +46,157 @@ Confirmed against actual executor.py:
 
 Pipeline at L594 receives only the Pydantic model instance (T). Both research docs correctly identify this as the central problem.
 
-### Research Contradiction: Option B vs Option D
-**Source:** step-1 Section 5, step-2 Sections "LLMCallStarting" and "LLMCallCompleted"
+### Architecture Decision: HYBRID (CEO Resolved)
+**Source:** step-1 Section 5, step-2 Sections "LLMCallStarting" and "LLMCallCompleted", CEO answer
 
-**Step-1 recommends Option D**: New `execute_llm_step_with_metadata()` returning enriched result. Pipeline unpacks and emits all events. "All emission stays in pipeline.py" -- consistent with Task 9 pattern.
+**Contradiction found:** Step-1 recommended Option D (enriched return, all emission in pipeline.py). Step-2 recommended Option B (pass emitter into executor, emit from executor). Option D had a timing flaw (LLMCallStarting timestamp would be post-call).
 
-**Step-2 recommends Option B**: Pass `event_emitter` + context params into `execute_llm_step()`. Executor emits LLMCallStarting (after prompt render, before provider call) and LLMCallCompleted (after provider call). "Why executor not pipeline: Rendered prompts are local variables."
+**CEO Decision: HYBRID approach.**
+- LLMCallPrepared: emitted from pipeline.py (after prepare_calls, before for-loop). Pipeline owns this data naturally.
+- LLMCallStarting: emitted from executor.py (after prompt render, before provider.call_structured). Correct timing. Rendered prompts are local to executor.
+- LLMCallCompleted: emitted from executor.py (after provider.call_structured, or in exception handler). Correct timing. LLMCallResult is local to executor.
 
-These are architecturally incompatible. Step-2 even provides a full signature change for execute_llm_step with event_emitter, run_id, pipeline_name, step_name, call_index parameters.
+This gives correct timestamps for profiling (Starting.timestamp before call, Completed.timestamp after call) while keeping LLMCallPrepared at pipeline level where its data (call_count, system_key, user_key) is naturally available.
 
-### Option D Timing Flaw (Gap)
-**Source:** analysis of executor.py call flow
+### Executor Signature Change (Derived from CEO Decision)
+**Source:** analysis of executor.py, pipeline.py L583-594
 
-Option D returns enriched metadata AFTER execute_llm_step_with_metadata() completes. Pipeline would then emit LLMCallStarting. But the LLM call already happened inside the function. LLMCallStarting.timestamp would reflect post-call time, not pre-call time.
+execute_llm_step() needs new optional parameters for event context:
+- `event_emitter: PipelineEventEmitter | None = None`
+- `run_id: str | None = None`
+- `pipeline_name: str | None = None`
+- `step_name: str | None = None`
+- `call_index: int = 0`
 
-For performance profiling: `LLMCallCompleted.timestamp - LLMCallStarting.timestamp` would show ~0ms instead of actual LLM API latency (typically 1-30 seconds).
+All default to None/0. Backward compatible -- existing callers unaffected.
 
-Workaround: enrich result could include pre_call_timestamp and post_call_timestamp, and pipeline constructs events with overridden timestamps. Feasible but adds complexity.
+Pipeline injects these into call_kwargs after create_llm_call(), same pattern as existing provider/prompt_service injection (L586-587):
+```python
+call_kwargs["provider"] = self._provider
+call_kwargs["prompt_service"] = prompt_service
+# NEW: inject event context
+if self._event_emitter:
+    call_kwargs["event_emitter"] = self._event_emitter
+    call_kwargs["run_id"] = self.run_id
+    call_kwargs["pipeline_name"] = self.pipeline_name
+    call_kwargs["step_name"] = step.step_name
+    call_kwargs["call_index"] = idx  # params loop index
+```
 
-### LLMCallPrepared Emission Point (Verified)
+Zero overhead when no emitter: params not injected, executor skips all event logic.
+
+### Executor Event Emission Pattern (Derived)
+**Source:** executor.py L82-131, CEO error-path decision
+
+Executor emit pattern:
+```python
+# After L102 (prompts rendered):
+if event_emitter:
+    event_emitter.emit(LLMCallStarting(...))
+
+try:
+    result = provider.call_structured(...)
+except Exception as e:
+    if event_emitter:
+        event_emitter.emit(LLMCallCompleted(
+            ..., raw_response=None, parsed_result=None,
+            model_name=None, attempt_count=1,
+            validation_errors=[str(e)]
+        ))
+    raise  # re-raise for pipeline's outer try/except
+
+# After successful call:
+if event_emitter:
+    event_emitter.emit(LLMCallCompleted(
+        ..., raw_response=result.raw_response,
+        parsed_result=result.parsed,
+        model_name=result.model_name,
+        attempt_count=result.attempt_count,
+        validation_errors=result.validation_errors
+    ))
+```
+
+Key points:
+- try/catch around provider.call_structured() emits Completed then re-raises
+- Exception message goes in validation_errors (no schema change needed, existing list[str] field)
+- Consumers distinguish exception from normal failure: raw_response=None + parsed_result=None + validation_errors contains exception text
+
+### call_index Semantics (CEO Resolved)
+**Source:** pipeline.py L583-594, L916-942, CEO answer
+
+**call_index = params loop index** (which prompt pair in the step, 0-indexed).
+
+- Non-consensus: `for idx, params in enumerate(call_params)` -- call_index = idx
+- Consensus: same call_index for all attempts within one params entry. ConsensusAttempt events (Task 13 scope) provide per-attempt detail.
+
+Consensus path flows naturally: pipeline injects call_index into call_kwargs before branching at L589. _execute_with_consensus() unpacks via `**call_kwargs` at L922, so each consensus attempt inherits the same call_index.
+
+### Error Path (CEO Resolved)
+**Source:** executor.py L105-111, pipeline.py L648-660, CEO answer
+
+**Always fire LLMCallCompleted.** Starting always paired with Completed. Three scenarios:
+
+| Scenario | raw_response | parsed_result | validation_errors | How consumer detects |
+|----------|-------------|---------------|-------------------|---------------------|
+| Success | str | dict | [] or prior-attempt errors | parsed_result is not None |
+| Validation failure | str | None | [error messages] | parsed_result is None, raw_response present |
+| Provider exception | None | None | [exception str] | raw_response is None |
+
+No schema change to LLMCallCompleted needed. validation_errors carries exception message for the exception case.
+
+### LLMCallPrepared Emission Point (Verified, Unchanged)
 **Source:** both research docs, pipeline.py L580
 
-Both docs agree: emit after `call_params = step.prepare_calls()` (L580), before the for-loop (L583). Data available: `len(call_params)`, `step.system_instruction_key`, `step.user_prompt_key`. This is unambiguous and pipeline-owned regardless of Option B vs D. Correct.
+Emit after `call_params = step.prepare_calls()` (L580), before the for-loop (L583). Data available: `len(call_params)`, `step.system_instruction_key`, `step.user_prompt_key`. Pipeline-owned, unambiguous.
 
-### Consensus Path (Partially Verified)
+### Consensus Path (Fully Verified)
 **Source:** research/step-1 Section 6, step-2 Section "Consensus Polling Path", pipeline.py L916-942
 
-Confirmed `_execute_with_consensus()` calls `execute_llm_step()` at L922 in a loop. Each attempt is a separate LLM call. Both docs correctly identify this needs events.
-
-**Gap: call_index semantics in consensus**. The consensus path is invoked from the main params loop (L590-592) where `params` is one entry from `call_params`. The `call_index` in LLMCallStarting/Completed has one field. For non-consensus: call_index = params loop index (0, 1, 2...). For consensus: each params entry triggers MULTIPLE calls. What does call_index represent? The event type has no `consensus_attempt` field.
-
-### Error Path (Gap)
-**Source:** executor.py L105-130, pipeline.py L648-660
-
-Neither research doc addresses what happens when `provider.call_structured()` raises an exception (network error, API timeout, unhandled error). In this case:
-- executor.py propagates the exception (no try/catch around L105-111)
-- pipeline.py catches at L648 and emits PipelineError
-- No LLMCallCompleted fires for the failed call
-- If LLMCallStarting was already emitted (Option B), there's an unmatched Starting without Completed
-
-For validation failures (result.parsed is None), executor returns `create_failure()` normally -- this IS a completed call, just with empty parsed_result.
+_execute_with_consensus() at L916 unpacks call_kwargs via `**call_kwargs` at L922. Event params flow through naturally -- no modification to _execute_with_consensus() needed. Each consensus attempt calls execute_llm_step() which handles its own LLMCallStarting/Completed emission.
 
 ### Backward Compatibility (Verified)
 **Source:** step-1 Section 5, executor.py __all__
 
-`execute_llm_step` is in `__all__` of executor.py -- public API. Both research docs correctly flag this. Option D preserves backward compat by keeping the old function as a thin wrapper. Option B adds optional params (backward compat via defaults).
+execute_llm_step is public API (__all__). All new params are optional with defaults (None/0). Existing callers pass no event params, get no event emission. Zero behavioral change.
 
-### Test Infrastructure (Partially Verified)
+### Test Infrastructure (Verified)
 **Source:** step-1 Section 7, tests/events/conftest.py
 
-- MockProvider returns LLMCallResult.success() with all needed fields -- verified
-- seeded_session has prompts with "Process: {data}" template -- verified
-- Rendered prompt would be "Process: test" (from variables={"data": "test"}) -- sufficient for testing LLMCallStarting.rendered_user_prompt
-- InMemoryEventHandler available -- verified
-- SuccessPipeline has 2 steps (2 LLM calls) -- suitable for call_index testing
-
-**Gap**: If Option D introduces a new dataclass (LLMStepExecutionResult), tests need to import it. Minor, but conftest.py claim of "no changes needed" is slightly inaccurate for Option D.
+- MockProvider returns LLMCallResult.success() with all fields -- verified
+- seeded_session has "Process: {data}" template -- rendered_user_prompt testable as "Process: test"
+- InMemoryEventHandler available for event capture
+- SuccessPipeline has 2 steps -> 2 LLM calls -> suitable for call_index testing
+- No new test fixtures needed beyond existing conftest.py infrastructure
+- New test file: tests/events/test_llm_call_events.py
 
 ### Scope Boundary Verification (Verified)
 **Source:** downstream Task 12
 
-Task 12 (LLMCallRetry/LLMCallFailed/LLMCallRateLimited) is OUT OF SCOPE. However, the architecture decision here (Option B vs D) constrains Task 12:
-- Option B (emitter threading): Task 12 naturally passes emitter deeper to provider
-- Option D (enriched return): Task 12 can't use same pattern since provider-level retry events happen INSIDE provider.call_structured(), not in executor
+Task 12 (LLMCallRetry/LLMCallFailed/LLMCallRateLimited) is OUT OF SCOPE. The hybrid approach (emitter threading) naturally extends for Task 12: pass emitter deeper from executor to provider. No architectural conflict.
 
-### Files Requiring Changes (Verified with Caveats)
-**Source:** both research docs
+### Files Requiring Changes (Final)
+**Source:** both research docs, CEO decisions
 
-Agreed regardless of option:
-- `llm_pipeline/llm/executor.py` -- modified (new function or new params)
-- `llm_pipeline/pipeline.py` -- add LLMCallPrepared emission + either other events (Option D) or pass emitter (Option B)
-- `tests/events/test_llm_call_events.py` -- new test file
+Modified:
+- `llm_pipeline/llm/executor.py` -- add event params, emit LLMCallStarting/Completed, try/catch for error path
+- `llm_pipeline/pipeline.py` -- emit LLMCallPrepared, inject event params into call_kwargs
 
-Agreed no changes needed:
+New:
+- `tests/events/test_llm_call_events.py` -- integration tests
+
+No changes:
 - `events/types.py` -- all 3 events already defined
 - `events/__init__.py` -- already exports all LLM call events
 - `events/handlers.py` -- CATEGORY_LLM_CALL already mapped
+- `events/emitter.py` -- PipelineEventEmitter protocol unchanged
 
 ## Q&A History
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| (pending) | (pending) | (pending) |
+| Research contradiction: Step-1 recommends Option D (enriched return, all emission in pipeline). Step-2 recommends Option B (emit from executor). Option D has timing flaw (LLMCallStarting fires post-call). Which approach? | HYBRID: LLMCallPrepared from pipeline.py, LLMCallStarting+Completed from executor.py via passed event_emitter. Correct timing for Starting (before actual LLM call). | Resolves contradiction. Executor gets new optional params. Mixed emission pattern (pipeline + executor) instead of single-owner. Task 12 extends naturally via emitter threading. |
+| call_index in consensus path: params loop index or running counter of all LLM calls in step? | call_index = params loop index (0-indexed). Consensus attempts are internal detail, not reflected in call_index. | Same call_index for all consensus attempts of one params entry. Consumers correlate with ConsensusAttempt events (Task 13) for per-attempt detail. No special handling in _execute_with_consensus(). |
+| Error path: when provider.call_structured() raises, should LLMCallCompleted fire or leave LLMCallStarting unmatched? | Always fire LLMCallCompleted, even on exceptions. Starting always paired with Completed. Include error data. | Executor needs try/catch around provider.call_structured() that emits Completed then re-raises. Exception message goes in validation_errors (no schema change). Consumers get clean paired events. |
 
 ## Assumptions Validated
 
@@ -144,18 +213,28 @@ Agreed no changes needed:
 - [x] Zero-overhead guard pattern (if self._event_emitter:) established by Tasks 8+9
 - [x] events/__init__.py already exports LLMCallPrepared, LLMCallStarting, LLMCallCompleted
 - [x] execute_llm_step is public API (__all__ in executor.py)
+- [x] HYBRID approach: new optional params on execute_llm_step() are backward compatible (all default None/0)
+- [x] Event context (run_id, pipeline_name, step_name, call_index) injectable via call_kwargs dict same as provider/prompt_service
+- [x] Consensus path: call_kwargs unpacked at L922, event params flow through without modification to _execute_with_consensus()
+- [x] rendered_system_prompt: str (not Optional) is safe -- executor only reaches emit point after successful prompt retrieval
+- [x] Exception in provider.call_structured() can be caught, Completed emitted, then re-raised without changing pipeline error handling
+- [x] validation_errors: list[str] can carry exception message without schema change
+- [x] PipelineEventEmitter is a Protocol (duck typed) -- executor can use TYPE_CHECKING import, call .emit() directly
 
 ## Open Items
 
-- Research docs use slightly different line numbers for pipeline.py execution flow (step-1: L571-615, step-2: L410-660 for full method). Non-blocking; code structure verified regardless.
-- Step-2 references a "Compatibility with Task 12" section but makes assumptions about event_emitter threading that depend on which option is chosen. Defer until Q1 resolved.
+- None. All questions resolved by CEO. Research fully validated.
 
 ## Recommendations for Planning
 
-1. Resolve the Option B vs D contradiction FIRST -- this is the foundational architecture decision affecting all implementation work
-2. LLMCallPrepared emission is unambiguous: emit from pipeline.py after prepare_calls(), before the for-loop. Implement this regardless of B vs D decision.
-3. For the enriched-return approach (Option D), a pre_call_timestamp field in the result dataclass resolves the timing flaw without breaking the "all emission in pipeline" pattern
-4. Consider a hybrid: LLMCallPrepared from pipeline, LLMCallStarting/Completed from executor via optional emitter. This gives correct timing AND keeps LLMCallPrepared in pipeline (it only needs data pipeline already has). Trade-off: mixed emission pattern.
-5. Consensus path needs explicit call_index strategy decided before implementation. Simplest: call_index = params loop index, same value for all consensus attempts of that params entry. Consumers correlate with ConsensusAttempt events (Task 13) for per-attempt detail.
-6. Error path recommendation: do NOT emit LLMCallCompleted for provider exceptions (unmatched Starting is acceptable -- consumers check for PipelineError). DO emit LLMCallCompleted for validation failures (result.parsed is None) since executor handles these gracefully.
-7. Task 12 downstream impact: document chosen architecture decision so Task 12 can extend naturally.
+1. Emit LLMCallPrepared from pipeline.py after `call_params = step.prepare_calls()` (L580), before for-loop (L583), guarded by `if self._event_emitter:`
+2. Inject event params (event_emitter, run_id, pipeline_name, step_name, call_index) into call_kwargs after create_llm_call(), alongside existing provider/prompt_service injection (L586-587)
+3. Add 5 new optional params to execute_llm_step() signature: event_emitter, run_id, pipeline_name, step_name, call_index (all defaulting None/0)
+4. In executor: emit LLMCallStarting after prompt render (L102), before provider.call_structured() (L105)
+5. In executor: wrap provider.call_structured() in try/catch -- emit LLMCallCompleted in both success and exception paths, re-raise on exception
+6. In executor: emit LLMCallCompleted after provider.call_structured() returns normally (after L111), using LLMCallResult fields
+7. For exception-path LLMCallCompleted: raw_response=None, parsed_result=None, model_name=None, attempt_count=1, validation_errors=[str(exception)]
+8. All executor emissions guarded by `if event_emitter:` for zero-overhead when no emitter
+9. Use enumerate() on call_params loop in pipeline.py for call_index
+10. No changes to _execute_with_consensus() -- event params flow through call_kwargs naturally
+11. Tests: verify LLMCallPrepared emitted with correct call_count, verify LLMCallStarting contains rendered prompts (not template keys), verify LLMCallCompleted contains LLMCallResult data, verify error-path pairing, verify no-emitter zero-overhead path
