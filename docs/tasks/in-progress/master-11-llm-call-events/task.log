@@ -90,3 +90,9 @@ To proceed, either:
 [2026-02-14 12:29:52] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-02-14 12:31:32] [ERROR] BLOCKED: Invalid commit message format
 [2026-02-14 12:31:56] [DEBUG] STATE.md atomic write complete
+[2026-02-14 12:32:08] [INFO] Already committed implementation-A: ['step-1-executor-events.md']
+[2026-02-14 12:32:11] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-02-14 12:32:11] [INFO] Updated Commits for 'Executor Events': a40025c
+[2026-02-14 12:32:11] [INFO] Auto-updated agent statuses: Pipeline Events: pending -> in-progress, Integration Tests: pending -> in-progress
+[2026-02-14 12:32:11] [INFO] Deleted 1 old contract file(s)
+[2026-02-14 12:32:11] [DEBUG] STATE.md atomic write complete
