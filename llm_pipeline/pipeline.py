@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 from llm_pipeline.events.types import (
     PipelineStarted, PipelineCompleted, PipelineError,
     StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
+    CacheLookup, CacheHit, CacheMiss, CacheReconstruction,
     LLMCallPrepared,
 )
 
@@ -544,9 +545,24 @@ class PipelineConfig(ABC):
 
                 cached_state = None
                 if use_cache:
+                    if self._event_emitter:
+                        self._emit(CacheLookup(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            input_hash=input_hash,
+                        ))
                     cached_state = self._find_cached_state(step, input_hash)
 
                 if cached_state:
+                    if self._event_emitter:
+                        self._emit(CacheHit(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            input_hash=input_hash,
+                            cached_at=cached_state.created_at,
+                        ))
                     logger.info(
                         f"  [CACHED] Using result from "
                         f"{cached_state.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
@@ -566,11 +582,26 @@ class PipelineConfig(ABC):
                     reconstructed_count = self._reconstruct_extractions_from_cache(
                         cached_state, step_def
                     )
+                    if self._event_emitter and step_def.extractions:
+                        self._emit(CacheReconstruction(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            model_count=len(step_def.extractions),
+                            instance_count=reconstructed_count,
+                        ))
                     if reconstructed_count == 0 and step_def.extractions:
                         logger.info("  [PARTIAL CACHE] Re-running extraction")
                         step.extract_data(instructions)
                 else:
                     if use_cache:
+                        if self._event_emitter:
+                            self._emit(CacheMiss(
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                step_name=step.step_name,
+                                input_hash=input_hash,
+                            ))
                         logger.info("  [FRESH] No cache found, running fresh")
                     if use_consensus:
                         logger.info(
