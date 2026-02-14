@@ -16,5 +16,5 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Caching Logic Research | python-development:python-pro | research | 1 | - | A | in-progress | 0 | - | pending | - |
-| Event System Research | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | - | pending | - |
+| Caching Logic Research | python-development:python-pro | research | 1 | - | A | complete | 0 | a560857 | pending | - |
+| Event System Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a6402ca | pending | - |
