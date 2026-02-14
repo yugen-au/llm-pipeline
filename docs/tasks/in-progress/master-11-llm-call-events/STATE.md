@@ -1,7 +1,7 @@
 ## Task: master-11-llm-call-events
 ## Description: Add event emission for LLMCallPrepared, LLMCallStarting, LLMCallCompleted in executor.py and pipeline.py
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -23,4 +23,5 @@
 | Pipeline Events | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a0191f2 | 485d728,36f49d8 | - |
 | Integration Tests | python-development:python-pro | implementation | 3 | - | B | complete | 1 | a336ef6 | 36f49d8,6092401 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a52112a | 7c16fb4,7910d9c | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | a509aa1 | 3059935 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | a509aa1 | 3059935,f55d6cd | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
