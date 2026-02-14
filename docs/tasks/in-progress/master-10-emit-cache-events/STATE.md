@@ -26,6 +26,6 @@
 | Emit CacheMiss | python-development:python-pro | implementation | 4 | - | A | complete | 0 | a982080 | 01b9bb7 | - |
 | Emit CacheReconstruction | python-development:python-pro | implementation | 5 | - | A | complete | 0 | abf1798 | 0f0ebfa | - |
 | CacheReconstruction Fixtures | python-development:python-pro | implementation | 6 | - | B | complete | 0 | ae3b0f9 | dcbb4d3 | - |
-| Test CacheLookup+Miss | python-development:python-pro | implementation | 7 | - | B | in-progress | 1 | a10e7f5 | bad2e7c | - |
-| Test CacheLookup+Hit | python-development:python-pro | implementation | 8 | - | B | in-progress | 1 | aa5c8e8 | pending | - |
-| Test CacheReconstruction | python-development:python-pro | implementation | 9 | - | B | in-progress | 1 | a94af83 | pending | - |
+| Test CacheLookup+Miss | python-development:python-pro | implementation | 7 | - | B | complete | 1 | a10e7f5 | bad2e7c | - |
+| Test CacheLookup+Hit | python-development:python-pro | implementation | 8 | - | B | complete | 1 | aa5c8e8 | ac36fbe | - |
+| Test CacheReconstruction | python-development:python-pro | implementation | 9 | - | B | complete | 1 | a94af83 | 338ff1e | - |
