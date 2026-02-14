@@ -38,3 +38,28 @@ New file with 7 test classes and 32 test methods:
 [x] TestLLMCallEventPairing: call_index matching, timestamp ordering, total count correct
 [x] TestLLMCallErrorPath: Completed emitted with error data on provider exception
 [x] TestNoEmitterZeroOverhead: no event params injected without emitter
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] LOW - Zero-overhead test monkeypatch target fragility: tightened weak `"run_id" not in kw or kw.get("run_id") is None` assertion and added strict `not in` checks for all event-related params (pipeline_name, step_name, call_index)
+
+### Changes Made
+#### File: `tests/events/test_llm_call_events.py`
+Replaced weak disjunctive assertion with strict `not in` for all 4 event params.
+```
+# Before
+assert "run_id" not in kw or kw.get("run_id") is None
+
+# After
+assert "run_id" not in kw, "run_id should not be injected without emitter"
+assert "pipeline_name" not in kw, "pipeline_name should not be injected without emitter"
+assert "step_name" not in kw, "step_name should not be injected without emitter"
+assert "call_index" not in kw, "call_index should not be injected without emitter"
+```
+
+### Verification
+[x] TestNoEmitterZeroOverhead tests pass (2/2)
+[x] All 150 tests pass (no regressions)

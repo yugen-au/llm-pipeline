@@ -396,4 +396,7 @@ class TestNoEmitterZeroOverhead:
         assert len(captured_kwargs) >= 1
         for kw in captured_kwargs:
             assert "event_emitter" not in kw, "event_emitter should not be injected without emitter"
-            assert "run_id" not in kw or kw.get("run_id") is None
+            assert "run_id" not in kw, "run_id should not be injected without emitter"
+            assert "pipeline_name" not in kw, "pipeline_name should not be injected without emitter"
+            assert "step_name" not in kw, "step_name should not be injected without emitter"
+            assert "call_index" not in kw, "call_index should not be injected without emitter"
