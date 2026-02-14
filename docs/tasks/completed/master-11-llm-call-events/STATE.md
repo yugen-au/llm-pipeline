@@ -1,7 +1,7 @@
 ## Task: master-11-llm-call-events
 ## Description: Add event emission for LLMCallPrepared, LLMCallStarting, LLMCallCompleted in executor.py and pipeline.py
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
