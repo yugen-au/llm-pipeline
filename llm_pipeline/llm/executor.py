@@ -58,6 +58,11 @@ def execute_llm_step(
         array_validation: Optional array validation configuration
         system_variables: Optional system prompt variables
         validation_context: Optional ValidationContext for Pydantic validators
+        event_emitter: Optional PipelineEventEmitter for LLM call events
+        run_id: Optional pipeline run identifier for event correlation
+        pipeline_name: Optional pipeline name included in emitted events
+        step_name: Optional step name included in emitted events
+        call_index: Zero-based index when a step makes multiple LLM calls
 
     Returns:
         Validated Pydantic result object
@@ -109,9 +114,9 @@ def execute_llm_step(
         context=context,
     )
 
-    # Emit LLMCallStarting before provider call
+    # Lazy-import event types once when emitter is present
     if event_emitter:
-        from llm_pipeline.events.types import LLMCallStarting
+        from llm_pipeline.events.types import LLMCallCompleted, LLMCallStarting
 
         event_emitter.emit(
             LLMCallStarting(
@@ -135,8 +140,6 @@ def execute_llm_step(
         )
     except Exception as exc:
         if event_emitter:
-            from llm_pipeline.events.types import LLMCallCompleted
-
             event_emitter.emit(
                 LLMCallCompleted(
                     run_id=run_id,
@@ -154,8 +157,6 @@ def execute_llm_step(
 
     # Emit LLMCallCompleted after successful provider call
     if event_emitter:
-        from llm_pipeline.events.types import LLMCallCompleted
-
         event_emitter.emit(
             LLMCallCompleted(
                 run_id=run_id,

@@ -128,3 +128,61 @@ Added LLMCallStarting emission after user_prompt rendering, guarded by `if event
 [x] LLMCallCompleted emitted on success path with full LLMCallResult fields
 [x] LLMCallCompleted emitted on exception path with error in validation_errors, then re-raises
 [x] TYPE_CHECKING import avoids circular dependency
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - Missing docstring for new executor parameters: added entries for event_emitter, run_id, pipeline_name, step_name, call_index to Args docstring
+[x] LOW - Duplicate lazy import of LLMCallCompleted: consolidated to single import at top of first `if event_emitter:` block alongside LLMCallStarting
+
+### Changes Made
+#### File: `llm_pipeline/llm/executor.py`
+Added 5 param docstrings and consolidated duplicate import.
+
+```python
+# Before (docstring)
+        validation_context: Optional ValidationContext for Pydantic validators
+
+    Returns:
+
+# After (docstring)
+        validation_context: Optional ValidationContext for Pydantic validators
+        event_emitter: Optional PipelineEventEmitter for LLM call events
+        run_id: Optional pipeline run identifier for event correlation
+        pipeline_name: Optional pipeline name included in emitted events
+        step_name: Optional step name included in emitted events
+        call_index: Zero-based index when a step makes multiple LLM calls
+
+    Returns:
+```
+
+```python
+# Before (three separate lazy imports)
+    if event_emitter:
+        from llm_pipeline.events.types import LLMCallStarting
+        ...
+    except Exception as exc:
+        if event_emitter:
+            from llm_pipeline.events.types import LLMCallCompleted
+            ...
+    if event_emitter:
+        from llm_pipeline.events.types import LLMCallCompleted
+        ...
+
+# After (single import block)
+    if event_emitter:
+        from llm_pipeline.events.types import LLMCallCompleted, LLMCallStarting
+        ...
+    except Exception as exc:
+        if event_emitter:
+            event_emitter.emit(...)  # LLMCallCompleted already in scope
+    if event_emitter:
+        event_emitter.emit(...)  # LLMCallCompleted already in scope
+```
+
+### Verification
+[x] All 150 tests pass
+[x] Docstring now documents all 15 parameters
+[x] Single import point for both event types
