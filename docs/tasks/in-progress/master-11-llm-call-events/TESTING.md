@@ -100,3 +100,18 @@ None
 1. Consensus path event emission validated by implementation logic (call_kwargs injection before consensus, **call_kwargs unpacking confirmed L922), but no explicit integration test. Consider adding test_llm_call_events_consensus_path if regression concerns arise.
 2. All Task 11 success criteria met. Ready for transition to review phase.
 3. Single pytest warning about TestPipeline.__init__ is pre-existing (not introduced by Task 11), does not affect test execution.
+
+---
+
+## Post-Review Testing (2nd Run)
+
+### Changes Applied
+1. **executor.py**: Added docstrings for new event emission parameters (event_emitter, run_id, pipeline_name, step_name, call_index). Consolidated duplicate PipelineEventEmitter TYPE_CHECKING import.
+2. **test_llm_call_events.py**: Tightened zero-overhead test assertions - now verifies event_emitter NOT in call_kwargs (previously only checked run_id/step_name absence).
+
+### Test Execution (Post-Review)
+**Pass Rate:** 150/150 tests
+**Execution Time:** 1.68s (0.05s faster than initial 1.73s)
+**Status:** passed
+
+All tests still pass after review fixes. No regressions introduced. Zero-overhead verification now more robust (explicitly checks event_emitter param not injected when emitter=None). Docstring additions improve API documentation without affecting runtime behavior.
