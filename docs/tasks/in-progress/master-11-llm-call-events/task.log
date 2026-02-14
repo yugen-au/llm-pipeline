@@ -136,3 +136,8 @@ To proceed, either:
 [2026-02-14 12:46:19] [DEBUG] STATE.md atomic write complete
 [2026-02-14 12:47:59] [ERROR] BLOCKED: Invalid commit message format
 [2026-02-14 12:48:16] [DEBUG] STATE.md atomic write complete
+[2026-02-14 12:48:30] [INFO] Already committed fixing-review-A: ['step-1-executor-events.md']
+[2026-02-14 12:48:32] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-02-14 12:48:32] [INFO] Auto-updated agent statuses: Integration Tests: pending -> in-progress
+[2026-02-14 12:48:32] [INFO] Deleted 1 old contract file(s)
+[2026-02-14 12:48:32] [DEBUG] STATE.md atomic write complete
