@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 from llm_pipeline.events.types import (
     PipelineStarted, PipelineCompleted, PipelineError,
     StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
+    LLMCallPrepared,
 )
 
 if TYPE_CHECKING:
@@ -580,11 +581,28 @@ class PipelineConfig(ABC):
                     call_params = step.prepare_calls()
                     instructions = []
 
-                    for params in call_params:
+                    if self._event_emitter:
+                        self._emit(LLMCallPrepared(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            call_count=len(call_params),
+                            system_key=step.system_instruction_key,
+                            user_key=step.user_prompt_key,
+                        ))
+
+                    for idx, params in enumerate(call_params):
                         call_kwargs = step.create_llm_call(**params)
                         # Inject provider and prompt_service
                         call_kwargs["provider"] = self._provider
                         call_kwargs["prompt_service"] = prompt_service
+
+                        if self._event_emitter:
+                            call_kwargs["event_emitter"] = self._event_emitter
+                            call_kwargs["run_id"] = self.run_id
+                            call_kwargs["pipeline_name"] = self.pipeline_name
+                            call_kwargs["step_name"] = step.step_name
+                            call_kwargs["call_index"] = idx
 
                         if use_consensus:
                             instruction = self._execute_with_consensus(

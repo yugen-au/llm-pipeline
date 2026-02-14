@@ -5,13 +5,16 @@ Handles prompt retrieval, variable formatting, and dispatching to LLM providers.
 """
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
 from llm_pipeline.llm.provider import LLMProvider
 from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
+
+if TYPE_CHECKING:
+    from llm_pipeline.events.emitter import PipelineEventEmitter
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,11 @@ def execute_llm_step(
     array_validation: Optional[ArrayValidationConfig] = None,
     system_variables: Optional[Any] = None,
     validation_context: Optional[ValidationContext] = None,
+    event_emitter: Optional["PipelineEventEmitter"] = None,
+    run_id: Optional[str] = None,
+    pipeline_name: Optional[str] = None,
+    step_name: Optional[str] = None,
+    call_index: int = 0,
 ) -> T:
     """
     Generic executor for LLM-based pipeline steps.
@@ -50,6 +58,11 @@ def execute_llm_step(
         array_validation: Optional array validation configuration
         system_variables: Optional system prompt variables
         validation_context: Optional ValidationContext for Pydantic validators
+        event_emitter: Optional PipelineEventEmitter for LLM call events
+        run_id: Optional pipeline run identifier for event correlation
+        pipeline_name: Optional pipeline name included in emitted events
+        step_name: Optional step name included in emitted events
+        call_index: Zero-based index when a step makes multiple LLM calls
 
     Returns:
         Validated Pydantic result object
@@ -101,14 +114,62 @@ def execute_llm_step(
         context=context,
     )
 
+    # Lazy-import event types once when emitter is present
+    if event_emitter:
+        from llm_pipeline.events.types import LLMCallCompleted, LLMCallStarting
+
+        event_emitter.emit(
+            LLMCallStarting(
+                run_id=run_id,
+                pipeline_name=pipeline_name,
+                step_name=step_name,
+                call_index=call_index,
+                rendered_system_prompt=system_instruction,
+                rendered_user_prompt=user_prompt,
+            )
+        )
+
     # Call LLM via provider
-    result: LLMCallResult = provider.call_structured(
-        prompt=user_prompt,
-        system_instruction=system_instruction,
-        result_class=result_class,
-        array_validation=array_validation,
-        validation_context=validation_context,
-    )
+    try:
+        result: LLMCallResult = provider.call_structured(
+            prompt=user_prompt,
+            system_instruction=system_instruction,
+            result_class=result_class,
+            array_validation=array_validation,
+            validation_context=validation_context,
+        )
+    except Exception as exc:
+        if event_emitter:
+            event_emitter.emit(
+                LLMCallCompleted(
+                    run_id=run_id,
+                    pipeline_name=pipeline_name,
+                    step_name=step_name,
+                    call_index=call_index,
+                    raw_response=None,
+                    parsed_result=None,
+                    model_name=None,
+                    attempt_count=1,
+                    validation_errors=[str(exc)],
+                )
+            )
+        raise
+
+    # Emit LLMCallCompleted after successful provider call
+    if event_emitter:
+        event_emitter.emit(
+            LLMCallCompleted(
+                run_id=run_id,
+                pipeline_name=pipeline_name,
+                step_name=step_name,
+                call_index=call_index,
+                raw_response=result.raw_response,
+                parsed_result=result.parsed,
+                model_name=result.model_name,
+                attempt_count=result.attempt_count,
+                validation_errors=result.validation_errors,
+            )
+        )
 
     if result.parsed is None:
         if result.validation_errors:
