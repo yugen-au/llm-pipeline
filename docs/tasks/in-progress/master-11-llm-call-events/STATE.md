@@ -19,3 +19,6 @@
 | LLM Pipeline Architecture | llm-application-dev:ai-engineer | research | 2 | - | A | complete | 0 | ad3a34d | 389d50e | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a79eba1 | 28430fc | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2b4cdc | pending | - |
+| Executor Events | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Pipeline Events | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Integration Tests | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
