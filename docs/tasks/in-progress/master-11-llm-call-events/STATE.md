@@ -21,6 +21,6 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2b4cdc | ae4e3e7 | - |
 | Executor Events | python-development:python-pro | implementation | 1 | - | A | complete | 1 | a4d67f5 | a40025c,8d656df | - |
 | Pipeline Events | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a0191f2 | 485d728,36f49d8 | - |
-| Integration Tests | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | a336ef6 | 36f49d8 | - |
+| Integration Tests | python-development:python-pro | implementation | 3 | - | B | in-progress | 1 | a336ef6 | 36f49d8 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a52112a | 7c16fb4 | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a509aa1 | 3059935 | - |
