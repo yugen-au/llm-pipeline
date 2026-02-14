@@ -1,16 +1,16 @@
 ## Task: master-11-llm-call-events
 ## Description: Add event emission for LLMCallPrepared, LLMCallStarting, LLMCallCompleted in executor.py and pipeline.py
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: B
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/11-llm-call-events
 ## Plugins: python-development, llm-application-dev
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Last Updated: 2026-02-14 12:37
+## Last Updated: 2026-02-14 12:38
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,5 +20,6 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a79eba1 | 28430fc | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a2b4cdc | ae4e3e7 | - |
 | Executor Events | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a4d67f5 | a40025c | - |
-| Pipeline Events | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a0191f2 | 485d728 | - |
+| Pipeline Events | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a0191f2 | 485d728,36f49d8 | - |
 | Integration Tests | python-development:python-pro | implementation | 3 | - | B | complete | 0 | a336ef6 | 36f49d8 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
