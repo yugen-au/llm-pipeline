@@ -158,3 +158,11 @@ To proceed, either:
 [2026-02-15 13:31:24] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-02-15 13:31:24] [INFO] Deleted 1 old contract file(s)
 [2026-02-15 13:31:24] [DEBUG] STATE.md atomic write complete
+[2026-02-15 13:31:38] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-02-15 15:46:49] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-15 15:46:59] [INFO] Committed summary-A: ['SUMMARY.md'] -> 6424c8a
+[2026-02-15 15:47:00] [INFO] STATE.md updated: phase=pending-merge, status=in-progress
+[2026-02-15 15:47:00] [INFO] Updated Commits for 'Create summary': 6424c8a
+[2026-02-15 15:47:00] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
+[2026-02-15 15:47:00] [INFO] Deleted 1 old contract file(s)
+[2026-02-15 15:47:00] [DEBUG] STATE.md atomic write complete
