@@ -4,7 +4,7 @@ Provides common mock providers, instruction models, context classes, steps,
 strategies, pipelines, and pytest fixtures used across event test modules.
 """
 import pytest
-from sqlmodel import SQLModel, Session, create_engine
+from sqlmodel import SQLModel, Field, Session, create_engine
 from typing import Any, Dict, List, Optional, ClassVar
 
 from llm_pipeline import (
@@ -17,6 +17,7 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
     PipelineContext,
 )
+from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.llm.provider import LLMProvider
 from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.db.prompt import Prompt
@@ -90,6 +91,40 @@ class SkippableContext(PipelineContext):
     total: int
 
 
+# -- Extraction Domain (for CacheReconstruction tests) -------------------------
+
+
+class Item(SQLModel, table=True):
+    """Minimal DB model for extraction tests."""
+    __tablename__ = "items"
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str
+    value: int
+
+
+class ItemDetectionInstructions(LLMResultMixin):
+    """Instruction model for extraction step."""
+    item_count: int
+    category: str
+
+    example: ClassVar[dict] = {"item_count": 2, "category": "test", "notes": "ok"}
+
+
+class ItemDetectionContext(PipelineContext):
+    """Context produced by extraction step."""
+    category: str
+
+
+class ItemExtraction(PipelineExtraction, model=Item):
+    """Extraction that creates Item instances from instructions."""
+    def default(self, results):
+        instruction = results[0]
+        return [
+            Item(name=f"item_{i}", value=i)
+            for i in range(instruction.item_count)
+        ]
+
+
 # -- Test Steps ----------------------------------------------------------------
 
 
@@ -135,6 +170,22 @@ class SkippableStep(LLMStep):
 
     def process_instructions(self, instructions):
         return SkippableContext(total=instructions[0].count)
+
+
+@step_definition(
+    instructions=ItemDetectionInstructions,
+    default_system_key="item_detection.system",
+    default_user_key="item_detection.user",
+    default_extractions=[ItemExtraction],
+    context=ItemDetectionContext,
+)
+class ItemDetectionStep(LLMStep):
+    """Step with extractions for CacheReconstruction tests."""
+    def prepare_calls(self) -> List[StepCallParams]:
+        return [self.create_llm_call(variables={"data": "test"})]
+
+    def process_instructions(self, instructions):
+        return ItemDetectionContext(category=instructions[0].category)
 
 
 # -- Test Strategies -----------------------------------------------------------
@@ -209,6 +260,27 @@ class SkipPipeline(PipelineConfig, registry=SkipRegistry, strategies=SkipStrateg
     pass
 
 
+class ExtractionStrategy(PipelineStrategy):
+    """Strategy with a single extraction step."""
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return [ItemDetectionStep.create_definition()]
+
+
+class ExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
+    pass
+
+
+class ExtractionStrategies(PipelineStrategies, strategies=[ExtractionStrategy]):
+    pass
+
+
+class ExtractionPipeline(PipelineConfig, registry=ExtractionRegistry, strategies=ExtractionStrategies):
+    pass
+
+
 # -- Fixtures ------------------------------------------------------------------
 
 
@@ -276,6 +348,24 @@ def seeded_session(engine):
             category="test",
             step_name="skippable",
             content="Process: {data}",
+            version="1.0",
+        ))
+        session.add(Prompt(
+            prompt_key="item_detection.system",
+            prompt_name="Item Detection System",
+            prompt_type="system",
+            category="test",
+            step_name="item_detection",
+            content="You are an item detector.",
+            version="1.0",
+        ))
+        session.add(Prompt(
+            prompt_key="item_detection.user",
+            prompt_name="Item Detection User",
+            prompt_type="user",
+            category="test",
+            step_name="item_detection",
+            content="Detect items: {data}",
             version="1.0",
         ))
         session.commit()
