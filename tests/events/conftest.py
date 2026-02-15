@@ -21,7 +21,6 @@ from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.llm.provider import LLMProvider
 from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.state import PipelineStepState, PipelineRunInstance
 from llm_pipeline.types import StepCallParams
 from llm_pipeline.events.handlers import InMemoryEventHandler
 
@@ -379,62 +378,3 @@ def seeded_session(engine):
 def in_memory_handler():
     """Fresh InMemoryEventHandler for each test."""
     return InMemoryEventHandler()
-
-
-@pytest.fixture
-def seeded_cache_session(engine):
-    """Session with prompts + cached extraction state from a completed first run.
-
-    Seeds the DB by running ExtractionPipeline once with use_cache=True,
-    which saves PipelineStepState and PipelineRunInstance records via the
-    normal pipeline flow. A second pipeline using this session will hit
-    the cache-hit path and trigger CacheReconstruction.
-
-    Returns (session, first_run_id) so tests can verify reconstruction
-    against the original run.
-    """
-    with Session(engine) as setup:
-        # Seed prompts (same version="1.0" used by _find_cached_state)
-        for key_prefix, name_prefix, step in [
-            ("simple", "Simple", "simple"),
-            ("failing", "Failing", "failing"),
-            ("skippable", "Skippable", "skippable"),
-            ("item_detection", "Item Detection", "item_detection"),
-        ]:
-            setup.add(Prompt(
-                prompt_key=f"{key_prefix}.system",
-                prompt_name=f"{name_prefix} System",
-                prompt_type="system",
-                category="test",
-                step_name=step,
-                content="You are a test assistant.",
-                version="1.0",
-            ))
-            setup.add(Prompt(
-                prompt_key=f"{key_prefix}.user",
-                prompt_name=f"{name_prefix} User",
-                prompt_type="user",
-                category="test",
-                step_name=step,
-                content="Process: {data}",
-                version="1.0",
-            ))
-        setup.commit()
-
-    session = Session(engine)
-
-    # First run: populates PipelineStepState + PipelineRunInstance + Item rows
-    provider = MockProvider(responses=[
-        {"item_count": 2, "category": "widgets", "notes": "ok"},
-    ])
-    first_pipeline = ExtractionPipeline(
-        session=session,
-        provider=provider,
-    )
-    first_pipeline.execute(data="test data", initial_context={}, use_cache=True)
-    first_run_id = first_pipeline.run_id
-
-    # Flush to ensure all state persisted for second run
-    session.commit()
-
-    return session, first_run_id
