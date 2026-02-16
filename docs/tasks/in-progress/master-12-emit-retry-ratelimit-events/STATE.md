@@ -10,7 +10,7 @@
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Last Updated: 2026-02-16 17:34
+## Last Updated: 2026-02-16 17:38
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -22,5 +22,5 @@
 | Modify LLMProvider ABC | python-development:python-pro | implementation | 1 | - | A | complete | 0 | ab5d241 | 190d8e5 | - |
 | Thread Event Context | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
 | Add Event Emissions | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
-| Add Dev Dependency | python-development:python-pro | implementation | 4 | - | B | in-progress | 0 | pending | pending | - |
+| Add Dev Dependency | python-development:python-pro | implementation | 4 | - | B | complete | 0 | af6f421 | e4bfea7 | - |
 | Create Event Tests | backend-development:test-automator | implementation | 5 | - | C | pending | 0 | pending | pending | /google/generativeai |
