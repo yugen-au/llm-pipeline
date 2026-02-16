@@ -469,6 +469,7 @@ class TransformationStarting(StepScopedEvent):
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_TRANSFORMATION
 
     transformation_class: str
+    cached: bool
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -479,6 +480,7 @@ class TransformationCompleted(StepScopedEvent):
 
     data_key: str
     execution_time_ms: float
+    cached: bool
 
 
 # -- Extraction Events ---------------------------------------------------------
@@ -503,6 +505,7 @@ class ExtractionCompleted(StepScopedEvent):
     extraction_class: str
     model_class: str
     instance_count: int
+    execution_time_ms: float
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
