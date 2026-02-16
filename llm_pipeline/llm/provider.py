@@ -4,8 +4,11 @@ Abstract base class for LLM providers.
 Defines the interface that all LLM provider implementations must follow.
 """
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, Type
+from typing import TYPE_CHECKING, Any, List, Optional, Type
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from llm_pipeline.events.emitter import PipelineEventEmitter
 
 from llm_pipeline.llm.result import LLMCallResult
 
@@ -39,6 +42,10 @@ class LLMProvider(ABC):
         strict_types: bool = True,
         array_validation: Optional[Any] = None,
         validation_context: Optional[Any] = None,
+        event_emitter: Optional["PipelineEventEmitter"] = None,
+        step_name: Optional[str] = None,
+        run_id: Optional[str] = None,
+        pipeline_name: Optional[str] = None,
         **kwargs,
     ) -> LLMCallResult:
         """
@@ -53,6 +60,10 @@ class LLMProvider(ABC):
             strict_types: Whether to validate field types strictly
             array_validation: Optional ArrayValidationConfig
             validation_context: Optional ValidationContext for Pydantic validators
+            event_emitter: Optional PipelineEventEmitter for emitting retry/failure events
+            step_name: Optional step name for event scoping
+            run_id: Optional run identifier for event correlation
+            pipeline_name: Optional pipeline name for event scoping
 
         Returns:
             LLMCallResult containing parsed output, raw response, model

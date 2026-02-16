@@ -76,10 +76,17 @@ class GeminiProvider(LLMProvider):
         strict_types: bool = True,
         array_validation: Optional[Any] = None,
         validation_context: Optional[Any] = None,
+        event_emitter: Optional[Any] = None,
+        step_name: Optional[str] = None,
+        run_id: Optional[str] = None,
+        pipeline_name: Optional[str] = None,
         **kwargs,
     ) -> LLMCallResult:
         """Call Gemini with structured output validation and retry logic."""
         self._ensure_configured()
+
+        if event_emitter:
+            from llm_pipeline.events.types import LLMCallRetry, LLMCallFailed, LLMCallRateLimited
         import google.generativeai as genai
 
         expected_schema = result_class.model_json_schema()
@@ -106,6 +113,12 @@ class GeminiProvider(LLMProvider):
                         f"  Attempt {attempt + 1}/{max_retries}: No response from Gemini"
                     )
                     accumulated_errors.append("Empty/no response from model")
+                    if event_emitter and attempt < max_retries - 1:
+                        event_emitter.emit(LLMCallRetry(
+                            run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                            attempt=attempt + 1, max_retries=max_retries,
+                            error_type="empty_response", error_message="Empty/no response from model",
+                        ))
                     continue
 
                 response_text = response.text
@@ -145,6 +158,12 @@ class GeminiProvider(LLMProvider):
                         f"  Attempt {attempt + 1}/{max_retries}: JSON parse error: {e}"
                     )
                     accumulated_errors.append(f"JSON decode error: {e}")
+                    if event_emitter and attempt < max_retries - 1:
+                        event_emitter.emit(LLMCallRetry(
+                            run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                            attempt=attempt + 1, max_retries=max_retries,
+                            error_type="json_decode_error", error_message=f"JSON decode error: {e}",
+                        ))
                     continue
 
                 # Validate structure
@@ -158,6 +177,12 @@ class GeminiProvider(LLMProvider):
                     for error in errors:
                         logger.warning(f"    - {error}")
                     accumulated_errors.extend(errors)
+                    if event_emitter and attempt < max_retries - 1:
+                        event_emitter.emit(LLMCallRetry(
+                            run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                            attempt=attempt + 1, max_retries=max_retries,
+                            error_type="validation_error", error_message="; ".join(errors),
+                        ))
                     if attempt < max_retries - 1:
                         continue
                     continue
@@ -174,6 +199,12 @@ class GeminiProvider(LLMProvider):
                         for error in array_errors:
                             logger.warning(f"    - {error}")
                         accumulated_errors.extend(array_errors)
+                        if event_emitter and attempt < max_retries - 1:
+                            event_emitter.emit(LLMCallRetry(
+                                run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                                attempt=attempt + 1, max_retries=max_retries,
+                                error_type="array_validation_error", error_message="; ".join(array_errors),
+                            ))
                         if attempt < max_retries - 1:
                             continue
                         continue
@@ -192,6 +223,12 @@ class GeminiProvider(LLMProvider):
                         f"Pydantic validation failed: {pydantic_error}"
                     )
                     accumulated_errors.append(str(pydantic_error))
+                    if event_emitter and attempt < max_retries - 1:
+                        event_emitter.emit(LLMCallRetry(
+                            run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                            attempt=attempt + 1, max_retries=max_retries,
+                            error_type="pydantic_validation_error", error_message=str(pydantic_error),
+                        ))
                     if attempt < max_retries - 1:
                         continue
                     continue
@@ -219,22 +256,45 @@ class GeminiProvider(LLMProvider):
                         logger.info(
                             f"  API suggested waiting {retry_delay:.1f}s, waiting..."
                         )
+                        if event_emitter:
+                            event_emitter.emit(LLMCallRateLimited(
+                                run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                                attempt=attempt + 1, wait_seconds=retry_delay, backoff_type="api_suggested",
+                            ))
                         time.sleep(retry_delay)
                     else:
                         wait_time = 2**attempt
                         logger.info(
                             f"  Waiting {wait_time}s (exponential backoff)..."
                         )
+                        if event_emitter:
+                            event_emitter.emit(LLMCallRateLimited(
+                                run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                                attempt=attempt + 1, wait_seconds=float(wait_time), backoff_type="exponential",
+                            ))
                         time.sleep(wait_time)
                     continue
                 else:
                     logger.warning(
                         f"  Attempt {attempt + 1}/{max_retries}: Error: {e}"
                     )
+                    accumulated_errors.append(error_str)
+                    if event_emitter and attempt < max_retries - 1:
+                        event_emitter.emit(LLMCallRetry(
+                            run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                            attempt=attempt + 1, max_retries=max_retries,
+                            error_type="exception", error_message=error_str,
+                        ))
                     if attempt < max_retries - 1:
                         continue
 
         logger.error(f"  [ERROR] All {max_retries} attempts failed")
+        if event_emitter:
+            last_error = accumulated_errors[-1] if accumulated_errors else "Unknown error"
+            event_emitter.emit(LLMCallFailed(
+                run_id=run_id, pipeline_name=pipeline_name, step_name=step_name,
+                max_retries=max_retries, last_error=last_error,
+            ))
         return LLMCallResult(
             parsed=None,
             raw_response=last_raw_response,
