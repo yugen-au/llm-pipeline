@@ -137,6 +137,10 @@ def execute_llm_step(
             result_class=result_class,
             array_validation=array_validation,
             validation_context=validation_context,
+            event_emitter=event_emitter,
+            step_name=step_name,
+            run_id=run_id,
+            pipeline_name=pipeline_name,
         )
     except Exception as exc:
         if event_emitter:
