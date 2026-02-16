@@ -9,11 +9,17 @@ This module defines the foundation for implementing LLM-powered pipeline steps:
 import logging
 import re
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlmodel import SQLModel
 
+from llm_pipeline.events.types import (
+    ExtractionCompleted,
+    ExtractionError,
+    ExtractionStarting,
+)
 from llm_pipeline.types import StepCallParams
 
 logger = logging.getLogger(__name__)
@@ -322,12 +328,54 @@ class LLMStep(ABC):
         for extraction_class in extraction_classes:
             extraction = extraction_class(self.pipeline)
             self.pipeline._current_extraction = extraction_class
+
+            if self.pipeline._event_emitter:
+                self.pipeline._emit(ExtractionStarting(
+                    run_id=self.pipeline.run_id,
+                    pipeline_name=self.pipeline.pipeline_name,
+                    step_name=self.step_name,
+                    extraction_class=extraction_class.__name__,
+                    model_class=extraction.MODEL.__name__,
+                    timestamp=datetime.now(timezone.utc),
+                ))
+
             try:
+                extract_start = datetime.now(timezone.utc)
                 instances = extraction.extract(instructions)
                 self.store_extractions(extraction.MODEL, instances)
                 for instance in instances:
                     self.pipeline._real_session.add(instance)
                 self.pipeline._real_session.flush()
+
+                if self.pipeline._event_emitter:
+                    self.pipeline._emit(ExtractionCompleted(
+                        run_id=self.pipeline.run_id,
+                        pipeline_name=self.pipeline.pipeline_name,
+                        step_name=self.step_name,
+                        extraction_class=extraction_class.__name__,
+                        model_class=extraction.MODEL.__name__,
+                        instance_count=len(instances),
+                        execution_time_ms=(
+                            datetime.now(timezone.utc) - extract_start
+                        ).total_seconds() * 1000,
+                        timestamp=datetime.now(timezone.utc),
+                    ))
+            except Exception as e:
+                if self.pipeline._event_emitter:
+                    validation_errors = (
+                        e.errors() if isinstance(e, ValidationError) else []
+                    )
+                    self.pipeline._emit(ExtractionError(
+                        run_id=self.pipeline.run_id,
+                        pipeline_name=self.pipeline.pipeline_name,
+                        step_name=self.step_name,
+                        extraction_class=extraction_class.__name__,
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        validation_errors=validation_errors,
+                        timestamp=datetime.now(timezone.utc),
+                    ))
+                raise
             finally:
                 self.pipeline._current_extraction = None
 
