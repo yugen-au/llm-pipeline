@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/13-emit-consensus-events
 ## Plugins: python-development, backend-development
@@ -21,4 +21,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | adc02d4 | 2f9646f | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a61caf1 | 9602943 | - |
 | Modify pipeline.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a719f50 | 90486c5 | - |
-| Create consensus event tests | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Create consensus event tests | backend-development:backend-architect | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
