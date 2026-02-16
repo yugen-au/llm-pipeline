@@ -82,13 +82,13 @@ Validated both research files against actual source code (events/types.py, step.
 
 | # | Question | Answer | Impact |
 | --- | --- | --- | --- |
-| 1 | ExtractionError emits then re-raises. The outer PipelineError handler (L699) catches all exceptions with full traceback. Should extraction errors produce BOTH ExtractionError + PipelineError events (double-emit), or should ExtractionError suppress PipelineError for extraction failures? | PENDING | Determines whether except block re-raises or handles differently |
-| 2 | Transformation blocks exist in both cached path (L576-580) and fresh path (L652-656). Cached path re-transforms data that was already transformed when cache was built. Should both paths emit TransformationStarting/Completed events, or only the fresh path? If both, should the events distinguish cached vs fresh context? | PENDING | Affects whether we add events to 1 or 2 code sites, and whether events need additional context |
-| 3 | ExtractionCompleted has no execution_time_ms field, but TransformationCompleted does. This asymmetry is baked into the existing type definitions. Should we add execution_time_ms to ExtractionCompleted (scope creep, requires type modification), or implement strictly per existing types? | PENDING | Scope decision: modify types.py or not |
+| 1 | ExtractionError emits then re-raises. The outer PipelineError handler (L699) catches all exceptions with full traceback. Should extraction errors produce BOTH ExtractionError + PipelineError events (double-emit), or should ExtractionError suppress PipelineError for extraction failures? | BOTH fire. Let consumers filter. No changes to error handler. | Simple re-raise in except block. ExtractionError has error detail, PipelineError has traceback. Complementary, not redundant. |
+| 2 | Transformation blocks exist in both cached path (L576-580) and fresh path (L652-656). Cached path re-transforms data that was already transformed when cache was built. Should both paths emit TransformationStarting/Completed events, or only the fresh path? If both, should the events distinguish cached vs fresh context? | BOTH paths emit events WITH a distinguishing flag (e.g., cached=True/False or source="cache"/"fresh"). | Requires adding a `source` or `cached` field to TransformationStarting and TransformationCompleted in types.py. Both transformation blocks get event emissions with different flag values. |
+| 3 | ExtractionCompleted has no execution_time_ms field, but TransformationCompleted does. This asymmetry is baked into the existing type definitions. Should we add execution_time_ms to ExtractionCompleted (scope creep, requires type modification), or implement strictly per existing types? | ADD execution_time_ms to ExtractionCompleted. Approved scope expansion. | Modify ExtractionCompleted in types.py to add `execution_time_ms: float`. Capture timing around extraction.extract() call in step.py. |
 
 ## Assumptions Validated
 
-- [x] All 5 event types already defined in events/types.py (no type changes needed)
+- [x] All 5 event types already defined in events/types.py (type modifications approved for ExtractionCompleted + TransformationStarting/Completed)
 - [x] ExtractionError intentionally omits model_class field (types.py is source of truth)
 - [x] step.py extract_data() structure matches research (L315-332, try/finally, no except)
 - [x] Two identical transformation blocks at L576-580 and L652-656 in pipeline.py
@@ -100,15 +100,38 @@ Validated both research files against actual source code (events/types.py, step.
 - [x] Import pattern: module-level imports, not TYPE_CHECKING (matches pipeline.py convention)
 - [x] Timing pattern: float via (datetime.now(timezone.utc) - start).total_seconds() * 1000
 
+## CEO Design Decisions (Revision 1)
+
+### Decision 1: Double-emit for extraction errors
+ExtractionError and PipelineError both fire on extraction failures. ExtractionError carries extraction-specific detail (extraction_class, error_type, validation_errors). PipelineError carries full traceback. Consumers filter by event_type. Implementation: except block emits ExtractionError then re-raises; outer handler at L699 emits PipelineError as normal.
+
+### Decision 2: Both transformation paths emit events with source flag
+Both cached (L576-580) and fresh (L652-656) paths emit TransformationStarting/Completed. A new field distinguishes them. Implementation requires modifying types.py:
+- TransformationStarting: add `source: str` field (values: "cache" or "fresh")
+- TransformationCompleted: add `source: str` field (values: "cache" or "fresh")
+
+### Decision 3: Add execution_time_ms to ExtractionCompleted
+Approved scope expansion. Modify ExtractionCompleted in types.py to add `execution_time_ms: float`. Capture timing around extraction.extract() + flush in step.py.
+
+## Type Modifications Required (approved)
+
+| Type | Field to Add | Type | Default |
+| --- | --- | --- | --- |
+| ExtractionCompleted | execution_time_ms | float | (required) |
+| TransformationStarting | source | str | (required) |
+| TransformationCompleted | source | str | (required) |
+
 ## Open Items
 
 - Pydantic ValidationError enrichment for ExtractionError.validation_errors: implementation can do isinstance check for ValidationError and extract .errors() details, or pass empty list for non-validation exceptions. Decide during implementation.
 
 ## Recommendations for Planning
 
-1. Start with step.py extraction events (single file, 3 event types) before pipeline.py transformation events (2 sites, 2 event types)
-2. Add except block to extract_data() try/finally -- restructure to try/except/finally with re-raise
-3. Create transformation test infrastructure in conftest (PipelineTransformation subclass, step, strategy, pipeline) before writing transformation event tests
-4. Use ExtractionPipeline from existing conftest for extraction event tests (no new infrastructure needed)
-5. Import from llm_pipeline.events.types directly (not through events/__init__.py) matching pipeline.py L35-41 pattern
-6. Both transformation sites need identical event emission code -- consider whether a helper is warranted (likely not, given existing duplication pattern in codebase)
+1. Modify types.py first: add execution_time_ms to ExtractionCompleted, add source:str to TransformationStarting and TransformationCompleted
+2. Then step.py extraction events (3 event types, timing capture, try/except/finally restructure)
+3. Then pipeline.py transformation events (2 sites, each with source="cache" or source="fresh")
+4. Create transformation test infrastructure in conftest (PipelineTransformation subclass, step, strategy, pipeline) before writing transformation event tests
+5. Use ExtractionPipeline from existing conftest for extraction event tests (no new infrastructure needed)
+6. Import from llm_pipeline.events.types directly (not through events/__init__.py) matching pipeline.py L35-41 pattern
+7. Both transformation sites need identical event emission code except source value -- consider whether a helper is warranted (likely not, given existing duplication pattern in codebase)
+8. Test ExtractionCompleted.execution_time_ms > 0 and TransformationStarting/Completed.source values in respective test suites
