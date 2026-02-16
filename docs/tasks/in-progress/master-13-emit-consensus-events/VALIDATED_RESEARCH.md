@@ -63,9 +63,9 @@ Using MockProvider is cleaner, requires no unittest.mock, and is consistent with
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should ConsensusAttempt fire on the attempt that reaches consensus (before ConsensusReached)? | Yes -- step-2 explicitly documents this. Provides group_count progression. | Emission point 2 stays before threshold check. Successful attempt emits both ConsensusAttempt + ConsensusReached. |
-| Parameter name: `step_name` vs `current_step_name` for the new param? | Use `current_step_name` to match the local variable at the call site (pipeline.py L492). Both research docs use different names. | Cosmetic. Use `current_step_name` for consistency with call site. |
-| Mock approach: unittest.mock.patch vs MockProvider? | Use MockProvider (established conftest pattern). No need for mock.patch. | Simpler tests, consistent with test_cache_events.py and test_step_lifecycle_events.py patterns. |
+| Should ConsensusAttempt fire on the attempt that reaches consensus (before ConsensusReached)? | CEO: Yes, both fire. ConsensusAttempt always fires; ConsensusReached fires additionally when threshold met on same attempt. | Confirmed: emission point 2 stays before threshold check. Winning attempt emits ConsensusAttempt then ConsensusReached. Tests must assert both events on the successful attempt. |
+| Parameter name: `step_name` vs `current_step_name` for the new param? | CEO: `current_step_name` -- matches call site variable at L492. | Decided: use `current_step_name` everywhere. Resolves naming inconsistency between research docs. |
+| Mock approach: unittest.mock.patch vs MockProvider? | CEO: MockProvider from conftest -- consistent with all other event tests. | Decided: no unittest.mock.patch. Use MockProvider response lists to control consensus outcomes. |
 
 ## Assumptions Validated
 
