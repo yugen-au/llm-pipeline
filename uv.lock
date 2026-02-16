@@ -642,6 +642,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "google-generativeai" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -651,6 +652,7 @@ gemini = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google-generativeai", marker = "extra == 'dev'", specifier = ">=0.3.0" },
     { name = "google-generativeai", marker = "extra == 'gemini'", specifier = ">=0.3.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
