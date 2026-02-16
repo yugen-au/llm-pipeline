@@ -19,3 +19,8 @@
 | Event Emission Patterns Research | python-development:python-pro | research | 2 | - | A | complete | 0 | a46b5a3 | 3d7e593 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a0ca874 | bcc4a97 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a45a182 | pending | - |
+| Modify LLMProvider ABC | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Thread Event Context | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Add Event Emissions | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Add Dev Dependency | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| Create Event Tests | backend-development:test-automator | implementation | 5 | - | C | pending | 0 | pending | pending | /google/generativeai |
