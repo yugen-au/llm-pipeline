@@ -39,6 +39,8 @@ class LLMProvider(ABC):
         strict_types: bool = True,
         array_validation: Optional[Any] = None,
         validation_context: Optional[Any] = None,
+        event_emitter: Optional[Any] = None,
+        step_name: Optional[str] = None,
         **kwargs,
     ) -> LLMCallResult:
         """
@@ -53,6 +55,8 @@ class LLMProvider(ABC):
             strict_types: Whether to validate field types strictly
             array_validation: Optional ArrayValidationConfig
             validation_context: Optional ValidationContext for Pydantic validators
+            event_emitter: Optional EventEmitter for emitting retry/failure events
+            step_name: Optional step name for event scoping
 
         Returns:
             LLMCallResult containing parsed output, raw response, model
