@@ -1,7 +1,7 @@
 ## Task: master-12-emit-retry-ratelimit-events
 ## Description: Emit LLMCallRetry, LLMCallFailed, LLMCallRateLimited events in GeminiProvider retry loop
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
