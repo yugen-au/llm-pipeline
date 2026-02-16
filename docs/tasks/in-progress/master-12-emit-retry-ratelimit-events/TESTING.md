@@ -13,80 +13,39 @@ All 205 tests pass successfully, including 16 new test cases in test_retry_ratel
 
 ### Test Execution
 **Pass Rate:** 205/205 tests
+
+**Initial run (testing phase):**
+```
+205 passed, 1 warning in 3.32s
+```
+
+**Re-test after ABC signature fix (added run_id + pipeline_name params):**
 ```
 ============================= test session starts =============================
-platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0 -- C:\Users\SamSG\AppData\Local\Programs\Python\Python313\python.exe
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
 cachedir: .pytest_cache
 rootdir: C:\Users\SamSG\Documents\claude_projects\llm-pipeline
 configfile: pyproject.toml
 testpaths: tests
 plugins: anyio-4.9.0, langsmith-0.3.30, cov-7.0.0
-collecting ... collected 205 items
+collected 205 items
 
-tests/events/test_cache_events.py::TestCacheLookupEmitted::test_lookup_emitted_per_step PASSED
-tests/events/test_cache_events.py::TestCacheLookupEmitted::test_lookup_has_input_hash PASSED
-tests/events/test_cache_events.py::TestCacheLookupEmitted::test_lookup_has_run_id PASSED
-tests/events/test_cache_events.py::TestCacheLookupEmitted::test_lookup_has_pipeline_name PASSED
-tests/events/test_cache_events.py::TestCacheLookupEmitted::test_lookup_step_name PASSED
-tests/events/test_cache_events.py::TestCacheMissEmitted::test_miss_emitted_on_fresh_db PASSED
-tests/events/test_cache_events.py::TestCacheMissEmitted::test_miss_has_input_hash PASSED
-tests/events/test_cache_events.py::TestCacheMissEmitted::test_miss_has_run_id PASSED
-tests/events/test_cache_events.py::TestCacheMissEmitted::test_miss_has_pipeline_name PASSED
-tests/events/test_cache_events.py::TestCacheMissEmitted::test_miss_step_name PASSED
-tests/events/test_cache_events.py::TestCacheEventInputHashConsistency::test_first_lookup_miss_hash_matches PASSED
-tests/events/test_cache_events.py::TestCacheEventInputHashConsistency::test_input_hash_is_hex_string PASSED
-tests/events/test_cache_events.py::TestCacheEventInputHashConsistency::test_all_cache_events_share_input_hash PASSED
-tests/events/test_cache_events.py::TestCacheEventOrdering::test_lookup_before_miss PASSED
-tests/events/test_cache_events.py::TestCacheEventOrdering::test_cache_event_sequence PASSED
-tests/events/test_cache_events.py::TestCacheEventOrdering::test_lookup_timestamp_before_miss PASSED
-tests/events/test_cache_events.py::TestCacheEventsNoEmitter::test_no_events_without_emitter PASSED
-tests/events/test_cache_events.py::TestNoCacheEventsWithoutCacheFlag::test_no_cache_events_default PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitEmitted::test_all_steps_hit_cache PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitEmitted::test_lookup_emitted_per_step PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitEmitted::test_no_llm_calls_on_cache_hit PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitTimestamp::test_cached_at_present PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitTimestamp::test_cached_at_before_event_timestamp PASSED
-tests/events/test_cache_events.py::TestTwoRunInputHashConsistency::test_lookup_and_hit_share_hash PASSED
-tests/events/test_cache_events.py::TestTwoRunInputHashConsistency::test_input_hash_is_hex PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitOrdering::test_lookup_before_hit_per_step PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitOrdering::test_cache_sequence_on_second_run PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitOrdering::test_step_completed_after_each_hit PASSED
-tests/events/test_cache_events.py::TestTwoRunCacheHitOrdering::test_run_id_consistent_across_cache_events PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionEmitted::test_reconstruction_emitted_on_cache_hit PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionEmitted::test_reconstruction_model_count PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionEmitted::test_reconstruction_instance_count PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionEmitted::test_reconstruction_has_run_id PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionEmitted::test_reconstruction_has_step_name PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionNotEmittedWithoutExtractions::test_no_reconstruction_for_simple_pipeline PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionNotEmittedWithoutExtractions::test_no_reconstruction_on_cache_miss PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionOrdering::test_hit_before_reconstruction PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionOrdering::test_reconstruction_before_step_completed PASSED
-tests/events/test_cache_events.py::TestCacheReconstructionOrdering::test_full_cache_hit_sequence PASSED
-[... additional cache and event test output ...]
-tests/events/test_retry_ratelimit_events.py::TestEmptyResponseRetry::test_empty_response_retry_emits_events PASSED
-tests/events/test_retry_ratelimit_events.py::TestEmptyResponseRetry::test_empty_response_no_retry_on_last_attempt PASSED
-tests/events/test_retry_ratelimit_events.py::TestJSONDecodeRetry::test_json_decode_retry_emits_events PASSED
-tests/events/test_retry_ratelimit_events.py::TestValidationFailureRetry::test_validation_failure_retry_emits_events PASSED
-tests/events/test_retry_ratelimit_events.py::TestAllAttemptsFail::test_all_attempts_fail_emits_failed_event PASSED
-tests/events/test_retry_ratelimit_events.py::TestRateLimitApiSuggested::test_rate_limit_api_suggested_emits_event PASSED
-tests/events/test_retry_ratelimit_events.py::TestRateLimitExponential::test_rate_limit_exponential_emits_event PASSED
-tests/events/test_retry_ratelimit_events.py::TestNonRateLimitExceptionRetry::test_non_rate_limit_exception_retry_emits_event PASSED
-tests/events/test_retry_ratelimit_events.py::TestNoEmitterZeroOverhead::test_no_events_without_emitter PASSED
-tests/events/test_retry_ratelimit_events.py::TestEventFieldValues::test_retry_event_fields PASSED
-tests/events/test_retry_ratelimit_events.py::TestEventFieldValues::test_failed_event_fields PASSED
-tests/events/test_retry_ratelimit_events.py::TestEventFieldValues::test_ratelimited_event_fields PASSED
-tests/events/test_retry_ratelimit_events.py::TestEventOrdering::test_multi_attempt_ordering PASSED
-tests/events/test_retry_ratelimit_events.py::TestAccumulatedErrorsBugFix::test_accumulated_errors_bug_fix PASSED
-tests/events/test_retry_ratelimit_events.py::TestPydanticValidationRetry::test_pydantic_validation_retry PASSED
-tests/events/test_retry_ratelimit_events.py::TestMultipleRateLimits::test_multiple_rate_limits PASSED
-[... additional test output ...]
+tests/events/test_cache_events.py ......................................... [ 19%]
+tests/events/test_handlers.py ......................................... [ 50%]
+tests/events/test_llm_call_events.py ......................................... [ 61%]
+tests/events/test_pipeline_lifecycle_events.py ... [ 51%]
+tests/events/test_retry_ratelimit_events.py ................ [ 59%]
+tests/events/test_step_lifecycle_events.py ........ [ 62%]
+tests/test_emitter.py ........................... [ 72%]
+tests/test_llm_call_result.py ................. [ 81%]
+tests/test_pipeline.py ..................................... [100%]
+
 ============================== warnings summary ===============================
 tests\test_pipeline.py:143
-  C:\Users\SamSG\Documents\claude_projects\llm-pipeline\tests\test_pipeline.py:143: PytestCollectionWarning: cannot collect test class 'TestPipeline' because it has a __init__ constructor (from: tests/test_pipeline.py)
-    class TestPipeline(PipelineConfig, registry=TestRegistry, strategies=TestStrategies):
+  PytestCollectionWarning: cannot collect test class 'TestPipeline' because it has a __init__ constructor
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================= 205 passed, 1 warning in 3.32s ========================
+======================= 205 passed, 1 warning in 3.57s ========================
 ```
 
 ### Failed Tests
