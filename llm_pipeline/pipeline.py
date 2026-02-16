@@ -37,6 +37,7 @@ from llm_pipeline.events.types import (
     StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
     CacheLookup, CacheHit, CacheMiss, CacheReconstruction,
     LLMCallPrepared,
+    ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
 )
 
 if TYPE_CHECKING:
@@ -637,7 +638,8 @@ class PipelineConfig(ABC):
 
                         if use_consensus:
                             instruction = self._execute_with_consensus(
-                                call_kwargs, consensus_threshold, maximum_step_calls
+                                call_kwargs, consensus_threshold, maximum_step_calls,
+                                current_step_name,
                             )
                         else:
                             instruction = execute_llm_step(**call_kwargs)
@@ -962,11 +964,19 @@ class PipelineConfig(ABC):
         dict2 = instr2.model_dump()
         return PipelineConfig._smart_compare(dict1, dict2, mixin_fields=mixin_fields)
 
-    def _execute_with_consensus(self, call_kwargs, consensus_threshold, maximum_step_calls):
+    def _execute_with_consensus(self, call_kwargs, consensus_threshold, maximum_step_calls, current_step_name):
         from llm_pipeline.llm.executor import execute_llm_step
 
         results = []
         result_groups = []
+        if self._event_emitter:
+            self._emit(ConsensusStarted(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+                step_name=current_step_name,
+                threshold=consensus_threshold,
+                max_calls=maximum_step_calls,
+            ))
         for attempt in range(maximum_step_calls):
             instruction = execute_llm_step(**call_kwargs)
             results.append(instruction)
@@ -979,15 +989,39 @@ class PipelineConfig(ABC):
             if matched_group is None:
                 result_groups.append([instruction])
                 matched_group = result_groups[-1]
+            if self._event_emitter:
+                self._emit(ConsensusAttempt(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    step_name=current_step_name,
+                    attempt=attempt + 1,
+                    group_count=len(result_groups),
+                ))
             if len(matched_group) >= consensus_threshold:
                 logger.info(
                     f"  [CONSENSUS] Reached on attempt {attempt + 1}/{maximum_step_calls}"
                 )
+                if self._event_emitter:
+                    self._emit(ConsensusReached(
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_name=current_step_name,
+                        attempt=attempt + 1,
+                        threshold=consensus_threshold,
+                    ))
                 return matched_group[0]
 
         logger.info(f"  [NO CONSENSUS] After {maximum_step_calls} attempts")
         largest_group = max(result_groups, key=len)
         logger.info(f"  -> Using most common response ({len(largest_group)} occurrences)")
+        if self._event_emitter:
+            self._emit(ConsensusFailed(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+                step_name=current_step_name,
+                max_calls=maximum_step_calls,
+                largest_group_size=len(largest_group),
+            ))
         return largest_group[0]
 
     def close(self) -> None:
