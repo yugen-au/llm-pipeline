@@ -1,7 +1,7 @@
 ## Task: master-14-extract-xform-events
 ## Description: Add event emission for ExtractionStarting/Completed/Error and TransformationStarting/Completed in step.py and pipeline.py, extending the event system from Task 13
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
