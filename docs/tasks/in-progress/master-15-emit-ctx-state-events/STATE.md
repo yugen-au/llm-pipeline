@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/15-emit-ctx-state-events
 ## Plugins: python-development, backend-development
@@ -20,5 +20,5 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a94a171 | 6995c7f | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | ae5432c | c49bda3 | - |
 | Add Event Imports | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a310d15 | 8735ddf | - |
-| Add Emission Blocks | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Add Emission Blocks | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
 | Create Event Tests | backend-development:test-automator | implementation | 3 | - | C | pending | 0 | pending | pending | - |
