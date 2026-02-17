@@ -1,16 +1,16 @@
 ## Task: master-14-extract-xform-events
 ## Description: Add event emission for ExtractionStarting/Completed/Error and TransformationStarting/Completed in step.py and pipeline.py, extending the event system from Task 13
 
-## Phase: fixing-review
+## Phase: testing
 ## Status: in-progress
-## Current Group: C
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/14-extract-xform-events
 ## Plugins: python-development, backend-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: [2,5]
-## Last Updated: 2026-02-17 11:48
+## Last Updated: 2026-02-17 11:49
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,5 +26,5 @@
 | Create Transform Test Infra | backend-development:test-automator | implementation | 5 | - | C | complete | 1 | a95c247 | 7fd51c3,214036c | /pytest/pytest,/python/pydantic |
 | Test Extraction Events | backend-development:test-automator | implementation | 6 | - | D | complete | 0 | a744473 | dd9a988b36f126bf5e1c0ac463d335b4b4ceafdb,dd9a988 | /pytest/pytest |
 | Test Transform Events | backend-development:test-automator | implementation | 7 | - | D | complete | 0 | a7905db | 37a0063,dd9a988 | /pytest/pytest |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a1f7a75 | 15e9a0e | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | a1f7a75 | 15e9a0e | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | ab164f8 | 935c964 | - |
