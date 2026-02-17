@@ -232,7 +232,7 @@ class TestExtractionError:
         # ValidationError from Pydantic should populate validation_errors
         assert len(error["validation_errors"]) > 0, "validation_errors should be populated for ValidationError"
         assert "timestamp" in error
-        assert error["step_name"] == "item_detection"
+        assert error["step_name"] == "failing_item_detection"
         assert error["run_id"] == pipeline.run_id
         assert error["pipeline_name"] == pipeline.pipeline_name
 
