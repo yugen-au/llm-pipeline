@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Validated research findings from step-1 (event system research) and step-2 (pipeline emission points) against actual source code. All 4 event types are correctly defined in `events/types.py` and emission point locations in `pipeline.py` are accurate. Two inconsistencies found between the research files requiring CEO clarification before planning can proceed: (1) `logged_keys` semantics for InstructionsLogged, (2) whether ContextUpdated should emit on empty context merges.
+Validated research findings from step-1 (event system research) and step-2 (pipeline emission points) against actual source code. All 4 event types are correctly defined in `events/types.py` and emission point locations in `pipeline.py` are accurate. Two inconsistencies between research files resolved via CEO decisions: (1) `logged_keys` uses storage key semantics `[step.step_name]`, (2) ContextUpdated always emits, even on empty context merges. All findings validated -- ready for planning.
 
 ## Domain Findings
 
@@ -50,8 +50,8 @@ Established pattern: `if self._event_emitter:` guard before event construction. 
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| What should `logged_keys` contain for InstructionsLogged? | PENDING | Determines implementation of both cached and fresh path emissions |
-| Should ContextUpdated emit when new_context is empty? | PENDING | Determines guard pattern: `if self._event_emitter:` vs `if new_context and self._event_emitter:` |
+| What should `logged_keys` contain for InstructionsLogged? | Use storage key: `[step.step_name]`. Simpler, matches storage semantics. | Resolves step-1 vs step-2 disagreement. Implementation uses `[step.step_name]` at both cached (L603) and fresh (L707) paths. |
+| Should ContextUpdated emit when new_context is empty? | Always emit, even when empty. Emit with `new_keys=[]` to signal validation happened. Useful for tracing. | Guard pattern is `if self._event_emitter:` only (no `new_context and` check). Emit at L372 unconditionally. |
 
 ## Assumptions Validated
 
@@ -68,15 +68,14 @@ Established pattern: `if self._event_emitter:` guard before event construction. 
 
 ## Open Items
 
-- InstructionsLogged `logged_keys`: research files disagree. Step-1 proposes `[step.step_name]` (storage key). Step-2 proposes `[k for k in (step.system_instruction_key, step.user_prompt_key) if k is not None]` (prompt keys). Both are valid interpretations of "instruction keys that were logged." CEO decision needed.
-- ContextUpdated empty-emit behavior: Step-1 says emit with `new_keys=[]` (always, signals validation happened). Step-2 says skip via `if new_context and self._event_emitter:` (noise reduction). Architectural choice. CEO decision needed.
-- context_snapshot captures post-merge state only. No pre-merge snapshot. Consecutive ContextUpdated events enable diffing at the UI level. Not a blocking issue but worth noting for downstream task 53 test design.
+- context_snapshot captures post-merge state only. No pre-merge snapshot. Consecutive ContextUpdated events enable diffing at the UI level. Not blocking but worth noting for downstream task 53 test design.
 
 ## Recommendations for Planning
 
-1. Resolve the 2 open items before starting implementation -- both affect the exact code written
-2. Implementation is straightforward: 6 emission blocks (~36 lines), 1 import addition. Low risk.
-3. InstructionsStored and StateSaved have no ambiguity -- can be implemented immediately after planning
-4. Test strategy should cover both cached and fresh paths for InstructionsStored and InstructionsLogged (2 emission points each)
-5. StateSaved tests need fresh path (use_cache=False or no cache), not cached path
-6. ContextUpdated test should verify `context_snapshot` reflects merged state (not pre-merge)
+1. Implementation is straightforward: 6 emission blocks (~36 lines), 1 import addition. Low risk.
+2. InstructionsLogged uses `logged_keys=[step.step_name]` at both emission points (CEO decision).
+3. ContextUpdated uses `if self._event_emitter:` guard only -- no `new_context` check (CEO decision). Emits with `new_keys=[]` when context is empty.
+4. Test strategy should cover both cached and fresh paths for InstructionsStored and InstructionsLogged (2 emission points each).
+5. StateSaved tests need fresh path (use_cache=False or no cache), not cached path.
+6. ContextUpdated test should verify `context_snapshot` reflects merged state (not pre-merge).
+7. ContextUpdated test should also verify emission occurs with `new_keys=[]` on empty context merge.

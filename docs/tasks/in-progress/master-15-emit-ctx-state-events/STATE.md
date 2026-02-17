@@ -17,4 +17,4 @@
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Event System Research | python-development:python-pro | research | 1 | - | A | complete | 0 | acbb8b5 | f5b890b | - |
 | Pipeline Emission Points | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a9c40d4 | f5b890b | - |
-| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | needs-input | 1 | a94a171 | pending | - |
+| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a94a171 | pending | - |
