@@ -128,3 +128,44 @@ None -- all emission patterns follow established conventions from pipeline.py co
 - [x] ValidationError isinstance check populates validation_errors; empty list for other exceptions
 - [x] Guard pattern `if self.pipeline._event_emitter:` matches codebase convention
 - [x] All three events use kw_only construction matching event type definitions
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] ExtractionError.validation_errors type mismatch: field typed `list[str]` but `e.errors()` returns `list[dict]`
+
+### Changes Made
+#### File: `llm_pipeline/step.py`
+Convert ValidationError.errors() dicts to message strings before passing to ExtractionError.
+```python
+# Before
+validation_errors = (
+    e.errors() if isinstance(e, ValidationError) else []
+)
+
+# After
+validation_errors = (
+    [err["msg"] for err in e.errors()]
+    if isinstance(e, ValidationError)
+    else []
+)
+```
+
+#### File: `tests/events/test_extraction_events.py`
+Added assertion that validation_errors elements are strings.
+```python
+# Before
+assert len(error["validation_errors"]) > 0, "validation_errors should be populated for ValidationError"
+
+# After
+assert len(error["validation_errors"]) > 0, "validation_errors should be populated for ValidationError"
+assert all(isinstance(e, str) for e in error["validation_errors"]), "validation_errors elements must be strings"
+```
+
+### Verification
+- [x] All 272 tests pass (pytest tests/ -x -q)
+- [x] 13 extraction event tests pass including type assertion
+- [x] Conversion uses err["msg"] matching Pydantic v2 error dict structure
+- [x] Consistent with executor.py pattern of converting ValidationError to list[str]

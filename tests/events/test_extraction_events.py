@@ -231,6 +231,7 @@ class TestExtractionError:
         assert isinstance(error["validation_errors"], list)
         # ValidationError from Pydantic should populate validation_errors
         assert len(error["validation_errors"]) > 0, "validation_errors should be populated for ValidationError"
+        assert all(isinstance(e, str) for e in error["validation_errors"]), "validation_errors elements must be strings"
         assert "timestamp" in error
         assert error["step_name"] == "failing_item_detection"
         assert error["run_id"] == pipeline.run_id

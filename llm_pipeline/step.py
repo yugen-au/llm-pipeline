@@ -363,7 +363,9 @@ class LLMStep(ABC):
             except Exception as e:
                 if self.pipeline._event_emitter:
                     validation_errors = (
-                        e.errors() if isinstance(e, ValidationError) else []
+                        [err["msg"] for err in e.errors()]
+                        if isinstance(e, ValidationError)
+                        else []
                     )
                     self.pipeline._emit(ExtractionError(
                         run_id=self.pipeline.run_id,
