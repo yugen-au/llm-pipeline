@@ -1,9 +1,9 @@
 ## Task: master-15-emit-ctx-state-events
 ## Description: Emit InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved events at appropriate points in pipeline.py
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: C
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/15-emit-ctx-state-events
 ## Plugins: python-development, backend-development
@@ -22,3 +22,4 @@
 | Add Event Imports | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a310d15 | 8735ddf | - |
 | Add Emission Blocks | python-development:python-pro | implementation | 2 | - | B | complete | 0 | afda08d | 513ff70 | - |
 | Create Event Tests | backend-development:test-automator | implementation | 3 | - | C | complete | 0 | a80cf49 | 163f556 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
