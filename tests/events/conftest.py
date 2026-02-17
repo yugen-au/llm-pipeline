@@ -18,6 +18,7 @@ from llm_pipeline import (
     PipelineContext,
 )
 from llm_pipeline.extraction import PipelineExtraction
+from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.llm.provider import LLMProvider
 from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.db.prompt import Prompt
@@ -125,6 +126,32 @@ class ItemExtraction(PipelineExtraction, model=Item):
         ]
 
 
+# -- Transformation Domain (for transformation event tests) -------------------
+
+
+class TransformationTransformation(PipelineTransformation, input_type=dict, output_type=dict):
+    """Transformation that adds a transformed_key to input dict."""
+    def transform(self, data: dict, instructions) -> dict:
+        """Add transformed_key to demonstrate transformation."""
+        result = data.copy()
+        result["transformed_key"] = "transformed_value"
+        result["original_count"] = instructions.count if hasattr(instructions, 'count') else 0
+        return result
+
+
+class TransformationInstructions(LLMResultMixin):
+    """Instruction model for transformation step."""
+    count: int
+    operation: str
+
+    example: ClassVar[dict] = {"count": 5, "operation": "transform", "notes": "test"}
+
+
+class TransformationContext(PipelineContext):
+    """Context produced by transformation step."""
+    operation: str
+
+
 # -- Test Steps ----------------------------------------------------------------
 
 
@@ -186,6 +213,22 @@ class ItemDetectionStep(LLMStep):
 
     def process_instructions(self, instructions):
         return ItemDetectionContext(category=instructions[0].category)
+
+
+@step_definition(
+    instructions=TransformationInstructions,
+    default_system_key="transformation.system",
+    default_user_key="transformation.user",
+    default_transformation=TransformationTransformation,
+    context=TransformationContext,
+)
+class TransformationStep(LLMStep):
+    """Step with transformation for transformation event tests."""
+    def prepare_calls(self) -> List[StepCallParams]:
+        return [self.create_llm_call(variables={"data": "test"})]
+
+    def process_instructions(self, instructions):
+        return TransformationContext(operation=instructions[0].operation)
 
 
 # -- Test Strategies -----------------------------------------------------------
@@ -281,6 +324,27 @@ class ExtractionPipeline(PipelineConfig, registry=ExtractionRegistry, strategies
     pass
 
 
+class TransformationStrategy(PipelineStrategy):
+    """Strategy with a single transformation step."""
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return [TransformationStep.create_definition()]
+
+
+class TransformationRegistry(PipelineDatabaseRegistry, models=[]):
+    pass
+
+
+class TransformationStrategies(PipelineStrategies, strategies=[TransformationStrategy]):
+    pass
+
+
+class TransformationPipeline(PipelineConfig, registry=TransformationRegistry, strategies=TransformationStrategies):
+    pass
+
+
 # -- Fixtures ------------------------------------------------------------------
 
 
@@ -366,6 +430,24 @@ def seeded_session(engine):
             category="test",
             step_name="item_detection",
             content="Detect items: {data}",
+            version="1.0",
+        ))
+        session.add(Prompt(
+            prompt_key="transformation.system",
+            prompt_name="Transformation System",
+            prompt_type="system",
+            category="test",
+            step_name="transformation",
+            content="You are a data transformer.",
+            version="1.0",
+        ))
+        session.add(Prompt(
+            prompt_key="transformation.user",
+            prompt_name="Transformation User",
+            prompt_type="user",
+            category="test",
+            step_name="transformation",
+            content="Transform data: {data}",
             version="1.0",
         ))
         session.commit()

@@ -38,6 +38,7 @@ from llm_pipeline.events.types import (
     CacheLookup, CacheHit, CacheMiss, CacheReconstruction,
     LLMCallPrepared,
     ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
+    TransformationStarting, TransformationCompleted,
 )
 
 if TYPE_CHECKING:
@@ -575,9 +576,29 @@ class PipelineConfig(ABC):
 
                     if hasattr(step, "_transformation") and step._transformation:
                         transformation = step._transformation(self)
+                        if self._event_emitter:
+                            self._emit(TransformationStarting(
+                                transformation_class=step._transformation.__name__,
+                                cached=True,
+                                step_name=step.step_name,
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                timestamp=datetime.now(timezone.utc),
+                            ))
+                        transform_start = datetime.now(timezone.utc)
                         current_data = self.get_data("current")
                         transformed_data = transformation.transform(current_data, instructions)
                         self.set_data(transformed_data, step_name=step.step_name)
+                        if self._event_emitter:
+                            self._emit(TransformationCompleted(
+                                data_key=step.step_name,
+                                execution_time_ms=(datetime.now(timezone.utc) - transform_start).total_seconds() * 1000,
+                                cached=True,
+                                step_name=step.step_name,
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                timestamp=datetime.now(timezone.utc),
+                            ))
 
                     step.log_instructions(instructions)
                     reconstructed_count = self._reconstruct_extractions_from_cache(
@@ -651,9 +672,29 @@ class PipelineConfig(ABC):
 
                     if hasattr(step, "_transformation") and step._transformation:
                         transformation = step._transformation(self)
+                        if self._event_emitter:
+                            self._emit(TransformationStarting(
+                                transformation_class=step._transformation.__name__,
+                                cached=False,
+                                step_name=step.step_name,
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                timestamp=datetime.now(timezone.utc),
+                            ))
+                        transform_start = datetime.now(timezone.utc)
                         current_data = self.get_data("current")
                         transformed_data = transformation.transform(current_data, instructions)
                         self.set_data(transformed_data, step_name=step.step_name)
+                        if self._event_emitter:
+                            self._emit(TransformationCompleted(
+                                data_key=step.step_name,
+                                execution_time_ms=(datetime.now(timezone.utc) - transform_start).total_seconds() * 1000,
+                                cached=False,
+                                step_name=step.step_name,
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                timestamp=datetime.now(timezone.utc),
+                            ))
 
                     step.extract_data(instructions)
                     execution_time_ms = int(
