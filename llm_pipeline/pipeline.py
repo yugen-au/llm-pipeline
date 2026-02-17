@@ -39,6 +39,7 @@ from llm_pipeline.events.types import (
     LLMCallPrepared,
     ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
     TransformationStarting, TransformationCompleted,
+    InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
 )
 
 if TYPE_CHECKING:
