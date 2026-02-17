@@ -27,4 +27,4 @@
 | Test Extraction Events | backend-development:test-automator | implementation | 6 | - | D | complete | 0 | a744473 | dd9a988b36f126bf5e1c0ac463d335b4b4ceafdb,dd9a988 | /pytest/pytest |
 | Test Transform Events | backend-development:test-automator | implementation | 7 | - | D | complete | 0 | a7905db | 37a0063,dd9a988 | /pytest/pytest |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a1f7a75 | 15e9a0e,87e012d | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | ab164f8 | 935c964 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | ab164f8 | 935c964 | - |
