@@ -109,3 +109,40 @@ None
 2. No regressions detected across existing 225 tests
 3. All 47 new event tests passing with comprehensive coverage
 4. Consider documenting extraction/transformation event usage in library documentation
+
+---
+
+# Review Fixes Verification (Re-test)
+
+## Summary
+**Status:** passed
+Re-ran full test suite after two review fixes. All 272 tests still pass with zero regressions.
+
+## Review Fixes Applied
+### Fix 1: Step 2 - ExtractionError validation_errors type correction
+**Modified:** llm_pipeline/step.py
+**Change:** validation_errors in ExtractionError now converts ValidationError.errors() dict items to list[str] using `[str(err) for err in e.errors()]` instead of passing raw dicts
+**Verification:** All extraction event tests pass including test_extraction_error_fields which verifies validation_errors is list[str]
+
+### Fix 2: Step 5 - Remove unused transformation_pipeline fixture
+**Modified:** tests/events/conftest.py
+**Change:** Removed unused transformation_pipeline fixture that had wrong emitter kwarg (event_handler instead of emitter)
+**Verification:** All transformation event tests pass without the fixture (TransformationPipeline used inline in tests instead)
+
+## Test Execution (Post-Review)
+**Pass Rate:** 272/272 tests
+**Execution Time:** 10.42s
+```
+======================= 272 passed, 1 warning in 10.42s =======================
+```
+
+## Verification Checklist
+- [x] ExtractionError validation_errors correctly converts dicts to strings (Step 2 fix)
+- [x] Unused transformation_pipeline fixture removed without breaking tests (Step 5 fix)
+- [x] All 13 extraction event tests still pass
+- [x] All 34 transformation event tests still pass
+- [x] All 225 existing tests still pass
+- [x] No new warnings introduced
+
+## Issues Found
+None
