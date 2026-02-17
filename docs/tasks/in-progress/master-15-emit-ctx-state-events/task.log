@@ -13,3 +13,7 @@
 [2026-02-17 12:40:00] [INFO] STATE.md updated: phase=research, status=in-progress
 [2026-02-17 12:40:00] [INFO] Auto-updated agent statuses: Event System Research: pending -> in-progress, Pipeline Emission Points: pending -> in-progress
 [2026-02-17 12:40:00] [DEBUG] STATE.md atomic write complete
+[2026-02-17 12:40:13] [INFO] Task call: python-development:python-pro (phase: research)
+[2026-02-17 12:40:18] [INFO] Task call: backend-development:backend-architect (phase: research)
+[2026-02-17 12:43:34] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-17 12:44:52] [DEBUG] STATE.md atomic write complete
