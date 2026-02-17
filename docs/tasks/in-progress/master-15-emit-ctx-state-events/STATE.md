@@ -19,3 +19,6 @@
 | Pipeline Emission Points | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a9c40d4 | f5b890b | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a94a171 | 6995c7f | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | ae5432c | pending | - |
+| Add Event Imports | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Add Emission Blocks | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Create Event Tests | backend-development:test-automator | implementation | 3 | - | C | pending | 0 | pending | pending | - |
