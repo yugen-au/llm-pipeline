@@ -1,7 +1,7 @@
 ## Task: master-15-emit-ctx-state-events
 ## Description: Emit InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved events at appropriate points in pipeline.py
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
