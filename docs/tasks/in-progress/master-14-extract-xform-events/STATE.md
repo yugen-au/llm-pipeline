@@ -1,9 +1,9 @@
 ## Task: master-14-extract-xform-events
 ## Description: Add event emission for ExtractionStarting/Completed/Error and TransformationStarting/Completed in step.py and pipeline.py, extending the event system from Task 13
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: D
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/14-extract-xform-events
 ## Plugins: python-development, backend-development
@@ -24,5 +24,6 @@
 | Emit Transform Events (Cached) | python-development:python-pro | implementation | 3 | - | B | complete | 0 | a14ef58 | e1e0538,df050de | /python/datetime |
 | Emit Transform Events (Fresh) | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a8bfe4d | e1e0538,df050de | - |
 | Create Transform Test Infra | backend-development:test-automator | implementation | 5 | - | C | complete | 0 | a95c247 | 7fd51c3 | /pytest/pytest,/python/pydantic |
-| Test Extraction Events | backend-development:test-automator | implementation | 6 | - | D | complete | 0 | a744473 | dd9a988b36f126bf5e1c0ac463d335b4b4ceafdb | /pytest/pytest |
-| Test Transform Events | backend-development:test-automator | implementation | 7 | - | D | complete | 0 | a7905db | 37a0063 | /pytest/pytest |
+| Test Extraction Events | backend-development:test-automator | implementation | 6 | - | D | complete | 0 | a744473 | dd9a988b36f126bf5e1c0ac463d335b4b4ceafdb,dd9a988 | /pytest/pytest |
+| Test Transform Events | backend-development:test-automator | implementation | 7 | - | D | complete | 0 | a7905db | 37a0063,dd9a988 | /pytest/pytest |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
