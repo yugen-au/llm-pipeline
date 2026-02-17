@@ -66,3 +66,62 @@ None
 **Decision:** CONDITIONAL
 
 Both issues are non-blocking for merge. The medium issue (validation_errors type mismatch) should be fixed before this code is consumed by downstream event consumers who rely on the type annotation. The low issue (dead fixture) is cleanup. Recommend fixing both before phase transition.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+
+Both issues from the initial review have been resolved correctly. No new issues introduced. Full suite passes (272 tests, 0 failures).
+
+## Project Guidelines Compliance
+**CLAUDE.md:** C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| No hardcoded values | pass | validation_errors conversion uses dict key access, not hardcoded strings |
+| Error handling present | pass | ExtractionError still emits then re-raises; conversion is inside emitter guard |
+| Tests pass | pass | 272 passed (full suite), 47 event tests pass |
+
+## Issues Found
+### Critical
+
+None
+
+### High
+
+None
+
+### Medium
+
+None
+
+### Low
+
+None
+
+## Review Checklist
+[x] Architecture patterns followed - validation_errors conversion matches LLMCallCompleted pattern (executor.py converts to strings)
+[x] Code quality and maintainability - `[err["msg"] for err in e.errors()]` is clear, concise
+[x] Error handling present - conversion inside `isinstance(e, ValidationError)` guard, empty list fallback for non-ValidationError
+[x] No hardcoded values - no new hardcoded values
+[x] Project conventions followed - consistent with executor.py approach of storing strings
+[x] Security considerations - no change to security posture
+[x] Properly scoped (DRY, YAGNI, no over-engineering) - minimal, targeted fixes
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/step.py | pass | L365-366: `[err["msg"] for err in e.errors()]` correctly converts Pydantic ValidationError dicts to `list[str]` matching type annotation |
+| tests/events/test_extraction_events.py | pass | L234: new assertion `all(isinstance(e, str) for e in error["validation_errors"])` validates string elements |
+| tests/events/conftest.py | pass | Dead `transformation_pipeline` fixture removed; TransformationPipeline class and infra retained (used by tests) |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+Both fixes are correct and minimal. validation_errors type contract is now consistent between annotation (`list[str]`) and runtime value. Dead fixture removed without affecting any test. Full suite green.
