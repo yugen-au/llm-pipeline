@@ -460,16 +460,3 @@ def seeded_session(engine):
 def in_memory_handler():
     """Fresh InMemoryEventHandler for each test."""
     return InMemoryEventHandler()
-
-
-@pytest.fixture
-def transformation_pipeline(seeded_session, in_memory_handler):
-    """TransformationPipeline with seeded session and InMemoryEventHandler."""
-    pipeline = TransformationPipeline(
-        session=seeded_session,
-        provider=MockProvider(responses=[
-            {"count": 5, "operation": "transform"}
-        ]),
-        event_handler=in_memory_handler,
-    )
-    return pipeline

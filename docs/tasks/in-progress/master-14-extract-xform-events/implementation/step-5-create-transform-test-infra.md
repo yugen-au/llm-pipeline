@@ -164,3 +164,48 @@ def transformation_pipeline(seeded_session, in_memory_handler):
 [x] Follows ExtractionPipeline pattern: Strategy → Strategies → Pipeline → fixture
 [x] Prompts added to seeded_session: transformation.system and transformation.user
 [x] transformation_pipeline fixture instantiates with MockProvider and InMemoryEventHandler
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Remove unused transformation_pipeline fixture with latent bug (event_handler= instead of event_emitter=)
+
+### Changes Made
+#### File: `tests/events/conftest.py`
+Removed unused transformation_pipeline fixture that had incorrect parameter name and was never used by test files.
+
+```python
+# Before (L465-475)
+@pytest.fixture
+def in_memory_handler():
+    """Fresh InMemoryEventHandler for each test."""
+    return InMemoryEventHandler()
+
+
+@pytest.fixture
+def transformation_pipeline(seeded_session, in_memory_handler):
+    """TransformationPipeline with seeded session and InMemoryEventHandler."""
+    pipeline = TransformationPipeline(
+        session=seeded_session,
+        provider=MockProvider(responses=[
+            {"count": 5, "operation": "transform"}
+        ]),
+        event_handler=in_memory_handler,  # BUG: should be event_emitter=
+    )
+    return pipeline
+
+# After (L465-467)
+@pytest.fixture
+def in_memory_handler():
+    """Fresh InMemoryEventHandler for each test."""
+    return InMemoryEventHandler()
+```
+
+**Rationale:** test_transformation_events.py creates pipelines directly via helper functions `_run_transformation_fresh()` and `_run_transformation_cached()` which correctly use `event_emitter=` parameter. The fixture was dead code with latent TypeError bug that would fail if ever called.
+
+### Verification
+[x] All 34 transformation event tests pass (pytest tests/events/test_transformation_events.py -v)
+[x] No usage of transformation_pipeline fixture found in test files
+[x] Helper functions _run_transformation_fresh and _run_transformation_cached correctly use event_emitter= parameter
