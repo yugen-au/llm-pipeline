@@ -39,6 +39,7 @@ from llm_pipeline.events.types import (
     LLMCallPrepared,
     ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
     TransformationStarting, TransformationCompleted,
+    InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
 )
 
 if TYPE_CHECKING:
@@ -370,6 +371,14 @@ class PipelineConfig(ABC):
                 f"PipelineContext, got {type(new_context).__name__}"
             )
         self._context.update(new_context)
+        if self._event_emitter:
+            self._emit(ContextUpdated(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+                step_name=step.step_name,
+                new_keys=list(new_context.keys()),
+                context_snapshot=dict(self._context),
+            ))
 
     def sanitize(self, data: Any) -> str:
         """Override for custom sanitization. Default: str(data)."""
@@ -571,6 +580,13 @@ class PipelineConfig(ABC):
                     )
                     instructions = self._load_from_cache(cached_state, step)
                     self._instructions[step.step_name] = instructions
+                    if self._event_emitter:
+                        self._emit(InstructionsStored(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            instruction_count=len(instructions),
+                        ))
                     new_context = step.process_instructions(instructions)
                     self._validate_and_merge_context(step, new_context)
 
@@ -601,6 +617,13 @@ class PipelineConfig(ABC):
                             ))
 
                     step.log_instructions(instructions)
+                    if self._event_emitter:
+                        self._emit(InstructionsLogged(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            logged_keys=[step.step_name],
+                        ))
                     reconstructed_count = self._reconstruct_extractions_from_cache(
                         cached_state, step_def
                     )
@@ -667,6 +690,13 @@ class PipelineConfig(ABC):
                         instructions.append(instruction)
 
                     self._instructions[step.step_name] = instructions
+                    if self._event_emitter:
+                        self._emit(InstructionsStored(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            instruction_count=len(instructions),
+                        ))
                     new_context = step.process_instructions(instructions)
                     self._validate_and_merge_context(step, new_context)
 
@@ -705,6 +735,13 @@ class PipelineConfig(ABC):
                         step, step_num, instructions, input_hash, execution_time_ms, model_name
                     )
                     step.log_instructions(instructions)
+                    if self._event_emitter:
+                        self._emit(InstructionsLogged(
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            logged_keys=[step.step_name],
+                        ))
 
                 if self._event_emitter:
                     # Timing includes cache-lookup or LLM-call depending on path;
@@ -908,6 +945,15 @@ class PipelineConfig(ABC):
         )
         self._real_session.add(state)
         self._real_session.flush()
+        if self._event_emitter:
+            self._emit(StateSaved(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+                step_name=step.step_name,
+                step_number=step_number,
+                input_hash=input_hash,
+                execution_time_ms=float(execution_time_ms) if execution_time_ms is not None else 0.0,
+            ))
 
     def save(
         self,
