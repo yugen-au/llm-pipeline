@@ -1,7 +1,7 @@
 ## Task: master-18-export-event-system
 ## Description: Update llm_pipeline/__init__.py to export all event types, LLMCallResult, emitters, and handlers. Create llm_pipeline/events/__init__.py with proper exports.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
