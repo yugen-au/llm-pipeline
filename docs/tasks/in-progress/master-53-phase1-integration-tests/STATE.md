@@ -21,4 +21,4 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a68f4e9 | 07ac870 | - |
 | Create test_event_types.py | python-development:python-pro | implementation | 1 | - | A | complete | 1 | a0e7e64 | c649ecd | /pytest-dev/pytest |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | ad791ce | 4fa8239,be6be11 | - |
-| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | complete | 0 | a7bd43b | pending | - |
