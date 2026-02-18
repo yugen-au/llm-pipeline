@@ -1,7 +1,7 @@
 ## Task: master-17-pipeline-events-table
 ## Description: Add SQLModel PipelineEvent table definition and integrate with init_pipeline_db() for automatic creation
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
