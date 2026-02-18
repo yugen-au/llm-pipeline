@@ -9,7 +9,7 @@
 ## Plugins: python-development, backend-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
-## Steps to Fix: none
+## Steps to Fix: [1]
 ## Last Updated: 2026-02-18 14:51
 
 ## Agents
@@ -20,4 +20,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 3 | a1180ec | ee6b720 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a68f4e9 | 07ac870 | - |
 | Create test_event_types.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a0e7e64 | 22ab9fa | /pytest-dev/pytest |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 0 | ad4ee57 | pending | - |
