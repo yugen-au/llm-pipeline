@@ -9,10 +9,10 @@ All 31 concrete event types are exercised via parametrized EVENT_FIXTURES.
 """
 
 import json
-import dataclasses
 import pytest
 from datetime import datetime
 
+from conftest import MockProvider, SuccessPipeline
 from llm_pipeline.events.types import (
     PipelineEvent,
     StepScopedEvent,
@@ -444,8 +444,6 @@ class TestContextSnapshotDepth:
         self, seeded_session, in_memory_handler
     ):
         """Integration: ContextUpdated snapshot contains merged keys after pipeline run."""
-        from conftest import MockProvider, SuccessPipeline
-
         provider = MockProvider(responses=[
             {"count": 1, "notes": "first"},
             {"count": 2, "notes": "second"},
@@ -469,8 +467,6 @@ class TestContextSnapshotDepth:
         self, seeded_session, in_memory_handler
     ):
         """Integration: new_keys for each step contains 'total' (SimpleStep output)."""
-        from conftest import MockProvider, SuccessPipeline
-
         provider = MockProvider(responses=[
             {"count": 1, "notes": "first"},
             {"count": 2, "notes": "second"},

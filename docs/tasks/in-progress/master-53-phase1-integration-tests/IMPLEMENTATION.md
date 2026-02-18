@@ -45,3 +45,41 @@ New file with 9 test classes and 163 tests:
 - [x] Baseline coverage recorded: 95% total, types.py 93%
 - [x] Post coverage: 100% total, types.py 100% (target was >93%)
 - [x] Full suite: 465 passed (318 existing + 163 new - 16 pre-existing failures ignored)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] UNUSED IMPORT: Removed `import dataclasses` (was line 12, never used)
+- [x] CONFTEST IMPORT PLACEMENT: Moved `from conftest import MockProvider, SuccessPipeline` from inside test method bodies to module-level imports, matching convention of all 8 existing event test files
+
+### Changes Made
+#### File: `tests/events/test_event_types.py`
+```
+# Before
+import json
+import dataclasses
+import pytest
+...
+    def test_context_snapshot_contains_all_merged_keys_integration(...):
+        from conftest import MockProvider, SuccessPipeline
+    def test_context_snapshot_new_keys_reflects_step_output(...):
+        from conftest import MockProvider, SuccessPipeline
+
+# After
+import json
+import pytest
+...
+from conftest import MockProvider, SuccessPipeline
+...
+    def test_context_snapshot_contains_all_merged_keys_integration(...):
+        provider = ...
+    def test_context_snapshot_new_keys_reflects_step_output(...):
+        provider = ...
+```
+
+### Verification
+- [x] All 163 tests pass after fixes
+- [x] No `import dataclasses` in file
+- [x] `from conftest import` at module level, not inside methods
