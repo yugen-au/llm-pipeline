@@ -106,3 +106,12 @@
 [2026-02-18 15:44:51] [INFO] Task call: code-review-ai:architect-review (phase: review)
 [2026-02-18 15:44:51] [INFO] Incremented Revisions: 0 -> 1
 [2026-02-18 15:44:51] [DEBUG] STATE.md atomic write complete
+[2026-02-18 15:46:18] [INFO] WARNING: No active agent found for 'code-review-ai:architect-review'
+[2026-02-18 15:46:37] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-02-18 15:46:46] [INFO] Committed review-A: ['REVIEW.md'] -> be6be11
+[2026-02-18 15:46:48] [INFO] STATE.md updated: phase=summary, status=in-progress
+[2026-02-18 15:46:48] [INFO] Updated Commits for 'Architecture review': be6be11
+[2026-02-18 15:46:48] [INFO] Auto-filled agent rows: Create summary
+[2026-02-18 15:46:48] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
+[2026-02-18 15:46:48] [INFO] Deleted 1 old contract file(s)
+[2026-02-18 15:46:48] [DEBUG] STATE.md atomic write complete
