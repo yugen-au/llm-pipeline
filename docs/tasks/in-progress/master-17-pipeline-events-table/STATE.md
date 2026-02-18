@@ -3,14 +3,14 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/17-pipeline-events-table
 ## Plugins: backend-development, database-design
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
 ## Steps to Fix: none
-## Last Updated: 2026-02-18 16:23
+## Last Updated: 2026-02-18 16:24
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,6 +20,6 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a295ccb | a604858 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a424553 | 8c10bfd | - |
 | Integrate into init_pipeline_db | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a296cca | 23103a4 | /websites/sqlmodel_tiangolo |
-| Export from events/__init__ | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | - |
-| Export from llm_pipeline/__init__ | backend-development:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Export from events/__init__ | backend-development:backend-architect | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
+| Export from llm_pipeline/__init__ | backend-development:backend-architect | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
 | Add init_pipeline_db Tests | backend-development:test-automator | implementation | 4 | - | C | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo |
