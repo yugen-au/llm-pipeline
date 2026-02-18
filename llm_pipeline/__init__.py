@@ -15,6 +15,7 @@ from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.registry import PipelineDatabaseRegistry
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance
+from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.session import ReadOnlySession
@@ -39,6 +40,7 @@ __all__ = [
     # State
     "PipelineStepState",
     "PipelineRunInstance",
+    "PipelineEventRecord",
     # Types
     "ArrayValidationConfig",
     "ValidationContext",
