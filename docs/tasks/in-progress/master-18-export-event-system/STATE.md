@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/18-export-event-system
 ## Plugins: python-development, backend-development
@@ -21,4 +21,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a46cfa2 | 69e6140 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a388b31 | 7d93890 | - |
 | Fix events/__init__.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | ac9a462 | d4cab94 | - |
-| Update top-level __init__.py | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Update top-level __init__.py | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
