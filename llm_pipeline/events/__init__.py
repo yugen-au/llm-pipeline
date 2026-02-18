@@ -71,6 +71,7 @@ from llm_pipeline.events.types import (
     StateSaved,
 )
 from llm_pipeline.events.emitter import CompositeEmitter, PipelineEventEmitter
+from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.llm.result import LLMCallResult
 
 # Convenience alias for resolve_event on PipelineEvent
@@ -80,6 +81,8 @@ __all__ = [
     # Base Classes
     "PipelineEvent",
     "StepScopedEvent",
+    # DB Models
+    "PipelineEventRecord",
     # Emitters
     "PipelineEventEmitter",
     "CompositeEmitter",

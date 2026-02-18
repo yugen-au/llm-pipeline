@@ -13,6 +13,7 @@ from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance
+from llm_pipeline.events.models import PipelineEventRecord
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ def get_default_db_path() -> Path:
 def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     """Initialize pipeline database tables.
 
-    Creates PipelineStepState, PipelineRunInstance, and Prompt tables.
+    Creates PipelineStepState, PipelineRunInstance, Prompt, and
+    PipelineEventRecord (pipeline_events) tables.
 
     Args:
         engine: Optional SQLAlchemy engine. If None, creates auto-SQLite.
@@ -61,6 +63,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineStepState.__table__,
             PipelineRunInstance.__table__,
             Prompt.__table__,
+            PipelineEventRecord.__table__,
         ],
     )
 
