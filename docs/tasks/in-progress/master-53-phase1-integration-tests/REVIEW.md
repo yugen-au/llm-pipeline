@@ -57,3 +57,67 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Remove unused `import dataclasses` (line 12) and move `from conftest import MockProvider, SuccessPipeline` from inline test methods (lines 447, 472) to module-level imports. Both are mechanical fixes requiring no design decisions.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+Both MEDIUM issues from prior review resolved correctly. 163/163 tests pass (0.35s). No regressions, no new issues.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Tests pass | pass | 163/163 pass, 0.35s |
+| No hardcoded values | pass | Unchanged from prior review |
+| Error handling present | pass | Unchanged from prior review |
+| Project conventions (pytest, test class structure) | pass | conftest import now at module level, matching all 8 sibling test files |
+| No warnings | pass | Clean pytest output |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None (both prior MEDIUM issues resolved)
+
+### Low
+#### Duplicate `test_resolve_event_unknown_type_raises_value_error`
+**Step:** 6, 11
+**Details:** Carried forward from prior review. Plan-authorized intentional duplication. Not blocking.
+
+## Fix Verification
+
+### Fix 1: Removed unused `import dataclasses` (prior Step 3)
+**Status:** VERIFIED
+File no longer contains `import dataclasses`. Grep confirms zero matches. No code in the file ever used `dataclasses.*`.
+
+### Fix 2: Moved conftest import to module level (prior Step 13)
+**Status:** VERIFIED
+`from conftest import MockProvider, SuccessPipeline` now at line 15 (module level). No inline imports remain in test method bodies. Pattern matches all 8 other test files in `tests/events/` which all import from conftest at module level.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations (N/A -- pure test file)
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `tests/events/test_event_types.py` | pass | 163 tests, 9 classes. Both fixes applied correctly. Module-level imports clean. |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+Both MEDIUM fixes applied correctly. All 163 tests pass. Import conventions now match codebase. No regressions.

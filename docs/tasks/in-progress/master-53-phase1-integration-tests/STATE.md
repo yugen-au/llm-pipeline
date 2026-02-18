@@ -20,4 +20,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 3 | a1180ec | ee6b720 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a68f4e9 | 07ac870 | - |
 | Create test_event_types.py | python-development:python-pro | implementation | 1 | - | A | complete | 1 | a0e7e64 | c649ecd | /pytest-dev/pytest |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | ad4ee57 | 4fa8239 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | ad791ce | 4fa8239 | - |
