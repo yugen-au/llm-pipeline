@@ -74,9 +74,9 @@ The "~85% current, >93% target" estimates are unverified. `pytest-cov` is not in
 | Question | Answer | Impact |
 | --- | --- | --- |
 | Event count 31 vs 28 -- simple miscount or were types added recently? | Verified via git log: types.py unchanged since task 14. All 31 types existed when research was conducted. Simple miscount in header; tables are accurate. | All test assertions using "28" must use "31" |
-| Should tests cover mutable-container mutation edge case? (CEO input needed) | PENDING | Affects scope of test_event_types.py immutability tests |
-| Coverage baseline -- install dev deps or accept estimate? (CEO input needed) | PENDING | Affects confidence in coverage target |
-| test_event_types.py placement: tests/events/ or tests/ root? (CEO input needed) | PENDING | Affects file organization |
+| Should tests cover mutable-container mutation edge case? (CEO input needed) | YES -- test both frozen-prevents-reassignment AND list/dict contents can be mutated. Documents convention boundary. | Add dedicated mutable-container tests to test_event_types.py immutability section |
+| Coverage baseline -- install dev deps or accept estimate? (CEO input needed) | Install pytest-cov, measure actual baseline BEFORE writing tests. | Must install pytest-cov as first implementation step; baseline measurement gates test design |
+| test_event_types.py placement: tests/events/ or tests/ root? (CEO input needed) | tests/events/ -- consolidate with other event tests there. | File goes to tests/events/test_event_types.py; consistent with existing event test layout |
 
 ## Assumptions Validated
 - [x] 9 event categories with correct category constants (validated against types.py lines 27-35)
@@ -94,17 +94,27 @@ The "~85% current, >93% target" estimates are unverified. `pytest-cov` is not in
 - [x] Task 15 recommended deeper context_snapshot coverage for task 53
 
 ## Open Items
-- Coverage baseline unknown -- pytest-cov not installed in venv, actual percentage unverifiable until dev deps installed
-- Mutable-container convention boundary: frozen dataclass prevents field reassignment but allows mutation of dict/list field contents (types.py docstring lines 6-7). Research test patterns do not cover this edge case. CEO decision needed on whether to test.
-- Test file placement: research recommends `tests/events/test_event_types.py` but `test_emitter.py` (also testing events internals) lives at `tests/` root. Consistency question.
-- Task 53 description in TaskMaster references creating `tests/test_events.py` (singular, at root) while research recommends 2 files in `tests/events/`. Mismatch with original task description.
+All CEO questions resolved. No open items remain.
+
+### Resolved
+- ~~Coverage baseline unknown~~ -- RESOLVED: install pytest-cov, measure actual baseline before writing tests
+- ~~Mutable-container convention boundary~~ -- RESOLVED: YES, test both frozen-prevents-reassignment and mutable-contents-allowed
+- ~~Test file placement~~ -- RESOLVED: tests/events/ (consolidate with other event tests)
+- ~~Task 53 description mismatch~~ -- RESOLVED: CEO decision overrides original task description; use tests/events/ path
 
 ## Recommendations for Planning
-1. Correct all "28" references to "31" in test assertions and documentation
-2. Parametrized test fixtures for all 31 event types must include CacheHit with `cached_at` as a datetime field (special case in resolve_event deserialization)
-3. PipelineStarted accepts positional args (no kw_only) -- event_factory fixture must handle this asymmetry
-4. Add mutable-container convention tests: verify frozen prevents field reassignment, verify list/dict contents CAN be mutated (documents the convention boundary per types.py docstring)
-5. Place test_event_types.py in `tests/events/` to keep event tests consolidated (test_emitter.py at root is the outlier, not the standard)
-6. Include deeper context_snapshot tests per task 15 recommendation #3
-7. Install dev deps (pytest, pytest-cov) before implementation to establish actual coverage baseline
-8. Coverage command: `pytest tests/events/ tests/test_emitter.py --cov=llm_pipeline/events --cov-report=term-missing --cov-branch -v`
+
+### Pre-implementation (must do first)
+1. **Install pytest-cov** and measure actual coverage baseline before writing any tests (CEO decision)
+2. Coverage command: `pytest tests/events/ tests/test_emitter.py --cov=llm_pipeline/events --cov-report=term-missing --cov-branch -v`
+3. Record baseline number in task log to measure improvement
+
+### Test design
+4. Correct all "28" references to "31" in test assertions and documentation
+5. Parametrized test fixtures for all 31 event types must include CacheHit with `cached_at` as a datetime field (special case in resolve_event deserialization)
+6. PipelineStarted accepts positional args (no kw_only) -- event_factory fixture must handle this asymmetry
+7. **Mutable-container convention tests** (CEO decision): verify frozen prevents field reassignment AND verify list/dict contents CAN be mutated (documents convention boundary per types.py docstring)
+8. Include deeper context_snapshot tests per task 15 recommendation #3
+
+### File organization
+9. **Place test_event_types.py in `tests/events/`** (CEO decision) -- consolidate with other event tests; test_emitter.py at root is the outlier, not the standard
