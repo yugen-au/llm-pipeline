@@ -20,3 +20,5 @@
 | Event System Architecture | backend-development:backend-architect | research | 2 | - | A | complete | 0 | ad17574 | a01a251 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a46cfa2 | 69e6140 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a388b31 | pending | - |
+| Fix events/__init__.py | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Update top-level __init__.py | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
