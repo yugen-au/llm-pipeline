@@ -115,3 +115,12 @@
 [2026-02-18 15:46:48] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-02-18 15:46:48] [INFO] Deleted 1 old contract file(s)
 [2026-02-18 15:46:48] [DEBUG] STATE.md atomic write complete
+[2026-02-18 15:47:06] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-02-18 15:49:26] [INFO] WARNING: No active agent found for 'code-documentation:docs-architect'
+[2026-02-18 15:49:52] [INFO] STATE.md updated: phase=summary, status=in-progress
+[2026-02-18 15:50:02] [INFO] Committed summary-A: ['SUMMARY.md'] -> 08adff3
+[2026-02-18 15:50:04] [INFO] STATE.md updated: phase=pending-merge, status=in-progress
+[2026-02-18 15:50:04] [INFO] Updated Commits for 'Create summary': 08adff3
+[2026-02-18 15:50:04] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
+[2026-02-18 15:50:04] [INFO] Deleted 1 old contract file(s)
+[2026-02-18 15:50:04] [DEBUG] STATE.md atomic write complete
