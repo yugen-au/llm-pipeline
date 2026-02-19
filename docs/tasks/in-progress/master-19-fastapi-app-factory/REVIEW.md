@@ -75,3 +75,72 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is clean, minimal, and faithfully follows all PLAN.md architectural decisions. The two medium issues are both pre-existing constraints (global engine design) or known risks already documented in the plan (dev deps gap). Neither blocks downstream tasks 20-25. The dev deps gap should be addressed before CI integration but is not blocking for this foundational task.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+
+All 4 issues from the initial review have been addressed. Fixes are correct, minimal, and introduce no new issues. 43 tests pass.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| SQLModel / SQLAlchemy 2.0 | pass | `app.py` now imports `create_engine` from `sqlmodel`, matching `db/__init__.py` |
+| Tests with pytest | pass | 43 tests pass; dev deps now include fastapi so `pip install llm-pipeline[dev]` covers UI tests |
+
+## Fix Verification
+
+### MEDIUM - Missing fastapi in dev deps (Step 1)
+**Status:** RESOLVED
+**Evidence:** `pyproject.toml` dev group now includes `"fastapi>=0.100"` and `"uvicorn[standard]>=0.20"` (lines 26-27). Version constraints match the `ui` group exactly. CI environments installing `[dev]` will now get FastAPI.
+
+### MEDIUM - Global engine mutation (Step 3)
+**Status:** RESOLVED
+**Evidence:** `app.py` lines 39-41 now contain a comment documenting the `init_pipeline_db()` global side-effect. No behavioral change needed -- the app correctly reads from `app.state.engine` via DI. Comment is accurate and concise.
+
+### LOW - create_engine import source (Step 3)
+**Status:** RESOLVED
+**Evidence:** `app.py` line 6 changed from `from sqlalchemy import create_engine` to `from sqlmodel import create_engine`. Now consistent with `llm_pipeline/db/__init__.py` line 12 which uses the same import. Functionally identical but improves codebase consistency.
+
+### LOW - Test file naming mismatch
+**Status:** ACKNOWLEDGED
+**Evidence:** Documentation-only discrepancy. No code change needed; actual file `tests/test_ui.py` is correct and comprehensive.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| pyproject.toml | pass | dev deps now include fastapi>=0.100 and uvicorn[standard]>=0.20 |
+| llm_pipeline/ui/app.py | pass | `create_engine` import from sqlmodel; global engine side-effect documented |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previously identified issues resolved. No new issues introduced. Implementation is clean and ready for downstream tasks 20-25.
