@@ -144,6 +144,7 @@ class PipelineConfig(ABC):
         provider: Optional["LLMProvider"] = None,
         variable_resolver: Optional["VariableResolver"] = None,
         event_emitter: Optional["PipelineEventEmitter"] = None,
+        run_id: Optional[str] = None,
     ):
         """
         Initialize pipeline.
@@ -197,7 +198,7 @@ class PipelineConfig(ABC):
         self._validate_foreign_key_dependencies()
         self._validate_registry_order()
 
-        self.run_id = str(uuid.uuid4())
+        self.run_id = run_id or str(uuid.uuid4())
 
         # Session setup: explicit session > engine > auto-SQLite
         if session is not None:
@@ -430,6 +431,7 @@ class PipelineConfig(ABC):
         """Execute pipeline steps with optional caching and consensus polling."""
         from llm_pipeline.llm.executor import execute_llm_step
         from llm_pipeline.prompts.service import PromptService
+        from llm_pipeline.state import PipelineRun
 
         if self._provider is None:
             raise ValueError(
@@ -462,6 +464,15 @@ class PipelineConfig(ABC):
 
         start_time = datetime.now(timezone.utc)
         current_step_name: str | None = None
+
+        pipeline_run = PipelineRun(
+            run_id=self.run_id,
+            pipeline_name=self.pipeline_name,
+            status="running",
+            started_at=start_time,
+        )
+        self._real_session.add(pipeline_run)
+        self._real_session.flush()
 
         if self._event_emitter:
             self._emit(PipelineStarted(
@@ -760,10 +771,18 @@ class PipelineConfig(ABC):
                     if action_method and callable(action_method):
                         action_method(self.context)
 
+            pipeline_execution_time_ms = (
+                datetime.now(timezone.utc) - start_time
+            ).total_seconds() * 1000
+
+            pipeline_run.status = "completed"
+            pipeline_run.completed_at = datetime.now(timezone.utc)
+            pipeline_run.step_count = len(self._executed_steps)
+            pipeline_run.total_time_ms = int(pipeline_execution_time_ms)
+            self._real_session.add(pipeline_run)
+            self._real_session.flush()
+
             if self._event_emitter:
-                pipeline_execution_time_ms = (
-                    datetime.now(timezone.utc) - start_time
-                ).total_seconds() * 1000
                 self._emit(PipelineCompleted(
                     run_id=self.run_id,
                     pipeline_name=self.pipeline_name,
@@ -775,6 +794,12 @@ class PipelineConfig(ABC):
             return self
 
         except Exception as e:
+            if pipeline_run:
+                pipeline_run.status = "failed"
+                pipeline_run.completed_at = datetime.now(timezone.utc)
+                self._real_session.add(pipeline_run)
+                self._real_session.flush()
+
             if self._event_emitter:
                 import traceback
                 self._emit(PipelineError(
