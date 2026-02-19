@@ -91,3 +91,57 @@ if engine.url.drivername.startswith("sqlite"):
 [x] PipelineRun imported in db/__init__.py
 [x] event imported from sqlalchemy in db/__init__.py
 [x] All 511 existing tests pass (16 pre-existing failures in test_retry_ratelimit_events.py due to missing google module - unrelated)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] WAL event listener registered multiple times on repeated init_pipeline_db() calls
+[x] PipelineRun not exported from top-level __init__.py
+
+### Changes Made
+#### File: `llm_pipeline/db/__init__.py`
+Added module-level `_wal_registered_engines` set to track engines with WAL listener. Guard WAL registration with `id(engine) not in _wal_registered_engines` check.
+
+```
+# Before
+_engine: Optional[Engine] = None
+...
+if engine.url.drivername.startswith("sqlite"):
+    @event.listens_for(engine, "connect")
+    def set_sqlite_wal(dbapi_conn, conn_record):
+
+# After
+_engine: Optional[Engine] = None
+_wal_registered_engines: set = set()
+...
+if engine.url.drivername.startswith("sqlite") and id(engine) not in _wal_registered_engines:
+    _wal_registered_engines.add(id(engine))
+
+    @event.listens_for(engine, "connect")
+    def set_sqlite_wal(dbapi_conn, conn_record):
+```
+
+#### File: `llm_pipeline/__init__.py`
+Added PipelineRun import and __all__ entry alongside existing state exports.
+
+```
+# Before
+from llm_pipeline.state import PipelineStepState, PipelineRunInstance
+...
+"PipelineStepState",
+"PipelineRunInstance",
+
+# After
+from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun
+...
+"PipelineStepState",
+"PipelineRunInstance",
+"PipelineRun",
+```
+
+### Verification
+[x] _wal_registered_engines prevents duplicate listener registration on repeated init_pipeline_db() calls
+[x] PipelineRun importable via `from llm_pipeline import PipelineRun`
+[x] All 558 tests pass (0 failures)
