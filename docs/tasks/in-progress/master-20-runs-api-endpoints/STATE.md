@@ -1,7 +1,7 @@
 ## Task: master-20-runs-api-endpoints
 ## Description: REST endpoints for listing/retrieving pipeline runs (PipelineRunInstance, PipelineStepState). Pagination, filtering by pipeline_name/date, <200ms for 10k+ runs. FastAPI + SQLModel.
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-02-19 16:47
+## Last Updated: 2026-02-19 16:48
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,4 +26,5 @@
 | API Endpoints + Registry | backend-development:backend-architect | implementation | 3 | - | C | complete | 0 | a71c229 | f8aa5e4 | /websites/fastapi_tiangolo,/websites/sqlmodel_tiangolo |
 | httpx Dev Dependency | backend-development:backend-architect | implementation | 4 | - | C | complete | 0 | a44cab0 | 758dd94,f8aa5e4 | - |
 | Endpoint + Integration Tests | backend-development:test-automator | implementation | 5 | - | D | complete | 0 | a8c5ede | fff9f38 | /websites/fastapi_tiangolo |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a27cd57 | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a27cd57 | 73cb2aa | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
