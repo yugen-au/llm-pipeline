@@ -66,3 +66,51 @@ def create_app(
 [x] 347 existing tests pass (1 pre-existing failure in test_retry_ratelimit_events.py due to missing google module)
 [x] All endpoints are sync def (not async)
 [x] Router uses prefix="/runs" with tags=["runs"], included with prefix="/api" in app
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] POST /runs background task has no error handling -- run_pipeline() closure now wrapped in try/except
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/runs.py`
+Added logging import, timezone import, logger instance, and try/except in run_pipeline() closure. On failure: logs exception, attempts to mark PipelineRun as "failed" with completed_at timestamp using a fresh session from the engine.
+
+```
+# Before
+def run_pipeline() -> None:
+    pipeline = factory(run_id=run_id, engine=engine)
+    pipeline.execute()
+    pipeline.save()
+
+# After
+def run_pipeline() -> None:
+    try:
+        pipeline = factory(run_id=run_id, engine=engine)
+        pipeline.execute()
+        pipeline.save()
+    except Exception:
+        logger.exception("Background pipeline execution failed for run_id=%s", run_id)
+        try:
+            with Session(engine) as err_session:
+                run = err_session.exec(
+                    select(PipelineRun).where(PipelineRun.run_id == run_id)
+                ).first()
+                if run:
+                    run.status = "failed"
+                    run.completed_at = datetime.now(timezone.utc)
+                    err_session.add(run)
+                    err_session.commit()
+        except Exception:
+            logger.exception(
+                "Failed to update PipelineRun status for run_id=%s", run_id
+            )
+```
+
+### Verification
+[x] Module imports cleanly
+[x] 558 tests pass (0 failures)
+[x] Error handler uses fresh Session from engine (not pipeline's possibly-broken session)
+[x] Double try/except prevents status-update failure from masking original error log

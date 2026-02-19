@@ -1,6 +1,7 @@
 """Pipeline runs route module -- list, detail, trigger."""
+import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -10,6 +11,8 @@ from sqlmodel import Session, select
 
 from llm_pipeline.state import PipelineRun, PipelineStepState
 from llm_pipeline.ui.deps import DBSession
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/runs", tags=["runs"])
 
@@ -199,9 +202,26 @@ def trigger_run(
     engine = request.app.state.engine
 
     def run_pipeline() -> None:
-        pipeline = factory(run_id=run_id, engine=engine)
-        pipeline.execute()
-        pipeline.save()
+        try:
+            pipeline = factory(run_id=run_id, engine=engine)
+            pipeline.execute()
+            pipeline.save()
+        except Exception:
+            logger.exception("Background pipeline execution failed for run_id=%s", run_id)
+            try:
+                with Session(engine) as err_session:
+                    run = err_session.exec(
+                        select(PipelineRun).where(PipelineRun.run_id == run_id)
+                    ).first()
+                    if run:
+                        run.status = "failed"
+                        run.completed_at = datetime.now(timezone.utc)
+                        err_session.add(run)
+                        err_session.commit()
+            except Exception:
+                logger.exception(
+                    "Failed to update PipelineRun status for run_id=%s", run_id
+                )
 
     background_tasks.add_task(run_pipeline)
 
