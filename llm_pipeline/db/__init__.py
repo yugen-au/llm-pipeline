@@ -8,11 +8,11 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, event
 from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.state import PipelineStepState, PipelineRunInstance
+from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun
 from llm_pipeline.events.models import PipelineEventRecord
 
 logger = logging.getLogger(__name__)
@@ -56,12 +56,21 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
 
     _engine = engine
 
+    # Enable WAL mode for concurrent read/write on SQLite
+    if engine.url.drivername.startswith("sqlite"):
+        @event.listens_for(engine, "connect")
+        def set_sqlite_wal(dbapi_conn, conn_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.close()
+
     # Create framework tables
     SQLModel.metadata.create_all(
         engine,
         tables=[
             PipelineStepState.__table__,
             PipelineRunInstance.__table__,
+            PipelineRun.__table__,
             Prompt.__table__,
             PipelineEventRecord.__table__,
         ],

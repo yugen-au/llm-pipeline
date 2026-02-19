@@ -41,10 +41,9 @@ class PipelineStepState(SQLModel, table=True):
     )
     run_id: str = Field(
         max_length=36,
-        index=True,
         description="UUID identifying this specific pipeline run"
     )
-    
+
     # Step identification
     step_name: str = Field(
         max_length=100,
@@ -120,7 +119,6 @@ class PipelineRunInstance(SQLModel, table=True):
     # Link to pipeline run
     run_id: str = Field(
         max_length=36,
-        index=True,
         description="UUID of the pipeline run that created this instance"
     )
     
@@ -143,4 +141,41 @@ class PipelineRunInstance(SQLModel, table=True):
     )
 
 
-__all__ = ["PipelineStepState", "PipelineRunInstance"]
+class PipelineRun(SQLModel, table=True):
+    """
+    Tracks pipeline run lifecycle (start, complete, fail).
+
+    Dedicated table for fast indexed queries on run history.
+    Distinct from PipelineRunInstance which tracks created DB instances.
+    step_count reflects unique step classes executed, not total calls.
+    """
+    __tablename__ = "pipeline_runs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    run_id: str = Field(
+        max_length=36,
+        unique=True,
+        description="UUID identifying this pipeline run"
+    )
+    pipeline_name: str = Field(
+        max_length=100,
+        description="Pipeline name in snake_case"
+    )
+    status: str = Field(
+        max_length=20,
+        default="running",
+        description="Run status: running, completed, failed"
+    )
+    started_at: datetime = Field(default_factory=utc_now)
+    completed_at: Optional[datetime] = Field(default=None)
+    step_count: Optional[int] = Field(default=None)
+    total_time_ms: Optional[int] = Field(default=None)
+
+    __table_args__ = (
+        Index("ix_pipeline_runs_name_started", "pipeline_name", "started_at"),
+        Index("ix_pipeline_runs_status", "status"),
+    )
+
+
+__all__ = ["PipelineStepState", "PipelineRunInstance", "PipelineRun"]
