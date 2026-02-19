@@ -18,10 +18,13 @@ dependencies = [
 
 [project.optional-dependencies]
 gemini = ["google-generativeai>=0.3.0"]
+ui = ["fastapi>=0.100", "uvicorn[standard]>=0.20"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "google-generativeai>=0.3.0",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.20",
 ]
 
 [tool.pytest.ini_options]
