@@ -1,9 +1,9 @@
 ## Task: master-20-runs-api-endpoints
 ## Description: REST endpoints for listing/retrieving pipeline runs (PipelineRunInstance, PipelineStepState). Pagination, filtering by pipeline_name/date, <200ms for 10k+ runs. FastAPI + SQLModel.
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: D
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/20-runs-api-endpoints
 ## Plugins: backend-development, python-development, database-design
@@ -26,3 +26,4 @@
 | API Endpoints + Registry | backend-development:backend-architect | implementation | 3 | - | C | complete | 0 | a71c229 | f8aa5e4 | /websites/fastapi_tiangolo,/websites/sqlmodel_tiangolo |
 | httpx Dev Dependency | backend-development:backend-architect | implementation | 4 | - | C | complete | 0 | a44cab0 | 758dd94,f8aa5e4 | - |
 | Endpoint + Integration Tests | backend-development:test-automator | implementation | 5 | - | D | complete | 0 | a8c5ede | fff9f38 | /websites/fastapi_tiangolo |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
