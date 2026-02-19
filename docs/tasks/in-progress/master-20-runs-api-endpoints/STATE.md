@@ -21,3 +21,8 @@
 | Query Optimization & Indexing | database-design:database-architect | research | 3 | - | A | complete | 0 | a386d92 | 9c44897 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a436ff7 | 2050a2b | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aa0bc47 | pending | - |
+| DB Layer: PipelineRun + WAL | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_21 |
+| Pipeline Instrumentation | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo |
+| API Endpoints + Registry | backend-development:backend-architect | implementation | 3 | - | C | pending | 0 | pending | pending | /websites/fastapi_tiangolo,/websites/sqlmodel_tiangolo |
+| httpx Dev Dependency | backend-development:backend-architect | implementation | 4 | - | C | pending | 0 | pending | pending | - |
+| Endpoint + Integration Tests | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | pending | pending | /websites/fastapi_tiangolo |
