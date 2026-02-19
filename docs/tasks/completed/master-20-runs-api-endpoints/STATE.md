@@ -1,7 +1,7 @@
 ## Task: master-20-runs-api-endpoints
 ## Description: REST endpoints for listing/retrieving pipeline runs (PipelineRunInstance, PipelineStepState). Pagination, filtering by pipeline_name/date, <200ms for 10k+ runs. FastAPI + SQLModel.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
