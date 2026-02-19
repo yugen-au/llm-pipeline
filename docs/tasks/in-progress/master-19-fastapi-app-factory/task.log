@@ -5,3 +5,13 @@
 [2026-02-19 12:05:12] [INFO] Created: STATE.md
 [2026-02-19 12:05:12] [INFO] ============================================================
 [2026-02-19 12:05:13] [DEBUG] STATE.md atomic write complete
+[2026-02-19 12:05:38] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-19 12:06:45] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-19 12:06:52] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-19 12:06:58] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-19 12:07:10] [ERROR] BLOCKED: Cannot enter research: no agents in table
+[2026-02-19 12:07:18] [ERROR] BLOCKED: Invalid AgentRow 'Codebase & FastAPI Patterns': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-19 12:07:25] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-19 12:07:36] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-19 12:07:36] [INFO] Auto-updated agent statuses: Codebase & FastAPI Patterns: pending -> in-progress, API Architecture & Routes: pending -> in-progress
+[2026-02-19 12:07:36] [DEBUG] STATE.md atomic write complete
