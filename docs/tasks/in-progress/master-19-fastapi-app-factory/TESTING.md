@@ -96,5 +96,20 @@ None
 None
 
 ## Recommendations
-1. Add fastapi and httpx to dev optional-dependencies in pyproject.toml so CI can run ui tests without requiring explicit `[ui]` install. Currently fastapi must be present from a prior install or `pip install -e ".[ui]"`.
-2. Consider adding pytest-anyio or httpx as dev dep for future route endpoint tests (TestClient requires httpx).
+1. ~~Add fastapi and uvicorn to dev optional-dependencies~~ - done in review fixes (fastapi>=0.100 and uvicorn[standard]>=0.20 now in dev group).
+2. Consider adding httpx as dev dep for future route endpoint tests (TestClient requires httpx).
+
+---
+
+## Re-run After Review Fixes (2026-02-19)
+
+### Changes Verified
+1. pyproject.toml: fastapi>=0.100 and uvicorn[standard]>=0.20 added to dev optional-dependencies group
+2. llm_pipeline/ui/app.py: create_engine import changed from sqlalchemy to sqlmodel; comment added re: init_pipeline_db global side-effect
+
+### Full Suite Results
+**Pass Rate:** 511/527 (43 ui + 468 pre-existing passing; 16 pre-existing failures unchanged - all in test_retry_ratelimit_events.py due to missing google module, unrelated to task 19)
+```
+16 failed, 511 passed, 1 warning in 11.10s
+```
+All 43 ui tests still pass. No regressions introduced by review fixes.
