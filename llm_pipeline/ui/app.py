@@ -11,6 +11,7 @@ from llm_pipeline.db import init_pipeline_db
 def create_app(
     db_path: Optional[str] = None,
     cors_origins: Optional[list] = None,
+    pipeline_registry: Optional[dict] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -19,6 +20,11 @@ def create_app(
             init_pipeline_db() default (LLM_PIPELINE_DB env var
             or .llm_pipeline/pipeline.db).
         cors_origins: List of allowed CORS origins. Defaults to ["*"].
+        pipeline_registry: Optional mapping of pipeline names to factory
+            callables. Each factory has signature
+            ``(run_id: str, engine: Engine) -> pipeline`` where the
+            returned object exposes ``.execute()`` and ``.save()``.
+            Used by POST /api/runs to trigger pipelines.
 
     Returns:
         Configured FastAPI application instance.
@@ -44,6 +50,8 @@ def create_app(
         app.state.engine = init_pipeline_db(engine)
     else:
         app.state.engine = init_pipeline_db()
+
+    app.state.pipeline_registry = pipeline_registry or {}
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router
