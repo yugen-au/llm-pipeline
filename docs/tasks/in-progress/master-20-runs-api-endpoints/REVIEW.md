@@ -84,3 +84,79 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is architecturally sound, well-tested, and follows codebase conventions. The 3 medium issues are non-blocking: WAL duplication is harmless, missing __init__.py export is a follow-up, and background task error handling is an enhancement. No data loss, security, or correctness risks identified.
+
+---
+
+# Re-Review: MEDIUM Issue Fixes
+
+## Overall Assessment
+**Status:** complete
+All 3 MEDIUM fixes are correct, clean, and introduce no new issues. Full test suite 558 passed, 0 regressions. The 3 original LOW issues remain unchanged and are the only outstanding items.
+
+## Fixes Verified
+
+### Fix 1: WAL listener deduplication (db/__init__.py)
+**Original issue:** WAL event listener registered multiple times on repeated init_pipeline_db() calls
+**Fix:** Module-level `_wal_registered_engines: set = set()` at line 21. Guard at line 61: `id(engine) not in _wal_registered_engines`. Add to set at line 62 before registering listener.
+**Verdict:** PASS. Uses `id(engine)` which is appropriate since engines are long-lived singletons. Theoretically `id()` could be reused after GC of an engine, but engines are never GC'd in normal usage (held by module global `_engine` or app.state). No over-engineering (WeakSet unnecessary). Guard is placed before `@event.listens_for` so the registration is atomic with the set addition.
+
+### Fix 2: PipelineRun in __init__.py exports (llm_pipeline/__init__.py)
+**Original issue:** PipelineRun not exported from top-level __init__.py
+**Fix:** Line 26 imports `PipelineRun` alongside existing `PipelineStepState, PipelineRunInstance`. Line 56 adds `"PipelineRun"` to `__all__` in the State section.
+**Verdict:** PASS. Consistent with existing pattern. Placed in correct `# State` grouping in `__all__`. `from llm_pipeline import PipelineRun` now works.
+
+### Fix 3: Background task error handling (ui/routes/runs.py)
+**Original issue:** POST /runs background task had no error handling
+**Fix:** Lines 205-224 wrap `run_pipeline()` body in try/except. On exception: (1) logs with `logger.exception` including run_id, (2) opens new Session to find PipelineRun row and set status="failed" + completed_at, (3) inner try/except on the recovery path prevents double-fault from crashing background thread.
+**Verdict:** PASS. Correctly handles all failure modes:
+- Factory raises before PipelineRun row exists: `run` is None at line 216, `if run:` guard skips update, error still logged at line 210.
+- execute()/save() raises after PipelineRun created: row found, status updated to "failed", completed_at set.
+- Recovery DB session itself fails: inner except at line 221 logs and swallows, preventing cascade.
+- Uses `datetime.now(timezone.utc)` consistent with PipelineRun model's `default_factory`.
+- Opens fresh `Session(engine)` rather than reusing any existing session -- correct for background thread isolation.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None -- all 3 original MEDIUM issues resolved
+
+### Low
+#### POST /runs factory contract loosely typed (unchanged from prior review)
+**Step:** 3
+**Details:** `pipeline_registry: Optional[dict]` uses untyped dict. Docstring documents contract but type system cannot enforce it.
+
+#### No validation on run_id path parameter format (unchanged from prior review)
+**Step:** 3
+**Details:** `GET /runs/{run_id}` accepts any string, no UUID format validation.
+
+#### test_pipeline_run_tracking.py uses SQLModel.metadata.create_all(engine) globally (unchanged from prior review)
+**Step:** 5
+**Details:** Global create_all in test fixture creates all imported tables, not just framework tables.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present -- significantly improved by Fix 3
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/db/__init__.py | pass | WAL dedup via id(engine) set is correct and minimal |
+| llm_pipeline/__init__.py | pass | PipelineRun added to import and __all__ in correct grouping |
+| llm_pipeline/ui/routes/runs.py | pass | Background task error handling covers all failure modes with proper isolation |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All 3 MEDIUM fixes are correct, minimal, and well-implemented. No new issues introduced. Only 3 LOW items remain (factory typing, run_id validation, test create_all pattern), all acceptable for current scope. Full test suite green at 558 passed.
