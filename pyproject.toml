@@ -25,6 +25,7 @@ dev = [
     "google-generativeai>=0.3.0",
     "fastapi>=0.100",
     "uvicorn[standard]>=0.20",
+    "httpx>=0.24",
 ]
 
 [tool.pytest.ini_options]
