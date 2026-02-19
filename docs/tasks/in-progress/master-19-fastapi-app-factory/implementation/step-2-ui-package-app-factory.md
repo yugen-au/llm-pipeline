@@ -66,3 +66,41 @@ Six stub modules, each declaring `router = APIRouter(...)`:
 [x] CORS middleware attached to app
 [x] Custom cors_origins parameter works
 [x] Existing test suite: 347 passed, 1 pre-existing failure (unrelated)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] (LOW) create_engine import source inconsistency: changed from sqlalchemy to sqlmodel for codebase consistency
+[x] (MEDIUM) Document global engine mutation: added inline comment noting init_pipeline_db() side-effect on module-level _engine
+
+### Changes Made
+#### File: `llm_pipeline/ui/app.py`
+Two targeted fixes:
+
+```
+# Before
+from sqlalchemy import create_engine
+
+# After
+from sqlmodel import create_engine
+```
+
+```
+# Before
+    # Database engine
+    if db_path is not None:
+
+# After
+    # Database engine
+    # NOTE: init_pipeline_db() sets the module-level _engine global in
+    # llm_pipeline.db as a side-effect. Multiple create_app() calls will
+    # overwrite that global with the last-created engine.
+    if db_path is not None:
+```
+
+### Verification
+[x] `from llm_pipeline.ui.app import create_app` imports successfully
+[x] `create_app()` returns working FastAPI app with engine
+[x] No import of sqlalchemy remains in app.py

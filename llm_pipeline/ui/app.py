@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine
+from sqlmodel import create_engine
 
 from llm_pipeline.db import init_pipeline_db
 
@@ -36,6 +36,9 @@ def create_app(
     )
 
     # Database engine
+    # NOTE: init_pipeline_db() sets the module-level _engine global in
+    # llm_pipeline.db as a side-effect. Multiple create_app() calls will
+    # overwrite that global with the last-created engine.
     if db_path is not None:
         engine = create_engine(f"sqlite:///{db_path}")
         app.state.engine = init_pipeline_db(engine)
