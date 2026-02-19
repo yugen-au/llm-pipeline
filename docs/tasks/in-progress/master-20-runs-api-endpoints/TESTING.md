@@ -91,3 +91,31 @@ None
 ## Recommendations
 1. The 10k-row performance criterion from PLAN.md is untested by automated suite - a load fixture or benchmark test could be added in a follow-up task if needed.
 2. The 2 pre-existing warnings (PytestCollectionWarning, google-generativeai FutureWarning) predate task 20 and should be addressed separately.
+
+---
+
+# Re-run: Post-Review Fixes (2026-02-19)
+
+## Summary
+**Status:** passed
+Re-ran full suite after three surgical fixes: WAL listener deduplication guard in `llm_pipeline/db/__init__.py`, `PipelineRun` added to `llm_pipeline/__init__.py` exports, background task error handling added to POST /runs in `llm_pipeline/ui/routes/runs.py`. Zero regressions.
+
+## Automated Testing
+
+### Test Execution
+**Pass Rate:** 558/558 tests
+
+```
+558 passed, 2 warnings in 22.83s
+```
+
+### Failed Tests
+None
+
+## Build Verification
+- [x] No install step needed (deps unchanged)
+- [x] No import errors on test collection
+- [x] Same 2 pre-existing warnings as prior run (unrelated to task 20)
+
+## Issues Found
+None
