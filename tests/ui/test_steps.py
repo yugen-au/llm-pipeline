@@ -1,5 +1,4 @@
 """Endpoint tests for steps list/detail and context evolution routes."""
-import pytest
 
 RUN_1 = "aaaaaaaa-0000-0000-0000-000000000001"
 RUN_2 = "aaaaaaaa-0000-0000-0000-000000000002"
@@ -61,6 +60,7 @@ class TestGetStep:
     def test_returns_404_for_nonexistent_run(self, seeded_app_client):
         resp = seeded_app_client.get(f"/api/runs/{NONEXISTENT}/steps/1")
         assert resp.status_code == 404
+        assert resp.json()["detail"] == "Run not found"
 
 
 class TestContextEvolution:

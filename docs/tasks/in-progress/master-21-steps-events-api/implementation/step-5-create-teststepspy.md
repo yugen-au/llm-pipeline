@@ -25,3 +25,35 @@ None
 [x] 14/14 tests pass in test_steps.py
 [x] 41/41 tests pass in full tests/ui/ suite (no regressions)
 [x] Follows test_runs.py patterns (class-based, assert status + body)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] LOW: Remove unused `import pytest` line
+[x] IMPORTANT: `TestGetStep::test_returns_404_for_nonexistent_run` now asserts detail message is "Run not found"
+
+### Changes Made
+#### File: `tests/ui/test_steps.py`
+Removed unused import, added detail assertion on 404.
+```
+# Before
+import pytest
+...
+    def test_returns_404_for_nonexistent_run(self, seeded_app_client):
+        resp = seeded_app_client.get(f"/api/runs/{NONEXISTENT}/steps/1")
+        assert resp.status_code == 404
+
+# After
+(no import pytest)
+...
+    def test_returns_404_for_nonexistent_run(self, seeded_app_client):
+        resp = seeded_app_client.get(f"/api/runs/{NONEXISTENT}/steps/1")
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Run not found"
+```
+
+### Verification
+[x] 14/14 tests pass in test_steps.py
+[x] No regressions
