@@ -20,6 +20,7 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
 )
 from llm_pipeline.introspection import PipelineIntrospector
+from llm_pipeline.transformation import PipelineTransformation
 
 
 # ---------- Domain classes (minimal WidgetPipeline pattern) ----------
@@ -66,6 +67,120 @@ class WidgetDetectionStep(LLMStep):
     def process_instructions(self, instructions):
         return WidgetDetectionContext(category=instructions[0].category)
 
+
+# ---------- Transformation domain classes (Pydantic input/output) ----------
+
+class TransformInput(BaseModel):
+    raw: str
+
+
+class TransformOutput(BaseModel):
+    processed: str
+
+
+class ScanDetectionInstructions(LLMResultMixin):
+    count: int
+    example: ClassVar[dict] = {"count": 1, "notes": "scan"}
+
+
+class ScanDetectionTransformation(PipelineTransformation,
+                                  input_type=TransformInput,
+                                  output_type=TransformOutput):
+    def default(self, data, instructions):
+        return TransformOutput(processed=data.raw.upper())
+
+
+@step_definition(
+    instructions=ScanDetectionInstructions,
+    default_system_key="scan.system",
+    default_user_key="scan.user",
+    default_transformation=ScanDetectionTransformation,
+)
+class ScanDetectionStep(LLMStep):
+    def prepare_calls(self):
+        return [self.create_llm_call(variables={})]
+
+    def process_instructions(self, instructions):
+        return None
+
+
+class ScanStrategy(PipelineStrategy):
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return [ScanDetectionStep.create_definition()]
+
+
+class ScanRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
+    pass
+
+
+class ScanStrategies(PipelineStrategies, strategies=[ScanStrategy]):
+    pass
+
+
+class ScanPipeline(PipelineConfig, registry=ScanRegistry, strategies=ScanStrategies):
+    pass
+
+
+# ---------- Transformation domain classes (non-Pydantic input/output) ----------
+
+class PlainInput:
+    pass
+
+
+class PlainOutput:
+    pass
+
+
+class GadgetDetectionInstructions(LLMResultMixin):
+    count: int
+    example: ClassVar[dict] = {"count": 1, "notes": "gadget"}
+
+
+class GadgetDetectionTransformation(PipelineTransformation,
+                                    input_type=PlainInput,
+                                    output_type=PlainOutput):
+    def default(self, data, instructions):
+        return PlainOutput()
+
+
+@step_definition(
+    instructions=GadgetDetectionInstructions,
+    default_system_key="gadget.system",
+    default_user_key="gadget.user",
+    default_transformation=GadgetDetectionTransformation,
+)
+class GadgetDetectionStep(LLMStep):
+    def prepare_calls(self):
+        return [self.create_llm_call(variables={})]
+
+    def process_instructions(self, instructions):
+        return None
+
+
+class GadgetStrategy(PipelineStrategy):
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return [GadgetDetectionStep.create_definition()]
+
+
+class GadgetRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
+    pass
+
+
+class GadgetStrategies(PipelineStrategies, strategies=[GadgetStrategy]):
+    pass
+
+
+class GadgetPipeline(PipelineConfig, registry=GadgetRegistry, strategies=GadgetStrategies):
+    pass
+
+
+# ---------- Primary strategy (no transformation) ----------
 
 class PrimaryStrategy(PipelineStrategy):
     def can_handle(self, context):
@@ -357,3 +472,57 @@ class TestBrokenStrategy:
         assert "error" not in ok
         assert ok["class_name"] == "PrimaryStrategy"
         assert len(ok["steps"]) == 1
+
+
+class TestTransformation:
+    def _step(self, pipeline_cls):
+        meta = PipelineIntrospector(pipeline_cls).get_metadata()
+        return meta["strategies"][0]["steps"][0]
+
+    def test_transformation_key_present_in_step(self):
+        step = self._step(ScanPipeline)
+        assert "transformation" in step
+
+    def test_transformation_is_not_none_when_configured(self):
+        step = self._step(ScanPipeline)
+        assert step["transformation"] is not None
+
+    def test_transformation_class_name(self):
+        t = self._step(ScanPipeline)["transformation"]
+        assert t["class_name"] == "ScanDetectionTransformation"
+
+    def test_transformation_pydantic_input_type_name(self):
+        t = self._step(ScanPipeline)["transformation"]
+        assert t["input_type"] == "TransformInput"
+
+    def test_transformation_pydantic_output_type_name(self):
+        t = self._step(ScanPipeline)["transformation"]
+        assert t["output_type"] == "TransformOutput"
+
+    def test_transformation_pydantic_input_schema_has_properties(self):
+        t = self._step(ScanPipeline)["transformation"]
+        assert isinstance(t["input_schema"], dict)
+        assert "properties" in t["input_schema"]
+
+    def test_transformation_pydantic_output_schema_has_properties(self):
+        t = self._step(ScanPipeline)["transformation"]
+        assert isinstance(t["output_schema"], dict)
+        assert "properties" in t["output_schema"]
+
+    def test_transformation_non_pydantic_input_schema_is_type_dict(self):
+        t = self._step(GadgetPipeline)["transformation"]
+        assert t["input_schema"] == {"type": "PlainInput"}
+
+    def test_transformation_non_pydantic_output_schema_is_type_dict(self):
+        t = self._step(GadgetPipeline)["transformation"]
+        assert t["output_schema"] == {"type": "PlainOutput"}
+
+    def test_transformation_non_pydantic_type_names(self):
+        t = self._step(GadgetPipeline)["transformation"]
+        assert t["input_type"] == "PlainInput"
+        assert t["output_type"] == "PlainOutput"
+
+    def test_no_transformation_is_none(self):
+        """Step without transformation has transformation=None."""
+        step = self._step(WidgetPipeline)
+        assert step["transformation"] is None

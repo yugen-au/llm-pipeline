@@ -43,3 +43,27 @@ TestBrokenStrategy        - error dict not exception, broken+ok strategy coexist
 - [x] All 12 PLAN.md test cases covered
 - [x] No DB, LLM, or FastAPI imports in test file
 - [x] Cache isolation via autouse fixture
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] No test coverage for transformation code path: `PipelineIntrospector` transformation dict (input_type, input_schema, output_type, output_schema) never exercised
+
+### Changes Made
+#### File: `tests/test_introspection.py`
+Added two new pipeline fixtures (ScanPipeline with Pydantic types, GadgetPipeline with plain types) and a `TestTransformation` class with 11 tests covering:
+- transformation key present in step dict
+- transformation is not None when configured
+- class_name correct
+- Pydantic input/output type names
+- Pydantic input/output schemas contain `properties`
+- non-Pydantic input/output schemas return `{"type": class_name}`
+- non-Pydantic type names
+- step without transformation has `transformation=None`
+
+Also added `PipelineTransformation` import and per-step instruction classes (`ScanDetectionInstructions`, `GadgetDetectionInstructions`) to satisfy `step_definition` `{StepPrefix}Instructions` naming enforcement.
+
+### Verification
+- [x] `pytest tests/test_introspection.py` -> 43 passed, 0 failed (was 32)
