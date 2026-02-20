@@ -1,8 +1,8 @@
 ## Task: master-27-cli-entry-point
 ## Description: Implement llm-pipeline CLI entry point with ui command, --dev/--port/--db flags, uvicorn prod mode, Vite HMR dev mode
 
-## Phase: pending-merge
-## Status: in-progress
+## Phase: complete
+## Status: complete
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/27-cli-entry-point
