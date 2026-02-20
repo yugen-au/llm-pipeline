@@ -20,3 +20,7 @@
 | Introspection Patterns | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a73d13d | 58de2c5 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a5c0496 | e04ba1c | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a611855 | pending | - |
+| Create Introspection Module | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /llmstxt/pydantic_dev_llms-full_txt |
+| Update create_app | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Write Tests | backend-development:test-automator | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Export from init | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
