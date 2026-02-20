@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/27-cli-entry-point
 ## Plugins: python-development, backend-development
@@ -21,4 +21,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a4e15ce | 4f9eb70 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a6660cb | c7192db | - |
 | Create CLI Module | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a932ca2 | 2d801b6 | /encode/uvicorn,/fastapi/fastapi |
-| Create CLI Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Create CLI Tests | backend-development:test-automator | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
