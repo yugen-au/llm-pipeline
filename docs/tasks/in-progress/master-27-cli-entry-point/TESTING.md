@@ -3,7 +3,37 @@
 ## Summary
 **Status:** passed
 
-All 34 CLI tests pass. Full suite: 667/668 pass (1 pre-existing failure). No regressions from reload fix (commit 4700ac6). The WAL flaky failure from prior run did not recur.
+All 42 CLI tests pass. Full suite: 675/676 pass (1 pre-existing failure). No regressions from test quality fixes (commit ff8a055).
+
+---
+
+## Re-run After Test Quality Fixes (commit ff8a055)
+
+Changes to `tests/ui/test_cli.py`:
+1. `Path.exists` patching made targeted per-function (no longer global `pathlib.Path.exists` patch)
+2. Added SIGTERM handler registration tests (`test_sigterm_handler_registered_on_unix`, `test_sigterm_handler_skipped_when_no_sigterm`)
+3. Added `_create_dev_app` factory tests (`TestCreateDevApp`: 3 tests) and factory=True kwarg assertions (`test_uvicorn_called_with_factory_true`, `test_uvicorn_first_arg_is_factory_import_string`, `test_db_flag_sets_env_var`)
+
+Test count grew from 34 to 42 (+8 new tests).
+
+**All 42 CLI tests pass. Full suite: 675/676.**
+
+### Test Execution (post-quality-fix)
+**Pass Rate:** 42/42 (CLI tests); 675/676 (full suite)
+
+CLI-only run:
+```
+42 passed, 2 warnings in 0.22s
+```
+
+Full suite run:
+```
+1 failed, 675 passed, 3 warnings in 10.46s
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
+```
+
+### Failed Tests (post-quality-fix)
+None introduced. Only the pre-existing `test_events_router_prefix` failure remains.
 
 ---
 
