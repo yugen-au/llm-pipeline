@@ -5,3 +5,7 @@
 [2026-02-20 20:15:00] [INFO] Created: STATE.md
 [2026-02-20 20:15:00] [INFO] ============================================================
 [2026-02-20 20:15:01] [DEBUG] STATE.md atomic write complete
+[2026-02-20 20:15:45] [ERROR] BLOCKED: Invalid AgentRow 'Codebase Structure Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-20 20:15:58] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-20 20:15:58] [INFO] Auto-updated agent statuses: Codebase Structure Research: pending -> in-progress, FastAPI + Uvicorn Patterns: pending -> in-progress
+[2026-02-20 20:15:58] [DEBUG] STATE.md atomic write complete
