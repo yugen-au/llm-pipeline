@@ -20,3 +20,5 @@
 | FastAPI + Uvicorn Patterns | backend-development:backend-architect | research | 2 | - | A | complete | 0 | aebf17d | 86673d8 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a4e15ce | 4f9eb70 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a6660cb | pending | - |
+| Create CLI Module | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /encode/uvicorn,/fastapi/fastapi |
+| Create CLI Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | - |
