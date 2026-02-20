@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Both research steps are well-aligned and accurate. All key claims verified against actual source code (create_app signature, import guard, pyproject.toml state, absence of cli.py and frontend/). Two contradictions found between research steps (argparse pattern) and between task 27 spec and task 28 scope (pyproject.toml ownership). Three hidden assumptions surfaced requiring clarification. Research is solid foundation for planning once questions are resolved.
+Both research steps are well-aligned and accurate. All key claims verified against actual source code (create_app signature, import guard, pyproject.toml state, absence of cli.py and frontend/). Two contradictions found and resolved: argparse pattern (subparsers confirmed), pyproject.toml ownership (task 28 confirmed). Dev mode behavior clarified as auto-detect (Vite if frontend/ exists, uvicorn --reload otherwise). Research is solid foundation for planning.
 
 ## Domain Findings
 
@@ -45,8 +45,8 @@ Both research steps are well-aligned and accurate. All key claims verified again
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| 1. `--dev` without frontend: hard error or fallback to uvicorn reload mode? | PENDING | Determines dev mode implementation complexity |
-| 2. Subparsers vs positional command for argparse? | PENDING | Affects CLI UX and extensibility |
+| 1. `--dev` without frontend: hard error or fallback to uvicorn reload mode? | Auto-detect: if frontend/ exists start Vite+FastAPI, otherwise uvicorn --reload only. Frontend not required -- headless/backend-only is valid production use case. | Dev mode has two code paths: with-frontend (Vite subprocess + FastAPI) and without-frontend (uvicorn --reload only). Both must be implemented and tested. |
+| 2. Subparsers vs positional command for argparse? | Subparsers confirmed. Extensible for future commands like `llm-pipeline run`. | Use `parser.add_subparsers(dest="command")` pattern. Resolves contradiction between research steps 1 and 2 in favor of step 2. |
 
 ## Assumptions Validated
 - [x] create_app() accepts db_path and maps cleanly to --db CLI flag
@@ -57,19 +57,21 @@ Both research steps are well-aligned and accurate. All key claims verified again
 - [x] Task 28 owns pyproject.toml changes (not task 27), despite task 27 spec including it
 - [x] Default port 8642 per task spec
 - [x] atexit + try/finally is sufficient for Vite subprocess cleanup on both Unix and Windows
-- [x] 127.0.0.1 for dev (Vite proxy only), 0.0.0.0 for prod -- security-appropriate defaults
+- [x] 127.0.0.1 for dev, 0.0.0.0 for prod -- security-appropriate defaults
+- [x] Dev mode auto-detects frontend: Vite+FastAPI if frontend/ exists, uvicorn --reload if not (CEO confirmed)
+- [x] Subparsers for argparse, not positional command (CEO confirmed)
 
 ## Open Items
-- Testing strategy for cli.py not addressed in either research step (mocking uvicorn.run, subprocess.Popen)
-- No --host flag proposed; hardcoded 0.0.0.0 (prod) / 127.0.0.1 (dev). Acceptable per task spec but noted.
+- Testing strategy for cli.py not addressed in either research step -- planning must define mock approach for uvicorn.run, subprocess.Popen, and both dev-mode paths
+- No --host flag proposed; hardcoded 0.0.0.0 (prod) / 127.0.0.1 (dev). Acceptable per task spec but noted for future extensibility.
 - No --verbose / --log-level flag proposed. Out of scope per task spec.
-- Node.js/npm availability not validated before `npx vite` -- should add check with helpful error message
 - `proc.kill()` on Windows is same as `proc.terminate()` (no SIGKILL equivalent) -- cleanup timeout is cosmetic on Windows
 
 ## Recommendations for Planning
-1. Use subparsers pattern for argparse (more extensible, better help output, idiomatic)
-2. Implement dev-mode frontend check as hard error with clear message pointing to frontend setup
-3. Add Node.js/npx availability check before attempting Vite subprocess launch
-4. Plan test file `tests/test_cli.py` with mocked uvicorn.run and subprocess.Popen
+1. Use subparsers pattern for argparse (CEO confirmed, extensible for future `llm-pipeline run` etc.)
+2. Dev mode: auto-detect frontend/ directory. If present: Vite subprocess on port+1 + FastAPI on port. If absent: uvicorn with --reload on port only, print info message about headless mode.
+3. Add Node.js/npx availability check before Vite subprocess launch (only when frontend/ exists)
+4. Plan test file `tests/test_cli.py` with mocked uvicorn.run and subprocess.Popen -- cover both dev-mode paths (with and without frontend/)
 5. Mount StaticFiles in cli.py (_run_prod_mode), not in create_app -- keeps factory focused
 6. Do NOT modify pyproject.toml -- defer to task 28
+7. Prod mode: also auto-detect dist/ for static files. If missing, serve API-only with warning (headless mode).
