@@ -226,3 +226,47 @@ def trigger_run(
     background_tasks.add_task(run_pipeline)
 
     return TriggerRunResponse(run_id=run_id, status="accepted")
+
+
+# ---------------------------------------------------------------------------
+# Context evolution models + endpoint
+# ---------------------------------------------------------------------------
+
+
+class ContextSnapshot(BaseModel):
+    step_name: str
+    step_number: int
+    context_snapshot: dict
+
+
+class ContextEvolutionResponse(BaseModel):
+    run_id: str
+    snapshots: List[ContextSnapshot]
+
+
+@router.get("/{run_id}/context", response_model=ContextEvolutionResponse)
+def get_context_evolution(run_id: str, db: DBSession) -> ContextEvolutionResponse:
+    """Context snapshot at each step, ordered by step number."""
+    stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
+    run = db.exec(stmt).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    steps_stmt = (
+        select(PipelineStepState)
+        .where(PipelineStepState.run_id == run_id)
+        .order_by(PipelineStepState.step_number)
+    )
+    steps = db.exec(steps_stmt).all()
+
+    return ContextEvolutionResponse(
+        run_id=run_id,
+        snapshots=[
+            ContextSnapshot(
+                step_name=s.step_name,
+                step_number=s.step_number,
+                context_snapshot=s.context_snapshot,
+            )
+            for s in steps
+        ],
+    )
