@@ -1,9 +1,9 @@
 ## Task: master-27-cli-entry-point
 ## Description: Implement llm-pipeline CLI entry point with ui command, --dev/--port/--db flags, uvicorn prod mode, Vite HMR dev mode
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: B
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/27-cli-entry-point
 ## Plugins: python-development, backend-development
@@ -22,3 +22,4 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a6660cb | c7192db | - |
 | Create CLI Module | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a932ca2 | 2d801b6 | /encode/uvicorn,/fastapi/fastapi |
 | Create CLI Tests | backend-development:test-automator | implementation | 2 | - | B | complete | 0 | a95fdc9 | 33d1d8d | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
