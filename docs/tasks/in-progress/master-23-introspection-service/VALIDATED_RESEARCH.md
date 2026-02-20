@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Validated research findings from step-1 (codebase architecture) and step-2 (introspection patterns) against actual source code. Core claims hold: ClassVar-based introspection works, strategy instantiation is safe, Pydantic schema extraction is viable. Found 2 critical integration issues (file placement behind FastAPI guard, pipeline_registry type mismatch), 2 medium issues (regex inconsistency, non-Pydantic transformation types), and 1 minor issue (StepDefinition type annotation vs runtime behavior).
+Validated research findings from step-1 (codebase architecture) and step-2 (introspection patterns) against actual source code. Core claims hold: ClassVar-based introspection works, strategy instantiation is safe, Pydantic schema extraction is viable. Two critical integration issues identified and RESOLVED via CEO decisions: file placement moved to `llm_pipeline/introspection.py` (avoids FastAPI guard), and `create_app()` will accept a separate `Dict[str, Type[PipelineConfig]]` for introspection. Three medium/minor implementation concerns remain as actionable recommendations (not blockers).
 
 ## Domain Findings
 
@@ -50,24 +50,21 @@ CAVEAT: `PipelineTransformation.INPUT_TYPE/OUTPUT_TYPE` may be non-Pydantic type
 
 VALIDATED: `dir(extraction_class) - dir(PipelineExtraction)` correctly discovers custom methods on the class level. Works equivalently to the instance-level `dir(self)` in the actual `extract()` method since methods are defined on the class.
 
-### Pipeline Registry Integration Gap
-**Source:** step-1
+### Pipeline Registry Integration (RESOLVED)
+**Source:** step-1, CEO decision
 
-`create_app()` signature: `pipeline_registry: Optional[dict] = None` with docstring: "factory has signature `(run_id, engine) -> pipeline`". This stores **factory callables**, not `Type[PipelineConfig]`. Task 24 expects `_pipeline_registry: Dict[str, Type[PipelineConfig]]`. The introspector needs class types for ClassVar access. These are incompatible unless:
-- Pipeline classes are callable (they are, but `__init__` has side effects)
-- Registry stores both factory and type
-- Separate registration mechanism added
+`create_app()` currently stores factory callables `(run_id, engine) -> pipeline`, not `Type[PipelineConfig]`. CEO decision: `create_app()` will accept an **additional** `Dict[str, Type[PipelineConfig]]` parameter for introspection, keeping the existing factory registry unchanged. Task 24 will implement this second parameter.
 
-### File Placement: FastAPI Import Guard
-**Source:** validated against llm_pipeline/ui/__init__.py
+### File Placement (RESOLVED)
+**Source:** validated against llm_pipeline/ui/__init__.py, CEO decision
 
-`ui/__init__.py` raises `ImportError` if FastAPI not installed. Importing `llm_pipeline.ui.introspection` triggers this guard (Python executes `__init__.py` when importing any submodule). This means introspection is unusable without FastAPI, contradicting the "no dependencies" goal. The introspector has zero FastAPI dependency - it's pure Python + Pydantic.
+CEO decision: `introspection.py` lives at `llm_pipeline/introspection.py` (NOT `ui/`). This avoids the FastAPI import guard in `ui/__init__.py` and allows introspection without FastAPI installed. Pure Python + Pydantic dependency only. Research step-2 imports section needs updating: `from llm_pipeline.introspection import PipelineIntrospector` (not `from llm_pipeline.ui.introspection`).
 
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should introspection.py live outside ui/ to avoid FastAPI dependency? | PENDING | If yes, changes file location and import paths for task 24 |
-| How will pipeline classes be registered for introspection given app.state.pipeline_registry stores factory callables not types? | PENDING | Determines integration approach between tasks 23 and 24 |
+| Should introspection.py live outside ui/ to avoid FastAPI dependency? | YES - `llm_pipeline/introspection.py` | Changes file location from research proposal. All import paths in task 23/24 must reference `llm_pipeline.introspection` not `llm_pipeline.ui.introspection`. Task 24 route imports from top-level package. |
+| How will pipeline classes be registered for introspection given app.state.pipeline_registry stores factory callables not types? | Separate `Dict[str, Type[PipelineConfig]]` param on `create_app()` | Task 24 adds new parameter alongside existing factory registry. No changes to existing factory-based pipeline execution. Introspector receives class types directly. |
 
 ## Assumptions Validated
 - [x] ClassVar attributes accessible without instantiation (verified all 7 class types)
@@ -80,18 +77,18 @@ VALIDATED: `dir(extraction_class) - dir(PipelineExtraction)` correctly discovers
 - [x] PipelineTransformation.__init__() requires pipeline instance - must avoid
 - [x] StepDefinition.create_step() requires DB - must avoid
 - [x] LLMResultMixin.example validated at import time, safe to read
+- [x] File placement at `llm_pipeline/introspection.py` avoids FastAPI guard (CEO confirmed)
+- [x] Separate introspection registry `Dict[str, Type[PipelineConfig]]` on create_app() (CEO confirmed)
 
 ## Open Items
-- File placement: `llm_pipeline/ui/introspection.py` blocked by FastAPI import guard for non-UI usage
-- Pipeline registry type: factory callable vs Type[PipelineConfig] mismatch between app.state and introspector needs
-- Concrete strategy __init__ overrides: need defensive try/except around `strategy_class()`
-- Transformation INPUT_TYPE/OUTPUT_TYPE: need type-check before calling model_json_schema()
-- Naming regex: must use per-class-type regex (single for pipeline/step, double for strategy)
+- Concrete strategy __init__ overrides: need defensive try/except around `strategy_class()` (implementation detail, not a blocker)
+- Transformation INPUT_TYPE/OUTPUT_TYPE: need BaseModel subclass check before model_json_schema() (implementation detail, not a blocker)
+- Naming regex: must use per-class-type regex - single for pipeline/step, double for strategy (implementation detail, not a blocker)
 
 ## Recommendations for Planning
-1. Resolve file placement before implementation - either move to `llm_pipeline/introspection.py` or make `ui/__init__.py` guard conditional (lazy import)
-2. Define pipeline registration contract for introspection: should `create_app()` accept `Dict[str, Type[PipelineConfig]]` separately from factory registry?
-3. Wrap strategy instantiation in try/except with clear error reporting for strategies with custom __init__
-4. Add BaseModel subclass check before calling model_json_schema() on transformation types
-5. Use correct per-class regex functions (extract from source or import from respective modules to avoid drift)
-6. Consider exposing model-to-step and step-to-transformation mappings from execution order for richer metadata
+1. File: `llm_pipeline/introspection.py` - imports only from core `llm_pipeline` modules (pipeline, extraction, transformation, strategy, context), no ui/FastAPI/DB imports
+2. Wrap `strategy_class()` in try/except to handle potential custom __init__ overrides gracefully
+3. Guard `model_json_schema()` calls with `issubclass(cls, BaseModel)` check; fall back to `type.__name__` for non-Pydantic types like DataFrame
+4. Use correct per-class regex: import or replicate the exact regex from each module (`pipeline.py` single-regex, `strategy.py` double-regex, `step.py` single-regex) to avoid naming drift
+5. Consider exposing model-to-step and step-to-transformation mappings from execution order for richer metadata output
+6. Task 24 scope: add `introspection_registry: Optional[Dict[str, Type[PipelineConfig]]]` param to `create_app()`, store on `app.state`, route imports `PipelineIntrospector` from `llm_pipeline.introspection`
