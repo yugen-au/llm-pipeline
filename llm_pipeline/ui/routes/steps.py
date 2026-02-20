@@ -92,6 +92,8 @@ def list_steps(run_id: str, db: DBSession) -> StepListResponse:
 @router.get("/{step_number}", response_model=StepDetail)
 def get_step(run_id: str, step_number: int, db: DBSession) -> StepDetail:
     """Full detail for a single step, looked up by run_id + step_number."""
+    _get_run_or_404(db, run_id)
+
     stmt = (
         select(PipelineStepState)
         .where(

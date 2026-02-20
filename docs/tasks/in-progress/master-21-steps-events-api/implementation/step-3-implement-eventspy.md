@@ -48,3 +48,28 @@ Full implementation with:
 [x] Uses `List[T]` style (consistent with runs.py)
 [x] Count query includes event_type WHERE clause when filter provided
 [x] Data query ordered by PipelineEventRecord.timestamp
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] LOW: `_get_run_or_404` missing docstring in events.py (steps.py has `"""Return run or raise 404."""`)
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/events.py`
+Added docstring to `_get_run_or_404` for consistency with steps.py.
+```
+# Before
+def _get_run_or_404(db: DBSession, run_id: str) -> PipelineRun:
+    stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
+
+# After
+def _get_run_or_404(db: DBSession, run_id: str) -> PipelineRun:
+    """Return run or raise 404."""
+    stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
+```
+
+### Verification
+[x] Docstring matches steps.py exactly
+[x] Import still succeeds

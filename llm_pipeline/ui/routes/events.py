@@ -50,6 +50,7 @@ class EventListParams(BaseModel):
 
 
 def _get_run_or_404(db: DBSession, run_id: str) -> PipelineRun:
+    """Return run or raise 404."""
     stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
     run = db.exec(stmt).first()
     if run is None:

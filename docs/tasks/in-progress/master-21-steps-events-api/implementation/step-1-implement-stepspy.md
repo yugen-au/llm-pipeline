@@ -39,3 +39,41 @@ Full module with:
 [x] Existing test_runs.py passes (23 passed, 0 regressions)
 [x] Uses sync def, DBSession, List[T], BaseModel -- matches runs.py patterns
 [x] All 13 PipelineStepState data columns mapped in StepDetail
+
+---
+
+# REVIEW FIX - STEP 1: IMPLEMENT STEPS.PY
+**Status:** completed
+
+## Summary
+Added run existence check to `get_step` so missing run returns "Run not found" (404) distinct from missing step "Step not found" (404).
+
+## Files
+**Created:** none
+**Modified:** llm_pipeline/ui/routes/steps.py
+**Deleted:** none
+
+## Changes
+### File: `llm_pipeline/ui/routes/steps.py`
+Added `_get_run_or_404(db, run_id)` call at top of `get_step` before step query.
+
+```
+# Before
+def get_step(run_id: str, step_number: int, db: DBSession) -> StepDetail:
+    """Full detail for a single step, looked up by run_id + step_number."""
+    stmt = (
+
+# After
+def get_step(run_id: str, step_number: int, db: DBSession) -> StepDetail:
+    """Full detail for a single step, looked up by run_id + step_number."""
+    _get_run_or_404(db, run_id)
+
+    stmt = (
+```
+
+## Decisions
+None
+
+## Verification
+[x] get_step now raises "Run not found" for missing run, "Step not found" for missing step
+[x] test_runs.py still passes (23 passed, 0 regressions)
