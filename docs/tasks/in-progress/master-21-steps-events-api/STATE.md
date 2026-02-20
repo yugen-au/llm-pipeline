@@ -24,7 +24,7 @@
 | Add context evolution to runs.py | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | a928164 | d599ac8 | - |
 | Implement events.py | backend-development:backend-architect | implementation | 3 | - | A | complete | 1 | a6ddaac | e3a3165,d599ac8,19310e8 | - |
 | Extend conftest.py with event seeds | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a8baf2c | be13488,f2e9f24 | - |
-| Create test_steps.py | python-development:python-pro | implementation | 5 | - | B | in-progress | 0 | a0bdeba | be13488,f2e9f24 | - |
+| Create test_steps.py | python-development:python-pro | implementation | 5 | - | B | in-progress | 1 | a0bdeba | be13488,f2e9f24 | - |
 | Create test_events.py | python-development:python-pro | implementation | 6 | - | B | complete | 0 | a03aaa9 | f2e9f24 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a2a22b4 | c6ebcd9 | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a274ce8 | 4faebe2 | - |
