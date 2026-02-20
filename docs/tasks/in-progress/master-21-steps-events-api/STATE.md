@@ -1,7 +1,7 @@
 ## Task: master-21-steps-events-api
 ## Description: REST endpoints for step details, context evolution, and events for pipeline runs
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [1,3,5]
 ## Work Mode: standard
-## Last Updated: 2026-02-20 11:25
+## Last Updated: 2026-02-20 11:26
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -27,4 +27,5 @@
 | Create test_steps.py | python-development:python-pro | implementation | 5 | - | B | complete | 1 | a0bdeba | be13488,f2e9f24,e7cf419 | - |
 | Create test_events.py | python-development:python-pro | implementation | 6 | - | B | complete | 0 | a03aaa9 | f2e9f24 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a2a22b4 | c6ebcd9,080c457 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | a274ce8 | 4faebe2 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | complete | 1 | a274ce8 | 4faebe2,6a8d2d6 | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
