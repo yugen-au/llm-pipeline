@@ -10,3 +10,8 @@
 [2026-02-20 13:15:39] [INFO] STATE.md updated: phase=research, status=in-progress
 [2026-02-20 13:15:39] [INFO] Auto-updated agent statuses: WebSocket Architecture Research: pending -> in-progress, FastAPI WebSocket Patterns: pending -> in-progress
 [2026-02-20 13:15:39] [DEBUG] STATE.md atomic write complete
+[2026-02-20 13:16:01] [INFO] Task call: backend-development:backend-architect (phase: research)
+[2026-02-20 13:16:08] [INFO] Task call: python-development:fastapi-pro (phase: research)
+[2026-02-20 13:20:54] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-20 13:21:32] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-20 13:23:11] [DEBUG] STATE.md atomic write complete
