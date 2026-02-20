@@ -23,4 +23,4 @@
 | Create CLI Module | python-development:python-pro | implementation | 1 | - | A | complete | 1 | a932ca2 | 2d801b6,4700ac6 | /encode/uvicorn,/fastapi/fastapi |
 | Create CLI Tests | backend-development:test-automator | implementation | 2 | - | B | complete | 1 | a95fdc9 | 33d1d8d,ff8a055 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 2 | a6e58ed | 3995fa2,bbbead2,aae82c2 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | a8f0322 | ffaafc8,79f39ba | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 2 | a8f0322 | ffaafc8,79f39ba | - |
