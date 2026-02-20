@@ -63,3 +63,65 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is correct, well-tested, and follows all architecture decisions. The medium issue (double instantiation) is a minor optimization opportunity that does not affect correctness and is masked by caching. No required changes.
+
+---
+
+# Architecture Re-Review (post-fix)
+
+## Overall Assessment
+**Status:** complete
+All 3 fixed issues verified resolved. 43/43 tests pass (up from 32). Implementation is clean with no remaining issues beyond the one accepted LOW (extra metadata fields, left as-is per design decision).
+
+## Issues Re-Verified
+
+### MEDIUM - Double strategy instantiation: RESOLVED
+**Commits:** 272e37c
+**Verification:** `get_metadata()` now instantiates each strategy once into a `resolved` list (L221-228). `_introspect_strategy()` receives pre-resolved `step_defs` (L118). Execution order loop (L246-253) reuses same `resolved` tuples. No double instantiation. Error path also correctly handled -- errored strategies get `(s_cls, None, exc)` tuple and are skipped in execution_order (L247-248).
+
+### LOW - No transformation test coverage: RESOLVED
+**Commits:** 9580bbe
+**Verification:** `TestTransformation` class (L477-528) adds 11 tests across 3 pipelines: `ScanPipeline` (Pydantic transformation with `TransformInput`/`TransformOutput`), `GadgetPipeline` (non-Pydantic with `PlainInput`/`PlainOutput`), and `WidgetPipeline` (no transformation, asserts `None`). Covers class_name, type names, Pydantic schema extraction, non-Pydantic fallback, and null case.
+
+### LOW - Redundant "extract" filter: RESOLVED
+**Commits:** 272e37c
+**Verification:** `_get_extraction_methods()` L106-111 now filters only `callable` + `not startswith("_")`. The `m != "extract"` guard is removed; set difference with `dir(PipelineExtraction)` already excludes it.
+
+### LOW - Extra metadata fields: ACCEPTED (no change)
+Step entries still include `context_class`, `context_schema`, `action_after`. Left as-is per original review rationale (task 24 will consume these).
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+#### Extra metadata fields beyond plan specification (accepted)
+**Step:** 1 (item 10)
+**Details:** Carried forward from initial review. Step entries include `context_class`, `context_schema`, `action_after` not in PLAN.md spec. Defensible for task 24 downstream consumption. No action required.
+
+## Review Checklist
+[x] Architecture patterns followed - single-instantiation refactor maintains clean separation; resolved tuple pattern is idiomatic
+[x] Code quality and maintainability - _introspect_strategy signature change is clear; docstring updated to explain pre-resolved step_defs
+[x] Error handling present - error tuple path (L227-228) correctly propagated to both strategy metadata (L232-239) and execution_order skip (L247-248)
+[x] No hardcoded values - unchanged
+[x] Project conventions followed - unchanged
+[x] Security considerations - unchanged
+[x] Properly scoped (DRY, YAGNI, no over-engineering) - refactor is minimal and targeted; no unnecessary abstractions added
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/introspection.py | pass | 267 lines; strategy instantiation refactored to single-pass; redundant filter removed; clean tuple-based resolved pattern |
+| tests/test_introspection.py | pass | 43 tests across 9 test classes (up from 32/8); TestTransformation covers Pydantic, non-Pydantic, and null transformation paths |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previously identified issues resolved or explicitly accepted. Test coverage increased from 32 to 43 tests. Implementation quality improved. No regressions.
