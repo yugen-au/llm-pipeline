@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-21-steps-events-api
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-2-add-context-evolution-to-runspy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-5-create-teststepspy.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 2 - implement ONLY this step, not others
+- Step: 5 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-2-add-context-evolution-to-runspy.md
+4. Document decisions in implementation\step-5-create-teststepspy.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 2: ADD CONTEXT EVOLUTION TO RUNS.PY
+# IMPLEMENTATION - STEP 5: CREATE TEST_STEPS.PY
 **Status:** [completed/failed/blocked]
 
 ## Summary
