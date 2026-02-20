@@ -9,6 +9,7 @@ from starlette.testclient import TestClient
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.ui.app import create_app
 from llm_pipeline.state import PipelineRun, PipelineStepState
+from llm_pipeline.events.models import PipelineEventRecord
 
 
 def _utc(offset_seconds: int = 0) -> datetime:
@@ -136,6 +137,42 @@ def seeded_app_client():
         session.add(step1)
         session.add(step2)
         session.add(step3)
+        session.commit()
+
+    # Seed events for RUN_1 only (RUN_2 and RUN_3 have no events)
+    with Session(engine) as session:
+        evt1 = PipelineEventRecord(
+            run_id="aaaaaaaa-0000-0000-0000-000000000001",
+            event_type="pipeline_started",
+            pipeline_name="alpha_pipeline",
+            timestamp=_utc(-298),
+            event_data={"event_type": "pipeline_started", "run_id": "aaaaaaaa-0000-0000-0000-000000000001"},
+        )
+        evt2 = PipelineEventRecord(
+            run_id="aaaaaaaa-0000-0000-0000-000000000001",
+            event_type="step_started",
+            pipeline_name="alpha_pipeline",
+            timestamp=_utc(-297),
+            event_data={"event_type": "step_started", "run_id": "aaaaaaaa-0000-0000-0000-000000000001", "step_name": "step_a"},
+        )
+        evt3 = PipelineEventRecord(
+            run_id="aaaaaaaa-0000-0000-0000-000000000001",
+            event_type="step_completed",
+            pipeline_name="alpha_pipeline",
+            timestamp=_utc(-294),
+            event_data={"event_type": "step_completed", "run_id": "aaaaaaaa-0000-0000-0000-000000000001", "step_name": "step_a"},
+        )
+        evt4 = PipelineEventRecord(
+            run_id="aaaaaaaa-0000-0000-0000-000000000001",
+            event_type="pipeline_completed",
+            pipeline_name="alpha_pipeline",
+            timestamp=_utc(-291),
+            event_data={"event_type": "pipeline_completed", "run_id": "aaaaaaaa-0000-0000-0000-000000000001"},
+        )
+        session.add(evt1)
+        session.add(evt2)
+        session.add(evt3)
+        session.add(evt4)
         session.commit()
 
     with TestClient(app) as client:
