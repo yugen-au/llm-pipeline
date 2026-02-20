@@ -25,4 +25,4 @@
 | Implement events.py | backend-development:backend-architect | implementation | 3 | - | A | complete | 0 | a6ddaac | e3a3165,d599ac8 | - |
 | Extend conftest.py with event seeds | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a8baf2c | be13488 | - |
 | Create test_steps.py | python-development:python-pro | implementation | 5 | - | B | complete | 0 | a0bdeba | be13488 | - |
-| Create test_events.py | python-development:python-pro | implementation | 6 | - | B | in-progress | 0 | pending | pending | - |
+| Create test_events.py | python-development:python-pro | implementation | 6 | - | B | complete | 0 | a03aaa9 | pending | - |
