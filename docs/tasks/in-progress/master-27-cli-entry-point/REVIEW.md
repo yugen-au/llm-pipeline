@@ -134,3 +134,79 @@ The HIGH issue (uvicorn reload with app instance) is fully resolved. The fix use
 ## Recommendation
 **Decision:** APPROVE
 The HIGH issue is resolved correctly. Remaining issues are MEDIUM and LOW severity, none blocking. The implementation is clean, well-structured, and aligned with project architecture. The factory pattern for uvicorn reload is the standard approach and works correctly.
+
+---
+
+# Architecture Re-Review (Post-Fix: commit ff8a055)
+
+## Overall Assessment
+**Status:** complete
+All 3 remaining issues from previous reviews are resolved. Test suite grew from 34 to 42 tests, all passing. Path.exists patching is now targeted, SIGTERM handler has both positive and negative tests, and `_create_dev_app` factory has full unit test coverage.
+
+## Fix Verification
+
+### MEDIUM - Path.exists patch overly broad: RESOLVED
+**Changes reviewed:**
+1. Removed global `patch("pathlib.Path.exists", return_value=False/True)` from all test classes
+2. New `_path_exists_side_effect(frontend_exists, dist_exists)` helper returns a `side_effect` callable that intercepts only `frontend/` and `dist/` path checks, delegating all others to `real_exists = Path.exists` (captured before patch applies)
+3. Three convenience constructors: `_only_frontend_missing()`, `_only_dist_missing()`, `_both_present()` -- clear semantics
+4. All call sites now use `patch.object(Path, "exists", <helper>())` instead of global boolean
+5. `real_exists` is correctly captured at helper call time (before `with patch(...)` enters), so fallthrough to real filesystem works
+
+**Assessment:** Clean, well-structured fix. Side-effect approach is the standard pattern for targeted Path mocking. The helper names clearly communicate intent.
+
+### MEDIUM - No test for SIGTERM handler registration: RESOLVED
+**Changes reviewed:**
+1. `test_sigterm_handler_registered_on_unix` -- verifies `signal.signal(SIGTERM, <callable>)` is called when SIGTERM attr exists on the mocked signal module
+2. `test_sigterm_handler_skipped_when_no_sigterm` -- uses `MagicMock(spec=["signal"])` to create a signal module mock where `hasattr(mock, "SIGTERM")` returns False, verifying the Windows guard skips registration
+3. `_run_full_dev` now patches `llm_pipeline.ui.cli.signal` with a mock that has `SIGTERM` set, and exposes `mock_signal_signal` in the result dict
+
+**Assessment:** Both branches of the `hasattr(signal, "SIGTERM")` guard are now tested. The `spec=["signal"]` approach to simulate missing SIGTERM is correct and idiomatic.
+
+### LOW - No test coverage for _create_dev_app factory: RESOLVED
+**Changes reviewed:**
+1. `TestCreateDevApp.test_reads_env_var_and_passes_to_create_app` -- verifies `LLM_PIPELINE_DB` env var flows to `create_app(db_path=...)`
+2. `TestCreateDevApp.test_passes_none_when_env_var_absent` -- verifies `db_path=None` when env var not set (uses `clear=True` to guarantee clean env)
+3. `TestCreateDevApp.test_returns_create_app_result` -- verifies factory returns what `create_app` returns (sentinel pattern)
+4. `TestDevModeNoFrontend.test_uvicorn_called_with_factory_true` -- asserts `factory=True` in uvicorn.run kwargs
+5. `TestDevModeNoFrontend.test_uvicorn_first_arg_is_factory_import_string` -- asserts first arg is `"llm_pipeline.ui.cli:_create_dev_app"`
+6. `TestDevModeNoFrontend.test_db_flag_sets_env_var` -- verifies `--db` flag sets `LLM_PIPELINE_DB` env var before uvicorn launch
+
+**Assessment:** Thorough coverage of the factory function and its integration with the headless dev path. The env var round-trip (CLI sets it, factory reads it) is tested end-to-end.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+#### Unused `result` variable in two TestCreateDevApp tests
+**Step:** 2 (fix)
+**Details:** `test_reads_env_var_and_passes_to_create_app` and `test_passes_none_when_env_var_absent` assign `result = _create_dev_app()` but never use `result`. Harmless (the call is needed for side-effects on mock_ca), but linters may flag it. Trivially fixable with `_create_dev_app()` (no assignment) or `_ = _create_dev_app()`.
+
+## Review Checklist
+[x] Architecture patterns followed -- targeted mocking, proper signal module isolation, factory unit tests
+[x] Code quality and maintainability -- helper functions with clear names, consistent test structure
+[x] Error handling present -- n/a for test-only changes
+[x] No hardcoded values -- test paths use recognizable dummy values (`/tmp/env.db`, `/tmp/x.db`)
+[x] Project conventions followed -- pytest style, class-based test grouping
+[x] Security considerations -- n/a for test-only changes
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- helper reuse across test classes, no over-abstraction
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `tests/ui/test_cli.py` | pass | 42 tests, all pass. All 3 prior issues resolved. 1 trivial unused-var nit (LOW). |
+| `llm_pipeline/ui/cli.py` | pass | No changes in this commit; prior approval stands. |
+
+## New Issues Introduced
+- Unused `result` variable in 2 TestCreateDevApp tests (LOW, Step 2)
+
+## Recommendation
+**Decision:** APPROVE
+All previously identified issues are resolved. Implementation and test suite are clean, well-structured, and comprehensive. The single remaining nit (unused variable) is cosmetic and does not affect correctness. Full approval for merge.
