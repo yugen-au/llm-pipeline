@@ -1,5 +1,7 @@
 """FastAPI application factory for llm-pipeline UI."""
-from typing import Optional
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Dict, Optional, Type
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,11 +9,15 @@ from sqlmodel import create_engine
 
 from llm_pipeline.db import init_pipeline_db
 
+if TYPE_CHECKING:
+    from llm_pipeline.pipeline import PipelineConfig
+
 
 def create_app(
     db_path: Optional[str] = None,
     cors_origins: Optional[list] = None,
     pipeline_registry: Optional[dict] = None,
+    introspection_registry: Optional[Dict[str, Type[PipelineConfig]]] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -25,6 +31,10 @@ def create_app(
             ``(run_id: str, engine: Engine) -> pipeline`` where the
             returned object exposes ``.execute()`` and ``.save()``.
             Used by POST /api/runs to trigger pipelines.
+        introspection_registry: Optional mapping of pipeline names to
+            PipelineConfig subclass types for class-level introspection.
+            Separate from pipeline_registry which stores factory callables.
+            Consumed by introspection endpoints (task 24).
 
     Returns:
         Configured FastAPI application instance.
@@ -52,6 +62,7 @@ def create_app(
         app.state.engine = init_pipeline_db()
 
     app.state.pipeline_registry = pipeline_registry or {}
+    app.state.introspection_registry = introspection_registry or {}
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router
