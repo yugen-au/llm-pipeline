@@ -1,7 +1,7 @@
 ## Task: master-25-websocket-live-events
 ## Description: WebSocket endpoint for real-time event streaming during pipeline execution. FastAPI WebSocket handler supporting 100+ concurrent connections with heartbeat, per-run event queues, and batch replay for completed runs.
 
-## Phase: research
+## Phase: validate
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -16,5 +16,6 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| WebSocket Architecture Research | backend-development:backend-architect | research | 1 | - | A | complete | 0 | a7f719a | pending | - |
-| FastAPI WebSocket Patterns | python-development:fastapi-pro | research | 2 | - | A | complete | 0 | ae2c92c | pending | - |
+| WebSocket Architecture Research | backend-development:backend-architect | research | 1 | - | A | complete | 0 | a7f719a | 2531d86 | - |
+| FastAPI WebSocket Patterns | python-development:fastapi-pro | research | 2 | - | A | complete | 0 | ae2c92c | 2531d86 | - |
+| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | in-progress | 0 | pending | pending | - |
