@@ -1,5 +1,6 @@
 """WebSocket route module for real-time pipeline event streaming."""
 import asyncio
+import queue as thread_queue
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
@@ -25,16 +26,16 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         self._connections: dict[str, list[WebSocket]] = defaultdict(list)
-        self._queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
+        self._queues: dict[str, list[thread_queue.Queue]] = defaultdict(list)
 
-    def connect(self, run_id: str, ws: WebSocket) -> asyncio.Queue:
+    def connect(self, run_id: str, ws: WebSocket) -> thread_queue.Queue:
         """Register a client, return its dedicated event queue."""
-        queue: asyncio.Queue = asyncio.Queue()
+        queue: thread_queue.Queue = thread_queue.Queue()
         self._connections[run_id].append(ws)
         self._queues[run_id].append(queue)
         return queue
 
-    def disconnect(self, run_id: str, ws: WebSocket, queue: Optional[asyncio.Queue]) -> None:
+    def disconnect(self, run_id: str, ws: WebSocket, queue: Optional[thread_queue.Queue]) -> None:
         """Unregister a client. Safe to call even if never connected."""
         conns = self._connections.get(run_id)
         if conns and ws in conns:
@@ -85,12 +86,12 @@ async def _get_persisted_events(engine, run_id: str) -> list[dict]:
     return await asyncio.to_thread(_query)
 
 
-async def _stream_events(websocket: WebSocket, queue: asyncio.Queue, run_id: str) -> None:
+async def _stream_events(websocket: WebSocket, queue: thread_queue.Queue, run_id: str) -> None:
     """Stream live events from queue with heartbeat on inactivity."""
     while True:
         try:
-            event = await asyncio.wait_for(queue.get(), timeout=HEARTBEAT_INTERVAL_S)
-        except asyncio.TimeoutError:
+            event = await asyncio.to_thread(queue.get, True, HEARTBEAT_INTERVAL_S)
+        except thread_queue.Empty:
             await websocket.send_json({
                 "type": "heartbeat",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -111,7 +112,7 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str) -> None:
     - Unknown run_id: error message then close with 4004.
     """
     await websocket.accept()
-    queue: Optional[asyncio.Queue] = None
+    queue: Optional[thread_queue.Queue] = None
     try:
         engine = websocket.app.state.engine
 
