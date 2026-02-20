@@ -67,3 +67,70 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve after fixing the HIGH issue: `reload=True` with an app instance object does not work in uvicorn. The headless dev mode path (`_run_dev_mode` without frontend/) will log a uvicorn warning and not actually reload on file changes, defeating the purpose of `--dev` mode. All other aspects of the implementation are solid and well-aligned with the plan.
+
+---
+
+# Architecture Re-Review (Post-Fix: commit 4700ac6)
+
+## Overall Assessment
+**Status:** complete
+The HIGH issue (uvicorn reload with app instance) is fully resolved. The fix uses `factory=True` with an import string to `_create_dev_app`, passing `db_path` through `LLM_PIPELINE_DB` env var. All 34 tests pass. Implementation is architecturally sound.
+
+## Fix Verification
+
+### HIGH - uvicorn reload=True with app instance: RESOLVED
+**Commit:** 4700ac6
+**Changes reviewed:**
+1. `_run_dev_mode` signature changed from `(app, port)` to `(args)` -- correct, headless path no longer pre-creates app
+2. `_run_ui` now only calls `create_app` in prod path; dev path passes full `args` namespace
+3. Headless dev path sets `LLM_PIPELINE_DB` env var when `args.db` is provided, then calls `uvicorn.run("llm_pipeline.ui.cli:_create_dev_app", factory=True, ...)`
+4. New `_create_dev_app()` factory reads `LLM_PIPELINE_DB` from env and delegates to `create_app(db_path=...)`
+5. Verified `_create_dev_app` is importable from module path and returns a valid `FastAPI` instance
+
+**Assessment:** Clean fix. Env var approach aligns with existing `create_app` contract (which already documents `LLM_PIPELINE_DB` env var). The `factory=True` parameter tells uvicorn to call the function on each reload, which is correct.
+
+## Remaining Issues (unchanged from initial review)
+
+### Medium
+#### Path.exists patch is overly broad in tests
+**Step:** 2
+**Details:** Unchanged. Global `pathlib.Path.exists` patching is fragile but functional. Low risk.
+
+#### No test for SIGTERM handler registration on Unix
+**Step:** 2
+**Details:** Unchanged. Simple guard, low risk.
+
+### Low
+#### No test coverage for `_create_dev_app` factory or `factory=True` kwarg
+**Step:** 1 (fix)
+**Details:** The new `_create_dev_app()` function has no dedicated unit test. The headless dev tests (`TestDevModeNoFrontend`) verify `reload=True` is passed to `uvicorn.run` but do not assert that the first positional arg is the import string `"llm_pipeline.ui.cli:_create_dev_app"` or that `factory=True` is passed. The function itself is trivial (2 lines), so risk is low.
+
+#### Type annotation uses `object` instead of protocol or Union
+**Step:** 1
+**Details:** Unchanged. Minor polish item.
+
+#### Startup info message hardcodes "localhost" for Vite URL
+**Step:** 1
+**Details:** Unchanged. Very minor.
+
+## Review Checklist
+[x] Architecture patterns followed -- factory pattern for uvicorn reload, env var for config passthrough, clean separation maintained
+[x] Code quality and maintainability -- new factory function is minimal and well-documented
+[x] Error handling present -- all pre-existing error handling intact
+[x] No hardcoded values -- env var name `LLM_PIPELINE_DB` matches existing project convention
+[x] Project conventions followed -- stdlib-only top-level imports preserved
+[x] Security considerations -- no new security surface introduced
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- minimal fix, no unnecessary abstractions
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/ui/cli.py` | pass | HIGH issue resolved. Import string + factory=True pattern is correct. |
+| `tests/ui/test_cli.py` | pass | 34 tests pass. Missing _create_dev_app coverage (LOW). |
+
+## New Issues Introduced
+- No test for `_create_dev_app` factory or `factory=True` kwarg (LOW, Step 1)
+
+## Recommendation
+**Decision:** APPROVE
+The HIGH issue is resolved correctly. Remaining issues are MEDIUM and LOW severity, none blocking. The implementation is clean, well-structured, and aligned with project architecture. The factory pattern for uvicorn reload is the standard approach and works correctly.
