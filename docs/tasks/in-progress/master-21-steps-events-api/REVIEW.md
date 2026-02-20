@@ -70,3 +70,69 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is clean, consistent with existing patterns, well-tested, and follows all architecture decisions from PLAN.md. The medium-severity item (generic 404 in step detail) is an intentional tradeoff documented in the plan. No changes required.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+All 4 issues from the initial review have been resolved. 54/54 tests pass. No new issues introduced by the fixes.
+
+## Fix Verification
+
+### MEDIUM (resolved): `get_step` now validates run first
+**Step:** 1
+**Before:** Single query on `PipelineStepState` -- missing run returned "Step not found".
+**After:** `get_step` (line 95) now calls `_get_run_or_404(db, run_id)` before the step query. Missing run returns "Run not found", missing step returns "Step not found". Test `test_returns_404_for_nonexistent_run` (line 63) now asserts `detail == "Run not found"`.
+
+### LOW (resolved): Unused `pytest` import removed from test_steps.py
+**Step:** 5
+**Before:** `import pytest` on line 2, unused.
+**After:** Import removed. File starts with docstring then constants.
+
+### LOW (resolved): `_get_run_or_404` docstring now consistent
+**Step:** 1, 3
+**Before:** `steps.py` had docstring `"""Return run or raise 404."""`, `events.py` had none.
+**After:** Both files have identical docstring `"""Return run or raise 404."""` (steps.py line 53, events.py line 53).
+
+### LOW (acknowledged): Seed data `_utc()` pattern unchanged
+**Step:** 4
+**Status:** Accepted as-is per initial review. Consistent with existing conftest.py pattern. No fix needed.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/steps.py | pass | `get_step` now calls `_get_run_or_404` before step query |
+| llm_pipeline/ui/routes/events.py | pass | `_get_run_or_404` docstring added |
+| tests/ui/test_steps.py | pass | Unused import removed; 404 detail assertion added |
+| tests/ui/test_events.py | pass | No changes needed; re-verified |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previous issues resolved. Implementation is clean, all 54 tests pass, no regressions.
