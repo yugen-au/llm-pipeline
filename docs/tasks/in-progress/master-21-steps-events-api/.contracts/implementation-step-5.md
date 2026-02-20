@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-21-steps-events-api
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-3-implement-eventspy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-5-create-teststepspy.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 3
+- Step to fix: 5
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. [custom.context7_docs]
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 3
+1. Read REVIEW.md for issues assigned to Step 5
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-3-implement-eventspy.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-5-create-teststepspy.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
