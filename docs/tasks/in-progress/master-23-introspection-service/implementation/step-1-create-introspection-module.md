@@ -50,3 +50,51 @@ New module with `PipelineIntrospector` class containing:
 [x] `get_metadata()` called twice returns same cached object (identity check passes)
 [x] execution_order is deduplicated list of step name strings
 [x] Existing tests pass (505 passed, pre-existing UI failures only)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - Double strategy instantiation: strategy_cls() called twice per get_metadata() -- once in _introspect_strategy() and again in execution_order loop. Refactored to instantiate once.
+[x] LOW - Redundant "extract" filter in _get_extraction_methods(): `m != "extract"` unnecessary since "extract" already in set(dir(PipelineExtraction)).
+
+### Changes Made
+#### File: `llm_pipeline/introspection.py`
+**Fix 1:** Moved strategy instantiation + get_steps() into get_metadata() as a single resolution pass. Results stored in `resolved: List[tuple]` (strategy_cls, step_defs, error). `_introspect_strategy()` now takes pre-resolved step_defs instead of instantiating itself. Error-case strategies handled directly in get_metadata(). execution_order loop reuses same resolved list.
+
+```
+# Before: _introspect_strategy() instantiated, then execution_order loop instantiated again
+strategies = [self._introspect_strategy(s_cls) for s_cls in strategy_classes]
+for s_cls in strategy_classes:
+    instance = s_cls()  # DUPLICATE
+    step_defs = instance.get_steps()
+
+# After: single resolution pass, both consumers use resolved list
+resolved = []
+for s_cls in strategy_classes:
+    try:
+        instance = s_cls()
+        step_defs = instance.get_steps()
+        resolved.append((s_cls, step_defs, None))
+    except Exception as exc:
+        resolved.append((s_cls, None, exc))
+# _introspect_strategy(s_cls, step_defs) and execution_order both read from resolved
+```
+
+**Fix 2:** Removed `and m != "extract"` from _get_extraction_methods() filter.
+
+```
+# Before
+if callable(...) and not m.startswith("_") and m != "extract"
+
+# After
+if callable(...) and not m.startswith("_")
+```
+
+### Verification
+[x] get_metadata() output identical to before (same JSON structure, same values)
+[x] Caching still works (identity check passes)
+[x] Broken strategy still produces error dict with "error" key
+[x] _get_extraction_methods still returns ["default"] for WidgetExtraction
+[x] 520 tests pass (excluding pre-existing UI failures)

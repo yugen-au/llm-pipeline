@@ -108,19 +108,19 @@ class PipelineIntrospector:
             for m in (all_methods - base_methods)
             if callable(getattr(extraction_cls, m, None))
             and not m.startswith("_")
-            and m != "extract"
         )
 
     # ------------------------------------------------------------------
     # Strategy introspection
     # ------------------------------------------------------------------
 
-    def _introspect_strategy(self, strategy_cls: Type) -> Dict[str, Any]:
-        """Introspect a single strategy class.
+    def _introspect_strategy(
+        self, strategy_cls: Type, step_defs: List[Any],
+    ) -> Dict[str, Any]:
+        """Build strategy metadata dict from pre-resolved step definitions.
 
-        Instantiates the strategy (safe -- PipelineStrategy base has no
-        __init__ override) to call ``get_steps()``. Wraps in try/except
-        so one broken strategy does not block introspection of others.
+        ``step_defs`` are obtained once in ``get_metadata()`` to avoid
+        double-instantiating strategies.
         """
         entry: Dict[str, Any] = {
             "name": getattr(strategy_cls, "NAME", self._strategy_name(strategy_cls)),
@@ -128,13 +128,6 @@ class PipelineIntrospector:
             "class_name": strategy_cls.__name__,
             "steps": [],
         }
-
-        try:
-            instance = strategy_cls()
-            step_defs = instance.get_steps()
-        except Exception as exc:
-            entry["error"] = f"{type(exc).__name__}: {exc}"
-            return entry
 
         for step_def in step_defs:
             step_cls = step_def.step_class
@@ -223,18 +216,35 @@ class PipelineIntrospector:
         if strategies_cls is not None:
             strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
 
-        strategies: List[Dict[str, Any]] = []
-        for s_cls in strategy_classes:
-            strategies.append(self._introspect_strategy(s_cls))
-
-        # Execution order (deduplicated, first occurrence wins)
-        seen_step_classes: set = set()
-        execution_order: List[str] = []
+        # Instantiate each strategy once; reuse step_defs for both
+        # strategy metadata and execution_order derivation.
+        resolved: List[tuple] = []  # (strategy_cls, step_defs | None, error | None)
         for s_cls in strategy_classes:
             try:
                 instance = s_cls()
                 step_defs = instance.get_steps()
-            except Exception:
+                resolved.append((s_cls, step_defs, None))
+            except Exception as exc:
+                resolved.append((s_cls, None, exc))
+
+        strategies: List[Dict[str, Any]] = []
+        for s_cls, step_defs, err in resolved:
+            if err is not None:
+                strategies.append({
+                    "name": getattr(s_cls, "NAME", self._strategy_name(s_cls)),
+                    "display_name": getattr(s_cls, "DISPLAY_NAME", s_cls.__name__),
+                    "class_name": s_cls.__name__,
+                    "steps": [],
+                    "error": f"{type(err).__name__}: {err}",
+                })
+            else:
+                strategies.append(self._introspect_strategy(s_cls, step_defs))
+
+        # Execution order (deduplicated, first occurrence wins)
+        seen_step_classes: set = set()
+        execution_order: List[str] = []
+        for _s_cls, step_defs, err in resolved:
+            if err is not None:
                 continue
             for step_def in step_defs:
                 sc = step_def.step_class
