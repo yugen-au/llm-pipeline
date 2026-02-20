@@ -1,8 +1,8 @@
 ## Task: master-21-steps-events-api
 ## Description: REST endpoints for step details, context evolution, and events for pipeline runs
 
-## Phase: pending-merge
-## Status: in-progress
+## Phase: complete
+## Status: complete
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/21-steps-events-api
