@@ -57,3 +57,7 @@
 [2026-02-20 19:25:03] [INFO] Auto-updated agent statuses: ConnectionManager + WS Endpoint: pending -> in-progress
 [2026-02-20 19:25:03] [INFO] Deleted 1 old contract file(s)
 [2026-02-20 19:25:03] [DEBUG] STATE.md atomic write complete
+[2026-02-20 19:25:29] [INFO] Task call: python-development:fastapi-pro (phase: implementation)
+[2026-02-20 19:28:37] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-20 19:29:36] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-20 19:29:59] [DEBUG] STATE.md atomic write complete
