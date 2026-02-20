@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/25-websocket-live-events
 ## Plugins: backend-development, python-development
@@ -11,7 +11,7 @@
 ## Excluded Phases: testing, review
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-02-20 19:29
+## Last Updated: 2026-02-20 19:30
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,4 +21,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 0 | a018736 | 5b4614e | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | prior_session | 40ce361,f789088 | - |
 | ConnectionManager + WS Endpoint | python-development:fastapi-pro | implementation | 1 | - | A | complete | 0 | a4337d5 | 80f0a82 | /fastapi/fastapi |
-| WebSocket Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | /fastapi/fastapi |
+| WebSocket Tests | backend-development:test-automator | implementation | 2 | - | B | in-progress | 0 | pending | pending | /fastapi/fastapi |
