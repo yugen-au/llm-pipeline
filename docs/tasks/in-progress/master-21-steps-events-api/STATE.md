@@ -27,4 +27,4 @@
 | Create test_steps.py | python-development:python-pro | implementation | 5 | - | B | complete | 1 | a0bdeba | be13488,f2e9f24,e7cf419 | - |
 | Create test_events.py | python-development:python-pro | implementation | 6 | - | B | complete | 0 | a03aaa9 | f2e9f24 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a2a22b4 | c6ebcd9,080c457 | - |
-| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 0 | a274ce8 | 4faebe2 | - |
+| Architecture review | code-review-ai:architect-review | review | 1 | - | A | in-progress | 1 | a274ce8 | 4faebe2 | - |
