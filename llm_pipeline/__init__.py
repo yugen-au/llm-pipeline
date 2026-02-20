@@ -32,6 +32,7 @@ from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.session import ReadOnlySession
+from llm_pipeline.introspection import PipelineIntrospector
 
 __version__ = "0.1.0"
 
@@ -71,4 +72,6 @@ __all__ = [
     "init_pipeline_db",
     # Session
     "ReadOnlySession",
+    # Introspection
+    "PipelineIntrospector",
 ]
