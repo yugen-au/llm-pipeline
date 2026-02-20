@@ -142,3 +142,5 @@
 [2026-02-20 13:06:03] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-02-20 13:06:03] [INFO] Deleted 1 old contract file(s)
 [2026-02-20 13:06:03] [DEBUG] STATE.md atomic write complete
+[2026-02-20 13:06:21] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-02-20 13:08:48] [DEBUG] STATE.md atomic write complete
