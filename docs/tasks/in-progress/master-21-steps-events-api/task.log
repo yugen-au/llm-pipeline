@@ -103,3 +103,10 @@
 [2026-02-20 11:14:04] [DEBUG] STATE.md atomic write complete
 [2026-02-20 11:14:20] [INFO] Task call: code-review-ai:architect-review (phase: review)
 [2026-02-20 11:16:29] [DEBUG] STATE.md atomic write complete
+[2026-02-20 11:17:13] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '1,3,5'
+[2026-02-20 11:17:23] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-02-20 11:17:25] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-02-20 11:17:25] [INFO] Updated Commits for 'Architecture review': 4faebe2
+[2026-02-20 11:17:25] [INFO] Auto-updated agent statuses: Implement steps.py: complete -> in-progress, Implement events.py: complete -> in-progress, Create test_steps.py: complete -> pending, Architecture review: complete -> pending
+[2026-02-20 11:17:25] [INFO] Deleted 1 old contract file(s)
+[2026-02-20 11:17:25] [DEBUG] STATE.md atomic write complete
