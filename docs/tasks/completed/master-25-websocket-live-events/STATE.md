@@ -1,7 +1,7 @@
 ## Task: master-25-websocket-live-events
 ## Description: WebSocket endpoint for real-time event streaming during pipeline execution. FastAPI WebSocket handler supporting 100+ concurrent connections with heartbeat, per-run event queues, and batch replay for completed runs.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
