@@ -12,3 +12,5 @@
 [2026-02-20 20:16:20] [INFO] Task call: python-development:python-pro (phase: research)
 [2026-02-20 20:16:30] [INFO] Task call: backend-development:backend-architect (phase: research)
 [2026-02-20 20:20:18] [DEBUG] STATE.md atomic write complete
+[2026-02-20 20:21:25] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-20 20:23:33] [DEBUG] STATE.md atomic write complete
