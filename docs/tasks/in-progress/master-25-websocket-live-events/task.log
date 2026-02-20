@@ -5,3 +5,8 @@
 [2026-02-20 13:14:40] [INFO] Created: STATE.md
 [2026-02-20 13:14:40] [INFO] ============================================================
 [2026-02-20 13:14:41] [DEBUG] STATE.md atomic write complete
+[2026-02-20 13:15:16] [ERROR] BLOCKED: Invalid AgentRow 'WebSocket Architecture Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-20 13:15:29] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-20 13:15:39] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-20 13:15:39] [INFO] Auto-updated agent statuses: WebSocket Architecture Research: pending -> in-progress, FastAPI WebSocket Patterns: pending -> in-progress
+[2026-02-20 13:15:39] [DEBUG] STATE.md atomic write complete
