@@ -3,7 +3,34 @@
 ## Summary
 **Status:** passed
 
-All 34 CLI tests pass. Full suite: 666/668 pass. Both non-CLI failures are pre-existing and unrelated to this task's changes.
+All 34 CLI tests pass. Full suite: 667/668 pass (1 pre-existing failure). No regressions from reload fix (commit 4700ac6). The WAL flaky failure from prior run did not recur.
+
+---
+
+## Re-run After Reload Fix (commit 4700ac6)
+
+`_run_dev_mode()` headless path changed: now passes import string `"llm_pipeline.ui.cli:_create_dev_app"` with `factory=True` to uvicorn instead of passing the app instance. `create_app` is no longer called eagerly in headless dev mode - deferred to `_create_dev_app()` factory function.
+
+**All 34 CLI tests still pass** - existing mocks remain valid because `TestDevModeNoFrontend` patches `uvicorn.run` entirely (no call to `create_app` in headless path reaches the mock). `TestDbFlag` tests cover prod mode and Vite mode only, both unaffected.
+
+### Test Execution (post-fix)
+**Pass Rate:** 34/34 (CLI tests); 667/668 (full suite)
+
+CLI-only run (post-fix):
+```
+34 passed in 0.24s
+```
+
+Full suite run (post-fix):
+```
+1 failed, 667 passed, 1 warning in 11.30s
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
+```
+
+### Failed Tests (post-fix)
+None introduced by reload fix. Only pre-existing failure remains.
+
+---
 
 ## Automated Testing
 ### Test Scripts Created
