@@ -39,3 +39,63 @@ All FastAPI/uvicorn imports deferred to function bodies. Only stdlib at module l
 [x] All existing tests pass (1 pre-existing failure unrelated to this change: `test_events_router_prefix`)
 [x] No FastAPI/uvicorn imports at module level
 [x] All stdlib imports only at top of file
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH: `uvicorn.run(app, reload=True)` with app instance doesn't reload - uvicorn needs import string
+
+### Changes Made
+#### File: `llm_pipeline/ui/cli.py`
+Refactored `_run_dev_mode` and `_run_ui` to fix reload. Added `_create_dev_app` factory.
+
+```
+# Before
+def _run_ui(args):
+    app = create_app(db_path=args.db)
+    if args.dev:
+        _run_dev_mode(app, args.port)
+    ...
+
+def _run_dev_mode(app, port):
+    ...
+    uvicorn.run(app, host="127.0.0.1", port=port, reload=True)
+
+# After
+def _run_ui(args):
+    if args.dev:
+        _run_dev_mode(args)           # pass full args, no app creation yet
+    else:
+        app = create_app(db_path=args.db)
+        _run_prod_mode(app, args.port)
+
+def _run_dev_mode(args):
+    ...
+    # headless reload path: env var for db, import string + factory=True
+    if args.db:
+        os.environ["LLM_PIPELINE_DB"] = args.db
+    uvicorn.run(
+        "llm_pipeline.ui.cli:_create_dev_app",
+        factory=True,
+        host="127.0.0.1", port=args.port, reload=True,
+    )
+
+def _create_dev_app():
+    """Factory for uvicorn reload mode; reads config from env vars."""
+    db_path = os.environ.get("LLM_PIPELINE_DB")
+    return create_app(db_path=db_path)
+```
+
+Key changes:
+- `_run_dev_mode` now receives full `args` (not `app, port`) so it can defer app creation
+- Headless reload path uses import string `"llm_pipeline.ui.cli:_create_dev_app"` with `factory=True`
+- `--db` value passed via `LLM_PIPELINE_DB` env var so factory picks it up on each reload
+- Vite dev path still creates app directly (no reload needed there)
+
+### Verification
+[x] Syntax check passes
+[x] Module imports without triggering FastAPI guard
+[x] `_create_dev_app` callable and importable by string
+[x] 625 tests pass (pre-existing `test_events_router_prefix` excluded)

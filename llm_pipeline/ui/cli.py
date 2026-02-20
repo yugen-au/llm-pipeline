@@ -37,13 +37,12 @@ def main() -> None:
 
 def _run_ui(args: argparse.Namespace) -> None:
     """Create the FastAPI app and dispatch to prod or dev mode."""
-    from llm_pipeline.ui.app import create_app
-
-    app = create_app(db_path=args.db)
-
     if args.dev:
-        _run_dev_mode(app, args.port)
+        _run_dev_mode(args)
     else:
+        from llm_pipeline.ui.app import create_app
+
+        app = create_app(db_path=args.db)
         _run_prod_mode(app, args.port)
 
 
@@ -64,19 +63,40 @@ def _run_prod_mode(app: object, port: int) -> None:
     uvicorn.run(app, host="0.0.0.0", port=port)  # type: ignore[arg-type]
 
 
-def _run_dev_mode(app: object, port: int) -> None:
+def _run_dev_mode(args: argparse.Namespace) -> None:
     """Run in dev mode: Vite + FastAPI if frontend/ exists, else reload-only."""
     frontend_dir = Path(__file__).resolve().parent / "frontend"
     if frontend_dir.exists():
-        _start_vite_mode(app, port, frontend_dir)
+        from llm_pipeline.ui.app import create_app
+
+        app = create_app(db_path=args.db)
+        _start_vite_mode(app, args.port, frontend_dir)
     else:
         print(
             "INFO: No frontend/ directory found; starting in headless reload mode",
             file=sys.stderr,
         )
+        # Pass db_path via env var so the factory can pick it up on reload
+        if args.db:
+            os.environ["LLM_PIPELINE_DB"] = args.db
+
         import uvicorn
 
-        uvicorn.run(app, host="127.0.0.1", port=port, reload=True)  # type: ignore[arg-type]
+        uvicorn.run(
+            "llm_pipeline.ui.cli:_create_dev_app",
+            factory=True,
+            host="127.0.0.1",
+            port=args.port,
+            reload=True,
+        )
+
+
+def _create_dev_app() -> object:
+    """Factory for uvicorn reload mode; reads config from env vars."""
+    from llm_pipeline.ui.app import create_app
+
+    db_path = os.environ.get("LLM_PIPELINE_DB")
+    return create_app(db_path=db_path)
 
 
 def _start_vite_mode(app: object, port: int, frontend_dir: Path) -> None:
