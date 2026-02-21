@@ -30,3 +30,20 @@
 [2026-02-21 14:20:33] [INFO] WARNING: No active agent found for 'python-development:python-pro'
 [2026-02-21 14:21:37] [INFO] WARNING: No active agent found for 'python-development:python-pro'
 [2026-02-21 14:21:57] [DEBUG] STATE.md atomic write complete
+[2026-02-21 14:22:08] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-02-21 14:22:16] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-21 14:23:47] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\master-29-init-frontend-structure\research\step-1-frontend-stack-research.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-02-21 15:25:49] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-21 15:27:08] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-21 15:27:31] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-21 15:27:47] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-21 16:06:10] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-21 16:06:30] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-21 16:06:42] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-21 16:10:50] [DEBUG] STATE.md atomic write complete
