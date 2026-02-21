@@ -70,3 +70,74 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve with two recommended fixes before merge: (1) Change index.tsx search schema from `fallback().optional()` to `fallback().default()` to match $runId.tsx and Context7 recommended pattern. (2) Change index.tsx `min-h-screen` to `min-h-full` or `h-full`. Both are quick one-line changes. The zod 4 peer dep issue is accepted as-is since it works at runtime and the adapter will likely update its peer dep range soon.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** partial
+Fix commit `9c83e16` correctly addresses both MEDIUM issues from initial review (schema pattern and min-h-screen). However, the fix introduced a new HIGH issue: unused `search` variable in `index.tsx` causes `npm run type-check` to fail (TS6133), violating PLAN.md success criteria.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `D:\Documents\claude-projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| No semicolons | pass | Verified in fixed index.tsx |
+| Single quotes | pass | Verified in fixed index.tsx |
+| Named functions (not arrows) | pass | IndexPage remains named function |
+| Design tokens (no raw gray classes) | pass | text-muted-foreground used; no raw grays |
+| No hardcoded values | pass | No change |
+| Error handling present | pass | Zod fallback().default() now provides deterministic defaults |
+| Tests pass / type-check passes | fail | `npm run type-check` fails: TS6133 on unused `search` variable in index.tsx line 16 |
+
+## Previous Issues Status
+| Issue | Severity | Status |
+| --- | --- | --- |
+| fallback().optional() vs fallback().default() inconsistency | MEDIUM | FIXED -- index.tsx now uses `.default(1)` and `.default('')` matching $runId.tsx and Context7 docs |
+| min-h-screen ineffective inside root h-screen layout | MEDIUM | FIXED -- changed to `min-h-full` which correctly fills the main content area |
+
+## Issues Found
+### Critical
+None
+
+### High
+#### Unused `search` variable breaks type-check
+**Step:** 4
+**Details:** Fix commit added `const search = Route.useSearch()` to `IndexPage` but `search` is never read. `tsconfig.app.json` has `noUnusedLocals: true`, causing `npm run type-check` (`tsc -b --noEmit`) to fail with `TS6133: 'search' is declared but its value is never read.` PLAN.md success criteria explicitly requires type-check to pass. Fix: either prefix with underscore (`const _search = Route.useSearch()`) or remove the line entirely since it is a placeholder for task 31.
+
+### Medium
+None
+
+### Low
+#### Zod 4 peer dependency mismatch (carried from initial review)
+**Step:** 1
+**Details:** Unchanged from initial review. Functional but technically unsatisfied peer dep. Accepted.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[ ] Tests pass / type-check passes -- TS6133 failure
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/ui/frontend/src/routes/index.tsx` | fail | Schema fix correct; min-h-full fix correct; unused `search` variable causes TS6133 |
+| `llm_pipeline/ui/frontend/src/routes/__root.tsx` | pass | Unchanged, still correct |
+| `llm_pipeline/ui/frontend/src/routes/runs/$runId.tsx` | pass | Unchanged, still correct |
+| `llm_pipeline/ui/frontend/src/routes/live.tsx` | pass | Unchanged |
+| `llm_pipeline/ui/frontend/src/routes/prompts.tsx` | pass | Unchanged |
+| `llm_pipeline/ui/frontend/src/routes/pipelines.tsx` | pass | Unchanged |
+| `llm_pipeline/ui/frontend/vite.config.ts` | pass | Unchanged |
+
+## New Issues Introduced
+- HIGH: `const search = Route.useSearch()` on index.tsx line 16 is unused, breaking `npm run type-check` (TS6133)
+
+## Recommendation
+**Decision:** CONDITIONAL
+Remove or underscore-prefix the unused `search` variable in `index.tsx` line 16. Either `const _search = Route.useSearch()` or delete the line entirely (task 31 will add it when needed). Single-line fix. All other aspects of the implementation pass review.
