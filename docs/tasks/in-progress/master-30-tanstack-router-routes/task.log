@@ -5,3 +5,8 @@
 [2026-02-21 20:46:53] [INFO] Created: STATE.md
 [2026-02-21 20:46:53] [INFO] ============================================================
 [2026-02-21 20:46:53] [DEBUG] STATE.md atomic write complete
+[2026-02-21 20:48:30] [ERROR] BLOCKED: Invalid AgentRow 'TanStack Router Patterns': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-21 20:48:39] [ERROR] BLOCKED: Invalid agent 'javascript-typescript:typescript-advanced-types': subagent 'typescript-advanced-types' not found in 'javascript-typescript'
+[2026-02-21 20:48:48] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-21 20:48:48] [INFO] Auto-updated agent statuses: TanStack Router Patterns: pending -> in-progress, Existing Frontend Structure: pending -> in-progress
+[2026-02-21 20:48:48] [DEBUG] STATE.md atomic write complete
