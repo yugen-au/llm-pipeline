@@ -5,3 +5,14 @@
 [2026-02-21 11:33:22] [INFO] Created: STATE.md
 [2026-02-21 11:33:22] [INFO] ============================================================
 [2026-02-21 11:33:22] [DEBUG] STATE.md atomic write complete
+[2026-02-21 11:35:52] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-21 11:36:05] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-21 11:36:10] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-21 11:36:11] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-21 11:36:12] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-21 11:36:38] [ERROR] BLOCKED: Invalid AgentRow 'Packaging & Deps Research': skills: Skill must be '-' or 'plugin:skill' format, commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-21 11:36:45] [ERROR] BLOCKED: Invalid skill 'python-development:python-packaging': skill 'python-packaging' not found in 'python-development'
+[2026-02-21 11:36:52] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-21 11:37:00] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-21 11:37:00] [INFO] Auto-updated agent statuses: Packaging & Deps Research: pending -> in-progress
+[2026-02-21 11:37:00] [DEBUG] STATE.md atomic write complete

@@ -1,18 +1,19 @@
 ## Task: master-28-ui-deps-pyproject
-## Description: pending
+## Description: Update pyproject.toml with [ui] optional dependencies (FastAPI, uvicorn, websockets, python-multipart) and CLI entry point for llm-pipeline
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/28-ui-deps-pyproject
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: python-development, dependency-management
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Work Mode: pending
-## Last Updated: 2026-02-21 11:33
+## Work Mode: standard
+## Last Updated: 2026-02-21 11:37
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Packaging & Deps Research | python-development:python-pro | research | 1 | - | A | in-progress | 0 | - | pending | - |
