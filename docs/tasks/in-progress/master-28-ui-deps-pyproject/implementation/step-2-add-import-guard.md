@@ -48,3 +48,47 @@ None -- plan was unambiguous.
 [x] Import guard test passes (test_ui.py::test_missing_ui_deps or similar)
 [x] `llm-pipeline --help` not affected (main() has no new imports)
 [x] Pre-existing test failure (events router prefix) is unrelated to this change
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Broad ImportError catch may mask application bugs - made catch targeted via e.name check
+[x] No test for CLI import guard - added 4 tests in tests/ui/test_cli.py
+
+### Changes Made
+#### File: `llm_pipeline/ui/cli.py`
+Made except clause targeted: catch `ImportError as e`, check `e.name` root against known UI dep set, re-raise if unknown module.
+```
+# Before
+    except ImportError:
+        print(
+            "ERROR: UI dependencies not installed. Run: pip install llm-pipeline[ui]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+# After
+    except ImportError as e:
+        _ui_deps = {"fastapi", "uvicorn", "starlette", "multipart", "python_multipart"}
+        if e.name and e.name.split(".")[0] not in _ui_deps:
+            raise
+        print(
+            "ERROR: UI dependencies not installed. Run: pip install llm-pipeline[ui]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+```
+
+#### File: `tests/ui/test_cli.py`
+Added `TestImportGuardCli` class with 4 tests:
+- `test_missing_fastapi_exits_1` - ImportError(name="fastapi") triggers sys.exit(1)
+- `test_missing_fastapi_prints_install_hint` - stderr contains install instruction
+- `test_missing_uvicorn_exits_1` - ImportError(name="uvicorn") triggers sys.exit(1)
+- `test_unknown_import_error_reraised` - ImportError(name="bogus") is re-raised
+
+### Verification
+[x] All 46 tests in tests/ui/test_cli.py pass
+[x] Known UI dep ImportError caught and exits with friendly message
+[x] Unknown module ImportError re-raised (not swallowed)
