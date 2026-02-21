@@ -146,3 +146,10 @@
 [2026-02-21 23:26:49] [INFO] Incremented Revisions: 1 -> 2
 [2026-02-21 23:26:49] [DEBUG] STATE.md atomic write complete
 [2026-02-21 23:27:36] [DEBUG] STATE.md atomic write complete
+[2026-02-21 23:27:51] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-02-21 23:27:53] [INFO] STATE.md updated: phase=summary, status=in-progress
+[2026-02-21 23:27:53] [INFO] Updated Commits for 'Architecture review': 2acf936
+[2026-02-21 23:27:53] [INFO] Auto-filled agent rows: Create summary
+[2026-02-21 23:27:53] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
+[2026-02-21 23:27:53] [INFO] Deleted 1 old contract file(s)
+[2026-02-21 23:27:53] [DEBUG] STATE.md atomic write complete
