@@ -73,3 +73,35 @@ function IndexPage() {
 [x] validateSearch wired to zodValidator(runListSearchSchema)
 [x] Route.useSearch() called in component
 [x] Existing component body preserved
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] `fallback().optional()` changed to `fallback().default()` for consistency with `$runId.tsx` and Context7 docs
+[x] `min-h-screen` replaced with `min-h-full` since root layout uses `h-screen` with `overflow-auto` on `<main>`
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/index.tsx`
+Two fixes applied: schema uses `.default()` instead of `.optional()`, container uses `min-h-full` instead of `min-h-screen`.
+
+```
+# Before
+  page: fallback(z.number().int().min(1), 1).optional(),
+  status: fallback(z.string(), '').optional(),
+...
+    <div className="flex min-h-screen items-center justify-center">
+
+# After
+  page: fallback(z.number().int().min(1), 1).default(1),
+  status: fallback(z.string(), '').default(''),
+...
+    <div className="flex min-h-full items-center justify-center">
+```
+
+### Verification
+[x] Schema uses `.default()` pattern matching Context7 docs and `$runId.tsx`
+[x] Container uses `min-h-full` compatible with root layout overflow model
+[x] Route.useSearch() placeholder re-added (was missing)
+[x] No semicolons, single quotes, named function preserved

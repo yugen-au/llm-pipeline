@@ -3,8 +3,8 @@ import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
 
 const runListSearchSchema = z.object({
-  page: fallback(z.number().int().min(1), 1).optional(),
-  status: fallback(z.string(), '').optional(),
+  page: fallback(z.number().int().min(1), 1).default(1),
+  status: fallback(z.string(), '').default(''),
 })
 
 export const Route = createFileRoute('/')({
@@ -13,8 +13,10 @@ export const Route = createFileRoute('/')({
 })
 
 function IndexPage() {
+  const search = Route.useSearch()
+
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="flex min-h-full items-center justify-center">
       <p className="text-muted-foreground">llm-pipeline ui</p>
     </div>
   )
