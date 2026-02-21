@@ -189,3 +189,5 @@ To proceed, either:
 [2026-02-21 18:29:38] [INFO] Task call: python-development:python-pro (phase: fixing-review)
 [2026-02-21 18:29:38] [INFO] Incremented Revisions: 0 -> 1
 [2026-02-21 18:29:38] [DEBUG] STATE.md atomic write complete
+[2026-02-21 18:30:26] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-21 18:30:39] [DEBUG] STATE.md atomic write complete
