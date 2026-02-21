@@ -74,3 +74,55 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Both issues are low severity. The broken favicon causes only a console 404 in dev mode and the extra files in the wheel add negligible size. These can be fixed in a follow-up commit or as part of task 30 (routes/layout) which will likely touch index.html anyway. All architecture decisions are sound, implementation matches the plan, and the scaffold is ready for downstream tasks.
+
+---
+
+# Architecture Re-Review (post-fix)
+
+## Overall Assessment
+**Status:** complete
+Both LOW issues from initial review resolved correctly. No new issues introduced.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Fix Verification
+| Original Issue | Fix | Status |
+| --- | --- | --- |
+| Broken vite.svg favicon ref + scaffold title | Removed `<link rel="icon">` tag, changed `<title>` to `llm-pipeline` | verified correct |
+| index.html, README.md, .gitignore not in hatchling exclude | Added all 3 paths to pyproject.toml exclude list | verified correct |
+
+### index.html details
+- Favicon `<link>` tag fully removed (not replaced) -- correct, avoids 404
+- Title changed from `frontend` to `llm-pipeline` -- matches project name
+- No other changes to file structure (doctype, charset, viewport, root div, module script all intact)
+
+### pyproject.toml details
+- 3 new entries appended to exclude list: `index.html`, `README.md`, `.gitignore` (lines 50-52)
+- All prefixed with `llm_pipeline/ui/frontend/` -- correct path format matching existing entries
+- No glob patterns needed (single files, not directories) -- correct
+- Existing entries unchanged; `artifacts` directive unchanged
+- Total exclude count: 14 (was 11)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/frontend/index.html | pass | favicon removed, title corrected, structure intact |
+| pyproject.toml | pass | 3 exclude entries added, no regressions |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All issues from initial review resolved. Implementation is clean and complete.
