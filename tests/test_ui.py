@@ -323,17 +323,49 @@ class TestPyprojectToml:
         assert "ui" in opt_deps
 
     def test_ui_group_contains_fastapi(self):
-        """ui optional group contains fastapi>=0.100."""
+        """ui optional group contains fastapi>=0.115.0."""
         import tomllib
         with open("pyproject.toml", "rb") as f:
             data = tomllib.load(f)
         ui_deps = data["project"]["optional-dependencies"]["ui"]
-        assert any("fastapi" in dep for dep in ui_deps)
+        assert "fastapi>=0.115.0" in ui_deps
 
     def test_ui_group_contains_uvicorn(self):
-        """ui optional group contains uvicorn."""
+        """ui optional group contains uvicorn[standard]>=0.32.0."""
         import tomllib
         with open("pyproject.toml", "rb") as f:
             data = tomllib.load(f)
         ui_deps = data["project"]["optional-dependencies"]["ui"]
-        assert any("uvicorn" in dep for dep in ui_deps)
+        assert "uvicorn[standard]>=0.32.0" in ui_deps
+
+    def test_ui_group_contains_python_multipart(self):
+        """ui optional group contains python-multipart>=0.0.9."""
+        import tomllib
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+        ui_deps = data["project"]["optional-dependencies"]["ui"]
+        assert "python-multipart>=0.0.9" in ui_deps
+
+    def test_dev_group_contains_fastapi(self):
+        """dev optional group contains fastapi>=0.115.0."""
+        import tomllib
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+        dev_deps = data["project"]["optional-dependencies"]["dev"]
+        assert "fastapi>=0.115.0" in dev_deps
+
+    def test_dev_group_contains_uvicorn(self):
+        """dev optional group contains uvicorn[standard]>=0.32.0."""
+        import tomllib
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+        dev_deps = data["project"]["optional-dependencies"]["dev"]
+        assert "uvicorn[standard]>=0.32.0" in dev_deps
+
+    def test_dev_group_contains_python_multipart(self):
+        """dev optional group contains python-multipart>=0.0.9."""
+        import tomllib
+        with open("pyproject.toml", "rb") as f:
+            data = tomllib.load(f)
+        dev_deps = data["project"]["optional-dependencies"]["dev"]
+        assert "python-multipart>=0.0.9" in dev_deps

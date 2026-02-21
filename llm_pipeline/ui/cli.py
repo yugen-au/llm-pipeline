@@ -45,7 +45,10 @@ def _run_ui(args: argparse.Namespace) -> None:
 
             app = create_app(db_path=args.db)
             _run_prod_mode(app, args.port)
-    except ImportError:
+    except ImportError as e:
+        _ui_deps = {"fastapi", "uvicorn", "starlette", "multipart", "python_multipart"}
+        if e.name and e.name.split(".")[0] not in _ui_deps:
+            raise
         print(
             "ERROR: UI dependencies not installed. Run: pip install llm-pipeline[ui]",
             file=sys.stderr,
