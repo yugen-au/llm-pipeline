@@ -18,4 +18,4 @@
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | API Surface Research | backend-development:backend-architect | research | 1 | - | A | complete | 0 | a7acf4a4bccfcde32 | 4c94b79 | - |
 | Frontend Patterns Research | frontend-mobile-development:frontend-developer | research | 2 | - | A | complete | 0 | ae9bc9bf7891b41e4 | 4c94b79 | - |
-| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | needs-input | 1 | a52cde83fdfa5dee7 | pending | - |
+| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a52cde83fdfa5dee7 | pending | - |

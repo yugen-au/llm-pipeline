@@ -2,7 +2,9 @@
 
 ## Executive Summary
 
-Cross-referenced findings from both research agents (API surface + frontend patterns). Both agents independently confirmed the same critical gap: prompts and pipelines API endpoints are empty stubs with zero route handlers. The 8 implemented endpoints (4 runs, 2 steps, 1 events, 1 websocket) are well-documented with consistent type shapes across both reports. The frontend has TanStack Query v5 + Router v1 already configured with no existing API client code. Six questions surfaced requiring CEO decisions before planning can proceed -- two are critical (stub endpoint scope, WebSocket state architecture), two are important (fetch wrapper, missing prompts backend task), and two are minor defaults.
+Cross-referenced findings from both research agents (API surface + frontend patterns). Both agents independently confirmed the same critical gap: prompts and pipelines API endpoints are empty stubs with zero route handlers. The 8 implemented endpoints (4 runs, 2 steps, 1 events, 1 websocket) are well-documented with consistent type shapes across both reports. The frontend has TanStack Query v5 + Router v1 already configured with no existing API client code.
+
+**Revision 1 (CEO Q&A complete):** All 6 questions resolved. Scope confirmed as ALL hooks including prompts/pipelines (type against existing Pydantic/SQLModel models). WebSocket architecture decided: TanStack Query cache integration + thin Zustand for connection status. Shared apiClient + DevTools mount confirmed. Dynamic staleTime confirmed (Infinity for completed, shorter for active). Backend tasks 22 (Prompts) and 24 (Pipelines) already exist. Research is now complete for planning.
 
 ## Domain Findings
 
@@ -59,7 +61,12 @@ This pattern is sound and standard for TanStack Query v5. No concerns.
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| (pending CEO responses - first validation pass) | - | - |
+| Should task 31 create hooks for prompts/pipelines (stub endpoints) or limit to working endpoints only? | Create ALL hooks. Tasks 22 + 24 exist for backend. Type against existing Pydantic/SQLModel models. | Scope includes prompts.ts + pipelines.ts hook files. Types derived from Prompt model and PipelineIntrospector.get_metadata() shape. Hooks will 404 until backend tasks complete. |
+| WebSocket state architecture: standalone, query cache integration, or Zustand? | TanStack Query cache integration + thin Zustand for connection status. | WS events update query cache via setQueryData (runs, steps, events get real-time updates). Zustand store for connection state (connected/disconnected/reconnecting). Task 37 consumes both. |
+| Shared fetch wrapper or raw fetch()? | Yes, create shared apiClient with base URL, error handling, typed responses. | First subtask creates apiClient; all hooks depend on it. Consistent error handling, JSON parsing, type safety across all endpoints. |
+| No backend task for prompts endpoints? | Already exists as Task 22 (Prompts API). Task 24 covers Pipelines API. | No new tasks needed. Dependency chain: task 22 -> task 39 (via backend), task 31 -> task 39 (via hooks). |
+| Mount ReactQuery DevTools? | Yes, mount in main.tsx as part of task 31. | Quick early subtask. Dev-mode only mount aids debugging all subsequent hook work. |
+| Dynamic staleTime or global 30s default? | Dynamic staleTime. Infinity for completed runs (immutable), shorter polling for active/running. | Hooks need status-aware staleTime logic. Completed run detail + its steps/events = Infinity. Active runs need refetchInterval or shorter stale window. |
 
 ## Assumptions Validated
 - [x] TanStack Query v5 is installed and QueryClientProvider is wired in main.tsx
@@ -71,22 +78,26 @@ This pattern is sound and standard for TanStack Query v5. No concerns.
 - [x] Vite proxy forwards /api -> localhost:8642 and /ws -> ws://localhost:8642
 - [x] Response shapes for runs, steps, events are stable (implemented in code, not just spec)
 - [x] Task 30 recommends task 31 add Route.useSearch() to index.tsx for page/status params
+- [x] Task 31 scope includes ALL 6 hook files: runs.ts, steps.ts, events.ts, prompts.ts, pipelines.ts, websocket.ts (CEO confirmed)
+- [x] Prompts/pipelines hooks typed against existing Pydantic/SQLModel models, will 404 until tasks 22/24 complete (CEO accepted)
+- [x] WebSocket hook integrates with TanStack Query cache via setQueryData + thin Zustand store for connection status (CEO decided)
+- [x] Shared apiClient with base URL, error handling, typed responses required (CEO confirmed)
+- [x] ReactQuery DevTools mounted in main.tsx dev-mode only (CEO confirmed)
+- [x] Dynamic staleTime: Infinity for completed runs (immutable data), shorter/polling for active runs (CEO confirmed)
 
 ## Open Items
-- Prompts API response shape: DB model exists but no endpoint or Pydantic response model defined; shape must be guessed or deferred
-- Pipelines API response shape: task 24 description provides expected shapes but task 24 is still pending; shapes could change
-- TriggerRunRequest only accepts pipeline_name; task 37 expects input_data field (backend change needed, out of scope for task 31)
-- Task 33 code example references `data?.runs` but actual API returns `data?.items` (minor downstream fix)
-- Zustand v5 installed but no stores created yet; WS connection state may need a store
-- ReactQuery DevTools installed but not mounted
-- Zod 4 peer dep mismatch with @tanstack/zod-adapter accepted in task 30
+- TriggerRunRequest only accepts pipeline_name; task 37 expects input_data field (backend change needed, out of scope for task 31 -- task 37 or a prerequisite must add this)
+- Task 33 code example references `data?.runs` but actual API returns `data?.items` (minor downstream fix needed in task 33)
+- Exact Pydantic response models for prompts/pipelines don't exist yet; task 31 must infer TypeScript types from SQLModel fields (Prompt model) and PipelineIntrospector.get_metadata() output shape (documented in research). These types may need adjustment when tasks 22/24 land.
+- Zod 4 peer dep mismatch with @tanstack/zod-adapter accepted in task 30 (monitor only)
 
 ## Recommendations for Planning
-1. Scope task 31 to ONLY working endpoints (runs, steps, events, websocket) unless CEO decides otherwise on stub hooks
-2. Create a shared fetch client as the first subtask -- all hooks depend on it for consistent error handling and type safety
-3. WebSocket hook should be the most complex subtask -- needs careful design for 3 server behavioral modes, replay vs live, and cache integration strategy
-4. Mount ReactQuery DevTools in main.tsx as a quick early subtask (aids debugging all subsequent work)
-5. Define TypeScript types in a dedicated `src/api/types.ts` file, mirroring backend Pydantic models exactly as documented in research
-6. Wire Route.useSearch() in index.tsx as recommended by task 30 when implementing useRuns hook
-7. Add a task for prompts backend endpoints to unblock the task 39 -> task 31 dependency chain
-8. Query key factory pattern (e.g., `queryKeys.runs.list(filters)`) recommended over inline key arrays for maintainability
+1. Subtask ordering: (a) TypeScript types, (b) apiClient + DevTools mount, (c) query key factory, (d) runs hooks, (e) steps hooks, (f) events hooks, (g) prompts hooks, (h) pipelines hooks, (i) WebSocket hook + Zustand store. Dependencies flow left-to-right.
+2. apiClient as foundation subtask -- all hooks import from it. Base URL from Vite proxy (/api), typed error responses, JSON parsing.
+3. TypeScript types in `src/api/types.ts` mirroring: RunSummary, RunDetail, StepSummary, StepDetail, PipelineEvent (from implemented Pydantic models), Prompt (from SQLModel), PipelineMetadata (from PipelineIntrospector.get_metadata() shape). Mark prompts/pipelines types as provisional with TSDoc comments.
+4. Query key factory pattern (`queryKeys.runs.list(filters)`, `queryKeys.runs.detail(id)`, etc.) for all resources -- enables targeted invalidation and consistent key structure.
+5. Dynamic staleTime implementation: helper function that checks run status. Completed/failed -> `Infinity`. Running/pending -> `5_000` or `refetchInterval: 3_000`. Apply to run detail and nested resource hooks.
+6. WebSocket hook is highest-complexity subtask: must handle 3 server modes, integrate with query cache via `queryClient.setQueryData` for events/steps/run status, use thin Zustand store for connection state (status, error, reconnect count). Only reconnect for running runs with network interruption, not for completed runs (server intentionally closes).
+7. Mount ReactQuery DevTools in main.tsx early (lazy import, dev-mode only via `import.meta.env.DEV`).
+8. Wire Route.useSearch() in index.tsx per task 30 recommendation when implementing useRuns hook.
+9. Prompts/pipelines hooks: implement full CRUD-ready query hooks typed against inferred shapes. Add TSDoc noting these will 404 until tasks 22/24 complete. Downstream tasks 39/40 will consume these hooks directly.
