@@ -19,3 +19,5 @@
 [2026-02-21 20:54:19] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-02-21 20:55:05] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-02-21 20:55:38] [DEBUG] STATE.md atomic write complete
+[2026-02-21 20:56:21] [INFO] WARNING: No active agent found for 'frontend-mobile-development:frontend-developer'
+[2026-02-21 20:56:37] [DEBUG] STATE.md atomic write complete
