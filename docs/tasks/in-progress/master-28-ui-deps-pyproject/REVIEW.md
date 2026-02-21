@@ -58,3 +58,65 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Both changes are correct, minimal, and match the plan. The broad ImportError catch is an acknowledged trade-off documented in PLAN.md. The missing CLI guard test is a gap but not blocking given the simplicity of the code path. Recommend adding a test in a follow-up.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+All three issues from the initial review have been addressed. The import guard is now targeted with an explicit allowlist. Tests are comprehensive with exact version assertions and full CLI guard coverage. No new issues introduced.
+
+## Previous Issues Resolution
+| Issue | Severity | Status | Resolution |
+| --- | --- | --- | --- |
+| Broad ImportError catch | MEDIUM | RESOLVED | Guard now checks `e.name.split(".")[0]` against allowlist `{"fastapi", "uvicorn", "starlette", "multipart", "python_multipart"}`; unknown ImportErrors re-raised |
+| No test for CLI import guard | MEDIUM | RESOLVED | `TestImportGuardCli` added with 4 tests: fastapi exit code, fastapi stderr message, uvicorn exit code, unknown ImportError re-raise |
+| Loose version assertions | LOW | RESOLVED | Tests now assert exact strings (`"fastapi>=0.115.0" in ui_deps`) for all 3 deps in both [ui] and [dev] groups |
+
+## Fix Quality Assessment
+
+### Targeted ImportError guard (cli.py lines 48-56)
+Allowlist `{"fastapi", "uvicorn", "starlette", "multipart", "python_multipart"}` correctly covers all UI dependency import names: `fastapi` (direct), `uvicorn` (direct), `starlette` (CORSMiddleware, StaticFiles), `multipart`/`python_multipart` (python-multipart package). The `e.name.split(".")[0]` handles submodule imports (e.g. `fastapi.middleware.cors` -> `fastapi`). Unknown ImportErrors are re-raised, preventing masking of application bugs.
+
+### CLI guard tests (test_cli.py TestImportGuardCli)
+Four tests cover the critical paths: known dep missing (fastapi, uvicorn) triggers exit(1) with install hint on stderr; unknown dep ImportError propagates. Tests correctly call `_run_ui` directly rather than going through `main()`, isolating the guard logic. Both prod (`args.dev=False`) and dev (`args.dev=True`) paths tested.
+
+### Version assertion tests (test_ui.py TestPyprojectToml)
+Six new/updated tests assert exact dependency strings for fastapi, uvicorn, python-multipart in both [ui] and [dev] groups. Will catch accidental version bound regressions.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed -- targeted guard with explicit allowlist
+[x] Code quality and maintainability -- clean, readable guard logic
+[x] Error handling present -- known deps caught + friendly message; unknown re-raised
+[x] No hardcoded values -- allowlist is co-located with the guard, appropriate
+[x] Project conventions followed -- test class naming, commit format
+[x] Security considerations -- no change from initial review
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- minimal fix, no unnecessary abstractions
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/cli.py | pass | Targeted guard with allowlist and re-raise for unknown ImportErrors |
+| tests/ui/test_cli.py | pass | 4 new tests in TestImportGuardCli cover all guard branches |
+| tests/test_ui.py | pass | Exact version bound assertions for all 6 dep checks |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All three review issues fully resolved. Guard is now precise, tested, and version assertions are exact. Implementation is clean and minimal.
