@@ -257,3 +257,85 @@ This is a non-breaking deviation -- task 28 did NOT actually implement the share
 | Vite proxy config | Not yet created | Task 29 implementation scope |
 | Build pipeline docs | Not documented | Document npm build -> python build order |
 | shared-data correction | Task 28 plan was wrong | Use artifacts instead; already not implemented |
+
+---
+
+## Addendum: sdist and Graceful Degradation
+
+### sdist Considerations
+
+The recommended `[tool.hatch.build.targets.wheel]` config above only applies to wheel builds. For sdist:
+
+```toml
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "llm_pipeline/ui/frontend/node_modules/**",
+    "llm_pipeline/ui/frontend/dist/**",
+]
+```
+
+Rationale: sdist is source distribution. Including `dist/` in sdist is wrong (it's a build output). Including `node_modules/` is also wrong (100MB+). Frontend source files (src/, config) SHOULD be in sdist so `npm run build` can be run from source. The `artifacts` directive does NOT apply to sdist (it's wheel-specific in this config), so dist/ is naturally excluded from sdist via gitignore. The explicit exclude is belt-and-suspenders.
+
+### Graceful Degradation (no dist/ at build time)
+
+If `npm run build` has not been run before `hatch build`:
+- Wheel builds successfully but contains no `frontend/dist/` files
+- `artifacts` does not error when matching zero files
+- At runtime, `cli.py` `_run_prod_mode()` already handles this: prints "WARNING: frontend/dist/ not found; running in API-only mode"
+- This is the expected behavior for users who install `llm-pipeline` without the UI frontend (library-only usage)
+
+### Graphiti Memory Validation
+
+Confirmed against Graphiti (group_id: llm-pipeline):
+- Hatchling build system: verified
+- Package structure: llm_pipeline/
+- Entry point: llm_pipeline.ui.cli:main
+- Task 28 complete: [ui] deps + CLI entry point done
+- CLI defined in: llm_pipeline/ui/cli.py
+- UI package at: llm_pipeline/ui/
+
+All findings consistent with codebase state. No contradictions between Graphiti memory and current file system.
+
+---
+
+## Appendix: Validation & Corrections (Re-research Pass)
+
+### Correction 1: Missing `package*.json` in exclude config
+
+Finding 6 lists `package*.json` as excluded from wheel, but the recommended `exclude` config in Finding 1 omits it. Since `package.json` and `package-lock.json` are git-tracked (not gitignored), they would be included in the wheel without an explicit exclude.
+
+**Corrected exclude list (add to Finding 1):**
+```toml
+exclude = [
+    "llm_pipeline/ui/frontend/node_modules/**",
+    "llm_pipeline/ui/frontend/src/**",
+    "llm_pipeline/ui/frontend/.vite/**",
+    "llm_pipeline/ui/frontend/tsconfig*",
+    "llm_pipeline/ui/frontend/vite.config*",
+    "llm_pipeline/ui/frontend/tailwind.config*",
+    "llm_pipeline/ui/frontend/postcss.config*",
+    "llm_pipeline/ui/frontend/components.json",
+    "llm_pipeline/ui/frontend/eslint*",
+    "llm_pipeline/ui/frontend/.eslint*",
+    "llm_pipeline/ui/frontend/package*.json",
+]
+```
+
+### Correction 2: `artifacts` is immune to `exclude`
+
+Per Context7 (/pypa/hatch, build config docs): "The `artifacts` option is semantically equivalent to `include` and is **not affected by `exclude`**."
+
+This means:
+- `artifacts = ["llm_pipeline/ui/frontend/dist/**"]` will always include dist/ contents regardless of any `exclude` patterns
+- The `exclude` list only filters normal (git-tracked) files, not artifacts
+- Even if someone accidentally adds a pattern matching `dist/` to `exclude`, the artifacts directive overrides it
+- This is the correct and desired behavior for our use case
+
+### Context7 Source Validation
+
+| Context7 Doc | Key Finding | Impact |
+|--------------|-------------|--------|
+| /pypa/hatch build config: force-include | Directory contents recursively included; for files OUTSIDE package tree | Confirms force-include unnecessary here |
+| /pypa/hatch build config: artifacts | Overrides VCS-ignore; not affected by exclude | Confirms artifacts is correct approach |
+| /pypa/hatch build config: only-include | Prevents traversal from root; overrides include | Not applicable to our use case |
+| /pypa/hatch build hook reference: force_include | For build hooks needing absolute paths | Not applicable (no custom hooks) |

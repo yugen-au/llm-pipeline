@@ -25,3 +25,8 @@
 [2026-02-21 14:15:58] [INFO] Task call: python-development:python-pro (phase: research)
 [2026-02-21 14:19:12] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-02-21 14:19:24] [DEBUG] STATE.md atomic write complete
+[2026-02-21 14:19:51] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-21 14:20:01] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-21 14:20:33] [INFO] WARNING: No active agent found for 'python-development:python-pro'
+[2026-02-21 14:21:37] [INFO] WARNING: No active agent found for 'python-development:python-pro'
+[2026-02-21 14:21:57] [DEBUG] STATE.md atomic write complete
