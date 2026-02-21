@@ -5,3 +5,8 @@
 [2026-02-21 23:48:07] [INFO] Created: STATE.md
 [2026-02-21 23:48:07] [INFO] ============================================================
 [2026-02-21 23:48:07] [DEBUG] STATE.md atomic write complete
+[2026-02-22 09:18:28] [ERROR] BLOCKED: Invalid AgentRow 'API Surface Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-22 09:18:40] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-22 09:18:49] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-22 09:18:49] [INFO] Auto-updated agent statuses: API Surface Research: pending -> in-progress, Frontend Patterns Research: pending -> in-progress
+[2026-02-22 09:18:49] [DEBUG] STATE.md atomic write complete
