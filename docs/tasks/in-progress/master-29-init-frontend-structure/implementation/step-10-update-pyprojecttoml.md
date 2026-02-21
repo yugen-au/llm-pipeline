@@ -57,3 +57,34 @@ pythonpath = ["."]
 [x] All 11 exclude patterns from plan present
 [x] No existing sections overwritten or duplicated
 [x] Section did not previously exist (confirmed pre-edit)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Exclude list missing index.html (Vite entry point, dev-only)
+[x] Exclude list missing README.md (frontend readme, dev-only)
+[x] Exclude list missing .gitignore (frontend gitignore, dev-only)
+
+### Changes Made
+#### File: `pyproject.toml`
+Added 3 missing dev-only files to the hatchling wheel exclude list.
+
+```
+# Before (end of exclude list)
+    "llm_pipeline/ui/frontend/package*.json",
+]
+
+# After
+    "llm_pipeline/ui/frontend/package*.json",
+    "llm_pipeline/ui/frontend/index.html",
+    "llm_pipeline/ui/frontend/README.md",
+    "llm_pipeline/ui/frontend/.gitignore",
+]
+```
+
+### Verification
+[x] All 3 new exclude entries added
+[x] Exclude list now has 14 entries total (11 original + 3 new)
+[x] artifacts directive unaffected (not impacted by exclude per hatch docs)
