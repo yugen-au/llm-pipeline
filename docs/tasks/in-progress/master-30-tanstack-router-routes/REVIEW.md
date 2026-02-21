@@ -141,3 +141,62 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Remove or underscore-prefix the unused `search` variable in `index.tsx` line 16. Either `const _search = Route.useSearch()` or delete the line entirely (task 31 will add it when needed). Single-line fix. All other aspects of the implementation pass review.
+
+---
+
+# Architecture Final Re-Review (Post-Fix 2)
+
+## Overall Assessment
+**Status:** complete
+All three issues from previous reviews resolved. `index.tsx` uses `fallback().default()` pattern consistent with `$runId.tsx` and Context7 docs, `min-h-full` replaces `min-h-screen`, and unused `search` variable removed. `npm run type-check` passes cleanly.
+
+## Previous Issues Status
+| Issue | Severity | Fix Commit | Status |
+| --- | --- | --- | --- |
+| fallback().optional() vs fallback().default() | MEDIUM | 9c83e16 | RESOLVED |
+| min-h-screen ineffective in root layout | MEDIUM | 9c83e16 | RESOLVED |
+| Unused `search` variable breaks type-check | HIGH | 7ead599 | RESOLVED |
+
+## Verification
+- `npm run type-check` (`tsc -b --noEmit`): passes, zero errors
+- `index.tsx` schema: `fallback(z.number().int().min(1), 1).default(1)` and `fallback(z.string(), '').default('')`
+- `index.tsx` layout: `min-h-full` (not `min-h-screen`)
+- `index.tsx` component: no unused variables, clean render
+- Code style: no semicolons, single quotes, named function, 2-space indent
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+#### Zod 4 peer dependency mismatch (carried, accepted)
+**Step:** 1
+**Details:** Unchanged. `zod@4.3.6` installed against `@tanstack/zod-adapter` peer dep of `^3.23.8`. Functional at runtime. Accepted as-is.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Tests pass / type-check passes
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/ui/frontend/src/routes/index.tsx` | pass | All three fixes verified; clean code |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previously identified issues resolved. Implementation meets PLAN.md success criteria. Only remaining note is the accepted LOW zod 4 peer dep mismatch which is functional and tracked.
