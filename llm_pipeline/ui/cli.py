@@ -37,13 +37,20 @@ def main() -> None:
 
 def _run_ui(args: argparse.Namespace) -> None:
     """Create the FastAPI app and dispatch to prod or dev mode."""
-    if args.dev:
-        _run_dev_mode(args)
-    else:
-        from llm_pipeline.ui.app import create_app
+    try:
+        if args.dev:
+            _run_dev_mode(args)
+        else:
+            from llm_pipeline.ui.app import create_app
 
-        app = create_app(db_path=args.db)
-        _run_prod_mode(app, args.port)
+            app = create_app(db_path=args.db)
+            _run_prod_mode(app, args.port)
+    except ImportError:
+        print(
+            "ERROR: UI dependencies not installed. Run: pip install llm-pipeline[ui]",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def _run_prod_mode(app: object, port: int) -> None:
