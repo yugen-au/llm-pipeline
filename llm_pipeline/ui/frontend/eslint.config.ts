@@ -6,15 +6,17 @@ import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
   { ignores: ['dist', 'src/routeTree.gen.ts'] },
+  js.configs.recommended,
+  tseslint.configs.recommended,
   {
     files: ['**/*.{ts,tsx}'],
-    extends: [
-      js.configs.recommended,
-      ...tseslint.configs.recommended,
-      reactHooks.configs['flat/recommended'],
-      reactRefresh.configs.vite,
-    ],
+    ...reactHooks.configs.flat['recommended-latest'],
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    ...reactRefresh.configs.vite,
     rules: {
+      ...reactRefresh.configs.vite.rules,
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
