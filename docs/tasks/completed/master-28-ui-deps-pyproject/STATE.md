@@ -1,7 +1,7 @@
 ## Task: master-28-ui-deps-pyproject
 ## Description: Update pyproject.toml with [ui] optional dependencies (FastAPI, uvicorn, websockets, python-multipart) and CLI entry point for llm-pipeline
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
