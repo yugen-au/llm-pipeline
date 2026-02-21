@@ -11,3 +11,17 @@
 [2026-02-21 14:13:09] [INFO] STATE.md updated: phase=research, status=in-progress
 [2026-02-21 14:13:09] [INFO] Auto-updated agent statuses: Frontend Stack Research: pending -> in-progress, Python Integration Research: pending -> in-progress, TS/Vite Config Research: pending -> in-progress
 [2026-02-21 14:13:09] [DEBUG] STATE.md atomic write complete
+[2026-02-21 14:13:29] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-21 14:13:35] [INFO] Task call: python-development:python-pro (phase: research)
+[2026-02-21 14:13:43] [INFO] Task call: javascript-typescript:typescript-pro (phase: research)
+[2026-02-21 14:13:58] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-21 14:14:22] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-21 14:14:32] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-21 14:14:57] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-21 14:15:00] [INFO] Task call: python-development:python-pro (phase: research)
+[2026-02-21 14:15:13] [ERROR] BLOCKED: Expected one of ['frontend-mobile-development:frontend-developer', 'python-development:python-pro', 'javascript-typescript:typescript-pro']. Got: frontend-mobile-development:frontend-developer
+[2026-02-21 14:15:51] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-21 14:15:54] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-21 14:15:58] [INFO] Task call: python-development:python-pro (phase: research)
+[2026-02-21 14:19:12] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-21 14:19:24] [DEBUG] STATE.md atomic write complete
