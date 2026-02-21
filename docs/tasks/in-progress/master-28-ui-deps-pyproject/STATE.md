@@ -1,7 +1,7 @@
 ## Task: master-28-ui-deps-pyproject
 ## Description: Update pyproject.toml with [ui] optional dependencies (FastAPI, uvicorn, websockets, python-multipart) and CLI entry point for llm-pipeline
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-02-21 12:27
+## Last Updated: 2026-02-21 12:28
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -19,5 +19,6 @@
 | Packaging & Deps Research | python-development:python-pro | research | 1 | - | A | complete | 0 | a162818a6dcb12710 | 65b69fa | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a4d623cb240c07e19 | 524d753 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aefa8314f1588a241 | 06f12a9 | - |
-| Update pyproject.toml | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a605001cdbf740c8d | b8fdcfc | - |
+| Update pyproject.toml | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a605001cdbf740c8d | b8fdcfc,ae1c2e5 | - |
 | Add import guard | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a5ca5d47d647edcaf | ae1c2e5 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
