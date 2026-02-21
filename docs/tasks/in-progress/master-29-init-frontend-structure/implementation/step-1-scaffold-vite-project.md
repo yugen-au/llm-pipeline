@@ -2,7 +2,7 @@
 **Status:** completed
 
 ## Summary
-Scaffolded Vite 7.3.1 + React 19.2.0 + TypeScript 5.9.3 project at `llm_pipeline/ui/frontend/` using `npm create vite@latest` with `react-ts` template (create-vite v8.3.0). Installed dependencies, deleted placeholder files, and created `.gitignore`.
+Scaffolded Vite 7.3.1 + React 19.2.0 + TypeScript 5.9.3 project at `llm_pipeline/ui/frontend/` using `npm create vite@latest` with `react-ts` template (create-vite v8.3.0). Installed dependencies, deleted placeholder files, created `.gitignore`, and added `minimatch` override to resolve upstream audit vulnerabilities.
 
 ## Files
 **Created:** `llm_pipeline/ui/frontend/` (entire scaffold: package.json, index.html, vite.config.ts, tsconfig.json, tsconfig.app.json, tsconfig.node.json, eslint.config.js, src/main.tsx, src/index.css, README.md, public/, .gitignore)
@@ -67,6 +67,10 @@ node_modules/
 **Choice:** Kept `src/main.tsx` and `src/index.css` from scaffold
 **Rationale:** Step 5 (Tailwind CSS) and Step 8 (entry files) will replace these. They are valid placeholders until then.
 
+### minimatch override added
+**Choice:** Added `"overrides": {"minimatch": "^10.2.1"}` to package.json
+**Rationale:** Scaffold eslint ^9.39.1 and typescript-eslint ^8.48.0 depend transitively on minimatch <10.2.1 which has a ReDoS vulnerability (GHSA-3ppc-4f35-3m26). The only npm-suggested fix was eslint@10 (breaking, incompatible with eslint-plugin-react-hooks@7). npm overrides force minimatch to a patched version across all transitive deps, resolving all 10 high-severity findings with 0 breaking changes.
+
 ## Verification
 [x] `npm create vite@latest frontend -- --template react-ts` succeeded
 [x] `npm install` completed (226 packages)
@@ -79,3 +83,5 @@ node_modules/
 [x] `public/vite.svg` deleted
 [x] `.gitignore` contains: dist/, node_modules/, .vite/, *.tsbuildinfo, .env.local, .env.*.local
 [x] `package.json` has correct scripts (dev, build, lint, preview)
+[x] `npm audit` reports 0 vulnerabilities (minimatch override applied)
+[x] `package.json` contains `overrides.minimatch: "^10.2.1"`
