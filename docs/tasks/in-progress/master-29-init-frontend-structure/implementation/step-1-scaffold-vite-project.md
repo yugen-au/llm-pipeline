@@ -85,3 +85,29 @@ node_modules/
 [x] `package.json` has correct scripts (dev, build, lint, preview)
 [x] `npm audit` reports 0 vulnerabilities (minimatch override applied)
 [x] `package.json` contains `overrides.minimatch: "^10.2.1"`
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Broken favicon reference - index.html referenced href="/vite.svg" but public/vite.svg was deleted. Removed the `<link rel="icon">` tag entirely.
+[x] Scaffold title - changed `<title>frontend</title>` to `<title>llm-pipeline</title>`.
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/index.html`
+Removed broken favicon link tag and updated title to project name.
+```
+# Before
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+
+# After
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>llm-pipeline</title>
+```
+
+### Verification
+[x] No `<link rel="icon">` tag in index.html (no 404 in dev mode)
+[x] `<title>` is `llm-pipeline`
