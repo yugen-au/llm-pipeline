@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/30-tanstack-router-routes
 ## Plugins: frontend-mobile-development, javascript-typescript
@@ -22,8 +22,8 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | ae5e267d211f9e2e6 | 6a14d4c | - |
 | Install Dependencies | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | a21f06acb34f93588 | 4b2adfe | /tanstack/router |
 | Enable autoCodeSplitting | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | aa317524872768515 | 4b2adfe | /tanstack/router |
-| Root Layout Shell | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | pending | pending | /tanstack/router |
-| Index Search Params | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | pending | 0 | pending | pending | /tanstack/router |
-| Run Detail Route | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | /tanstack/router |
-| Remaining Routes | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | pending | 0 | pending | pending | /tanstack/router |
+| Root Layout Shell | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | in-progress | 0 | pending | pending | /tanstack/router |
+| Index Search Params | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | in-progress | 0 | pending | pending | /tanstack/router |
+| Run Detail Route | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | in-progress | 0 | pending | pending | /tanstack/router |
+| Remaining Routes | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | in-progress | 0 | pending | pending | /tanstack/router |
 | Verify Route Tree | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | pending | 0 | pending | pending | - |
