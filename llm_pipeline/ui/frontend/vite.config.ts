@@ -8,7 +8,7 @@ const apiPort = process.env.VITE_API_PORT || '8642'
 const devPort = Number(process.env.VITE_PORT || '5173')
 
 export default defineConfig({
-  plugins: [tanstackRouter(), react(), tailwindcss()],
+  plugins: [tanstackRouter({ autoCodeSplitting: true }), react(), tailwindcss()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
