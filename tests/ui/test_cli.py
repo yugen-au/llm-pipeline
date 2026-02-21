@@ -530,3 +530,53 @@ class TestCleanupVite:
         mock_proc.wait.return_value = None
         _cleanup_vite(mock_proc)
         mock_proc.kill.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Import guard - _run_ui catches ImportError for missing [ui] deps
+# ---------------------------------------------------------------------------
+
+class TestImportGuardCli:
+    """_run_ui() catches ImportError for known UI deps and exits with message."""
+
+    def test_missing_fastapi_exits_1(self):
+        """ImportError for 'fastapi' triggers sys.exit(1)."""
+        from llm_pipeline.ui.cli import _run_ui
+        args = MagicMock()
+        args.dev = False
+        with patch("llm_pipeline.ui.app.create_app", side_effect=ImportError("fastapi", name="fastapi")):
+            with pytest.raises(SystemExit) as exc_info:
+                _run_ui(args)
+        assert exc_info.value.code == 1
+
+    def test_missing_fastapi_prints_install_hint(self, capsys):
+        """ImportError for 'fastapi' prints install instruction to stderr."""
+        from llm_pipeline.ui.cli import _run_ui
+        args = MagicMock()
+        args.dev = False
+        with patch("llm_pipeline.ui.app.create_app", side_effect=ImportError("fastapi", name="fastapi")):
+            with pytest.raises(SystemExit):
+                _run_ui(args)
+        captured = capsys.readouterr()
+        assert "pip install llm-pipeline[ui]" in captured.err
+
+    def test_missing_uvicorn_exits_1(self):
+        """ImportError for 'uvicorn' triggers sys.exit(1)."""
+        from llm_pipeline.ui.cli import _run_ui
+        args = MagicMock()
+        args.dev = True
+        args.db = None
+        with patch.object(Path, "exists", _only_frontend_missing()), \
+             patch("uvicorn.run", side_effect=ImportError("uvicorn", name="uvicorn")):
+            with pytest.raises(SystemExit) as exc_info:
+                _run_ui(args)
+        assert exc_info.value.code == 1
+
+    def test_unknown_import_error_reraised(self):
+        """ImportError for unknown module (not a UI dep) is re-raised."""
+        from llm_pipeline.ui.cli import _run_ui
+        args = MagicMock()
+        args.dev = False
+        with patch("llm_pipeline.ui.app.create_app", side_effect=ImportError("bogus", name="bogus")):
+            with pytest.raises(ImportError, match="bogus"):
+                _run_ui(args)
