@@ -5,3 +5,9 @@
 [2026-02-21 14:07:08] [INFO] Created: STATE.md
 [2026-02-21 14:07:08] [INFO] ============================================================
 [2026-02-21 14:07:08] [DEBUG] STATE.md atomic write complete
+[2026-02-21 14:12:40] [ERROR] BLOCKED: Invalid AgentRow 'Frontend Stack Research': skills: Skill must be '-' or 'plugin:skill' format, commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-21 14:12:50] [ERROR] BLOCKED: Invalid agent 'javascript-typescript:frontend-developer': subagent 'frontend-developer' not found in 'javascript-typescript'
+[2026-02-21 14:13:01] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-21 14:13:09] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-21 14:13:09] [INFO] Auto-updated agent statuses: Frontend Stack Research: pending -> in-progress, Python Integration Research: pending -> in-progress, TS/Vite Config Research: pending -> in-progress
+[2026-02-21 14:13:09] [DEBUG] STATE.md atomic write complete
