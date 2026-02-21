@@ -32,6 +32,23 @@ dev = [
     "httpx>=0.24",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["llm_pipeline"]
+artifacts = ["llm_pipeline/ui/frontend/dist/**"]
+exclude = [
+    "llm_pipeline/ui/frontend/node_modules/**",
+    "llm_pipeline/ui/frontend/src/**",
+    "llm_pipeline/ui/frontend/.vite/**",
+    "llm_pipeline/ui/frontend/tsconfig*",
+    "llm_pipeline/ui/frontend/vite.config*",
+    "llm_pipeline/ui/frontend/components.json",
+    "llm_pipeline/ui/frontend/eslint*",
+    "llm_pipeline/ui/frontend/.eslint*",
+    "llm_pipeline/ui/frontend/.prettierrc",
+    "llm_pipeline/ui/frontend/.prettierignore",
+    "llm_pipeline/ui/frontend/package*.json",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
