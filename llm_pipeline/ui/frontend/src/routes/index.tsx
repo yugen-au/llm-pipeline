@@ -13,8 +13,6 @@ export const Route = createFileRoute('/')({
 })
 
 function IndexPage() {
-  const search = Route.useSearch()
-
   return (
     <div className="flex min-h-full items-center justify-center">
       <p className="text-muted-foreground">llm-pipeline ui</p>

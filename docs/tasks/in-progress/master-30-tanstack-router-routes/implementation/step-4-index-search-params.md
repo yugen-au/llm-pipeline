@@ -105,3 +105,30 @@ Two fixes applied: schema uses `.default()` instead of `.optional()`, container 
 [x] Container uses `min-h-full` compatible with root layout overflow model
 [x] Route.useSearch() placeholder re-added (was missing)
 [x] No semicolons, single quotes, named function preserved
+
+## Review Fix Iteration 1
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Removed unused `const search = Route.useSearch()` that caused TS6133 (declared but never used)
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/index.tsx`
+Removed placeholder `Route.useSearch()` call. Task 31 will add actual usage when building run list UI.
+
+```
+# Before
+function IndexPage() {
+  const search = Route.useSearch()
+
+  return (
+
+# After
+function IndexPage() {
+  return (
+```
+
+### Verification
+[x] `npx tsc --noEmit` passes with no errors
+[x] No unused variables remain
