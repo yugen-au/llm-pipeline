@@ -184,3 +184,6 @@
 [2026-02-22 14:23:16] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-02-22 14:23:16] [INFO] Deleted 1 old contract file(s)
 [2026-02-22 14:23:16] [DEBUG] STATE.md atomic write complete
+[2026-02-22 14:23:35] [ERROR] BLOCKED: Expected one of ['code-documentation:docs-architect']. Got: planning
+[2026-02-22 14:23:42] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-02-22 14:27:03] [DEBUG] STATE.md atomic write complete
