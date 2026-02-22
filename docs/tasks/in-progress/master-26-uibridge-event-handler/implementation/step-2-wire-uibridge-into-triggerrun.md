@@ -90,3 +90,25 @@ lambda run_id, engine, **kw: _TrackedPipeline(run_id, engine)
 [x] Factory protocol docstring updated to show event_emitter kwarg
 [x] All existing tests pass (683 passed, 1 pre-existing failure excluded)
 [x] No unused imports (CompositeEmitter intentionally omitted)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] (MEDIUM) `test_returns_404_for_unregistered_pipeline` L184 factory lambda missing `**kw` -- inconsistent with the other 3 updated lambdas
+
+### Changes Made
+#### File: `tests/ui/test_runs.py`
+Added `**kw` to the 4th factory lambda that was missed in the initial implementation.
+```
+# Before
+pipeline_registry={"other_pipeline": lambda run_id, engine: None},
+
+# After
+pipeline_registry={"other_pipeline": lambda run_id, engine, **kw: None},
+```
+
+### Verification
+[x] All 23 tests in tests/ui/test_runs.py pass
+[x] All 4 factory lambdas in TestTriggerRun now consistently accept `**kw`

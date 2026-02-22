@@ -181,7 +181,7 @@ class TestTriggerRun:
     def test_returns_404_for_unregistered_pipeline(self):
         app = create_app(
             db_path=":memory:",
-            pipeline_registry={"other_pipeline": lambda run_id, engine: None},
+            pipeline_registry={"other_pipeline": lambda run_id, engine, **kw: None},
         )
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "missing_pipeline"})
