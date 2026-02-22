@@ -38,3 +38,27 @@ New file with 4 exported hooks and 1 internal helper:
 [x] `useRunContext` accepts optional status param for dynamic staleTime
 [x] TSDoc notes data?.items (not data?.runs) per task 33 deviation
 [x] toSearchParams filters null/undefined before serializing
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Status type cast (LOW): removed redundant `as RunStatus | undefined` casts in `useRun` staleTime/refetchInterval callbacks. `RunDetail.status` is `string`, `isTerminalStatus` accepts `RunStatus | string` -- the cast was unnecessary and bypassed type checking.
+[x] URLSearchParams dedup: confirmed already fixed by Step 1 agent. `toSearchParams` is imported from `./types`, no local definition exists.
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/runs.ts`
+Removed two `as RunStatus | undefined` casts from staleTime/refetchInterval callbacks. The status value from `query.state.data?.status` is `string | undefined` which already satisfies `isTerminalStatus(status: RunStatus | string)`.
+```
+# Before
+const status = query.state.data?.status as RunStatus | undefined
+
+# After
+const status = query.state.data?.status
+```
+
+### Verification
+[x] TypeScript strict compilation passes (`npx tsc --noEmit`)
+[x] No runtime behavior change -- `isTerminalStatus` already accepted `string`
+[x] `RunStatus` import retained (still used by `useRunContext` param signature)
