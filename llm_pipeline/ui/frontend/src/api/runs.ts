@@ -64,12 +64,12 @@ export function useRun(runId: string) {
     queryFn: () => apiClient<RunDetail>(`/runs/${runId}`),
     enabled: Boolean(runId),
     staleTime: (query) => {
-      const status = query.state.data?.status as RunStatus | undefined
+      const status = query.state.data?.status
       if (!status) return 30_000
       return isTerminalStatus(status) ? Infinity : 5_000
     },
     refetchInterval: (query) => {
-      const status = query.state.data?.status as RunStatus | undefined
+      const status = query.state.data?.status
       if (status && !isTerminalStatus(status)) return 3_000
       return false
     },

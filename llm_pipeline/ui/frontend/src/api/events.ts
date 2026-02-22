@@ -25,6 +25,7 @@ export function useEvents(
     queryKey: queryKeys.runs.events(runId, filters),
     queryFn: () =>
       apiClient<EventListResponse>('/runs/' + runId + '/events' + toSearchParams(filters)),
+    enabled: Boolean(runId),
     staleTime: runStatus && isTerminalStatus(runStatus) ? Infinity : 5_000,
     refetchInterval: runStatus && !isTerminalStatus(runStatus) ? 3_000 : false,
   })
