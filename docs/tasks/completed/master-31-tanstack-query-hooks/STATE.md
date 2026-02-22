@@ -1,7 +1,7 @@
 ## Task: master-31-tanstack-query-hooks
 ## Description: Create TanStack Query hooks for all API endpoints with proper caching, invalidation, and WebSocket support
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
