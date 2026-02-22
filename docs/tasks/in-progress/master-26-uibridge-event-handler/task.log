@@ -5,3 +5,13 @@
 [2026-02-22 14:38:00] [INFO] Created: STATE.md
 [2026-02-22 14:38:00] [INFO] ============================================================
 [2026-02-22 14:38:00] [DEBUG] STATE.md atomic write complete
+[2026-02-22 14:52:27] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-22 14:52:43] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-22 14:52:47] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-22 14:52:52] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-22 14:53:08] [ERROR] BLOCKED: Invalid AgentRow 'Async/sync bridging patterns': skills: Skill must be '-' or 'plugin:skill' format, commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-22 14:53:16] [ERROR] BLOCKED: Invalid skill 'python-development:async-python-patterns': skill 'async-python-patterns' not found in 'python-development'
+[2026-02-22 14:53:25] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-22 14:53:33] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-22 14:53:33] [INFO] Auto-updated agent statuses: Async/sync bridging patterns: pending -> in-progress, Event-driven architecture patterns: pending -> in-progress, Existing codebase events/pipeline analysis: pending -> in-progress
+[2026-02-22 14:53:34] [DEBUG] STATE.md atomic write complete
