@@ -15,7 +15,7 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useWsStore } from '../stores/websocket'
 import { queryKeys } from './query-keys'
-import type { EventListResponse, EventItem } from './types'
+import type { WsMessage, EventListResponse, EventItem } from './types'
 
 /** Close codes that should NOT trigger reconnection. */
 const NO_RECONNECT_CODES = new Set([1000, 4004])
@@ -48,6 +48,34 @@ function buildWsUrl(runId: string): string {
 }
 
 /**
+ * Parse raw JSON into a WsMessage discriminated union member.
+ *
+ * The backend sends control messages with a `type` field, but raw pipeline
+ * events only have `event_type`. This function tags raw events with
+ * `type: 'pipeline_event'` so the caller can use `switch(msg.type)`.
+ */
+function parseWsMessage(data: string): WsMessage | null {
+  let raw: Record<string, unknown>
+  try {
+    raw = JSON.parse(data) as Record<string, unknown>
+  } catch {
+    return null
+  }
+
+  // Control messages already have `type`; pass through
+  if (typeof raw.type === 'string') {
+    return raw as unknown as WsMessage
+  }
+
+  // Raw pipeline events have `event_type` but no `type`; tag them
+  if (typeof raw.event_type === 'string') {
+    return { ...raw, type: 'pipeline_event' } as unknown as WsMessage
+  }
+
+  return null
+}
+
+/**
  * Connect to the WebSocket stream for a pipeline run.
  *
  * Returns `{ status, error }` from the Zustand store so consumers
@@ -65,8 +93,6 @@ export function useWebSocket(runId: string | null) {
   const connectRef = useRef<(() => void) | null>(null)
 
   const { status, error, setStatus, setError, incrementReconnect, reset } = useWsStore()
-
-  const reconnectCountRef = useRef(0)
 
   /**
    * Append a pipeline event to the events query cache.
@@ -111,59 +137,54 @@ export function useWebSocket(runId: string | null) {
         return
       }
       hadConnectionRef.current = true
-      reconnectCountRef.current = 0
       setStatus('connected')
     }
 
     ws.onmessage = (event) => {
       if (!mountedRef.current) return
 
-      let raw: Record<string, unknown>
-      try {
-        raw = JSON.parse(event.data as string) as Record<string, unknown>
-      } catch {
-        return
-      }
+      const msg = parseWsMessage(event.data as string)
+      if (!msg) return
 
-      // Control messages carry a `type` field; raw pipeline events do not
-      // (they have `event_type` instead). Branch on presence of `type`.
-      const msgType = raw.type as string | undefined
+      switch (msg.type) {
+        case 'heartbeat':
+          // keep-alive, no-op
+          break
 
-      if (msgType === 'heartbeat') {
-        // keep-alive, no-op
-        return
-      }
+        case 'replay_complete':
+          setStatus('closed')
+          break
 
-      if (msgType === 'replay_complete') {
-        setStatus('closed')
-        return
-      }
-
-      if (msgType === 'stream_complete') {
-        setStatus('closed')
-        // refetch run detail to pick up final status/timing
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.runs.detail(runId),
-        })
-        return
-      }
-
-      if (msgType === 'error') {
-        setStatus('error')
-        setError(raw.detail as string)
-        return
-      }
-
-      // Raw pipeline event (EventItem shape with event_type)
-      if (typeof raw.event_type === 'string') {
-        const pipelineEvent = raw as unknown as EventItem
-        appendEventToCache(pipelineEvent)
-
-        // Invalidate steps list when event is step-scoped
-        if (isStepScopedEvent(pipelineEvent.event_type)) {
+        case 'stream_complete':
+          setStatus('closed')
+          // refetch run detail to pick up final status/timing
           queryClient.invalidateQueries({
-            queryKey: queryKeys.runs.steps(runId),
+            queryKey: queryKeys.runs.detail(runId),
           })
+          break
+
+        case 'error':
+          setStatus('error')
+          setError(msg.detail)
+          break
+
+        case 'pipeline_event': {
+          // Transition to 'replaying' on first event if still 'connected'
+          // so consumers can show "replaying history..." UI
+          const currentStatus = useWsStore.getState().status
+          if (currentStatus === 'connected') {
+            setStatus('replaying')
+          }
+
+          appendEventToCache(msg)
+
+          // Invalidate steps list when event is step-scoped
+          if (isStepScopedEvent(msg.event_type)) {
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.runs.steps(runId),
+            })
+          }
+          break
         }
       }
     }
@@ -192,13 +213,10 @@ export function useWebSocket(runId: string | null) {
       // Unexpected disconnect -- attempt reconnection if we had
       // a successful connection previously
       if (hadConnectionRef.current && !NO_RECONNECT_CODES.has(event.code)) {
-        reconnectCountRef.current += 1
         incrementReconnect()
+        const count = useWsStore.getState().reconnectCount
 
-        const delay = Math.min(
-          BASE_RECONNECT_DELAY * 2 ** (reconnectCountRef.current - 1),
-          MAX_RECONNECT_DELAY,
-        )
+        const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** (count - 1), MAX_RECONNECT_DELAY)
 
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null
@@ -215,7 +233,6 @@ export function useWebSocket(runId: string | null) {
 
     mountedRef.current = true
     hadConnectionRef.current = false
-    reconnectCountRef.current = 0
 
     if (!runId) {
       reset()

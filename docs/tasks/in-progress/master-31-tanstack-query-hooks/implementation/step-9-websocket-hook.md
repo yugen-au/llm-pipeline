@@ -56,3 +56,87 @@ New useWebSocket(runId: string | null) hook. Key implementation details:
 [x] Unexpected disconnect triggers exponential backoff reconnect
 [x] Effect cleanup closes ws, clears timer, resets store
 [x] No unused imports (WsMessage removed since not directly used)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Unreachable 'replaying' status -- setStatus('replaying') now called on first pipeline_event when status is 'connected', so consumers can show "replaying history..." UI before replay_complete sets 'closed'
+[x] Dual reconnect tracking -- removed reconnectCountRef, backoff delay now reads useWsStore.getState().reconnectCount after incrementReconnect() call
+[x] WsPipelineEvent discriminated union -- refactored message parsing into parseWsMessage() that tags raw pipeline events with type:'pipeline_event', enabling proper switch(msg.type) over WsMessage union
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/websocket.ts`
+Full rewrite of message handling and reconnect logic.
+
+```
+# Before (issue 1 - unreachable 'replaying')
+if (msgType === 'replay_complete') {
+  setStatus('closed')
+  return
+}
+// Raw pipeline events never set 'replaying'
+
+# After
+case 'pipeline_event': {
+  const currentStatus = useWsStore.getState().status
+  if (currentStatus === 'connected') {
+    setStatus('replaying')
+  }
+  appendEventToCache(msg)
+  // ...
+}
+case 'replay_complete':
+  setStatus('closed')
+  break
+```
+
+```
+# Before (issue 2 - dual tracking)
+const reconnectCountRef = useRef(0)
+// ...
+reconnectCountRef.current += 1
+incrementReconnect()
+const delay = Math.min(
+  BASE_RECONNECT_DELAY * 2 ** (reconnectCountRef.current - 1),
+  MAX_RECONNECT_DELAY,
+)
+
+# After
+incrementReconnect()
+const count = useWsStore.getState().reconnectCount
+const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** (count - 1), MAX_RECONNECT_DELAY)
+```
+
+```
+# Before (issue 3 - no discriminated union)
+import type { EventListResponse, EventItem } from './types'
+// ...
+let raw: Record<string, unknown>
+raw = JSON.parse(event.data as string) as Record<string, unknown>
+const msgType = raw.type as string | undefined
+if (msgType === 'heartbeat') { ... }
+if (typeof raw.event_type === 'string') { ... }
+
+# After
+import type { WsMessage, EventListResponse, EventItem } from './types'
+// ...
+function parseWsMessage(data: string): WsMessage | null {
+  let raw: Record<string, unknown>
+  raw = JSON.parse(data) as Record<string, unknown>
+  if (typeof raw.type === 'string') return raw as unknown as WsMessage
+  if (typeof raw.event_type === 'string')
+    return { ...raw, type: 'pipeline_event' } as unknown as WsMessage
+  return null
+}
+// Then: switch(msg.type) { case 'heartbeat': ... case 'pipeline_event': ... }
+```
+
+### Verification
+[x] TypeScript compilation passes (tsc -b --noEmit)
+[x] Prettier formatting passes
+[x] 'replaying' status now reachable via pipeline_event handler
+[x] reconnectCountRef removed, single source of truth in Zustand store
+[x] WsMessage discriminated union used with switch(msg.type)
+[x] parseWsMessage tags raw events with type:'pipeline_event' discriminant
