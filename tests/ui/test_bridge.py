@@ -136,6 +136,32 @@ class TestUIBridgeEmit:
         _, called_data = manager.broadcast_calls[0]
         assert called_data == event.to_dict()
 
+    def test_emit_broadcast_raises_on_terminal_event_propagates_and_no_signal(self):
+        """broadcast_to_run raising during a terminal event propagates the exception.
+
+        complete() is NOT called, leaving _completed=False and signal_run_complete
+        uncalled.  The safety net is trigger_run's finally block, not UIBridge itself.
+        """
+
+        class _RaisingManager:
+            def __init__(self) -> None:
+                self.signal_calls: list[str] = []
+
+            def broadcast_to_run(self, run_id: str, event_data: dict) -> None:
+                raise RuntimeError("queue full")
+
+            def signal_run_complete(self, run_id: str) -> None:
+                self.signal_calls.append(run_id)
+
+        raising_manager = _RaisingManager()
+        bridge = UIBridge(run_id=RUN_ID, manager=raising_manager)
+
+        with pytest.raises(RuntimeError, match="queue full"):
+            bridge.emit(_make_completed())
+
+        assert bridge._completed is False
+        assert raising_manager.signal_calls == []
+
 
 # -- TestUIBridgeComplete ------------------------------------------------------
 
