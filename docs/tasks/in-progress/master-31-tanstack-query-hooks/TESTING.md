@@ -95,3 +95,56 @@ None (after fix applied)
 2. `useRunListSearch()` convenience hook noted in step-4 implementation file is not present in `src/api/runs.ts` - it was listed in PLAN.md Step 4 item 8 as a documentation note only ("document that index.tsx should import this when wiring the filter UI"). Task 33 agent should use `Route.useSearch()` directly from the runs index route; no hook stub is missing.
 3. Prompts/pipelines hooks will 404 at runtime until tasks 22/24 land - this is expected and documented in TSDoc.
 4. Production bundle size is clean: 368 kB main chunk (React + TanStack Router + Query + Zustand), DevTools excluded.
+
+---
+
+# Re-verification Results (post review-fix phase)
+
+## Summary
+**Status:** passed
+Re-ran all 4 checks after review-phase changes to types.ts, runs.ts, steps.ts, events.ts, prompts.ts, and websocket.ts. All pass with zero errors.
+
+## Changes Verified
+- `src/api/types.ts` - added `WsPipelineEvent` discriminated union wrapper (`type: 'pipeline_event' & EventItem`), added `toSearchParams()` shared utility, `WsConnectionStatus` now includes `'replaying'` state
+- `src/api/runs.ts` - switched from local `buildRunParams` to shared `toSearchParams` import
+- `src/api/steps.ts` - added `enabled: Boolean(runId)` guard to both `useSteps` and `useStep`
+- `src/api/events.ts` - added `enabled: Boolean(runId)` guard, switched to `toSearchParams`
+- `src/api/prompts.ts` - switched to `toSearchParams`
+- `src/api/websocket.ts` - `parseWsMessage()` helper added, tags raw pipeline events with `type: 'pipeline_event'`, `switch(msg.type)` exhaustive dispatch, `replaying` status set on first pipeline_event while `connected`, reconnect count now reads from `useWsStore.getState().reconnectCount` instead of local ref
+
+## Automated Testing
+### Test Execution
+**Pass Rate:** 4/4
+
+```
+tsc -b --noEmit: clean (no output)
+
+npm run build:
+vite v7.3.1 building client environment for production...
+253 modules transformed.
+dist/index.html                      0.41 kB | gzip:   0.27 kB
+dist/assets/index-DqoSpvZ3.css      9.63 kB | gzip:   2.62 kB
+dist/assets/index-CUYJWBEp.js       0.24 kB | gzip:   0.19 kB
+dist/assets/prompts-u5OqvGiN.js     0.30 kB | gzip:   0.21 kB
+dist/assets/live-DjK8vLyA.js        0.30 kB | gzip:   0.22 kB
+dist/assets/pipelines-Dvb70C9k.js   0.30 kB | gzip:   0.22 kB
+dist/assets/_runId-Ff3MmHHx.js      0.46 kB | gzip:   0.28 kB
+dist/assets/index-DwWfAv0n.js     368.96 kB | gzip: 113.43 kB
+built in 2.87s
+
+npm run lint: no problems
+
+madge --circular: 22 files processed, No circular dependency found!
+```
+
+### Failed Tests
+None
+
+## Build Verification
+- [x] TypeScript strict compilation passes (tsc -b --noEmit, zero output)
+- [x] Vite production build succeeds (253 modules, 2.87s)
+- [x] ESLint passes with zero errors or warnings
+- [x] No circular dependencies (22 files scanned)
+
+## Issues Found
+None
