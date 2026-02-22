@@ -111,3 +111,10 @@
 [2026-02-22 12:23:54] [DEBUG] STATE.md atomic write complete
 [2026-02-22 12:24:16] [INFO] Task call: code-review-ai:architect-review (phase: review)
 [2026-02-22 12:27:57] [DEBUG] STATE.md atomic write complete
+[2026-02-22 14:04:18] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '1,4,5,6,7,9'
+[2026-02-22 14:04:25] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-02-22 14:04:27] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-02-22 14:04:27] [INFO] Updated Commits for 'Architecture review': f97e899
+[2026-02-22 14:04:27] [INFO] Auto-updated agent statuses: TypeScript Types: complete -> in-progress, Runs Hooks: complete -> pending, Steps Hooks: complete -> pending, Events Hooks: complete -> pending, Prompts Hooks: complete -> pending, WebSocket Hook: complete -> pending, Architecture review: complete -> pending
+[2026-02-22 14:04:28] [INFO] Deleted 1 old contract file(s)
+[2026-02-22 14:04:28] [DEBUG] STATE.md atomic write complete
