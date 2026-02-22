@@ -1,20 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from './client'
 import { queryKeys, isTerminalStatus } from './query-keys'
+import { toSearchParams } from './types'
 import type { EventListParams, EventListResponse, RunStatus } from './types'
-
-/**
- * Build URLSearchParams from filter object, omitting undefined/null values.
- */
-function buildEventParams(filters: Partial<EventListParams>): string {
-  const params = new URLSearchParams(
-    Object.entries(filters)
-      .filter(([, v]) => v != null)
-      .map(([k, v]) => [k, String(v)])
-  )
-  const str = params.toString()
-  return str ? '?' + str : ''
-}
 
 /**
  * Fetch events for a pipeline run with optional filtering.
@@ -31,16 +19,13 @@ function buildEventParams(filters: Partial<EventListParams>): string {
 export function useEvents(
   runId: string,
   filters: Partial<EventListParams> = {},
-  runStatus?: RunStatus | string
+  runStatus?: RunStatus | string,
 ) {
   return useQuery({
     queryKey: queryKeys.runs.events(runId, filters),
     queryFn: () =>
-      apiClient<EventListResponse>(
-        '/runs/' + runId + '/events' + buildEventParams(filters)
-      ),
+      apiClient<EventListResponse>('/runs/' + runId + '/events' + toSearchParams(filters)),
     staleTime: runStatus && isTerminalStatus(runStatus) ? Infinity : 5_000,
-    refetchInterval:
-      runStatus && !isTerminalStatus(runStatus) ? 3_000 : false,
+    refetchInterval: runStatus && !isTerminalStatus(runStatus) ? 3_000 : false,
   })
 }

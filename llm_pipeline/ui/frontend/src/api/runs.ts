@@ -16,6 +16,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
 import { queryKeys, isTerminalStatus } from './query-keys'
+import { toSearchParams } from './types'
 import type {
   RunListParams,
   RunListResponse,
@@ -25,21 +26,6 @@ import type {
   TriggerRunResponse,
   ContextEvolutionResponse,
 } from './types'
-
-// ---------------------------------------------------------------------------
-// Helper: build URLSearchParams from partial filter objects
-// ---------------------------------------------------------------------------
-
-function toSearchParams(filters: Record<string, unknown>): string {
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(filters)) {
-    if (value != null) {
-      params.set(key, String(value))
-    }
-  }
-  const str = params.toString()
-  return str ? `?${str}` : ''
-}
 
 // ---------------------------------------------------------------------------
 // useRuns

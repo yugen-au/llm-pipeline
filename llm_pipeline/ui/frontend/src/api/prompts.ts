@@ -8,20 +8,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
+import { toSearchParams } from './types'
 import type { PromptListParams, PromptListResponse } from './types'
-
-/**
- * Build URLSearchParams from filter object, omitting undefined/null values.
- */
-function buildPromptParams(filters: Partial<PromptListParams>): string {
-  const params = new URLSearchParams(
-    Object.entries(filters)
-      .filter(([, v]) => v != null)
-      .map(([k, v]) => [k, String(v)])
-  )
-  const str = params.toString()
-  return str ? '?' + str : ''
-}
 
 /**
  * Fetch a paginated list of prompts with optional filtering.
@@ -38,9 +26,6 @@ function buildPromptParams(filters: Partial<PromptListParams>): string {
 export function usePrompts(filters: Partial<PromptListParams> = {}) {
   return useQuery({
     queryKey: queryKeys.prompts.list(filters),
-    queryFn: () =>
-      apiClient<PromptListResponse>(
-        '/prompts' + buildPromptParams(filters)
-      ),
+    queryFn: () => apiClient<PromptListResponse>('/prompts' + toSearchParams(filters)),
   })
 }

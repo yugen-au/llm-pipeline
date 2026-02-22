@@ -43,3 +43,47 @@ New file. All interfaces derived from backend sources:
 [x] All `@provisional` TSDoc markers on prompts and pipelines types
 [x] `import type` not needed (no type-only imports in this file)
 [x] `verbatimModuleSyntax` compatible (no imports at all)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] WsMessage discriminated union not truly discriminated -- added WsPipelineEvent wrapper type with `type: 'pipeline_event'` discriminant, replaced raw EventItem in WsMessage union
+[x] Duplicated URLSearchParams helper across runs.ts, events.ts, prompts.ts -- added shared `toSearchParams()` utility to types.ts, removed local helpers from all three hook files
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/types.ts`
+Added `WsPipelineEvent` wrapper type: `{ type: 'pipeline_event' } & EventItem`. Updated `WsMessage` union to use `WsPipelineEvent` instead of raw `EventItem`. Added `toSearchParams()` utility function that filters null/undefined values and serializes to `?key=value&...` query string.
+
+```
+# Before (WsMessage)
+export type WsMessage = WsHeartbeat | WsStreamComplete | WsReplayComplete | WsError | EventItem
+
+# After (WsMessage)
+export type WsPipelineEvent = { type: 'pipeline_event' } & EventItem
+export type WsMessage = WsHeartbeat | WsStreamComplete | WsReplayComplete | WsError | WsPipelineEvent
+
+# Before (no shared utility)
+# (three local helpers in runs.ts, events.ts, prompts.ts)
+
+# After (shared utility in types.ts)
+export function toSearchParams(
+  params: Record<string, string | number | boolean | undefined | null>,
+): string
+```
+
+#### File: `llm_pipeline/ui/frontend/src/api/runs.ts`
+Removed local `toSearchParams` function. Added `import { toSearchParams } from './types'`.
+
+#### File: `llm_pipeline/ui/frontend/src/api/events.ts`
+Removed local `buildEventParams` function. Added `import { toSearchParams } from './types'`. Updated call site.
+
+#### File: `llm_pipeline/ui/frontend/src/api/prompts.ts`
+Removed local `buildPromptParams` function. Added `import { toSearchParams } from './types'`. Updated call site.
+
+### Verification
+[x] TypeScript compilation passes (`npx tsc --noEmit --project tsconfig.app.json`)
+[x] Prettier formatting passes on all 5 changed files
+[x] WsMessage is now a proper discriminated union on `type` field
+[x] All three hook files use shared `toSearchParams` -- no local duplicates remain
