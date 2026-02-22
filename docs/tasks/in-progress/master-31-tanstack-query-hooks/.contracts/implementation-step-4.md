@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-31-tanstack-query-hooks
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-3-query-key-factory.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-runs-hooks.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 3 - implement ONLY this step, not others
+- Step: 4 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-3-query-key-factory.md
+4. Document decisions in implementation\step-4-runs-hooks.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 3: QUERY KEY FACTORY
+# IMPLEMENTATION - STEP 4: RUNS HOOKS
 **Status:** [completed/failed/blocked]
 
 ## Summary

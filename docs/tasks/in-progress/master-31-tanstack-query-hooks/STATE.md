@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/31-tanstack-query-hooks
 ## Plugins: frontend-mobile-development, backend-development
@@ -20,12 +20,12 @@
 | Frontend Patterns Research | frontend-mobile-development:frontend-developer | research | 2 | - | A | complete | 0 | ae9bc9bf7891b41e4 | 4c94b79 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a52cde83fdfa5dee7 | a3bc36d | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a13935b617ef38690 | 278aafd | - |
-| TypeScript Types | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | ab88f95b057b93c55 | e7f9062 | /tanstack/query |
-| apiClient and DevTools | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a664d8b56f52eb6a9 | e7f9062 | /tanstack/query |
-| Query Key Factory | frontend-mobile-development:frontend-developer | implementation | 3 | - | A | complete | 0 | ada8a055f4198abbc | 44c19eb | /tanstack/query |
-| Runs Hooks | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | pending | 0 | pending | pending | /tanstack/query |
-| Steps Hooks | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | /tanstack/query |
-| Events Hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | pending | 0 | pending | pending | /tanstack/query |
-| Prompts Hooks | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | pending | 0 | pending | pending | /tanstack/query |
-| Pipelines Hooks | frontend-mobile-development:frontend-developer | implementation | 8 | - | B | pending | 0 | pending | pending | /tanstack/query |
+| TypeScript Types | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | ab88f95b057b93c55 | e7f9062,2e45079 | /tanstack/query |
+| apiClient and DevTools | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a664d8b56f52eb6a9 | e7f9062,2e45079 | /tanstack/query |
+| Query Key Factory | frontend-mobile-development:frontend-developer | implementation | 3 | - | A | complete | 0 | ada8a055f4198abbc | 44c19eb,2e45079 | /tanstack/query |
+| Runs Hooks | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
+| Steps Hooks | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
+| Events Hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
+| Prompts Hooks | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
+| Pipelines Hooks | frontend-mobile-development:frontend-developer | implementation | 8 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
 | WebSocket Hook | frontend-mobile-development:frontend-developer | implementation | 9 | - | C | pending | 0 | pending | pending | /tanstack/query,/pmndrs/zustand |
