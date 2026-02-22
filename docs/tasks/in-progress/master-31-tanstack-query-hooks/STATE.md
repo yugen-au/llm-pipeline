@@ -22,7 +22,7 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a13935b617ef38690 | 278aafd | - |
 | TypeScript Types | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | ab88f95b057b93c55 | e7f9062 | /tanstack/query |
 | apiClient and DevTools | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | in-progress | 0 | pending | pending | /tanstack/query |
-| Query Key Factory | frontend-mobile-development:frontend-developer | implementation | 3 | - | A | in-progress | 0 | pending | pending | /tanstack/query |
+| Query Key Factory | frontend-mobile-development:frontend-developer | implementation | 3 | - | A | complete | 0 | ada8a055f4198abbc | 44c19eb | /tanstack/query |
 | Runs Hooks | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | pending | 0 | pending | pending | /tanstack/query |
 | Steps Hooks | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | /tanstack/query |
 | Events Hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | pending | 0 | pending | pending | /tanstack/query |
