@@ -1,9 +1,9 @@
 ## Task: master-31-tanstack-query-hooks
 ## Description: Create TanStack Query hooks for all API endpoints with proper caching, invalidation, and WebSocket support
 
-## Phase: fixing-review
+## Phase: testing
 ## Status: in-progress
-## Current Group: C
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/31-tanstack-query-hooks
 ## Plugins: frontend-mobile-development, backend-development
@@ -29,5 +29,5 @@
 | Prompts Hooks | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | complete | 1 | af272697129d6c39f | 8f4cd45,bd7ec6a,d8ef4e0 | /tanstack/query |
 | Pipelines Hooks | frontend-mobile-development:frontend-developer | implementation | 8 | - | B | complete | 0 | a263e8213b10eae46 | e8863b9,bd7ec6a | /tanstack/query |
 | WebSocket Hook | frontend-mobile-development:frontend-developer | implementation | 9 | - | C | complete | 1 | a34fb473c762832a5 | 4957fd4,6dba9b1 | /tanstack/query,/pmndrs/zustand |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a5e7f3d8d7264d4cd | 83c992f | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | a5e7f3d8d7264d4cd | 83c992f | - |
 | Architecture review | code-review-ai:architect-review | review | 1 | - | A | pending | 0 | a13519bf37367ca48 | f97e899 | - |
