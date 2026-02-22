@@ -23,7 +23,7 @@
 | TypeScript Types | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 1 | ab88f95b057b93c55 | e7f9062,2e45079,977a895 | /tanstack/query |
 | apiClient and DevTools | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a664d8b56f52eb6a9 | e7f9062,2e45079 | /tanstack/query |
 | Query Key Factory | frontend-mobile-development:frontend-developer | implementation | 3 | - | A | complete | 0 | ada8a055f4198abbc | 44c19eb,2e45079 | /tanstack/query |
-| Runs Hooks | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | in-progress | 1 | ab17ee29c4a53c4b7 | bd7ec6a | /tanstack/query |
+| Runs Hooks | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 1 | ab17ee29c4a53c4b7 | bd7ec6a | /tanstack/query |
 | Steps Hooks | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 1 | a59f2a2766650d586 | bd7ec6a | /tanstack/query |
 | Events Hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | complete | 1 | a3d5e3ec1e2d746fc | e8863b9,bd7ec6a,a9fb1f9 | /tanstack/query |
 | Prompts Hooks | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | complete | 1 | af272697129d6c39f | 8f4cd45,bd7ec6a,d8ef4e0 | /tanstack/query |
