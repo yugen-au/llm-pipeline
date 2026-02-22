@@ -20,3 +20,4 @@
 | Python Testing Patterns | python-development:python-pro | research | 2 | - | A | complete | 0 | a0eacbe2946945d40 | 324789d | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a33f0ebd5cb276f0f | fe685d6 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a4d7630d3e11b237e | pending | - |
+| Write Integration Tests | backend-development:test-automator | implementation | 1 | - | A | pending | 0 | pending | pending | /websites/fastapi_tiangolo,/pytest-dev/pytest |
