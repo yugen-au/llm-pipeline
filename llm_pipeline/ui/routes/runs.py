@@ -9,7 +9,9 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from llm_pipeline.events import CompositeEmitter
 from llm_pipeline.state import PipelineRun, PipelineStepState
+from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
 
 logger = logging.getLogger(__name__)
