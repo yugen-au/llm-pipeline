@@ -87,3 +87,96 @@ None
 **Decision:** APPROVE
 
 All success criteria from PLAN.md are met. TypeScript compiles clean, types match backend models, TanStack Query v5 API is used correctly (staleTime/refetchInterval as functions, object-form hooks, proper invalidation). WebSocket hook properly handles React 19 Strict Mode via readyState guard and mountedRef. The three medium issues (unreachable `'replaying'` status, duplicated URL params helper, non-discriminated WsMessage union) are all non-blocking and can be addressed in a follow-up cleanup.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+
+All 6 issues from the initial review have been addressed. Fixes are clean, correct, and introduce no regressions. One new low-severity observation about the `'replaying'` status semantics in live-streaming mode.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `D:\Documents\claude-projects\llm-pipeline\CLAUDE.md`
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| No semicolons | pass | Verified across all changed files |
+| Single quotes | pass | No double-quote regressions |
+| `import type` for type-only imports | pass | `toSearchParams` correctly uses value import (it's a function); type imports unchanged |
+| `verbatimModuleSyntax: true` compliance | pass | New `import { toSearchParams }` in runs.ts, events.ts, prompts.ts are value imports (function), correct |
+| No hardcoded values | pass | No changes to URLs or constants |
+| Error handling present | pass | No regressions |
+| Prettier config compliance | pass | No style violations detected |
+
+## Fix Verification
+
+### Fix 1: WsMessage discriminated union (MEDIUM - Step 1)
+**Verdict:** RESOLVED
+`WsPipelineEvent` wrapper type added to `types.ts` with `type: 'pipeline_event'` discriminant. `WsMessage` union now uses `WsPipelineEvent` instead of raw `EventItem`. `parseWsMessage()` in `websocket.ts` tags incoming events with `type: 'pipeline_event'`. `switch(msg.type)` in the handler now has a proper `case 'pipeline_event'` branch. Union is fully discriminated and narrowable.
+
+### Fix 2: URLSearchParams deduplication (MEDIUM - Steps 4, 6, 7)
+**Verdict:** RESOLVED
+Single `toSearchParams()` function in `types.ts` (line 365-371). Imported by `runs.ts`, `events.ts`, `prompts.ts`. Old per-file helpers (`buildEventParams`, `buildPromptParams`, local `toSearchParams` in runs.ts) removed. Implementation correctly filters null/undefined, returns empty string or `?key=value&...`.
+
+### Fix 3: Unreachable 'replaying' status (MEDIUM - Step 9)
+**Verdict:** RESOLVED (with observation)
+WebSocket hook now transitions to `'replaying'` on the first `pipeline_event` when `currentStatus === 'connected'` (websocket.ts lines 173-177). Uses `useWsStore.getState().status` for synchronous read -- correct pattern. See low issue below re: live-stream semantics.
+
+### Fix 4: Missing `enabled` guards (LOW - Steps 5, 6)
+**Verdict:** RESOLVED
+`enabled: Boolean(runId)` added to `useSteps` (line 22), `useStep` (line 53), `useEvents` (line 28). Now consistent with `useRun` and `useRunContext`.
+
+### Fix 5: Status type cast (LOW - Step 4)
+**Verdict:** RESOLVED
+`as RunStatus | undefined` cast removed from `useRun` staleTime/refetchInterval callbacks. `isTerminalStatus` already accepts `RunStatus | string` (query-keys.ts line 41), so `query.state.data?.status` (typed as `string | undefined`) is accepted without casting.
+
+### Fix 6: Dual reconnect tracking (LOW - Step 9)
+**Verdict:** RESOLVED
+Local `reconnectCountRef` removed. Reconnect delay now calculated from `useWsStore.getState().reconnectCount` (websocket.ts line 217) after `incrementReconnect()` call. Single source of truth.
+
+## Issues Found
+
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+
+#### `'replaying'` status triggers for both replay and live-stream modes
+**Step:** 9
+**Details:** The fix transitions to `'replaying'` on the first `pipeline_event` when status is `'connected'`. This works correctly for replay mode (completed/failed runs). However, for live-streaming runs (actively executing), the first real-time event also triggers `'replaying'`, which is semantically misleading -- the UI would show "replaying" during a live stream. The WebSocket protocol does not distinguish replay events from live events at the message level, so the hook cannot differentiate the two modes. Not functionally harmful (status transitions to `'closed'` on `stream_complete`/`replay_complete` regardless), but downstream UI components should be aware that `'replaying'` means "receiving events" rather than strictly "replaying historical data." Consider renaming to `'streaming'` in a follow-up if this distinction matters.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `src/api/types.ts` | pass | `WsPipelineEvent` wrapper added, `toSearchParams` centralized, union properly discriminated |
+| `src/api/runs.ts` | pass | Uses shared `toSearchParams`, status cast removed, no regressions |
+| `src/api/steps.ts` | pass | `enabled: Boolean(runId)` added to both hooks |
+| `src/api/events.ts` | pass | Uses shared `toSearchParams`, `enabled` guard added |
+| `src/api/prompts.ts` | pass | Uses shared `toSearchParams`, no other changes |
+| `src/api/websocket.ts` | pass | `'replaying'` status set, dual ref removed, `WsPipelineEvent` case added |
+| `src/stores/websocket.ts` | pass | No changes needed; `'replaying'` now reachable |
+
+## New Issues Introduced
+- None detected -- all fixes are additive/corrective with no regressions
+
+## Recommendation
+**Decision:** APPROVE
+
+All 6 original issues resolved correctly. One new low observation (replaying/streaming semantic ambiguity) is non-blocking and purely a naming concern for future UI work. Code is clean, consistent, and ready to merge.
