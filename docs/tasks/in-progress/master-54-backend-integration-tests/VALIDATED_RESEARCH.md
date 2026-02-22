@@ -4,7 +4,7 @@
 
 Validated Step 1 (API architecture) and Step 2 (testing patterns) against codebase. Core tension resolved: both are partially correct. Step 2's "comprehensive coverage" is accurate for endpoint-level testing (all 7 REST + 1 WS endpoint have happy/error path tests). Step 1's 7 gaps are about cross-component integration flows, not endpoint coverage. After codebase validation, 5 of 7 gaps are genuine, 1 is overstated, 1 is subsumed. Both documents have significant test count inaccuracies (actual total: 180, Step 1 claims ~128). Task 54 spec details contain stale/incorrect code patterns.
 
-Two architectural questions require CEO input before planning.
+Two architectural questions resolved by CEO -- all decisions locked in, ready for planning.
 
 ## Domain Findings
 
@@ -76,8 +76,8 @@ Minor inconsistency: context evolution endpoint lives in `runs.py` (router prefi
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Where should new integration tests go? `tests/test_ui_backend.py` (task 54 spec) or `tests/ui/test_integration.py` (step 1)? | **Pending CEO response** | Determines file structure and import patterns |
-| Should new tests use `_make_app()` or extend `create_app()` to accept pre-built engine? | **Pending CEO response** | Determines whether app.py is modified (scope creep vs architectural improvement) |
+| Where should new integration tests go? `tests/test_ui_backend.py` (task 54 spec) or `tests/ui/test_integration.py` (step 1)? | **`tests/ui/test_integration.py`** -- follow existing tests/ui/ convention | Locks file location. New tests import from conftest.py fixtures already in tests/ui/. No new conftest needed. |
+| Should new tests use `_make_app()` or extend `create_app()` to accept pre-built engine? | **Use `_make_app()` from conftest** -- proven pattern, no source changes | No modifications to app.py. GAP 2 (create_app factory integration) downgraded to NOT PLANNED -- existing 52 tests already cover create_app() config and trigger flow. StaticPool threading concern becomes moot since _make_app() already handles it. |
 
 ## Assumptions Validated
 - [x] All 7 REST endpoints + 1 WS endpoint have individual test coverage (Step 2 claim confirmed)
@@ -92,15 +92,14 @@ Minor inconsistency: context evolution endpoint lives in `runs.py` (router prefi
 - [x] Factory lambdas in test_runs.py already accept **kw since task 26
 
 ## Open Items
-- Test file location decision pending (task spec vs convention)
-- create_app() vs _make_app() strategy for new tests pending
-- Task 54 spec code samples are inaccurate -- planning must reference actual API signatures
+- Task 54 spec code samples are inaccurate -- planning must reference actual API signatures from Step 1
 
 ## Recommendations for Planning
-1. Prioritize GAP 1 (E2E trigger+WS) as primary deliverable -- only CRITICAL gap, explicitly called for by upstream task 26
-2. Include GAP 3 (trigger error DB update) as secondary deliverable -- MEDIUM priority, small scope, high value
-3. Use `_make_app()` pattern for new tests unless CEO wants create_app() extended -- avoids scope creep
-4. Place new tests in `tests/ui/test_integration.py` following existing convention (pending CEO approval)
-5. Defer GAPs 5-7 (LOW priority) unless time permits -- diminishing returns
-6. Do NOT copy code from Task 54 spec details -- use Step 1's API surface area as reference
-7. New tests should follow existing conventions: class-based grouping, seeded fixtures, no parametrization, starlette TestClient
+1. **File:** `tests/ui/test_integration.py` (CEO decision, follows convention)
+2. **Fixtures:** Use `_make_app()` from existing conftest.py (CEO decision, proven StaticPool pattern)
+3. **Primary deliverable:** GAP 1 (E2E trigger+WS) -- only CRITICAL gap, explicitly called for by upstream task 26
+4. **Secondary deliverable:** GAP 3 (trigger error DB update) -- MEDIUM priority, small scope, high value
+5. **Defer:** GAPs 5-7 (LOW priority) unless time permits -- diminishing returns
+6. **Drop:** GAP 2 (create_app factory) -- already covered by 52 existing tests, moot given _make_app() decision
+7. **Do NOT** copy code from Task 54 spec details -- use Step 1's API surface area as reference
+8. Follow existing conventions: class-based grouping, seeded fixtures, starlette TestClient, `**kw` in factory lambdas
