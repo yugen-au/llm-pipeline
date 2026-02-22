@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-31-tanstack-query-hooks
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-1-typescript-types.md (if already exists, APPEND to file)
+- Output Files: implementation\step-5-steps-hooks.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 1
+- Step to fix: 5
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. Context7 library IDs to query: /tanstack/query
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 1
+1. Read REVIEW.md for issues assigned to Step 5
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-1-typescript-types.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-5-steps-hooks.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
