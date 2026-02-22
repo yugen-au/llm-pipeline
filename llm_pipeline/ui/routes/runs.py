@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from llm_pipeline.state import PipelineRun, PipelineStepState
+from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
 
 logger = logging.getLogger(__name__)
@@ -187,8 +188,13 @@ def trigger_run(
     """Trigger a pipeline run in the background.
 
     The pipeline_registry on app.state maps pipeline names to factory
-    callables with signature ``(run_id: str, engine: Engine) -> pipeline``
+    callables with signature
+    ``(run_id: str, engine: Engine, event_emitter: PipelineEventEmitter | None = None) -> pipeline``
     where the returned object exposes ``.execute()`` and ``.save()``.
+
+    A :class:`~llm_pipeline.ui.bridge.UIBridge` is constructed per run and
+    passed as ``event_emitter`` so pipeline events are forwarded to
+    WebSocket clients in real time.
     """
     registry: dict = getattr(request.app.state, "pipeline_registry", {})
     factory = registry.get(body.pipeline_name)
@@ -202,8 +208,9 @@ def trigger_run(
     engine = request.app.state.engine
 
     def run_pipeline() -> None:
+        bridge = UIBridge(run_id=run_id)
         try:
-            pipeline = factory(run_id=run_id, engine=engine)
+            pipeline = factory(run_id=run_id, engine=engine, event_emitter=bridge)
             pipeline.execute()
             pipeline.save()
         except Exception:
@@ -222,6 +229,8 @@ def trigger_run(
                 logger.exception(
                     "Failed to update PipelineRun status for run_id=%s", run_id
                 )
+        finally:
+            bridge.complete()
 
     background_tasks.add_task(run_pipeline)
 

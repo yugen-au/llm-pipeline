@@ -17,7 +17,7 @@ HEARTBEAT_INTERVAL_S: float = 30.0
 
 
 class ConnectionManager:
-    """Per-client asyncio.Queue fan-out for WebSocket connections.
+    """Per-client threading.Queue fan-out for WebSocket connections.
 
     Each connected client gets its own Queue. broadcast_to_run and
     signal_run_complete are sync (put_nowait) so they can be called
