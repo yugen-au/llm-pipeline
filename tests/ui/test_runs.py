@@ -158,7 +158,7 @@ class TestTriggerRun:
                 pass
 
         client = self._make_client_with_registry(
-            lambda run_id, engine: _FakePipeline(run_id, engine)
+            lambda run_id, engine, **kw: _FakePipeline(run_id, engine)
         )
         with client:
             resp = client.post("/api/runs", json={"pipeline_name": "test_pipeline"})
@@ -170,7 +170,7 @@ class TestTriggerRun:
     def test_run_id_is_valid_uuid(self):
         app = create_app(
             db_path=":memory:",
-            pipeline_registry={"p": lambda run_id, engine: type("P", (), {"execute": lambda s: None, "save": lambda s: None})()},
+            pipeline_registry={"p": lambda run_id, engine, **kw: type("P", (), {"execute": lambda s: None, "save": lambda s: None})()},
         )
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "p"})
@@ -208,7 +208,7 @@ class TestTriggerRun:
 
         app = create_app(
             db_path=":memory:",
-            pipeline_registry={"tracked": lambda run_id, engine: _TrackedPipeline(run_id, engine)},
+            pipeline_registry={"tracked": lambda run_id, engine, **kw: _TrackedPipeline(run_id, engine)},
         )
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "tracked"})

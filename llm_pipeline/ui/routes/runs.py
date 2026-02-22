@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from llm_pipeline.events import CompositeEmitter
 from llm_pipeline.state import PipelineRun, PipelineStepState
 from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
@@ -209,8 +208,9 @@ def trigger_run(
     engine = request.app.state.engine
 
     def run_pipeline() -> None:
+        bridge = UIBridge(run_id=run_id)
         try:
-            pipeline = factory(run_id=run_id, engine=engine)
+            pipeline = factory(run_id=run_id, engine=engine, event_emitter=bridge)
             pipeline.execute()
             pipeline.save()
         except Exception:
@@ -229,6 +229,8 @@ def trigger_run(
                 logger.exception(
                     "Failed to update PipelineRun status for run_id=%s", run_id
                 )
+        finally:
+            bridge.complete()
 
     background_tasks.add_task(run_pipeline)
 
