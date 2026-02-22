@@ -155,3 +155,5 @@
 [2026-02-22 14:14:39] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: fixing-review)
 [2026-02-22 14:14:39] [INFO] Incremented Revisions: 0 -> 1
 [2026-02-22 14:14:39] [DEBUG] STATE.md atomic write complete
+[2026-02-22 14:17:13] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-22 14:17:27] [DEBUG] STATE.md atomic write complete
