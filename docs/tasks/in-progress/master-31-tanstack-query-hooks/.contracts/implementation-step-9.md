@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\master-31-tanstack-query-hooks
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-5-steps-hooks.md (if already exists, APPEND to file)
+- Output Files: implementation\step-9-websocket-hook.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 5
+- Step to fix: 9
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /tanstack/query
+3. Context7 library IDs to query: /tanstack/query,/pmndrs/zustand
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 5
+1. Read REVIEW.md for issues assigned to Step 9
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-5-steps-hooks.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-9-websocket-hook.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-9-websocket-hook.md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
