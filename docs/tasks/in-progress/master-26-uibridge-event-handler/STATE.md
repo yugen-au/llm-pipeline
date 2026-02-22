@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/26-uibridge-event-handler
 ## Plugins: python-development, backend-development, llm-application-dev
@@ -22,6 +22,6 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a0919f35c79e2a843 | d206c62 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | ac484a01c224468d4 | 54fbfb9 | - |
 | Create UIBridge class | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a68e2d40e22bc1c32 | 777be4f | - |
-| Wire UIBridge into trigger_run | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
-| Fix ConnectionManager docstring | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Wire UIBridge into trigger_run | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
+| Fix ConnectionManager docstring | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
 | Create UIBridge tests | backend-development:test-automator | implementation | 4 | - | C | pending | 0 | pending | pending | - |
