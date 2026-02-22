@@ -58,3 +58,27 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is architecturally sound, follows all CEO-approved decisions from VALIDATED_RESEARCH.md, matches PLAN.md steps exactly, and has comprehensive test coverage. The two issues noted are non-blocking: one is a minor test inconsistency (MEDIUM), the other is a missing edge-case test (LOW). Neither affects production correctness due to existing safety nets (trigger_run finally block, CompositeEmitter error isolation).
+
+---
+
+# Re-Review (Post-Fix)
+
+## Fixes Verified
+
+### MEDIUM - Step 2: Inconsistent factory signature in test_runs.py 404 test
+**Status:** RESOLVED
+test_runs.py L184 now uses `lambda run_id, engine, **kw: None`, consistent with all other factory lambdas in the file.
+
+### LOW - Step 4: Missing test for emit() when broadcast_to_run raises
+**Status:** RESOLVED
+New test `test_emit_broadcast_raises_on_terminal_event_propagates_and_no_signal` (test_bridge.py L139-163) correctly verifies: exception propagates, `_completed` stays False, `signal_run_complete` never called. Docstring documents that trigger_run's finally block is the safety net. Well-structured test using inline `_RaisingManager` stub.
+
+## Test Results
+50 tests pass (27 bridge + 23 runs), 0 failures.
+
+## New Issues Introduced
+None detected.
+
+## Recommendation
+**Decision:** APPROVE
+All previously identified issues resolved. No new issues. 27 tests now cover all UIBridge behavior including the exception propagation edge case.
