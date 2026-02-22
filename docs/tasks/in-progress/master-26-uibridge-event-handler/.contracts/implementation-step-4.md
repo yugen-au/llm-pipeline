@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-26-uibridge-event-handler
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-2-wire-uibridge-into-triggerrun.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-create-uibridge-tests.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 2 - implement ONLY this step, not others
+- Step: 4 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-2-wire-uibridge-into-triggerrun.md
+4. Document decisions in implementation\step-4-create-uibridge-tests.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 2: WIRE UIBRIDGE INTO TRIGGER_RUN
+# IMPLEMENTATION - STEP 4: CREATE UIBRIDGE TESTS
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -73,7 +73,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-4-create-uibridge-tests.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
