@@ -35,3 +35,36 @@ New file exporting `useEvents(runId, filters, runStatus?)` hook.
 [x] URLSearchParams omits undefined/null filter values
 [x] Dynamic staleTime: Infinity for terminal, 5s for active
 [x] refetchInterval: 3s for active runs, false for terminal
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Missing `enabled` guard: added `enabled: Boolean(runId)` to prevent fetching with empty strings, consistent with useSteps, useRun, useRunContext
+[x] URLSearchParams dedup: confirmed already resolved -- events.ts imports shared `toSearchParams` from `./types`, no local `buildEventParams` remains
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/events.ts`
+Added `enabled: Boolean(runId)` to useQuery options.
+```
+# Before
+  return useQuery({
+    queryKey: queryKeys.runs.events(runId, filters),
+    queryFn: () =>
+      apiClient<EventListResponse>('/runs/' + runId + '/events' + toSearchParams(filters)),
+    staleTime: runStatus && isTerminalStatus(runStatus) ? Infinity : 5_000,
+
+# After
+  return useQuery({
+    queryKey: queryKeys.runs.events(runId, filters),
+    queryFn: () =>
+      apiClient<EventListResponse>('/runs/' + runId + '/events' + toSearchParams(filters)),
+    enabled: Boolean(runId),
+    staleTime: runStatus && isTerminalStatus(runStatus) ? Infinity : 5_000,
+```
+
+### Verification
+[x] TypeScript strict compilation passes (`npx tsc --noEmit`)
+[x] `enabled: Boolean(runId)` matches pattern in steps.ts, runs.ts
+[x] `toSearchParams` import from `./types` already in place (no local helper)
