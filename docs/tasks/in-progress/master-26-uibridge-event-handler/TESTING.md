@@ -88,3 +88,49 @@ No human validation required. All success criteria verified automatically.
 ## Recommendations
 1. Pre-existing failure in test_ui.py should be tracked as a separate issue for the task that introduced the events router prefix change (task 28 or earlier).
 2. Task 26 implementation is complete and verified - all 26 new tests pass, no regressions introduced.
+
+---
+
+# Re-run: Post-Review Fixes Verification
+
+## Summary
+**Status:** passed
+Re-run after two review fixes: Step 2 (factory lambda in test_runs.py L184 updated to accept **kw) and Step 4 (exception path test added to test_bridge.py for broadcast_to_run raising). Full suite: 710/711 pass. +1 net test vs prior run. Pre-existing failure unchanged.
+
+## Automated Testing
+### Test Scripts Created
+| Script | Purpose | Location |
+| --- | --- | --- |
+| test_bridge.py | Added exception path test for broadcast_to_run raising | tests/ui/test_bridge.py |
+| test_runs.py | Factory lambda updated to accept **kw | tests/ui/test_runs.py |
+
+### Test Execution
+**Pass Rate:** 710/711 tests (50/50 in ui/test_bridge.py + ui/test_runs.py)
+
+```
+tests/ui/test_bridge.py - 27 passed (was 26, +1 exception path test)
+tests/ui/test_runs.py   - 23 passed
+Full suite: 1 failed, 710 passed, 1 warning in 10.79s
+```
+
+### Failed Tests
+None (task 26 scope). Pre-existing failure unchanged: `tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix`.
+
+## Build Verification
+- [x] All 27 UIBridge tests pass (includes new exception path test)
+- [x] All 23 runs tests pass (factory lambda **kw fix applied)
+- [x] No new failures introduced by review fixes
+- [x] Full suite regression check clean (710/711, same pre-existing failure)
+
+## Success Criteria (from PLAN.md)
+- [x] Step 2: factory lambda in test_runs.py accepts **kw - verified by TestTriggerRun::test_background_task_executes_pipeline passing
+- [x] Step 4: broadcast_to_run exception path covered - new test passes in TestUIBridgeEmit
+
+## Human Validation Required
+### None
+
+## Issues Found
+None
+
+## Recommendations
+1. All review fixes verified. Task 26 testing complete with 27/27 UIBridge tests and 23/23 runs tests passing.
