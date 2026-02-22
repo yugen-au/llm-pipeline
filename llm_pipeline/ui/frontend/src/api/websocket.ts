@@ -61,6 +61,8 @@ export function useWebSocket(runId: string | null) {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hadConnectionRef = useRef(false)
   const mountedRef = useRef(true)
+  // Stable ref to latest connect fn to avoid self-reference in useCallback deps
+  const connectRef = useRef<(() => void) | null>(null)
 
   const { status, error, setStatus, setError, incrementReconnect, reset } = useWsStore()
 
@@ -200,7 +202,7 @@ export function useWebSocket(runId: string | null) {
 
         reconnectTimerRef.current = setTimeout(() => {
           reconnectTimerRef.current = null
-          connect()
+          connectRef.current?.()
         }, delay)
       }
     }
@@ -208,6 +210,9 @@ export function useWebSocket(runId: string | null) {
 
   // Main effect: connect when runId changes, clean up on unmount / runId change
   useEffect(() => {
+    // Keep ref current so onclose can call latest connect without stale closure
+    connectRef.current = connect
+
     mountedRef.current = true
     hadConnectionRef.current = false
     reconnectCountRef.current = 0
