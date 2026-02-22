@@ -4,7 +4,7 @@
 
 All 3 research agents independently identified the same critical deviation: task 26 spec prescribes `asyncio.Queue` + `asyncio.run_coroutine_threadsafe()`, but the actual task 25 implementation uses `threading.Queue` with sync `broadcast_to_run()`/`signal_run_complete()` via `put_nowait()`. The spec was written before task 25 shipped. Research consensus is unanimous: UIBridge should be a thin sync adapter delegating to ConnectionManager (Pattern 3). No asyncio machinery needed.
 
-Validation confirmed this consensus against the actual codebase. Two gaps surfaced: (1) no task exists to wire UIBridge into `trigger_run()`, creating dead code between tasks 26 and 54; (2) the factory protocol `(run_id, engine) -> pipeline` does not accept `event_emitter`, so wiring requires either protocol extension or post-construction attribute setting.
+Validation confirmed this consensus against the actual codebase. Two gaps surfaced and resolved by CEO: (1) trigger_run wiring included in task 26 scope (not separate task); (2) factory protocol to be extended with `event_emitter` kwarg. Completion signaling uses auto-detect terminal events + explicit `complete()` fallback with idempotent guard (Option C).
 
 ## Domain Findings
 
@@ -21,15 +21,21 @@ Validation confirmed this consensus against the actual codebase. Two gaps surfac
 
 ```python
 class UIBridge(PipelineEventEmitter):
-    def __init__(self, run_id: str, manager: ConnectionManager):
+    def __init__(self, run_id: str, manager: ConnectionManager | None = None):
         self.run_id = run_id
-        self._manager = manager
+        self._manager = manager or _get_default_manager()
+        self._completed = False
 
     def emit(self, event: PipelineEvent) -> None:
         self._manager.broadcast_to_run(self.run_id, event.to_dict())
+        # Auto-detect terminal events
+        if isinstance(event, (PipelineCompleted, PipelineError)):
+            self.complete()
 
     def complete(self) -> None:
-        self._manager.signal_run_complete(self.run_id)
+        if not self._completed:
+            self._completed = True
+            self._manager.signal_run_complete(self.run_id)
 ```
 
 Why this works:
@@ -46,7 +52,7 @@ Three options evaluated:
 - **B**: Auto-detect terminal events (`PipelineCompleted`/`PipelineError`) -- couples UIBridge to specific event types
 - **C**: Both with idempotent guard -- auto-detect default + explicit fallback, `auto_complete` flag
 
-Research recommends Option C. **Needs CEO decision** -- auto-detect adds coupling to event types.
+**CEO decision: Option C.** Auto-detect `PipelineCompleted`/`PipelineError` in `emit()`, call `signal_run_complete` automatically with idempotent `_completed` guard. `complete()` remains as explicit fallback/safety net. Coupling to terminal event types is acceptable -- these are stable pipeline lifecycle events.
 
 ### Thread Safety
 **Source:** step-1 (section "Thread Safety Analysis"), step-2 (section 7), step-3 (section 7)
@@ -77,9 +83,9 @@ Not needed. <200 events/run, ~500 bytes each. 100 concurrent connections = ~10MB
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Sync delegation vs asyncio.Queue? | *PENDING CEO* | Determines entire UIBridge architecture |
-| Include trigger_run wiring in task 26? | *PENDING CEO* | Without wiring, UIBridge is dead code; task 54 can't test e2e |
-| Auto-complete on terminal events (Option C)? | *PENDING CEO* | Affects UIBridge API surface and coupling to event types |
+| Sync delegation vs asyncio.Queue? | **Sync delegation confirmed.** UIBridge calls `manager.broadcast_to_run()` directly. No asyncio.Queue. | Eliminates asyncio machinery, event loop refs, entire class of threading bugs. Spec deviation documented. |
+| Include trigger_run wiring in task 26? | **Yes, include in task 26.** Extend factory protocol with `event_emitter` kwarg. Wire UIBridge + CompositeEmitter in trigger_run. | UIBridge immediately usable. Task 54 can test e2e. Factory protocol extended. |
+| Auto-complete on terminal events (Option C)? | **Option C confirmed.** Auto-detect PipelineCompleted/PipelineError with idempotent guard. complete() as explicit fallback. | UIBridge auto-signals run completion. Coupling to terminal event types accepted as stable. |
 
 ## Assumptions Validated
 
@@ -93,22 +99,22 @@ Not needed. <200 events/run, ~500 bytes each. 100 concurrent connections = ~10MB
 - [x] `PipelineCompleted` and `PipelineError` are terminal event types (verified: types.py L176, L186)
 - [x] No event loop reference needed for ConnectionManager delegation (verified: all CM methods are sync)
 - [x] Task 25 shipped `threading.Queue`, NOT `asyncio.Queue` (verified: websocket.py L3 `import queue as thread_queue`)
-- [ ] Factory protocol supports `event_emitter` kwarg -- **INVALIDATED**: factory signature is `(run_id, engine)` only (runs.py L189-191)
+- [ ] Factory protocol supports `event_emitter` kwarg -- **INVALIDATED but RESOLVED**: current signature is `(run_id, engine)` only (runs.py L189-191). CEO approved extending to `(run_id, engine, event_emitter=None)` as part of task 26 scope.
 
 ## Open Items
 
-- Graphiti stale fact (uuid: d2762b82): "ConnectionManager handles per-client asyncio.Queue fan-out" should be "threading.Queue"
-- ConnectionManager docstring (websocket.py L20) says "Per-client asyncio.Queue fan-out" but uses `threading.Queue` -- should be corrected
-- Task 25 SUMMARY L5 says "per-client asyncio.Queue fan-out" -- stale documentation
-- Factory protocol extension needed for event_emitter support (if wiring included in task 26)
-- `_event_emitter` is a private attribute on PipelineConfig -- no public setter exists
+- Graphiti stale fact (uuid: d2762b82): "ConnectionManager handles per-client asyncio.Queue fan-out" should be "threading.Queue" -- fix during implementation
+- ConnectionManager docstring (websocket.py L20) says "Per-client asyncio.Queue fan-out" but uses `threading.Queue` -- fix during implementation
+- Task 25 SUMMARY L5 says "per-client asyncio.Queue fan-out" -- stale, read-only historical artifact (no fix needed)
+- `_event_emitter` is a private attribute on PipelineConfig -- factory protocol extension (CEO-approved) avoids needing public setter
 
 ## Recommendations for Planning
 
-1. **Adopt sync delegation (Pattern 3)** -- UIBridge as thin adapter calling `manager.broadcast_to_run()` directly. No asyncio.Queue, no run_coroutine_threadsafe, no event loop reference.
-2. **Document spec deviation** explicitly in PLAN.md and implementation notes. The spec's asyncio approach is architecturally mismatched with task 25's actual infrastructure.
-3. **Resolve wiring gap** before planning -- either include trigger_run modification in task 26 scope or create explicit intermediate task. Task 54 depends on this.
-4. **DI for ConnectionManager** -- accept `manager` parameter with singleton default for testability: `def __init__(self, run_id, manager=None)` with fallback to module-level singleton.
-5. **File placement**: `llm_pipeline/ui/bridge.py` per task spec -- correct, separates bridge from route handlers.
-6. **Fix stale Graphiti facts and task 25 docstring** during implementation to prevent future confusion.
-7. **Factory protocol**: If wiring is in scope, extend factory signature to accept optional `event_emitter` kwarg, or add a public `set_event_emitter()` method to PipelineConfig.
+1. **Adopt sync delegation (Pattern 3)** -- UIBridge as thin adapter calling `manager.broadcast_to_run()` directly. No asyncio.Queue, no run_coroutine_threadsafe, no event loop reference. (CEO confirmed)
+2. **Auto-detect terminal events (Option C)** -- `emit()` checks for `PipelineCompleted`/`PipelineError`, auto-calls `signal_run_complete` with idempotent `_completed` guard. `complete()` as explicit fallback. (CEO confirmed)
+3. **Include trigger_run wiring in task 26** -- extend factory protocol to `(run_id, engine, event_emitter=None)`, wire UIBridge + CompositeEmitter in `trigger_run()`, call `bridge.complete()` in finally block. (CEO confirmed)
+4. **Document spec deviation** explicitly in PLAN.md. The spec's asyncio approach is obsolete given task 25's threading.Queue implementation.
+5. **DI for ConnectionManager** -- accept `manager` parameter with singleton default for testability: `def __init__(self, run_id, manager=None)` with fallback to module-level singleton.
+6. **File placement**: `llm_pipeline/ui/bridge.py` per task spec -- separates bridge from route handlers.
+7. **Fix stale docstrings** -- correct ConnectionManager docstring from "asyncio.Queue" to "threading.Queue" during implementation.
+8. **Update Graphiti** -- correct stale facts about asyncio.Queue fan-out during implementation.
