@@ -60,3 +60,40 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve after: (1) adding a test for the detail endpoint 500 path, (2) optionally removing the unused `Dict` import and the dead `introspection_client` fixture. Only item 1 is required; items 2 are cleanup suggestions.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+All three issues from initial review resolved cleanly. No new issues introduced. Implementation is production-ready.
+
+## Fix Verification
+| Issue | Severity | Fix | Verified |
+| --- | --- | --- | --- |
+| Unused `Dict` import in pipelines.py | LOW | Removed; import line now `from typing import Any, List, Optional` | pass |
+| Missing detail 500 test | MEDIUM | Added `test_detail_introspection_failure_returns_500` at line 228; uses `patch.object` with `side_effect=Exception("boom")`, asserts 500 + error detail | pass |
+| Dead `introspection_client` fixture | LOW | Removed entirely; no `pipeline_cls_map` reference remains | pass |
+
+## New Issues Introduced
+- None detected
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/pipelines.py | pass | `Dict` removed, all imports used, no other changes |
+| tests/ui/test_pipelines.py | pass | 20 tests (was 19), dead fixture gone, new 500 test is clean and correct |
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Recommendation
+**Decision:** APPROVE
+All prior issues resolved. No regressions. Both endpoints have full test coverage including error paths. Code is clean, follows project conventions, and matches CEO-approved architecture decisions.
