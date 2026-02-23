@@ -75,3 +75,31 @@ Changed Route component reference from IndexPage to RunListPage.
 [x] Status filter change resets page to 1
 [x] data?.items and data?.total use correct response shape (RunListResponse)
 [x] Route.useSearch() used for URL params, useFiltersStore() for Zustand state
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] (MEDIUM) No margin/gap between FilterBar and RunsTable - adjacent children had no visual separation
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/index.tsx`
+Added `gap-4` to outer flex container for uniform spacing. Removed `mb-4` from h1 since gap handles it.
+
+```
+# Before
+<div className="flex flex-col h-full p-6">
+  <h1 className="text-2xl font-bold mb-4">Pipeline Runs</h1>
+
+# After
+<div className="flex flex-col gap-4 h-full p-6">
+  <h1 className="text-2xl font-bold">Pipeline Runs</h1>
+```
+
+Also verified: Pagination already uses `onPageChange` callback prop (updated by Step 5 fix agent), and index.tsx correctly passes it.
+
+### Verification
+[x] TypeScript compiles with no errors (npx tsc --noEmit)
+[x] gap-4 applies uniform 1rem spacing between h1, FilterBar, RunsTable, Pagination
+[x] Pagination onPageChange prop consistency confirmed with Step 5 fix
