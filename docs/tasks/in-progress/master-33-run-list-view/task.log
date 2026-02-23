@@ -110,3 +110,8 @@
 [2026-02-23 18:59:46] [INFO] Deleted 1 old contract file(s)
 [2026-02-23 18:59:46] [DEBUG] STATE.md atomic write complete
 [2026-02-23 19:00:03] [INFO] Task call: full-stack-orchestration:test-automator (phase: testing)
+[2026-02-24 09:50:49] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-24 09:51:14] [INFO] Task call: full-stack-orchestration:test-automator (phase: testing)
+[2026-02-24 09:53:47] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-24 09:54:04] [INFO] Task call: full-stack-orchestration:test-automator (phase: testing)
+[2026-02-24 09:56:42] [DEBUG] STATE.md atomic write complete
