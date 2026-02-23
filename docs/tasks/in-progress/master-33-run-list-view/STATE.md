@@ -25,6 +25,6 @@
 | Time Utility | frontend-mobile-development:frontend-developer | implementation | 3 | - | C | complete | 0 | a3f3e50a89ebc2179 | e4a6e65 | - |
 | StatusBadge Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | complete | 0 | a36b81c7742ece94b | e4a6e65 | /shadcn-ui/ui |
 | Pagination Component | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | ab76626f343e33d01 | e4a6e65 | /tanstack/router,/shadcn-ui/ui |
-| FilterBar Component | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | in-progress | 0 | pending | pending | /tanstack/router,/shadcn-ui/ui |
+| FilterBar Component | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a7e0df644fa0e7657 | 8f860e9 | /tanstack/router,/shadcn-ui/ui |
 | RunsTable Component | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | pending | pending | /shadcn-ui/ui,/tanstack/router |
 | Wire Up RunListPage | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | pending | pending | /tanstack/router |
