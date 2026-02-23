@@ -1,4 +1,119 @@
-"""Pipeline configurations route module."""
-from fastapi import APIRouter
+"""Pipeline configurations route module -- list and detail endpoints."""
+import logging
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
+
+from llm_pipeline.introspection import PipelineIntrospector
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
+
+# ---------------------------------------------------------------------------
+# Response models (plain Pydantic, NOT SQLModel)
+# ---------------------------------------------------------------------------
+
+
+class PipelineListItem(BaseModel):
+    name: str
+    strategy_count: Optional[int] = None
+    step_count: Optional[int] = None
+    has_input_schema: bool = False
+    registry_model_count: Optional[int] = None
+    error: Optional[str] = None
+
+
+class PipelineListResponse(BaseModel):
+    pipelines: List[PipelineListItem]
+
+
+class StepMetadata(BaseModel):
+    step_name: str
+    class_name: str
+    system_key: Optional[str] = None
+    user_key: Optional[str] = None
+    instructions_class: Optional[str] = None
+    instructions_schema: Optional[Any] = None
+    context_class: Optional[str] = None
+    context_schema: Optional[Any] = None
+    extractions: List[Any] = []
+    transformation: Optional[Any] = None
+    action_after: Optional[str] = None
+
+
+class StrategyMetadata(BaseModel):
+    name: str
+    display_name: str
+    class_name: str
+    steps: List[StepMetadata] = []
+    error: Optional[str] = None
+
+
+class PipelineMetadata(BaseModel):
+    pipeline_name: str
+    registry_models: List[str] = []
+    strategies: List[StrategyMetadata] = []
+    execution_order: List[str] = []
+
+
+# ---------------------------------------------------------------------------
+# Endpoints (all sync def -- no DB access, reads from app.state)
+# ---------------------------------------------------------------------------
+
+
+@router.get("", response_model=PipelineListResponse)
+def list_pipelines(request: Request) -> PipelineListResponse:
+    """List all registered pipelines with summary metadata."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+
+    items: List[PipelineListItem] = []
+    for name, pipeline_cls in sorted(registry.items(), key=lambda x: x[0]):
+        try:
+            metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+            strategies = metadata.get("strategies", [])
+            strategy_count = len(strategies)
+            step_count = sum(len(s.get("steps", [])) for s in strategies)
+            registry_models = metadata.get("registry_models", [])
+
+            has_input_schema = any(
+                step.get("instructions_schema") is not None
+                for strategy in strategies
+                for step in strategy.get("steps", [])
+            )
+
+            items.append(PipelineListItem(
+                name=name,
+                strategy_count=strategy_count,
+                step_count=step_count,
+                has_input_schema=has_input_schema,
+                registry_model_count=len(registry_models),
+            ))
+        except Exception as exc:
+            logger.warning("Failed to introspect pipeline '%s': %s", name, exc)
+            items.append(PipelineListItem(
+                name=name,
+                error=str(exc),
+            ))
+
+    return PipelineListResponse(pipelines=items)
+
+
+@router.get("/{name}", response_model=PipelineMetadata)
+def get_pipeline(name: str, request: Request) -> PipelineMetadata:
+    """Full introspection detail for a single pipeline."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+
+    if name not in registry:
+        raise HTTPException(
+            status_code=404, detail=f"Pipeline '{name}' not found"
+        )
+
+    pipeline_cls = registry[name]
+    try:
+        metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return PipelineMetadata(**metadata)
