@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: dev
 ## Task Branch: sam/master/33-run-list-view
 ## Plugins: frontend-mobile-development, full-stack-orchestration
@@ -27,4 +27,4 @@
 | Pagination Component | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | ab76626f343e33d01 | e4a6e65,ad98042 | /tanstack/router,/shadcn-ui/ui |
 | FilterBar Component | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a7e0df644fa0e7657 | 8f860e9,ad98042 | /tanstack/router,/shadcn-ui/ui |
 | RunsTable Component | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 0 | a48e942a2c74e7ccb | a5c9a6e | /shadcn-ui/ui,/tanstack/router |
-| Wire Up RunListPage | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | pending | pending | /tanstack/router |
+| Wire Up RunListPage | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | in-progress | 0 | pending | pending | /tanstack/router |

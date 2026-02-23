@@ -4,28 +4,28 @@
 - Task folder: docs\tasks\in-progress\master-33-run-list-view
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-7-runstable-component.md (if already exists, APPEND to file)
+- Output Files: implementation\step-8-wire-up-runlistpage.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 7 - implement ONLY this step, not others
+- Step: 8 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /shadcn-ui/ui,/tanstack/router
+3. Context7 library IDs to query: /tanstack/router
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-7-runstable-component.md
+4. Document decisions in implementation\step-8-wire-up-runlistpage.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 7: RUNSTABLE COMPONENT
+# IMPLEMENTATION - STEP 8: WIRE UP RUNLISTPAGE
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -73,7 +73,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-7-runstable-component.md
+Created: implementation\step-8-wire-up-runlistpage.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
