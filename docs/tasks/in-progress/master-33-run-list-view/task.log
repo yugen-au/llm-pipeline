@@ -208,3 +208,9 @@
 [2026-02-24 10:25:34] [DEBUG] STATE.md atomic write complete
 [2026-02-24 10:25:51] [INFO] Task call: code-documentation:docs-architect (phase: summary)
 [2026-02-24 10:28:32] [DEBUG] STATE.md atomic write complete
+[2026-02-24 10:29:20] [INFO] Already committed summary-A: ['SUMMARY.md']
+[2026-02-24 10:29:21] [INFO] STATE.md updated: phase=pending-merge, status=in-progress
+[2026-02-24 10:29:21] [INFO] Updated Commits for 'Create summary': 489ef70
+[2026-02-24 10:29:21] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
+[2026-02-24 10:29:21] [INFO] Deleted 1 old contract file(s)
+[2026-02-24 10:29:21] [DEBUG] STATE.md atomic write complete
