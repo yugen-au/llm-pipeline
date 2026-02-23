@@ -1,7 +1,7 @@
 ## Task: master-33-run-list-view
 ## Description: Implement Run List View - React table with filtering, pagination, status color coding, relative timestamps, row navigation to detail
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
