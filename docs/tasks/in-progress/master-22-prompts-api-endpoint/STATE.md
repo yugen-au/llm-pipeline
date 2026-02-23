@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/22-prompts-api-endpoint
 ## Plugins: backend-development, python-development, api-scaffolding
@@ -22,5 +22,5 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | aacde61febdfd1c73 | 12d2200 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aec55e5fe62113aba | 21652c8 | - |
 | Prompts Endpoints | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | aec8716ce39321fcb | 971d439 | /tiangolo/fastapi,/pydantic/pydantic |
-| Prompts Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest |
-| Frontend Types | api-scaffolding:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Prompts Tests | backend-development:test-automator | implementation | 2 | - | B | in-progress | 0 | pending | pending | /pytest-dev/pytest |
+| Frontend Types | api-scaffolding:backend-architect | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
