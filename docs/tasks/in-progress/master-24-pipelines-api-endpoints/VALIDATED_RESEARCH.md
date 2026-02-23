@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Validated 3 research documents against actual source code (app.py, pipelines.py, deps.py, introspection.py, conftest.py, frontend types.ts, pipelines.ts, test_introspection.py). Core architecture findings are consistent: empty router exists and is wired, introspection_registry on app.state is typed and ready, PipelineIntrospector is pure class-level with caching. However, a critical contradiction exists between research docs on the list endpoint response shape and field set. Three questions require CEO clarification before planning.
+Validated 3 research documents against actual source code (app.py, pipelines.py, deps.py, introspection.py, conftest.py, frontend types.ts, pipelines.ts, test_introspection.py). Core architecture findings are consistent: empty router exists and is wired, introspection_registry on app.state is typed and ready, PipelineIntrospector is pure class-level with caching. Three contradictions between research docs were identified and resolved via CEO decisions (see Q&A History). All open items now resolved -- ready for planning.
 
 ## Domain Findings
 
@@ -59,7 +59,9 @@ Validated 3 research documents against actual source code (app.py, pipelines.py,
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| [pending - see Questions below] | [awaiting CEO response] | [TBD] |
+| List response wrapper key: `{ pipelines: [...] }` (frontend) vs `{ items: [...], total }` (step-3)? | Use `{ pipelines: [...] }` -- match existing frontend contract, no pagination/total. | Step-3 proposal overruled. Backend returns `{ "pipelines": [...] }` key. No total/offset/limit fields. This diverges from paginated endpoints (runs, prompts, events) intentionally since pipeline data is static config. |
+| PipelineListItem fields: keep `has_input_schema` (frontend) or replace with `registry_model_count` (step-3)? | Include BOTH. Boolean is cheap and already in frontend types. Count adds useful detail. | Frontend PipelineListItem type needs `registry_model_count: number` added. Backend returns: `name`, `strategy_count`, `step_count`, `has_input_schema`, `registry_model_count`. |
+| List error handling: skip failed pipelines, include with error flag, or 500? | Include with error flag. Skip = hidden data loss (bad). 500 = single point of failure (worst). Error flag = explicit, no hidden failures (best). | Backend: try/except per pipeline. Failed pipeline gets name + error string + null counts. Log warning server-side. Frontend PipelineListItem type needs optional `error: string \| null` field added. |
 
 ## Assumptions Validated
 - [x] pipelines.py router exists and is empty -- confirmed against source
@@ -75,20 +77,41 @@ Validated 3 research documents against actual source code (app.py, pipelines.py,
 - [x] Test pipeline classes from test_introspection.py reusable for endpoint tests -- classes are module-level, no DB conflict
 - [x] Detail endpoint response should match PipelineMetadata frontend type exactly -- types.ts lines 296-301 mirror introspector output
 - [x] Frontend types are provisional and explicitly expect task 24 to provide the backend -- confirmed @provisional tags
+- [x] List response uses `{ pipelines: [...] }` wrapper key (not `items`) -- CEO decision, matches frontend usePipelines() contract
+- [x] PipelineListItem includes both has_input_schema and registry_model_count -- CEO decision
+- [x] has_input_schema = any step has non-null instructions_schema -- derived from step 1 research + introspector source (instructions_schema comes from step_definition(instructions=Class))
+- [x] Failed pipelines included in list with error flag + null counts -- CEO decision (explicit > silent skip > fail-all)
+- [x] Frontend PipelineListItem type needs registry_model_count + error fields added -- task 40 scope, backend returns them from task 24
 
 ## Open Items
-- **CRITICAL: List response shape contradiction** -- step 1 + frontend use `{ pipelines: [...] }` key; step 3 uses `{ items: [...], total }` key. Must resolve before planning.
-- **CRITICAL: PipelineListItem field disagreement** -- frontend has `has_input_schema: boolean`; step 3 proposes `registry_model_count: int` instead. Must resolve.
-- **MEDIUM: has_input_schema semantic definition** -- if kept, need to define derivation logic (instructions_schema? context_schema? either?)
-- **LOW: List error handling strategy** -- what to do when introspection fails for one pipeline in the list (skip, include with error, or 500)
-- **LOW: Cache clearing in endpoint tests** -- pipeline endpoint tests need `PipelineIntrospector._cache.clear()` fixture (not mentioned in research but required)
-- **LOW: Alphabetical sort** -- step 3 recommends sorting by name; needs confirmation since dict insertion order != alphabetical
+- ~~CRITICAL: List response shape~~ -- RESOLVED: use `{ pipelines: [...] }` key (CEO decision)
+- ~~CRITICAL: PipelineListItem fields~~ -- RESOLVED: include both `has_input_schema` and `registry_model_count` (CEO decision)
+- ~~MEDIUM: has_input_schema semantics~~ -- RESOLVED: derived as `any step across any strategy has non-null instructions_schema` (step 1 research definition, confirmed by introspector source -- `instructions_schema` is the Pydantic JSON schema for the LLM result type, set via `step_definition(instructions=SomeInstructionsClass)`)
+- ~~MEDIUM: List error handling~~ -- RESOLVED: include failed pipelines with error flag + null counts, log warning (CEO decision)
+- **NOTE: Frontend type updates needed** -- PipelineListItem in types.ts needs: add `registry_model_count: number`, add `error: string | null`. These are task 40 scope (frontend) but backend must return them from task 24.
+- **NOTE: Cache clearing in endpoint tests** -- pipeline endpoint tests need `PipelineIntrospector._cache.clear()` fixture (mirror test_introspection.py pattern)
+- **NOTE: Alphabetical sort** -- list endpoint should sort by name for deterministic output (explicit `sorted()` call since dict insertion order != alphabetical)
 
 ## Recommendations for Planning
-1. **Match existing frontend types** for list endpoint -- use `{ pipelines: PipelineListItem[] }` key (not `items`) since frontend code already exists and consumes this shape. Minimizes downstream work for task 40.
-2. **Use Option A (strictly typed Pydantic models)** for detail response -- consistent with codebase convention, enables OpenAPI docs, frontend types already exist.
-3. **Create dedicated test fixture** in new `tests/ui/test_pipelines.py` that builds app with introspection_registry populated. Import test pipeline classes from test_introspection.py.
-4. **Include cache-clearing fixture** in test_pipelines.py to prevent cross-test pollution (mirror test_introspection.py pattern).
-5. **No conftest.py changes** -- use per-file fixture pattern (like test_prompts.py) to keep existing test infrastructure stable.
-6. **Sync def, no DBSession** -- follow non-DB access pattern from trigger_run: `request.app.state.introspection_registry` via `Request` param.
-7. **Defensive try/except per pipeline** in list endpoint for safety, but **skip broken pipelines silently** (simplest, no frontend type changes needed). Detail endpoint gets try/except -> 500 as safety net.
+
+### Confirmed Decisions (CEO-approved)
+1. **List response shape**: `{ "pipelines": [PipelineListItem, ...] }` -- no total/offset/limit. Matches existing frontend `usePipelines()` contract.
+2. **PipelineListItem fields**: `name: str`, `strategy_count: int`, `step_count: int`, `has_input_schema: bool`, `registry_model_count: int`, `error: Optional[str]`. Backend Pydantic model must include all six fields.
+3. **has_input_schema derivation**: `True` if any step across any strategy has non-null `instructions_schema` in introspector output. For errored pipelines: `False`.
+4. **Error handling (list)**: try/except per pipeline. On failure: include `PipelineListItem(name=name, strategy_count=None, step_count=None, has_input_schema=False, registry_model_count=None, error=str(exc))`. Log `logger.warning(...)` server-side.
+5. **Error handling (detail)**: 404 if name not in registry. try/except around `get_metadata()` -> 500 with detail string (safety net; introspector is already defensive).
+
+### Implementation Patterns
+6. **Strictly typed Pydantic models (Option A)** for detail response -- consistent with codebase convention, enables OpenAPI docs, frontend types already mirror introspector output.
+7. **Sync def, no DBSession** -- follow non-DB access pattern from trigger_run: `request.app.state.introspection_registry` via `Request` param.
+8. **Alphabetical sort** on list endpoint -- `sorted(registry.items(), key=lambda x: x[0])` for deterministic output.
+
+### Testing
+9. **Create dedicated test fixture** in new `tests/ui/test_pipelines.py` that builds app with introspection_registry populated. Import test pipeline classes from test_introspection.py (WidgetPipeline, ScanPipeline, GadgetPipeline).
+10. **Include cache-clearing fixture** -- autouse fixture calling `PipelineIntrospector._cache.clear()` (mirror test_introspection.py).
+11. **No conftest.py changes** -- use per-file fixture pattern (like test_prompts.py) to keep existing test infrastructure stable.
+12. **Test cases**: empty registry (200, empty list), populated registry, 404 on unknown name, error pipeline in list (verify error field populated + counts null), detail for valid pipeline, detail for errored pipeline class (verify 500 or defensive dict).
+
+### Downstream Impact
+13. **Frontend type updates (task 40 scope)**: PipelineListItem in types.ts needs `registry_model_count: number` and `error: string | null` added. Backend ships these fields now; frontend adopts them in task 40.
+14. **Detail response matches PipelineMetadata type exactly** -- no frontend type changes needed for detail endpoint.
