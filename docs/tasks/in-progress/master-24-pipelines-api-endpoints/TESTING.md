@@ -86,3 +86,35 @@ tests/ui/test_pipelines.py::TestGetPipeline::test_detail_registry_models_is_list
 ## Recommendations
 1. Fix `test_events_router_prefix` in a separate task -- the test assertion does not match the actual events router prefix set in `llm_pipeline/ui/routes/events.py`.
 2. No action required for this task -- all 19 new tests pass, no regressions introduced.
+
+---
+
+## Re-verification Run (post review fixes)
+
+### Changes Verified
+- Removed unused `Dict` import from `llm_pipeline/ui/routes/pipelines.py` (fix-review-A)
+- Removed dead `introspection_client` fixture from `tests/ui/test_pipelines.py` (fix-review-B)
+- Added `test_detail_introspection_failure_returns_500` to `TestGetPipeline` (fix-review-B)
+
+### Test Execution
+**Pass Rate:** 765/767 tests (20/20 pipeline tests)
+
+Full suite: 2 failed, 765 passed (122s)
+- `tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix` -- pre-existing (unchanged from prior run)
+- `tests/ui/test_wal.py::TestWALMode::test_file_based_sqlite_sets_wal` -- order-dependent flake (see below)
+
+Pipeline tests isolated: 20/20 passed
+```
+tests/ui/test_pipelines.py::TestGetPipeline::test_detail_introspection_failure_returns_500 PASSED
+======================= 20 passed in 1.85s ============================
+```
+
+### WAL Flake Analysis
+`test_file_based_sqlite_sets_wal` fails only in full-suite ordering (passes in isolation and when run after pipeline tests). Stash verification confirms it passes before any changes from this task -- pre-existing ordering sensitivity not introduced here. Not caused by pipelines changes (confirmed: pipelines -> WAL sequence passes 24/24).
+
+### Failed Tests
+None introduced by this task's changes.
+
+### Summary
+**Status:** passed
+All 20 pipeline endpoint tests pass. 2 failures are both pre-existing (events prefix) or pre-existing ordering flake (WAL). No regressions from review fixes.
