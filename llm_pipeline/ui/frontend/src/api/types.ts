@@ -2,9 +2,9 @@
  * TypeScript interfaces mirroring backend Pydantic response models.
  *
  * All types match the shapes returned by FastAPI endpoints in
- * llm_pipeline/ui/routes/. Provisional types (prompts, pipelines)
- * are typed against existing DB/introspection models but their
- * endpoints do not exist yet (tasks 22, 24).
+ * llm_pipeline/ui/routes/. Provisional types (pipelines) are typed
+ * against existing DB/introspection models but their endpoints do
+ * not exist yet (task 24).
  */
 
 // ---------------------------------------------------------------------------
@@ -164,15 +164,10 @@ export interface EventListResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Prompts (@provisional - endpoints do not exist until task 22)
+// Prompts
 // ---------------------------------------------------------------------------
 
-/**
- * Prompt entity matching llm_pipeline/db/prompt.py SQLModel fields.
- *
- * @provisional - backend endpoint (GET /api/prompts) does not exist yet.
- * Will 404 until task 22 lands. Shape may change; update this type first.
- */
+/** Prompt entity matching llm_pipeline/db/prompt.py SQLModel fields. */
 export interface Prompt {
   id: number
   prompt_key: string
@@ -190,9 +185,7 @@ export interface Prompt {
   created_by: string | null
 }
 
-/**
- * @provisional - backend endpoint does not exist until task 22.
- */
+/** GET /api/prompts response body. */
 export interface PromptListResponse {
   items: Prompt[]
   total: number
@@ -200,11 +193,31 @@ export interface PromptListResponse {
   limit: number
 }
 
-/**
- * Query params for GET /api/prompts (anticipated shape).
- *
- * @provisional - backend endpoint does not exist until task 22.
- */
+/** Single variant (system or user) within a grouped prompt detail response. */
+export interface PromptVariant {
+  id: number
+  prompt_key: string
+  prompt_name: string
+  prompt_type: string
+  category: string | null
+  step_name: string | null
+  content: string
+  required_variables: string[] | null
+  description: string | null
+  version: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+  created_by: string | null
+}
+
+/** GET /api/prompts/{prompt_key} response body -- grouped wrapper with variants. */
+export interface PromptDetail {
+  prompt_key: string
+  variants: PromptVariant[]
+}
+
+/** Query params for GET /api/prompts. All fields optional for partial filtering. */
 export interface PromptListParams {
   prompt_type?: string
   category?: string
