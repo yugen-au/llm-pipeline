@@ -18,4 +18,4 @@
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Codebase Patterns | backend-development:backend-architect | research | 1 | - | A | in-progress | 0 | - | pending | - |
 | Prompt Model & Loader | python-development:python-pro | research | 2 | - | A | needs-input | 0 | af0e1aaf33e5e665a | pending | - |
-| API Route Conventions | api-scaffolding:backend-architect | research | 3 | - | A | in-progress | 0 | - | pending | - |
+| API Route Conventions | api-scaffolding:backend-architect | research | 3 | - | A | complete | 0 | acbc1cae9da0c0928 | pending | - |
