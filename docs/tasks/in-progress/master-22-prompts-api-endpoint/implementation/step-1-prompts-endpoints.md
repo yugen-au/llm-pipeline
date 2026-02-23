@@ -48,3 +48,37 @@ Key implementation details:
 [x] No regressions in runs, steps, events tests
 [x] Follows exact patterns from runs.py (sync def, DBSession, BaseModel, comment banners, _apply_filters)
 [x] Router already mounted in app.py -- no app changes needed
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - DRY violation: get_prompt duplicated field mapping instead of reusing _to_prompt_item
+[x] LOW - PromptVariant duplicated PromptItem fields; replaced with type alias
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/prompts.py`
+Made PromptVariant a type alias for PromptItem (identical fields) and replaced manual mapping in get_prompt with _to_prompt_item reuse.
+
+```
+# Before (PromptVariant was a separate class with same fields)
+class PromptVariant(BaseModel):
+    id: int
+    prompt_key: str
+    ...  # 12 more identical fields
+
+# After
+PromptVariant = PromptItem
+
+# Before (get_prompt manually mapped all fields)
+variants=[PromptVariant(id=r.id, prompt_key=r.prompt_key, ...) for r in rows]
+
+# After
+variants=[_to_prompt_item(r) for r in rows]
+```
+
+### Verification
+[x] Module imports cleanly, PromptVariant is PromptItem confirmed
+[x] All 169 UI tests pass (pytest tests/ui/ -x -q)
+[x] No regressions

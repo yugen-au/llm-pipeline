@@ -42,21 +42,8 @@ class PromptListResponse(BaseModel):
     limit: int
 
 
-class PromptVariant(BaseModel):
-    id: int
-    prompt_key: str
-    prompt_name: str
-    prompt_type: str
-    category: Optional[str]
-    step_name: Optional[str]
-    content: str
-    required_variables: Optional[List[str]]
-    description: Optional[str]
-    version: str
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-    created_by: Optional[str]
+# PromptVariant has identical fields to PromptItem (system or user variant in grouped detail)
+PromptVariant = PromptItem
 
 
 class PromptDetailResponse(BaseModel):
@@ -177,23 +164,5 @@ def get_prompt(prompt_key: str, db: DBSession) -> PromptDetailResponse:
 
     return PromptDetailResponse(
         prompt_key=prompt_key,
-        variants=[
-            PromptVariant(
-                id=r.id,
-                prompt_key=r.prompt_key,
-                prompt_name=r.prompt_name,
-                prompt_type=r.prompt_type,
-                category=r.category,
-                step_name=r.step_name,
-                content=r.content,
-                required_variables=_resolve_variables(r),
-                description=r.description,
-                version=r.version,
-                is_active=r.is_active,
-                created_at=r.created_at,
-                updated_at=r.updated_at,
-                created_by=r.created_by,
-            )
-            for r in rows
-        ],
+        variants=[_to_prompt_item(r) for r in rows],
     )
