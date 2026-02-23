@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\master-33-run-list-view
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-7-runstable-component.md (if already exists, APPEND to file)
+- Output Files: implementation\step-8-wire-up-runlistpage.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 7
+- Step to fix: 8
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /shadcn-ui/ui,/tanstack/router
+3. Context7 library IDs to query: /tanstack/router
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 7
+1. Read REVIEW.md for issues assigned to Step 8
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-7-runstable-component.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-8-wire-up-runlistpage.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-7-runstable-component.md
+Created: implementation\step-8-wire-up-runlistpage.md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
