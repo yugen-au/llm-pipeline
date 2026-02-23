@@ -53,3 +53,32 @@ Module-level helpers:
 - [x] GAP 7 covered: access-control-allow-origin on GET response; access-control-allow-origin + access-control-allow-methods on OPTIONS preflight
 - [x] No source files under llm_pipeline/ modified
 - [x] No new test dependencies added
+
+---
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] MEDIUM 1: Remove dead code `_make_emitting_pipeline_factory()` (lines 66-120, never called)
+- [x] MEDIUM 2: Extract `_trigger_and_collect(self)` helper to eliminate ~25 lines of duplicated setup across 3 E2E tests
+- [x] LOW 3: Move inline `from llm_pipeline.ui.bridge import UIBridge` (in each of 3 test methods) to module-level import
+- [x] LOW 4: Move inline `from datetime import timedelta` (in 2 TestCombinedFilters methods) to module-level `datetime` import line
+- [x] LOW 5: Move gate from `app.state.engine._test_gate` (monkey-patching SQLAlchemy Engine) to closure capture -- gate passed as argument to `_make_no_op_factory(gate)` at factory-creation time; `app.state._test_gate` set for traceability but factory reads gate via closure, not engine attribute
+
+### Changes Made
+#### File: `tests/ui/test_integration.py`
+
+Issue 1 -- deleted `_make_emitting_pipeline_factory()` function (55 lines removed).
+
+Issue 2 -- extracted `_trigger_and_collect(self)` on `TestE2ETriggerWebSocket`; each test reduced to 2-3 lines.
+
+Issue 3 -- added `from llm_pipeline.ui.bridge import UIBridge` to module-level imports; removed 3 inline imports.
+
+Issue 4 -- added `timedelta` to existing `from datetime import datetime, timezone` line; removed 2 inline imports.
+
+Issue 5 -- changed `_make_no_op_factory()` to `_make_no_op_factory(gate: threading.Event)`, gate captured via closure. `_setup()` passes gate at factory-creation time: `_make_no_op_factory(gate)`. `app.state._test_gate = gate` retained (not `app.state.engine._test_gate`).
+
+### Verification
+- [x] `pytest tests/ui/test_integration.py -v` -- 19 passed

@@ -11,7 +11,7 @@ All tests use _make_app() (StaticPool pattern) from conftest.py. No source chang
 """
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlmodel import Session, select
@@ -19,6 +19,7 @@ from starlette.testclient import TestClient
 
 from llm_pipeline.events.types import PipelineCompleted, PipelineStarted
 from llm_pipeline.state import PipelineRun
+from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.routes.websocket import manager
 
 from tests.ui.conftest import _make_app
@@ -63,63 +64,6 @@ def _wait_for_connection(run_id: str, count: int = 1, timeout: float = 2.0) -> N
     raise TimeoutError(f"Expected {count} connection(s) for {run_id} within {timeout}s")
 
 
-def _make_emitting_pipeline_factory():
-    """Return a factory that emits PipelineStarted + PipelineCompleted via UIBridge.
-
-    Factory signature: (run_id, engine, event_emitter=None, **kw) -> pipeline
-    The returned pipeline object:
-    - execute(): inserts a PipelineRun row, emits both events via event_emitter
-    - save(): updates PipelineRun.status to completed and sets completed_at
-    """
-    class _EmittingPipeline:
-        def __init__(self, run_id, engine, event_emitter=None):
-            self._run_id = run_id
-            self._engine = engine
-            self._emitter = event_emitter
-
-        def execute(self):
-            with Session(self._engine) as session:
-                run = PipelineRun(
-                    run_id=self._run_id,
-                    pipeline_name="integration_test_pipeline",
-                    status="running",
-                    started_at=datetime.now(timezone.utc),
-                )
-                session.add(run)
-                session.commit()
-
-            if self._emitter is not None:
-                self._emitter.emit(
-                    PipelineStarted(
-                        run_id=self._run_id,
-                        pipeline_name="integration_test_pipeline",
-                    )
-                )
-                self._emitter.emit(
-                    PipelineCompleted(
-                        run_id=self._run_id,
-                        pipeline_name="integration_test_pipeline",
-                        execution_time_ms=10.0,
-                        steps_executed=0,
-                    )
-                )
-
-        def save(self):
-            with Session(self._engine) as session:
-                stmt = select(PipelineRun).where(PipelineRun.run_id == self._run_id)
-                run = session.exec(stmt).first()
-                if run:
-                    run.status = "completed"
-                    run.completed_at = datetime.now(timezone.utc)
-                    session.add(run)
-                    session.commit()
-
-    def factory(run_id, engine, event_emitter=None, **kw):
-        return _EmittingPipeline(run_id, engine, event_emitter)
-
-    return factory
-
-
 def _make_failing_pipeline_factory():
     """Return a factory whose execute() raises RuntimeError after inserting a PipelineRun row.
 
@@ -157,12 +101,15 @@ def _make_failing_pipeline_factory():
 # ---------------------------------------------------------------------------
 
 
-def _make_no_op_factory():
-    """No-op factory: background task runs but does not emit events.
+def _make_no_op_factory(gate: threading.Event):
+    """No-op factory: background task inserts PipelineRun row then blocks on gate.
+
+    gate is captured at factory-creation time (closure). The test sets gate
+    after confirming the WS client is connected, then the background task
+    unblocks and returns -- allowing TestClient to exit cleanly.
 
     Used to get a valid run_id from POST /api/runs without racing the WS.
-    The test manually seeds the PipelineRun row and drives UIBridge emission
-    after the WS client is confirmed connected.
+    The test drives UIBridge emission manually after WS is confirmed connected.
     """
     class _NoOpPipeline:
         def __init__(self, run_id, engine, event_emitter=None):
@@ -170,7 +117,6 @@ def _make_no_op_factory():
             self._engine = engine
 
         def execute(self):
-            # Insert the PipelineRun row so trigger_run's except block can find it
             with Session(self._engine) as session:
                 session.add(PipelineRun(
                     run_id=self._run_id,
@@ -179,11 +125,7 @@ def _make_no_op_factory():
                     started_at=datetime.now(timezone.utc),
                 ))
                 session.commit()
-            # Deliberately block until the test signals us to proceed.
-            # We use a threading.Event stored on the engine (injected below).
-            gate = getattr(self._engine, "_test_gate", None)
-            if gate is not None:
-                gate.wait(timeout=5.0)
+            gate.wait(timeout=5.0)
 
         def save(self):
             pass
@@ -208,9 +150,9 @@ class TestE2ETriggerWebSocket:
         """Create app + client + gate event. Returns (app, client, gate)."""
         gate = threading.Event()
         app = _make_app()
-        app.state.engine._test_gate = gate
+        app.state._test_gate = gate
         app.state.pipeline_registry = {
-            "integration_test_pipeline": _make_no_op_factory()
+            "integration_test_pipeline": _make_no_op_factory(gate)
         }
         return app, TestClient(app), gate
 
@@ -236,9 +178,12 @@ class TestE2ETriggerWebSocket:
         t.start()
         return received, done
 
-    def test_trigger_then_ws_receives_pipeline_started(self):
-        from llm_pipeline.ui.bridge import UIBridge
+    def _trigger_and_collect(self):
+        """POST trigger, wait for DB row, connect WS, emit events, collect until stream_complete.
 
+        Returns (run_id, received) after the client context exits.
+        Encapsulates the shared orchestration for all 3 E2E tests.
+        """
         app, client, gate = self._setup()
         with client:
             resp = client.post("/api/runs", json={"pipeline_name": "integration_test_pipeline"})
@@ -257,7 +202,7 @@ class TestE2ETriggerWebSocket:
             received, done = self._collect_events(client, run_id)
             _wait_for_connection(run_id, count=1, timeout=3.0)
 
-            # WS is connected; now emit via UIBridge (same path as real pipeline)
+            # WS is connected; emit via UIBridge (same path as real pipeline)
             bridge = UIBridge(run_id=run_id)
             bridge.emit(PipelineStarted(run_id=run_id, pipeline_name="integration_test_pipeline"))
             bridge.emit(PipelineCompleted(
@@ -269,74 +214,20 @@ class TestE2ETriggerWebSocket:
             done.wait(timeout=3.0)
             gate.set()  # unblock background task so TestClient exits cleanly
 
+        return run_id, received
+
+    def test_trigger_then_ws_receives_pipeline_started(self):
+        _, received = self._trigger_and_collect()
         event_types = [m.get("event_type") for m in received if "event_type" in m]
         assert "pipeline_started" in event_types
 
     def test_trigger_then_ws_receives_pipeline_completed(self):
-        from llm_pipeline.ui.bridge import UIBridge
-
-        app, client, gate = self._setup()
-        with client:
-            resp = client.post("/api/runs", json={"pipeline_name": "integration_test_pipeline"})
-            assert resp.status_code == 202
-            run_id = resp.json()["run_id"]
-
-            deadline = time.monotonic() + 3.0
-            while time.monotonic() < deadline:
-                with Session(app.state.engine) as s:
-                    row = s.exec(select(PipelineRun).where(PipelineRun.run_id == run_id)).first()
-                if row is not None:
-                    break
-                time.sleep(0.01)
-
-            received, done = self._collect_events(client, run_id)
-            _wait_for_connection(run_id, count=1, timeout=3.0)
-
-            bridge = UIBridge(run_id=run_id)
-            bridge.emit(PipelineStarted(run_id=run_id, pipeline_name="integration_test_pipeline"))
-            bridge.emit(PipelineCompleted(
-                run_id=run_id,
-                pipeline_name="integration_test_pipeline",
-                execution_time_ms=10.0,
-                steps_executed=0,
-            ))
-            done.wait(timeout=3.0)
-            gate.set()
-
+        _, received = self._trigger_and_collect()
         event_types = [m.get("event_type") for m in received if "event_type" in m]
         assert "pipeline_completed" in event_types
 
     def test_trigger_ws_stream_complete_sent_on_finish(self):
-        from llm_pipeline.ui.bridge import UIBridge
-
-        app, client, gate = self._setup()
-        with client:
-            resp = client.post("/api/runs", json={"pipeline_name": "integration_test_pipeline"})
-            assert resp.status_code == 202
-            run_id = resp.json()["run_id"]
-
-            deadline = time.monotonic() + 3.0
-            while time.monotonic() < deadline:
-                with Session(app.state.engine) as s:
-                    row = s.exec(select(PipelineRun).where(PipelineRun.run_id == run_id)).first()
-                if row is not None:
-                    break
-                time.sleep(0.01)
-
-            received, done = self._collect_events(client, run_id)
-            _wait_for_connection(run_id, count=1, timeout=3.0)
-
-            bridge = UIBridge(run_id=run_id)
-            bridge.emit(PipelineStarted(run_id=run_id, pipeline_name="integration_test_pipeline"))
-            bridge.emit(PipelineCompleted(
-                run_id=run_id,
-                pipeline_name="integration_test_pipeline",
-                execution_time_ms=10.0,
-                steps_executed=0,
-            ))
-            done.wait(timeout=3.0)
-            gate.set()
-
+        run_id, received = self._trigger_and_collect()
         terminal = [m for m in received if m.get("type") == "stream_complete"]
         assert len(terminal) == 1
         assert terminal[0]["run_id"] == run_id
@@ -438,7 +329,6 @@ class TestCombinedFilters:
         assert body["items"] == []
 
     def test_runs_filter_pipeline_name_and_started_after(self, seeded_app_client):
-        from datetime import timedelta
         # run3 (alpha_pipeline, running) started ~100s ago; use 150s cutoff
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=150)).isoformat()
         resp = seeded_app_client.get(
@@ -452,7 +342,6 @@ class TestCombinedFilters:
         assert body["items"][0]["run_id"] == RUN_RUNNING
 
     def test_runs_filter_pipeline_name_and_started_after_no_match(self, seeded_app_client):
-        from datetime import timedelta
         # Cutoff at 50s ago -- no run started within last 50s
         cutoff = (datetime.now(timezone.utc) - timedelta(seconds=50)).isoformat()
         resp = seeded_app_client.get(
