@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Both research documents (step-1 frontend architecture, step-2 existing codebase patterns) are **verified accurate** against actual source files. All type definitions, API shapes, store interfaces, route schemas, and upstream task outputs match the codebase exactly. Two factual errors in the task 33 spec are confirmed: `data.runs` should be `data.items`, and `pending` status does not exist in the backend. No hidden architectural assumptions were found. Three minor implementation decisions need CEO input before planning.
+Both research documents (step-1 frontend architecture, step-2 existing codebase patterns) are **verified accurate** against actual source files. All type definitions, API shapes, store interfaces, route schemas, and upstream task outputs match the codebase exactly. Two factual errors in the task 33 spec are confirmed: `data.runs` should be `data.items`, and `pending` status does not exist in the backend. No hidden architectural assumptions were found. All three CEO decisions received and incorporated: vitest included in scope, PAGE_SIZE=25, strict 3-status mapping.
 
 ## Domain Findings
 
@@ -19,7 +19,7 @@ Both research documents (step-1 frontend architecture, step-2 existing codebase 
 - `RunStatus` type = `'running' | 'completed' | 'failed'` -- no `pending`
 - `isTerminalStatus()` checks `completed || failed` in query-keys.ts
 - Backend tests seed only `completed`, `failed`, `running` statuses
-- Step-1 includes `pending` in color table as defensive mapping -- minor inconsistency with step-2 which says "Three states" only
+- **CEO decision:** strict 3-status mapping only. Step-1's defensive "pending" row is discarded. Unknown values get fallback gray but no named "pending" case.
 
 ### Filter Architecture (Hybrid URL + Zustand)
 **Source:** step-1, step-2, `src/routes/index.tsx`, `src/stores/filters.ts`
@@ -46,13 +46,14 @@ Both research documents (step-1 frontend architecture, step-2 existing codebase 
 - No frontend test runner (no vitest, jest, or testing-library in package.json)
 - Task 33 testStrategy requires rendering tests, filter tests, pagination tests, navigation tests
 - Backend tests use starlette TestClient with in-memory SQLite -- not usable for frontend
+- **CEO decision:** vitest setup is in-scope for task 33. Must add vitest, @testing-library/react, @testing-library/jest-dom, jsdom as devDependencies and configure vitest.config.ts
 
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should task 33 add vitest or defer frontend testing? | *pending CEO response* | Determines if testStrategy is in-scope or deferred |
-| Default page size: 25 or 50? | *pending CEO response* | Minor UX decision affecting rows-per-page |
-| Include defensive "pending" color mapping in StatusBadge? | *pending CEO response* | Whether to map a status that doesn't currently exist in backend |
+| Should task 33 add vitest or defer frontend testing? | Include vitest setup in task 33 scope | Task 33 must add vitest + testing-library as a prerequisite step; testStrategy is fully in-scope |
+| Default page size: 25 or 50? | 25 rows (more scannable, faster loads) | PAGE_SIZE = 25 constant; matches CEO preference for scannability over matching backend default |
+| Include defensive "pending" color mapping in StatusBadge? | Strict 3 statuses only: running, completed, failed. No pending. | StatusBadge maps exactly 3 colors; unknown values get fallback gray but "pending" is not a named case |
 
 ## Assumptions Validated
 - [x] `RunListResponse` uses `items` field (not `runs`) -- types.ts line 30
@@ -78,9 +79,9 @@ Both research documents (step-1 frontend architecture, step-2 existing codebase 
 
 ## Recommendations for Planning
 1. **Update task 33 spec** to correct `data?.runs` to `data?.items` and remove `pending` from status color list
-2. **Install shadcn components first** as prerequisite step: `npx shadcn@latest add table badge button select tooltip`
-3. **Use PAGE_SIZE = 25** as reasonable default (more scannable than 50) unless CEO prefers otherwise
-4. **Include fallback gray/muted color** for unknown status values in StatusBadge (defensive, zero cost)
-5. **Defer vitest setup** to a separate task unless CEO wants it in task 33 scope -- keeps task 33 focused on the visual component
+2. **Add vitest + testing-library** as first implementation step: install devDependencies, create vitest.config.ts, add test script to package.json
+3. **Install shadcn components** as prerequisite step: `npx shadcn@latest add table badge button select tooltip`
+4. **Use PAGE_SIZE = 25** (CEO confirmed)
+5. **Strict 3-status StatusBadge** mapping running/completed/failed with fallback gray for truly unknown values (CEO confirmed no pending)
 6. **Define loading/error/empty states** as sub-steps in the implementation plan -- use `text-muted-foreground` centered text for empty/error, simple spinner or skeleton rows for loading
 7. **Stick with Route.useSearch()** directly rather than creating a wrapper hook -- matches existing patterns
