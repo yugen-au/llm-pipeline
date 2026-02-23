@@ -84,3 +84,28 @@ FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
 ## Recommendations
 1. Fix pre-existing test_events_router_prefix failure in a separate task -- update test assertion to match actual router prefix `/runs/{run_id}/events`
 2. No issues with prompts implementation -- all endpoints, filters, pagination, and variable resolution work correctly
+
+---
+
+## Re-run: Post-DRY Fix (get_prompt refactored to use _to_prompt_item)
+
+**Status:** passed
+
+Triggered by: DRY violation fix -- `get_prompt` now delegates to `_to_prompt_item` helper instead of inline PromptVariant construction.
+
+### Test Execution
+**Pass Rate:** 17/17 prompts tests, 50/50 UI regression tests (runs + steps + events)
+
+```
+tests/ui/test_prompts.py - 17 passed in 0.77s
+
+tests/ui/test_runs.py + test_steps.py + test_events.py - 50 passed in 2.06s
+```
+
+### Failed Tests
+None
+
+### Notes
+- All 17 prompts tests pass unchanged after refactor
+- No regressions in test_runs.py, test_steps.py, test_events.py
+- Pre-existing test_events_router_prefix failure unaffected (still pre-existing, not this task)
