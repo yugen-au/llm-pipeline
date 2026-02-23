@@ -1,7 +1,7 @@
 ## Task: master-22-prompts-api-endpoint
 ## Description: REST endpoints for listing/retrieving prompt templates with variable extraction
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
