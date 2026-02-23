@@ -1,7 +1,7 @@
 ## Task: master-24-pipelines-api-endpoints
 ## Description: Create REST endpoints for listing discovered pipelines and retrieving full introspection data. Includes pipeline registry, list endpoint, detail endpoint with introspection, and error handling.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
