@@ -32,3 +32,14 @@
 [2026-02-23 14:27:41] [INFO] Task call: code-documentation:code-reviewer (phase: validate)
 [2026-02-23 14:27:41] [INFO] Incremented Revisions: 0 -> 1
 [2026-02-23 14:27:41] [DEBUG] STATE.md atomic write complete
+[2026-02-23 14:33:15] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-23 14:33:25] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-23 14:33:55] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-23 14:34:30] [INFO] STATE.md updated: phase=validate, status=in-progress
+[2026-02-23 14:34:44] [INFO] Committed validate-A: ['VALIDATED_RESEARCH.md'] -> 77eedbb
+[2026-02-23 14:34:47] [INFO] STATE.md updated: phase=planning, status=in-progress
+[2026-02-23 14:34:47] [INFO] Updated Commits for 'Assumption Check': 77eedbb
+[2026-02-23 14:34:47] [INFO] Auto-filled agent rows: Plan
+[2026-02-23 14:34:47] [INFO] Auto-updated agent statuses: Plan: pending -> in-progress
+[2026-02-23 14:34:47] [INFO] Deleted 1 old contract file(s)
+[2026-02-23 14:34:48] [DEBUG] STATE.md atomic write complete
