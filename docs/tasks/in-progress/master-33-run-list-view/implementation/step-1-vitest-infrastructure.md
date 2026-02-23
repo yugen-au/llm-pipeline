@@ -65,3 +65,50 @@ Added `"vitest.config.ts"` to `include` array so TypeScript recognizes the confi
 [x] jest-dom matchers (toBeInTheDocument) work via setup file
 [x] TypeScript types resolve for vitest globals and jest-dom matchers
 [x] package-lock.json updated with all new dependencies
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] vitest.config.ts duplicated vite.config.ts plugins instead of extending base config
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/vitest.config.ts`
+Replaced standalone plugin imports with `mergeConfig` from `vitest/config` that extends the base `vite.config.ts`. Only test-specific settings remain in vitest config.
+```
+# Before
+import path from 'path'
+import { defineConfig } from 'vitest/config'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [tanstackRouter({ autoCodeSplitting: true }), react(), tailwindcss()],
+  resolve: { alias: { '@': path.resolve(__dirname, './src') } },
+  test: { ... },
+})
+
+# After
+import { defineConfig, mergeConfig } from 'vitest/config'
+import viteConfig from './vite.config'
+
+export default mergeConfig(
+  viteConfig,
+  defineConfig({
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: ['./src/test/setup.ts'],
+      include: ['src/**/*.{test,spec}.{ts,tsx}'],
+      exclude: ['node_modules'],
+    },
+  }),
+)
+```
+
+### Verification
+[x] `npx vitest run` passes (51/51 tests, 0 failures)
+[x] plugins, resolve.alias inherited from vite.config.ts via mergeConfig
+[x] no duplicate plugin imports remain
