@@ -17,7 +17,8 @@ import { formatRelative, formatAbsolute } from '@/lib/time'
 import { useNavigate } from '@tanstack/react-router'
 import type { RunListItem } from '@/api/types'
 
-const COLUMN_COUNT = 6
+const COLUMNS = ['Run ID', 'Pipeline', 'Started', 'Status', 'Steps', 'Duration'] as const
+const COLUMN_COUNT = COLUMNS.length
 
 interface RunsTableProps {
   runs: RunListItem[]
@@ -63,12 +64,9 @@ export function RunsTable({ runs, isLoading, isError }: RunsTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Run ID</TableHead>
-            <TableHead>Pipeline</TableHead>
-            <TableHead>Started</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Steps</TableHead>
-            <TableHead>Duration</TableHead>
+            {COLUMNS.map((col) => (
+              <TableHead key={col}>{col}</TableHead>
+            ))}
           </TableRow>
         </TableHeader>
         <TableBody>

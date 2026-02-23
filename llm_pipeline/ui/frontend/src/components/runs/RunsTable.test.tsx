@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { RunsTable } from './RunsTable'
 import type { RunListItem } from '@/api/types'
 
@@ -10,20 +10,24 @@ vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
 }))
 
-// Tooltip uses Radix Portal which needs polyfills already in setup.ts.
 // Mock formatRelative/formatAbsolute to avoid flaky time-dependent output.
 vi.mock('@/lib/time', () => ({
   formatRelative: (iso: string) => `relative(${iso})`,
   formatAbsolute: (iso: string) => `absolute(${iso})`,
 }))
 
+// Fixed "now" so mock dates are self-documenting regardless of when tests run
+const NOW = '2025-06-15T12:00:00.000Z'
+const ONE_HOUR_AGO = '2025-06-15T11:00:00.000Z'
+const TWO_HOURS_AGO = '2025-06-15T10:00:00.000Z'
+
 const mockRuns: RunListItem[] = [
   {
     run_id: 'abcdef12-3456-7890-abcd-ef1234567890',
     pipeline_name: 'test-pipeline',
     status: 'completed',
-    started_at: '2026-02-23T10:00:00Z',
-    completed_at: '2026-02-23T10:01:00Z',
+    started_at: TWO_HOURS_AGO,
+    completed_at: ONE_HOUR_AGO,
     step_count: 3,
     total_time_ms: 1500,
   },
@@ -31,7 +35,7 @@ const mockRuns: RunListItem[] = [
     run_id: '11223344-5566-7788-99aa-bbccddeeff00',
     pipeline_name: 'other-pipeline',
     status: 'running',
-    started_at: '2026-02-23T09:30:00Z',
+    started_at: ONE_HOUR_AGO,
     completed_at: null,
     step_count: null,
     total_time_ms: null,
@@ -40,7 +44,13 @@ const mockRuns: RunListItem[] = [
 
 describe('RunsTable', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(NOW))
     mockNavigate.mockClear()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders column headers', () => {
@@ -68,8 +78,8 @@ describe('RunsTable', () => {
 
   it('renders relative timestamps via formatRelative', () => {
     render(<RunsTable runs={mockRuns} isLoading={false} isError={false} />)
-    expect(screen.getByText('relative(2026-02-23T10:00:00Z)')).toBeInTheDocument()
-    expect(screen.getByText('relative(2026-02-23T09:30:00Z)')).toBeInTheDocument()
+    expect(screen.getByText(`relative(${TWO_HOURS_AGO})`)).toBeInTheDocument()
+    expect(screen.getByText(`relative(${ONE_HOUR_AGO})`)).toBeInTheDocument()
   })
 
   it('shows StatusBadge with correct status text', () => {
@@ -92,6 +102,9 @@ describe('RunsTable', () => {
   })
 
   it('navigates on row click', async () => {
+    // Radix Tooltip uses internal timers that deadlock with fake timers
+    // during pointer events, so restore real timers for this interaction test
+    vi.useRealTimers()
     const user = userEvent.setup()
     render(<RunsTable runs={mockRuns} isLoading={false} isError={false} />)
 

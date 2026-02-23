@@ -40,3 +40,55 @@ New component with props `runs: RunListItem[]`, `isLoading: boolean`, `isError: 
 [x] Row click navigates to /runs/$runId with correct params
 [x] All 12 RunsTable tests pass
 [x] Full test suite (51 tests across 6 files) passes
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] COLUMN_COUNT could drift from actual column count - derived from COLUMNS array
+[x] Test data uses future dates (2026) - use vi.setSystemTime with relative date constants
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/runs/RunsTable.tsx`
+Replaced `const COLUMN_COUNT = 6` with `const COLUMNS = [...] as const` array + `COLUMN_COUNT = COLUMNS.length`. Header now renders via `COLUMNS.map()` instead of hardcoded `<TableHead>` elements.
+```
+# Before
+const COLUMN_COUNT = 6
+...
+<TableHead>Run ID</TableHead>
+<TableHead>Pipeline</TableHead>
+...
+
+# After
+const COLUMNS = ['Run ID', 'Pipeline', 'Started', 'Status', 'Steps', 'Duration'] as const
+const COLUMN_COUNT = COLUMNS.length
+...
+{COLUMNS.map((col) => (
+  <TableHead key={col}>{col}</TableHead>
+))}
+```
+
+#### File: `llm_pipeline/ui/frontend/src/components/runs/RunsTable.test.tsx`
+Added `vi.useFakeTimers()` / `vi.setSystemTime(new Date(NOW))` in `beforeEach` and `vi.useRealTimers()` in `afterEach`. Mock data dates changed from hardcoded 2026 strings to named constants (`NOW`, `ONE_HOUR_AGO`, `TWO_HOURS_AGO`) relative to a fixed system time. Test assertions updated to reference constants. Click test uses `vi.useRealTimers()` locally to avoid Radix Tooltip timer deadlock during pointer events.
+```
+# Before
+const mockRuns = [{ started_at: '2026-02-23T10:00:00Z', ... }]
+expect(screen.getByText('relative(2026-02-23T10:00:00Z)'))
+
+# After
+const NOW = '2025-06-15T12:00:00.000Z'
+const TWO_HOURS_AGO = '2025-06-15T10:00:00.000Z'
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date(NOW)) })
+afterEach(() => { vi.useRealTimers() })
+const mockRuns = [{ started_at: TWO_HOURS_AGO, ... }]
+expect(screen.getByText(`relative(${TWO_HOURS_AGO})`))
+```
+
+### Verification
+[x] All 12 RunsTable tests pass
+[x] Full test suite (57 tests across 6 files) passes
+[x] COLUMN_COUNT derived from COLUMNS.length (adding/removing column auto-updates colspan)
+[x] Headers rendered via COLUMNS.map() (single source of truth)
+[x] Test dates are self-documenting via named constants relative to fixed NOW
+[x] Click test works correctly with Radix Tooltip by restoring real timers locally
