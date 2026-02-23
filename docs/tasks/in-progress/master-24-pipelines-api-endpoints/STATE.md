@@ -1,7 +1,7 @@
 ## Task: master-24-pipelines-api-endpoints
 ## Description: Create REST endpoints for listing discovered pipelines and retrieving full introspection data. Includes pipeline registry, list endpoint, detail endpoint with introspection, and error handling.
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -9,9 +9,9 @@
 ## Plugins: backend-development, python-development, api-scaffolding
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [1,2]
 ## Work Mode: standard
-## Last Updated: 2026-02-23 15:13
+## Last Updated: 2026-02-23 15:19
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,7 +21,7 @@
 | Introspection API Patterns | api-scaffolding:backend-architect | research | 3 | - | A | complete | 0 | abeb76a7402fbbb42 | e6b699d | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a437f903f9c327397 | 77eedbb | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a96047971261cdea7 | f7c9db4 | - |
-| Implement Endpoints | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | ac574fa03fb3819f3 | 0a168f3 | /websites/fastapi_tiangolo |
-| Add Tests | backend-development:test-automator | implementation | 2 | - | B | complete | 0 | a6153beac70f22640 | b010950 | /websites/fastapi_tiangolo |
+| Implement Endpoints | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 0 | ac574fa03fb3819f3 | 0a168f3 | /websites/fastapi_tiangolo |
+| Add Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | a6153beac70f22640 | b010950 | /websites/fastapi_tiangolo |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | ababd1641721ee05a | 5ede4b0 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | a21173e81a6712229 | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a21173e81a6712229 | f0eac47 | - |
