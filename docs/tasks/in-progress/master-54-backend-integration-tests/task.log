@@ -69,3 +69,11 @@
 [2026-02-23 10:59:25] [INFO] Auto-updated agent statuses: Architecture review: pending -> in-progress
 [2026-02-23 10:59:25] [INFO] Deleted 1 old contract file(s)
 [2026-02-23 10:59:25] [DEBUG] STATE.md atomic write complete
+[2026-02-23 10:59:39] [ERROR] BLOCKED: Expected one of ['comprehensive-review:architect-review']. Got: code-review-ai:architect-review
+[2026-02-23 10:59:51] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-02-23 11:00:04] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-23 11:00:23] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-02-23 11:17:29] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-23 11:17:59] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-02-23 11:18:15] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-02-23 11:25:20] [DEBUG] STATE.md atomic write complete
