@@ -1,26 +1,17 @@
 import { Button } from '@/components/ui/button'
-import { useNavigate } from '@tanstack/react-router'
 
 interface PaginationProps {
   total: number
   page: number
   pageSize: number
+  onPageChange: (page: number) => void
 }
 
-export function Pagination({ total, page, pageSize }: PaginationProps) {
-  const navigate = useNavigate()
+export function Pagination({ total, page, pageSize, onPageChange }: PaginationProps) {
   const totalPages = Math.ceil(total / pageSize)
 
   const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1
   const rangeEnd = Math.min(page * pageSize, total)
-
-  const handlePrev = () => {
-    navigate({ to: '/', search: (prev) => ({ ...prev, page: page - 1 }) })
-  }
-
-  const handleNext = () => {
-    navigate({ to: '/', search: (prev) => ({ ...prev, page: page + 1 }) })
-  }
 
   return (
     <div className="flex items-center justify-between py-4">
@@ -31,7 +22,7 @@ export function Pagination({ total, page, pageSize }: PaginationProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={handlePrev}
+          onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
         >
           Previous
@@ -42,7 +33,7 @@ export function Pagination({ total, page, pageSize }: PaginationProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={handleNext}
+          onClick={() => onPageChange(page + 1)}
           disabled={page >= totalPages || total === 0}
         >
           Next

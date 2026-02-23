@@ -36,3 +36,51 @@ New component. Props: `total`, `page`, `pageSize`. Computes `totalPages = Math.c
 [x] Next disabled on last page and when total=0
 [x] Record range shows correct "Showing X-Y of Z"
 [x] Navigate called with correct search params on button clicks
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] (MEDIUM) Pagination hardcodes route path - refactored to callback props pattern matching FilterBar
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/runs/Pagination.tsx`
+Removed `useNavigate` import and internal navigation. Added `onPageChange: (page: number) => void` prop. Buttons now call `onPageChange(page - 1)` / `onPageChange(page + 1)` directly.
+```
+# Before
+import { useNavigate } from '@tanstack/react-router'
+interface PaginationProps { total: number; page: number; pageSize: number }
+// internally: navigate({ to: '/', search: ... })
+
+# After
+interface PaginationProps { total: number; page: number; pageSize: number; onPageChange: (page: number) => void }
+// internally: onPageChange(page - 1) / onPageChange(page + 1)
+```
+
+#### File: `llm_pipeline/ui/frontend/src/components/runs/Pagination.test.tsx`
+Removed `vi.mock('@tanstack/react-router')` and `mockNavigate`. Tests now pass `onPageChange={vi.fn()}` and assert it's called with correct page number directly.
+```
+# Before
+expect(call.search({ page: 3, status: '' })).toEqual({ page: 2, status: '' })
+
+# After
+expect(onPageChange).toHaveBeenCalledWith(2)
+```
+
+#### File: `llm_pipeline/ui/frontend/src/routes/index.tsx`
+Passes `onPageChange` callback to Pagination that calls navigate with updated page param.
+```
+# Before
+<Pagination total={data?.total ?? 0} page={page} pageSize={PAGE_SIZE} />
+
+# After
+<Pagination total={...} page={page} pageSize={PAGE_SIZE}
+  onPageChange={(newPage) => navigate({ to: '/', search: (prev) => ({ ...prev, page: newPage }) })} />
+```
+
+### Verification
+[x] All 12 Pagination tests pass
+[x] TypeScript type check passes
+[x] Pagination component is now route-agnostic (no router imports)
+[x] index.tsx passes onPageChange callback handling navigation

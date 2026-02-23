@@ -49,7 +49,14 @@ function RunListPage() {
         isLoading={isLoading}
         isError={isError}
       />
-      <Pagination total={data?.total ?? 0} page={page} pageSize={PAGE_SIZE} />
+      <Pagination
+        total={data?.total ?? 0}
+        page={page}
+        pageSize={PAGE_SIZE}
+        onPageChange={(newPage) =>
+          navigate({ to: '/', search: (prev) => ({ ...prev, page: newPage }) })
+        }
+      />
     </div>
   )
 }
