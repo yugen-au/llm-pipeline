@@ -70,6 +70,31 @@ describe('formatRelative', () => {
     const twentyThreeHoursAgo = '2026-02-22T13:00:00.000Z'
     expect(formatRelative(twentyThreeHoursAgo)).toBe('23 hours ago')
   })
+
+  it('truncates rather than rounds at unit boundaries (90s -> 1 minute ago)', () => {
+    // 90 seconds = 1.5 minutes; Math.floor ensures "1 minute ago" not "2 minutes ago"
+    const ninetySecondsAgo = '2026-02-23T11:58:30.000Z'
+    expect(formatRelative(ninetySecondsAgo)).toBe('1 minute ago')
+  })
+
+  it('truncates future dates at unit boundaries (90s -> in 1 minute)', () => {
+    const ninetySecondsFromNow = '2026-02-23T12:01:30.000Z'
+    expect(formatRelative(ninetySecondsFromNow)).toBe('in 1 minute')
+  })
+
+  it('uses default en locale when none specified', () => {
+    const fiveMinutesAgo = '2026-02-23T11:55:00.000Z'
+    expect(formatRelative(fiveMinutesAgo)).toBe('5 minutes ago')
+    expect(formatRelative(fiveMinutesAgo, 'en')).toBe('5 minutes ago')
+  })
+
+  it('accepts a different locale', () => {
+    const fiveMinutesAgo = '2026-02-23T11:55:00.000Z'
+    const result = formatRelative(fiveMinutesAgo, 'de')
+    // German: "vor 5 Minuten"
+    expect(result).toContain('5')
+    expect(result).not.toBe('5 minutes ago')
+  })
 })
 
 describe('formatAbsolute', () => {
@@ -87,5 +112,19 @@ describe('formatAbsolute', () => {
     const result = formatAbsolute('2025-12-25T12:00:00.000Z')
     expect(result).toContain('2025')
     expect(result).toMatch(/Dec \d{1,2}, 2025/)
+  })
+
+  it('uses default en locale when none specified', () => {
+    const result = formatAbsolute('2026-02-23T14:30:00.000Z')
+    const resultExplicit = formatAbsolute('2026-02-23T14:30:00.000Z', 'en')
+    expect(result).toBe(resultExplicit)
+  })
+
+  it('accepts a different locale', () => {
+    const result = formatAbsolute('2026-02-23T14:30:00.000Z', 'de')
+    // German uses "Feb" or "Feb." for medium date style
+    expect(result).toContain('2026')
+    // Should not match English AM/PM pattern
+    expect(result).not.toMatch(/[AP]M/)
   })
 })

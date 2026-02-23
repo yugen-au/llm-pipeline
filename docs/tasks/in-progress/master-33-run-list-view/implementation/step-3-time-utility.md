@@ -40,3 +40,48 @@ New file. 14 tests across two describe blocks:
 [x] formatRelative handles future dates gracefully
 [x] formatAbsolute returns locale-formatted date+time string
 [x] No external date library used - native Intl APIs only
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] (LOW) formatRelative rounding edge case - Math.round can produce unexpected values at unit boundaries; replaced with Math.floor truncation toward zero
+[x] (LOW) Hardcoded 'en' locale - both functions now accept optional `locale` parameter defaulting to 'en'; cached singletons reused for default locale, new instances created for non-default
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/lib/time.ts`
+Replaced Math.round with Math.floor for ms-to-seconds and unit division. Added optional `locale` parameter to both exports. Introduced `getRtf`/`getDtf` helper functions that return cached singleton for default 'en' locale or create new instance for other locales.
+```
+# Before
+const diffSeconds = Math.round((then - now) / 1_000)
+const value = Math.round(diffSeconds / threshold)
+export function formatRelative(isoString: string): string
+export function formatAbsolute(isoString: string): string
+
+# After
+const diffSeconds = Math.floor((then - now) / 1_000)
+const value = diffSeconds >= 0
+  ? Math.floor(diffSeconds / threshold)
+  : -Math.floor(abs / threshold)
+export function formatRelative(isoString: string, locale: string = 'en'): string
+export function formatAbsolute(isoString: string, locale: string = 'en'): string
+```
+
+#### File: `llm_pipeline/ui/frontend/src/lib/time.test.ts`
+Added 6 new tests (14 -> 20 total): boundary truncation for past (90s -> "1 minute ago") and future (90s -> "in 1 minute"), default locale equivalence for both functions, non-default locale ('de') for both functions.
+```
+# Before
+12 formatRelative tests, 2 formatAbsolute tests
+
+# After
+16 formatRelative tests (+truncation boundary x2, +default locale, +de locale)
+4 formatAbsolute tests (+default locale equivalence, +de locale)
+```
+
+### Verification
+[x] `npx vitest run src/lib/time.test.ts` passes all 20 tests
+[x] 90s boundary correctly truncates to "1 minute ago" (not "2 minutes ago")
+[x] 90s future boundary correctly truncates to "in 1 minute"
+[x] Default locale (no arg) produces same output as explicit 'en'
+[x] German locale ('de') produces non-English output
