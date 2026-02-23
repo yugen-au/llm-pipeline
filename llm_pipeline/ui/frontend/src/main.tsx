@@ -5,6 +5,7 @@ import { RouterProvider } from '@tanstack/react-router'
 import { queryClient } from '@/queryClient'
 import { router } from '@/router'
 import './index.css'
+import '@/stores/ui'
 
 const ReactQueryDevtools = import.meta.env.DEV
   ? lazy(() =>
@@ -13,8 +14,6 @@ const ReactQueryDevtools = import.meta.env.DEV
       })),
     )
   : () => null
-
-document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
