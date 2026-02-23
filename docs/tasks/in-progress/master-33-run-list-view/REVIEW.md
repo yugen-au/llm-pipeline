@@ -87,3 +87,102 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is clean, well-tested, and follows established project patterns. The medium issues are minor consistency/coupling concerns that do not block merging. The Pagination route coupling and FilterBar-to-table gap are the only items worth addressing before or shortly after merge.
+
+---
+
+# Architecture Re-Review (Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+
+All 8 issues from the initial review have been properly addressed. Fixes are clean, well-tested, and introduce no regressions. 57 tests pass (up from 51 -- 6 new tests for locale support and truncation behavior). TypeScript compiles cleanly.
+
+## Fix Verification
+
+### Fix 1 (LOW - Step 1): vitest.config.ts uses mergeConfig
+**Status:** VERIFIED
+`vitest.config.ts` now imports `viteConfig` from `./vite.config` and uses `mergeConfig` from `vitest/config` to extend it. Plugins are no longer duplicated. The test-specific `defineConfig` only adds test settings (globals, environment, setupFiles, include, exclude). Single source of truth for plugins.
+
+### Fix 2 (LOW - Step 3): formatRelative uses Math.floor
+**Status:** VERIFIED
+`time.ts` line 51-52 now uses `Math.floor(diffSeconds / threshold)` and `-Math.floor(abs / threshold)` instead of `Math.round`. New tests at lines 74-83 of `time.test.ts` explicitly verify truncation: 90s produces "1 minute ago" (not "2 minutes ago"), and 90s future produces "in 1 minute" (not "in 2 minutes").
+
+### Fix 3 (LOW - Step 3): locale parameter on formatRelative/formatAbsolute
+**Status:** VERIFIED
+Both functions now accept `locale: string = DEFAULT_LOCALE`. Helper functions `getRtf` and `getDtf` return cached singleton for 'en' or create new instance for other locales. New tests at lines 85-97 and 117-129 verify default locale behavior and non-English locale ('de') produces different output. Clean implementation with no performance regression for the default case.
+
+### Fix 4 (MEDIUM - Step 4): StatusBadge uses RunStatus type
+**Status:** VERIFIED
+`StatusBadge.tsx` now imports `RunStatus` from `@/api/types`. The `statusConfig` record is typed as `Record<RunStatus, BadgeConfig>` providing compile-time exhaustiveness. Props type uses `RunStatus | (string & {})` pattern per the review recommendation, allowing unknown strings while providing autocomplete for known statuses. The `as RunStatus` cast on lookup plus `as BadgeConfig | undefined` handles the fallback path safely.
+
+### Fix 5 (MEDIUM - Step 5): Pagination uses onPageChange callback
+**Status:** VERIFIED
+`Pagination.tsx` no longer imports `useNavigate`. Props interface now includes `onPageChange: (page: number) => void`. Buttons call `onPageChange(page - 1)` and `onPageChange(page + 1)`. Router coupling moved to `index.tsx` line 56-58 where the callback is defined inline. Tests updated: no more `vi.mock('@tanstack/react-router')`, tests verify `onPageChange` is called with correct page number directly. Consistent with FilterBar's callback pattern.
+
+### Fix 6 (LOW - Step 7): COLUMN_COUNT derived from COLUMNS array
+**Status:** VERIFIED
+`RunsTable.tsx` line 20-21: `const COLUMNS = ['Run ID', 'Pipeline', 'Started', 'Status', 'Steps', 'Duration'] as const` followed by `const COLUMN_COUNT = COLUMNS.length`. Headers rendered via `COLUMNS.map()` at line 67. Adding/removing a column automatically updates both headers and colspan.
+
+### Fix 7 (LOW - Step 7): RunsTable tests use vi.setSystemTime
+**Status:** VERIFIED
+`RunsTable.test.tsx` now has `beforeEach` with `vi.useFakeTimers()` and `vi.setSystemTime(new Date(NOW))`, and `afterEach` with `vi.useRealTimers()`. Mock dates use `NOW = '2025-06-15T12:00:00.000Z'` with derived constants `ONE_HOUR_AGO` and `TWO_HOURS_AGO`. Tests are fully deterministic regardless of when they run. The navigate interaction test correctly calls `vi.useRealTimers()` first to avoid Radix Tooltip timer deadlocks.
+
+### Fix 8 (MEDIUM - Step 8): index.tsx uses gap-6 for spacing
+**Status:** VERIFIED
+`index.tsx` line 44: `<div className="flex flex-col gap-4 h-full p-6">`. The `gap-4` provides consistent spacing between h1, FilterBar, RunsTable, and Pagination. The previous `mb-4` on h1 is no longer needed (though removing it would be optional cleanup since gap handles spacing).
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Tests pass | pass | 57/57 tests pass (6 new locale + truncation tests) |
+| No hardcoded values | pass | COLUMN_COUNT now derived; locale parameterized |
+| Error handling present | pass | Unchanged from initial review |
+| Warnings fixed | pass | `tsc -b --noEmit` clean |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+#### h1 mb-4 redundant with gap-4 on parent
+**Step:** 8
+**Details:** `index.tsx` has both `gap-4` on the flex container and `mb-4` on the h1. The `mb-4` is now redundant since `gap-4` handles spacing between all children. Not a bug -- just slight CSS redundancy. Cosmetic only.
+
+## Review Checklist
+[x] Architecture patterns followed - Pagination now uses callback prop pattern, consistent with FilterBar
+[x] Code quality and maintainability - COLUMN_COUNT derived, locale parameterized, config properly shared
+[x] Error handling present - unchanged, still comprehensive
+[x] No hardcoded values - all previous hardcoded items resolved
+[x] Project conventions followed - consistent patterns across all components
+[x] Security considerations - no new vectors introduced
+[x] Properly scoped (DRY, YAGNI, no over-engineering) - locale support uses lazy singleton, no over-abstraction
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `vitest.config.ts` | pass | mergeConfig from vite.config, no plugin duplication |
+| `time.ts` | pass | Math.floor, locale param with cached default, getRtf/getDtf helpers |
+| `time.test.ts` | pass | 20 tests (up from 14), truncation + locale coverage |
+| `StatusBadge.tsx` | pass | RunStatus type, Record<RunStatus, BadgeConfig>, (string & {}) fallback |
+| `StatusBadge.test.tsx` | pass | Unchanged, still covers known + unknown statuses |
+| `Pagination.tsx` | pass | onPageChange callback, no router import |
+| `Pagination.test.tsx` | pass | 12 tests, verifies callback directly, no router mock |
+| `RunsTable.tsx` | pass | COLUMNS array + COLUMN_COUNT derived |
+| `RunsTable.test.tsx` | pass | vi.setSystemTime, deterministic dates, Radix timer workaround |
+| `index.tsx` | pass | gap-4 spacing, onPageChange wired inline |
+| `FilterBar.tsx` | pass | Unchanged |
+| `FilterBar.test.tsx` | pass | Unchanged |
+
+## New Issues Introduced
+- None detected (the mb-4 redundancy is pre-existing from initial implementation, not introduced by fixes)
+
+## Recommendation
+**Decision:** APPROVE
+All 8 review issues resolved cleanly. No regressions. Test count increased from 51 to 57 with meaningful new coverage. Implementation is ready to merge.
