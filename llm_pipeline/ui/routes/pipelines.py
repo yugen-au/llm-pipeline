@@ -1,6 +1,6 @@
 """Pipeline configurations route module -- list and detail endpoints."""
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
