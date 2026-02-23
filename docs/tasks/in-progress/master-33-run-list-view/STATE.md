@@ -20,3 +20,11 @@
 | Existing Codebase Patterns | full-stack-orchestration:test-automator | research | 2 | - | A | complete | 0 | af3da622a4a847b6a | 9545b8d | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | abf29229f96695444 | f5191df | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a38ffeacc3ff2ab71 | pending | - |
+| Vitest Infrastructure | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | pending | 0 | pending | pending | /vitest-dev/vitest,/websites/testing-library |
+| shadcn/ui Components | frontend-mobile-development:frontend-developer | implementation | 2 | - | B | pending | 0 | pending | pending | /shadcn-ui/ui |
+| Time Utility | frontend-mobile-development:frontend-developer | implementation | 3 | - | C | pending | 0 | pending | pending | - |
+| StatusBadge Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | pending | 0 | pending | pending | /shadcn-ui/ui |
+| Pagination Component | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | pending | 0 | pending | pending | /tanstack/router,/shadcn-ui/ui |
+| FilterBar Component | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | pending | 0 | pending | pending | /tanstack/router,/shadcn-ui/ui |
+| RunsTable Component | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | pending | pending | /shadcn-ui/ui,/tanstack/router |
+| Wire Up RunListPage | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | pending | pending | /tanstack/router |
