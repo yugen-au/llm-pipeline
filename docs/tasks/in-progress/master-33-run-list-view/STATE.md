@@ -26,7 +26,7 @@
 | StatusBadge Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | complete | 1 | a36b81c7742ece94b | e4a6e65,ad98042,796a6e5 | /shadcn-ui/ui |
 | Pagination Component | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 1 | ab76626f343e33d01 | e4a6e65,ad98042,016237e | /tanstack/router,/shadcn-ui/ui |
 | FilterBar Component | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a7e0df644fa0e7657 | 8f860e9,ad98042 | /tanstack/router,/shadcn-ui/ui |
-| RunsTable Component | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | in-progress | 0 | a48e942a2c74e7ccb | a5c9a6e | /shadcn-ui/ui,/tanstack/router |
+| RunsTable Component | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | in-progress | 1 | a48e942a2c74e7ccb | a5c9a6e | /shadcn-ui/ui,/tanstack/router |
 | Wire Up RunListPage | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | a56f8d02641b93b83 | d1c12a3 | /tanstack/router |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a6ed2998462db34ac | a806f96 | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | ad9b99d6dba9c06cf | de77126 | - |
