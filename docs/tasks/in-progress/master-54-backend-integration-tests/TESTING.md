@@ -79,3 +79,52 @@ None
 ## Recommendations
 1. Address pre-existing failure `test_ui.py::TestRoutersIncluded::test_events_router_prefix` in a separate task (asserts prefix == "/events" but actual prefix is "/runs/{run_id}/events").
 2. The 19 integration tests take ~106s due to E2E gate/thread patterns -- consider parallelising with pytest-xdist if suite time becomes a bottleneck.
+
+---
+
+## Re-run After Review Fixes (commit 63156a5)
+
+### Summary
+**Status:** passed
+Review fixes to `tests/ui/test_integration.py` (dead code removal, shared helper extraction, inline imports moved to module level, `_test_gate` moved to `app.state`) introduced no regressions. All 19 integration tests pass; full suite unchanged at 729 passed.
+
+### Test Execution
+**Pass Rate:** 19/19 (integration file); 729/730 full suite (1 pre-existing failure excluded)
+
+Integration file run:
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
+collected 19 items
+
+tests/ui/test_integration.py::TestE2ETriggerWebSocket::test_trigger_then_ws_receives_pipeline_started PASSED
+tests/ui/test_integration.py::TestE2ETriggerWebSocket::test_trigger_then_ws_receives_pipeline_completed PASSED
+tests/ui/test_integration.py::TestE2ETriggerWebSocket::test_trigger_ws_stream_complete_sent_on_finish PASSED
+tests/ui/test_integration.py::TestTriggerRunErrorHandling::test_trigger_failing_pipeline_sets_status_failed PASSED
+tests/ui/test_integration.py::TestTriggerRunErrorHandling::test_trigger_failing_pipeline_sets_completed_at PASSED
+tests/ui/test_integration.py::TestTriggerRunErrorHandling::test_trigger_failing_pipeline_completed_at_is_datetime PASSED
+tests/ui/test_integration.py::TestCombinedFilters::test_runs_filter_pipeline_name_and_status_match PASSED
+tests/ui/test_integration.py::TestCombinedFilters::test_runs_filter_pipeline_name_and_status_no_match PASSED
+tests/ui/test_integration.py::TestCombinedFilters::test_runs_filter_pipeline_name_and_started_after PASSED
+tests/ui/test_integration.py::TestCombinedFilters::test_runs_filter_pipeline_name_and_started_after_no_match PASSED
+tests/ui/test_integration.py::TestCombinedFilters::test_events_filter_event_type_with_pagination PASSED
+tests/ui/test_integration.py::TestCombinedFilters::test_events_filter_event_type_with_offset_returns_empty PASSED
+tests/ui/test_integration.py::TestCORSHeaders::test_cors_allows_any_origin_on_get PASSED
+tests/ui/test_integration.py::TestCORSHeaders::test_cors_preflight_options_returns_success PASSED
+tests/ui/test_integration.py::TestCORSHeaders::test_cors_preflight_includes_allow_origin_header PASSED
+tests/ui/test_integration.py::TestCORSHeaders::test_cors_allow_methods_header_on_preflight PASSED
+tests/ui/test_integration.py::TestWebSocketDisconnect::test_disconnect_mid_stream_removes_from_queues PASSED
+tests/ui/test_integration.py::TestWebSocketDisconnect::test_disconnect_mid_stream_removes_from_connections PASSED
+tests/ui/test_integration.py::TestWebSocketDisconnect::test_second_client_connects_after_first_disconnects PASSED
+
+19 passed, 2 warnings in 106.02s
+```
+
+Full suite run:
+```
+1 failed, 729 passed, 3 warnings in 124.60s
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix (pre-existing, out of scope)
+```
+
+### Failed Tests
+None -- review fixes introduced no regressions.
