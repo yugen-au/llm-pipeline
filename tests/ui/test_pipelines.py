@@ -24,14 +24,6 @@ def clear_introspector_cache():
 
 
 @pytest.fixture
-def introspection_client(pipeline_cls_map):
-    app = _make_app()
-    app.state.introspection_registry = pipeline_cls_map
-    with TestClient(app) as client:
-        yield client
-
-
-@pytest.fixture
 def empty_introspection_client():
     app = _make_app()
     app.state.introspection_registry = {}
@@ -232,3 +224,9 @@ class TestGetPipeline:
         resp = populated_introspection_client.get("/api/pipelines/scan")
         body = resp.json()
         assert isinstance(body["registry_models"], list)
+
+    def test_detail_introspection_failure_returns_500(self, populated_introspection_client):
+        with patch.object(PipelineIntrospector, "get_metadata", side_effect=Exception("boom")):
+            resp = populated_introspection_client.get("/api/pipelines/widget")
+        assert resp.status_code == 500
+        assert "boom" in resp.json()["detail"]

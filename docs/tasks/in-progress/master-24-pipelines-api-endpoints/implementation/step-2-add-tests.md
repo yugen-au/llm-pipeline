@@ -35,3 +35,45 @@ New file. 19 tests, 4 fixtures.
 - [x] Error-path tests verified endpoint returns 200 with error field, not 500
 - [x] Alphabetical sort verified by asserting names == sorted(names)
 - [x] No warnings beyond FastAPI deprecation noise (pre-existing, not introduced here)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+- [x] MEDIUM: Missing test for detail endpoint 500 error path
+- [x] LOW: Dead `introspection_client` fixture with undefined `pipeline_cls_map` parameter
+
+### Changes Made
+#### File: `tests/ui/test_pipelines.py`
+Removed `introspection_client` fixture (6 lines). Added `test_detail_introspection_failure_returns_500` to `TestGetPipeline`.
+
+```
+# Before
+@pytest.fixture
+def introspection_client(pipeline_cls_map):
+    app = _make_app()
+    app.state.introspection_registry = pipeline_cls_map
+    with TestClient(app) as client:
+        yield client
+
+# After
+[removed]
+```
+
+```
+# Before
+[no 500 test existed]
+
+# After
+def test_detail_introspection_failure_returns_500(self, populated_introspection_client):
+    with patch.object(PipelineIntrospector, "get_metadata", side_effect=Exception("boom")):
+        resp = populated_introspection_client.get("/api/pipelines/widget")
+    assert resp.status_code == 500
+    assert "boom" in resp.json()["detail"]
+```
+
+### Verification
+- [x] 20/20 tests pass: `pytest tests/ui/test_pipelines.py -v`
+- [x] Dead `introspection_client` fixture removed
+- [x] `test_detail_introspection_failure_returns_500` asserts 500 status and error message in detail
