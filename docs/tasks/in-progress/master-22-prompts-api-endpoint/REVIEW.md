@@ -55,3 +55,34 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is clean, well-tested (17 tests, 100% scenario coverage from plan), follows established patterns, and introduces no regressions. The two low/medium issues are style-level and do not affect correctness or security. The DRY violation in get_prompt is worth addressing but not blocking.
+
+---
+
+# Architecture Re-Review (post-fix)
+
+## Overall Assessment
+**Status:** complete
+MEDIUM DRY violation fully resolved. `PromptVariant` is now a type alias (`PromptVariant = PromptItem`) and `get_prompt` reuses `_to_prompt_item` for mapping. Clean, idiomatic fix. One LOW style issue remains (Optional fields without `= None` defaults) -- unchanged, non-blocking.
+
+## Fix Verification
+
+### MEDIUM - Duplicate field mapping (RESOLVED)
+**Original:** `get_prompt` duplicated all 14 field mappings inline instead of reusing `_to_prompt_item`.
+**Fix:** Line 46: `PromptVariant = PromptItem` (type alias, no duplicate class). Line 167: `variants=[_to_prompt_item(r) for r in rows]` (reuses shared helper). Single mapping point for future field changes. DRY violation eliminated.
+
+### LOW - Optional field defaults (UNCHANGED)
+**Status:** Still present. `category: Optional[str]` (line 26), `step_name: Optional[str]` (line 27), `description: Optional[str]` (line 30), `created_by: Optional[str]` (line 35) all lack `= None` defaults. runs.py uses `Optional[datetime] = None`. Functionally harmless since constructors always provide values, but style deviation persists.
+
+## Test Results
+- 17/17 prompts tests pass after fix
+- No regressions introduced by the fix
+
+## Review Checklist
+[x] DRY violation resolved -- single mapping helper, type alias for PromptVariant
+[x] No new issues introduced by fix
+[x] Tests still pass (17/17)
+[x] Code cleaner than before -- removed duplicate class, removed duplicate mapping
+
+## Recommendation
+**Decision:** APPROVE
+DRY fix is clean and correct. Remaining LOW issue is cosmetic and non-blocking.
