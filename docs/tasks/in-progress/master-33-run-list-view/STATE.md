@@ -9,7 +9,7 @@
 ## Plugins: frontend-mobile-development, full-stack-orchestration
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [1,3,4,5,7,8]
 ## Work Mode: standard
 ## Last Updated: 2026-02-24 10:00
 
