@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Three research files were cross-referenced against the actual codebase (db/prompt.py, prompts/loader.py, prompts/service.py, ui/routes/runs.py, ui/routes/events.py, ui/deps.py, ui/frontend/src/api/types.ts, tests/ui/conftest.py). Research findings are accurate with minor omissions. Two architectural ambiguities require CEO input before planning can proceed. Five assumptions were validated as self-resolvable based on codebase evidence.
+Three research files were cross-referenced against the actual codebase (db/prompt.py, prompts/loader.py, prompts/service.py, ui/routes/runs.py, ui/routes/events.py, ui/deps.py, ui/frontend/src/api/types.ts, tests/ui/conftest.py). Research findings are accurate with minor omissions. Two architectural ambiguities were resolved via CEO decisions. All assumptions now validated -- ready for planning.
 
 ## Domain Findings
 
@@ -60,8 +60,8 @@ Step-3 notes `tests/test_ui.py` line 141-143 has stale assertion about events ro
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| [pending] pipeline_name filter: use category+step_name instead? | [awaiting CEO] | Determines filter params, frontend alignment |
-| [pending] GET /prompts/{prompt_key} response: flat variants list or compound object? | [awaiting CEO] | Determines response model shape, frontend integration |
+| pipeline_name filter: use category+step_name instead? | CEO: Yes, use category+step_name. Matches frontend, avoids schema migration, uses existing composite index. | Filter params confirmed as category+step_name+is_active. No schema change needed. Frontend types.ts already aligned. |
+| GET /prompts/{prompt_key} response: flat variants list or compound object? | CEO: Grouped wrapper format: `{ prompt_key, variants: [{type: system, ...}, {type: user, ...}] }` | Detail endpoint returns grouped wrapper. Frontend will need a PromptDetail interface with variants array. |
 
 ## Assumptions Validated
 - [x] Use `sync def` endpoints (not async) -- all existing HTTP routes are sync, task spec is stale
@@ -72,17 +72,17 @@ Step-3 notes `tests/test_ui.py` line 141-143 has stale assertion about events ro
 - [x] Router stub exists and is mounted; no app.py changes needed
 - [x] Test fixtures via `_make_app()` already include prompts_router; seed Prompt rows directly via `Session(engine)`
 - [x] Frontend provisional types (Prompt, PromptListResponse, PromptListParams) exist in types.ts and should be matched/updated by backend
+- [x] Filter by `category` + `step_name` (NOT pipeline_name) -- CEO confirmed, frontend already aligned, composite index exists
+- [x] Detail endpoint uses grouped wrapper `{ prompt_key, variants: [...] }` -- CEO confirmed, frontend needs PromptDetail interface added
 
 ## Open Items
-- pipeline_name filter resolution (CEO decision needed)
-- GET /prompts/{prompt_key} response shape (CEO decision needed)
-- Frontend types.ts may need updating after CEO decisions -- currently provisional with `@provisional` tags
+- Frontend types.ts needs PromptDetail interface added for grouped wrapper response; remove `@provisional` tags after backend lands
 - Stale test assertion in tests/test_ui.py for events router prefix (non-blocking, separate fix)
 
 ## Recommendations for Planning
-1. Replace `pipeline_name` filter with `category` + `step_name` filters -- frontend types already align, no schema migration needed, composite index exists
-2. For detail endpoint, return `{ prompt_key: str, variants: List[PromptVariant] }` where each variant is a flat prompt object -- groups by key while keeping individual prompt rows flat (compatible with frontend Prompt interface)
-3. Implement `is_active` as optional bool param defaulting to `True`; pass `is_active=false` explicitly to see inactive prompts
-4. Import `extract_variables_from_content` from `llm_pipeline.prompts.loader` for null-fallback only
-5. Add `seeded_prompts_client` fixture or extend `seeded_app_client` to include Prompt seed data with both system/user variants
-6. After backend lands, update frontend types.ts to remove `@provisional` tags and adjust if response shapes changed
+1. **Filters (confirmed):** `category` + `step_name` + `is_active` query params on GET /api/prompts. `is_active` defaults to True. No pipeline_name.
+2. **Detail response (confirmed):** GET /api/prompts/{prompt_key} returns `{ prompt_key: str, variants: List[PromptVariant] }` where each variant is a flat prompt object with prompt_type, content, required_variables, etc.
+3. **Variables:** Use stored `required_variables` when non-null; fallback to `extract_variables_from_content(content)` for null values.
+4. **Conventions:** sync def, DBSession, plain Pydantic BaseModel responses, explicit field mapping, paginated envelope, comment banner sections.
+5. **Tests:** Add Prompt seed data to conftest or new fixture. Seed both system+user variants for same prompt_key. Test list filters, detail grouping, 404, pagination.
+6. **Frontend follow-up:** Add PromptDetail interface (grouped wrapper) to types.ts. Remove `@provisional` tags. Existing PromptListParams already correct.
