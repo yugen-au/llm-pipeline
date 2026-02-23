@@ -21,3 +21,6 @@
 | API Route Conventions | api-scaffolding:backend-architect | research | 3 | - | A | complete | 0 | acbc1cae9da0c0928 | fffe7b4 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | aacde61febdfd1c73 | 12d2200 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aec55e5fe62113aba | pending | - |
+| Prompts Endpoints | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /tiangolo/fastapi,/pydantic/pydantic |
+| Prompts Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest |
+| Frontend Types | api-scaffolding:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | - |
