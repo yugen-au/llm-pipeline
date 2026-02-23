@@ -49,3 +49,32 @@ Added `@testing-library/dom` as devDependency -- missing peer dep of `@testing-l
 [x] All 5 tests pass via `npx vitest run`
 [x] Component uses Badge from @/components/ui/badge (step 2 output)
 [x] Component uses cn() from @/lib/utils
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] (MEDIUM) Status type looseness -- StatusBadge accepts `status: string` but `RunStatus` union type exists. No compile-time protection for known statuses.
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/runs/StatusBadge.tsx`
+Imported `RunStatus` from `@/api/types`. Changed `statusConfig` key type from `Record<string, ...>` to `Record<RunStatus, ...>` so adding/removing backend statuses forces a compile error if the config map is out of sync. Changed prop type to `RunStatus | (string & {})` -- known statuses get autocomplete and compile-time checking, unknown strings still render via the fallback path. Lookup uses `as RunStatus` cast with `as BadgeConfig | undefined` to preserve the runtime fallback for unknown values.
+
+```
+# Before
+status: string
+statusConfig: Record<string, { variant: ...; className: string }>
+const config = statusConfig[status]
+
+# After
+status: RunStatus | (string & {})
+statusConfig: Record<RunStatus, BadgeConfig>
+const config = statusConfig[status as RunStatus] as BadgeConfig | undefined
+```
+
+### Verification
+[x] All 5 StatusBadge tests pass
+[x] `tsc -b --noEmit` clean (no type errors)
+[x] Unknown status fallback still works at runtime (tested via "unknown-state" test case)
+[x] Known statuses get IDE autocomplete from RunStatus union
