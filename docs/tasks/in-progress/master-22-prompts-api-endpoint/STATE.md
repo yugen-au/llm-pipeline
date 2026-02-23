@@ -16,6 +16,6 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Codebase Patterns | backend-development:backend-architect | research | 1 | - | A | needs-input | 0 | a6016c3e7433f6753 | pending | - |
-| Prompt Model & Loader | python-development:python-pro | research | 2 | - | A | needs-input | 0 | af0e1aaf33e5e665a | pending | - |
+| Codebase Patterns | backend-development:backend-architect | research | 1 | - | A | complete | 0 | a6016c3e7433f6753 | pending | - |
+| Prompt Model & Loader | python-development:python-pro | research | 2 | - | A | complete | 0 | af0e1aaf33e5e665a | pending | - |
 | API Route Conventions | api-scaffolding:backend-architect | research | 3 | - | A | complete | 0 | acbc1cae9da0c0928 | pending | - |
