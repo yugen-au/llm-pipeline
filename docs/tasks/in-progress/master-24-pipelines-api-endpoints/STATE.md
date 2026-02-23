@@ -1,7 +1,7 @@
 ## Task: master-24-pipelines-api-endpoints
 ## Description: Create REST endpoints for listing discovered pipelines and retrieving full introspection data. Includes pipeline registry, list endpoint, detail endpoint with introspection, and error handling.
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -23,4 +23,5 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a96047971261cdea7 | f7c9db4 | - |
 | Implement Endpoints | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | ac574fa03fb3819f3 | 0a168f3 | /websites/fastapi_tiangolo |
 | Add Tests | backend-development:test-automator | implementation | 2 | - | B | complete | 0 | a6153beac70f22640 | b010950 | /websites/fastapi_tiangolo |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | ababd1641721ee05a | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | ababd1641721ee05a | 5ede4b0 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
