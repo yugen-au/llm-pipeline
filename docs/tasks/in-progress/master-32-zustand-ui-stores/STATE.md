@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/32-zustand-ui-stores
 ## Plugins: frontend-mobile-development, python-development
@@ -21,5 +21,5 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a9779d0ce16cf7533 | d5fc260 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a1420e6744c17ba19 | fce3a3b | - |
 | Create UI Store | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | af9f371398e97a6c4 | 36a3f63 | - |
-| Create Filters Store | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | afdab43528d56fb23 | 1d45313 | - |
-| Update main.tsx Theme | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Create Filters Store | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | afdab43528d56fb23 | 1d45313,36a3f63 | - |
+| Update main.tsx Theme | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
