@@ -1,7 +1,7 @@
 ## Task: master-22-prompts-api-endpoint
 ## Description: REST endpoints for listing/retrieving prompt templates with variable extraction
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -24,4 +24,5 @@
 | Prompts Endpoints | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | aec8716ce39321fcb | 971d439 | /tiangolo/fastapi,/pydantic/pydantic |
 | Prompts Tests | backend-development:test-automator | implementation | 2 | - | B | complete | 0 | a1d11b2d7f510d107 | aa1bb1c | /pytest-dev/pytest |
 | Frontend Types | api-scaffolding:backend-architect | implementation | 3 | - | B | complete | 0 | a0e3bfa6368063b70 | aa1bb1c | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a00eb1470ecd0a42d | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a00eb1470ecd0a42d | 85fd97e | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
