@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/24-pipelines-api-endpoints
 ## Plugins: backend-development, python-development, api-scaffolding
@@ -22,4 +22,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a437f903f9c327397 | 77eedbb | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a96047971261cdea7 | f7c9db4 | - |
 | Implement Endpoints | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | ac574fa03fb3819f3 | 0a168f3 | /websites/fastapi_tiangolo |
-| Add Tests | backend-development:test-automator | implementation | 2 | - | B | pending | 0 | pending | pending | /websites/fastapi_tiangolo |
+| Add Tests | backend-development:test-automator | implementation | 2 | - | B | in-progress | 0 | pending | pending | /websites/fastapi_tiangolo |
