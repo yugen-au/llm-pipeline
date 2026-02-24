@@ -86,6 +86,7 @@ export interface RunListParams {
 /** Query params for GET /api/runs/{run_id}/events. */
 export interface EventListParams {
   event_type?: string
+  step_name?: string
   offset?: number
   limit?: number
 }
@@ -161,6 +162,61 @@ export interface EventListResponse {
   total: number
   offset: number
   limit: number
+}
+
+// ---------------------------------------------------------------------------
+// Typed event_data interfaces
+// ---------------------------------------------------------------------------
+
+/** event_data shape for llm_call_starting events. */
+export interface LLMCallStartingData {
+  call_index: number
+  rendered_system_prompt: string
+  rendered_user_prompt: string
+}
+
+/** event_data shape for llm_call_completed events. */
+export interface LLMCallCompletedData {
+  call_index: number
+  raw_response: string | null
+  parsed_result: Record<string, unknown> | null
+  model_name: string | null
+  attempt_count: number
+  validation_errors: string[]
+}
+
+/** event_data shape for context_updated events. */
+export interface ContextUpdatedData {
+  new_keys: string[]
+  context_snapshot: Record<string, unknown>
+}
+
+/** event_data shape for extraction_completed events. */
+export interface ExtractionCompletedData {
+  extraction_class: string
+  model_class: string
+  instance_count: number
+  execution_time_ms: number
+}
+
+// ---------------------------------------------------------------------------
+// Step prompt content (GET /api/pipelines/{name}/steps/{step_name}/prompts)
+// ---------------------------------------------------------------------------
+
+/** Single prompt item within a step's prompt content response. */
+export interface StepPromptItem {
+  prompt_key: string
+  prompt_type: string
+  content: string
+  required_variables: string[] | null
+  version: string
+}
+
+/** GET /api/pipelines/{name}/steps/{step_name}/prompts response body. */
+export interface StepPromptsResponse {
+  pipeline_name: string
+  step_name: string
+  prompts: StepPromptItem[]
 }
 
 // ---------------------------------------------------------------------------
