@@ -27,3 +27,48 @@ New file. Div-based fixed right panel with z-50, transition-transform for open/c
 [x] Loading/error/empty states present
 [x] Renders step_name, step_number, model, duration, created_at
 [x] Task 35 placeholder comment present
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Focus trap + Escape key missing - panel now traps focus and closes on Escape
+[x] Missing backdrop click-to-close - semi-transparent backdrop overlay added
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/runs/StepDetailPanel.tsx`
+Added accessibility and UX fixes:
+- Escape key: useEffect with keydown listener when visible, calls onClose
+- Focus on open: useEffect focuses close button ref when panel becomes visible
+- Focus trap: onKeyDown handler on panel div wraps Tab between first/last focusable elements
+- Backdrop: fixed inset-0 z-40 bg-black/50 div rendered when visible, onClick calls onClose
+- Panel div gets role="dialog", aria-modal, aria-label for screen readers
+- Added useCallback, useEffect, useRef imports from React
+
+```
+# Before (panel only, no backdrop)
+return (
+  <div className={cn('fixed inset-y-0 right-0 z-50 ...', ...)}>
+    ...
+    <Button variant="ghost" ... onClick={onClose}>
+
+# After (backdrop + focus trap + escape + dialog role)
+return (
+  <>
+    {visible && (
+      <div className="fixed inset-0 z-40 bg-black/50" aria-hidden="true" onClick={onClose} />
+    )}
+    <div ref={panelRef} role="dialog" aria-modal={visible} aria-label="Step detail"
+         onKeyDown={handleKeyDown} className={cn('fixed ... z-50 ...', ...)}>
+      ...
+      <Button ref={closeBtnRef} variant="ghost" ... onClick={onClose}>
+```
+
+### Verification
+[x] TypeScript compiles with no errors (npx tsc --noEmit)
+[x] Escape key handler added with cleanup
+[x] Focus moves to close button on open
+[x] Tab key trapped within panel (wraps first<->last)
+[x] Backdrop overlay at z-40 with click-to-close
+[x] Panel has role="dialog" and aria-modal

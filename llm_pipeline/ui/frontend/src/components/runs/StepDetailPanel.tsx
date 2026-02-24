@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from 'react'
 import { useStep } from '@/api/steps'
 import { formatDuration, formatAbsolute } from '@/lib/time'
 import { Button } from '@/components/ui/button'
@@ -58,6 +59,8 @@ function StepContent({
   )
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function StepDetailPanel({
   runId,
   stepNumber,
@@ -66,37 +69,96 @@ export function StepDetailPanel({
   runStatus,
 }: StepDetailPanelProps) {
   const visible = open && stepNumber != null
+  const panelRef = useRef<HTMLDivElement>(null)
+  const closeBtnRef = useRef<HTMLButtonElement>(null)
+
+  // Escape key handler
+  useEffect(() => {
+    if (!visible) return
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [visible, onClose])
+
+  // Focus close button on open
+  useEffect(() => {
+    if (visible) {
+      closeBtnRef.current?.focus()
+    }
+  }, [visible])
+
+  // Trap focus within panel
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key !== 'Tab' || !panelRef.current) return
+      const focusable = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    },
+    [],
+  )
 
   return (
-    <div
-      className={cn(
-        'fixed inset-y-0 right-0 z-50 w-96 bg-background border-l border-border shadow-xl transition-transform duration-200',
-        visible ? 'translate-x-0' : 'translate-x-full',
-      )}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h2 className="text-sm font-semibold">Step Detail</h2>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Close step detail"
+    <>
+      {/* Backdrop */}
+      {visible && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          aria-hidden="true"
           onClick={onClose}
-        >
-          <X />
-        </Button>
-      </div>
+        />
+      )}
 
-      {/* Body */}
-      <div className="p-4">
-        {visible ? (
-          <StepContent
-            runId={runId}
-            stepNumber={stepNumber}
-            runStatus={runStatus}
-          />
-        ) : null}
+      {/* Panel */}
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal={visible}
+        aria-label="Step detail"
+        onKeyDown={handleKeyDown}
+        className={cn(
+          'fixed inset-y-0 right-0 z-50 w-96 bg-background border-l border-border shadow-xl transition-transform duration-200',
+          visible ? 'translate-x-0' : 'translate-x-full',
+        )}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-sm font-semibold">Step Detail</h2>
+          <Button
+            ref={closeBtnRef}
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Close step detail"
+            onClick={onClose}
+          >
+            <X />
+          </Button>
+        </div>
+
+        {/* Body */}
+        <div className="p-4">
+          {visible ? (
+            <StepContent
+              runId={runId}
+              stepNumber={stepNumber}
+              runStatus={runStatus}
+            />
+          ) : null}
+        </div>
       </div>
-    </div>
+    </>
   )
 }
