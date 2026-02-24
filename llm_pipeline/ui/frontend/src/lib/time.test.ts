@@ -1,4 +1,4 @@
-import { formatRelative, formatAbsolute } from './time'
+import { formatRelative, formatAbsolute, formatDuration } from './time'
 
 const NOW = '2026-02-23T12:00:00.000Z'
 
@@ -126,5 +126,23 @@ describe('formatAbsolute', () => {
     expect(result).toContain('2026')
     // Should not match English AM/PM pattern
     expect(result).not.toMatch(/[AP]M/)
+  })
+})
+
+describe('formatDuration', () => {
+  it('returns em dash for null', () => {
+    expect(formatDuration(null)).toBe('\u2014')
+  })
+
+  it('returns 0.0s for 0', () => {
+    expect(formatDuration(0)).toBe('0.0s')
+  })
+
+  it('returns 1.5s for 1500ms', () => {
+    expect(formatDuration(1500)).toBe('1.5s')
+  })
+
+  it('returns 60.0s for 60000ms', () => {
+    expect(formatDuration(60000)).toBe('60.0s')
   })
 })

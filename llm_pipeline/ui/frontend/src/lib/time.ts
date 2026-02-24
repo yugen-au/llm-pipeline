@@ -68,3 +68,12 @@ export function formatAbsolute(
 ): string {
   return getDtf(locale).format(new Date(isoString))
 }
+
+/**
+ * Format millisecond duration as seconds with 1 decimal.
+ * Returns em dash for null/undefined.
+ */
+export function formatDuration(ms: number | null): string {
+  if (ms == null) return '\u2014'
+  return `${(ms / 1000).toFixed(1)}s`
+}

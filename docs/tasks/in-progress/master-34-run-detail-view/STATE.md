@@ -1,0 +1,32 @@
+## Task: master-34-run-detail-view
+## Description: Implement Run Detail View with step timeline, context evolution panel, and step detail slide-over. Route: runs/$runId. Components: StepTimeline, ContextEvolution, StepDetailPanel.
+
+## Phase: pending-merge
+## Status: in-progress
+## Current Group: A
+## Base Branch: dev
+## Task Branch: sam/master/34-run-detail-view
+## Plugins: frontend-mobile-development, backend-development
+## Graphiti Group ID: llm-pipeline
+## Excluded Phases: none
+## Steps to Fix: [5,6,7]
+## Work Mode: standard
+## Last Updated: 2026-02-24 12:05
+
+## Agents
+| Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
+|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Codebase Architecture Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | complete | 0 | a8b6532bd76142742 | 5c15d16 | - |
+| API & Data Layer Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a309979860721aec4 | 5c15d16 | - |
+| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 2 | a3a58ff8cd7cbf7fa | 28db380,1d658de | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a1fb3879a439dae6a | 94dab22 | - |
+| Shared Utilities | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | afb7f3af4bcb2a985 | 1e7529e | - |
+| Install shadcn Components | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | ab331571cbec598b2 | 79eb90e,1e7529e | /shadcn-ui/ui |
+| StepTimeline Component | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | ae9b4b7b549bf351a | 5d5fb92 | /tanstack/router |
+| ContextEvolution Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | abacf06278bb700a5 | edb03e4,5d5fb92 | /shadcn-ui/ui |
+| StepDetailPanel Skeleton | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 1 | a90b9b79b591cf3df | 5d5fb92,ab4887c | - |
+| RunDetailPage Assembly | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 1 | a37956b18d9c6471d | 5d4a82e,ef003ff | /tanstack/router |
+| Component Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 1 | ab6ae892f28553602 | a453cb9,f1b62a3 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | affc74972bb6bd931 | 90a8cb1,42c0c57 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | a25ea4521843d1f62 | 3ccdf20,8ac6ac4 | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | complete | 0 | a59b5879f4acf2f2b | add59fa | - |

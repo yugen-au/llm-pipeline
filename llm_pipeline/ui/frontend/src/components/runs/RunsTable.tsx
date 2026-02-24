@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { StatusBadge } from './StatusBadge'
-import { formatRelative, formatAbsolute } from '@/lib/time'
+import { formatRelative, formatAbsolute, formatDuration } from '@/lib/time'
 import { useNavigate } from '@tanstack/react-router'
 import type { RunListItem } from '@/api/types'
 
@@ -24,11 +24,6 @@ interface RunsTableProps {
   runs: RunListItem[]
   isLoading: boolean
   isError: boolean
-}
-
-function formatDuration(ms: number | null): string {
-  if (ms == null) return '\u2014'
-  return `${(ms / 1000).toFixed(1)}s`
 }
 
 function SkeletonCell({ className = 'w-20' }: { className?: string }) {
