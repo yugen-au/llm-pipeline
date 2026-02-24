@@ -180,9 +180,12 @@ export function StepTimeline({
             type="button"
             className={cn(
               'flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors',
-              'cursor-pointer hover:bg-muted/30',
+              item.status === 'running'
+                ? 'cursor-not-allowed opacity-70'
+                : 'cursor-pointer hover:bg-muted/30',
               isSelected && 'bg-muted/50',
             )}
+            title={item.status === 'running' ? 'Step still in progress' : undefined}
             onClick={() => onSelectStep(item.step_number)}
           >
             {/* Step number badge */}

@@ -50,3 +50,69 @@ Full 3-column responsive layout with:
 [x] Mobile layout uses shadcn Tabs below lg breakpoint
 [x] Task 38 placeholder div present with data-testid
 [x] All imports resolve to existing modules
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Issue 1: StepDetailPanel receives runStatus={undefined} -- added `deriveRunStatus()` that maps WsConnectionStatus + events to RunStatus, passed to StepDetailPanel
+[x] Issue 2: Silent no-op on running step click -- added console.info log, title="Step still in progress" attribute, cursor-not-allowed + opacity-70 on running step buttons in StepTimeline
+[x] Issue 3: useEvents/useSteps called with undefined runStatus -- pass derived `runStatus` to both hooks so REST polling activates as backup while run is active
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/live.tsx`
+Added `deriveRunStatus()` function and `runStatus` useMemo. Passed derived status to useEvents, useSteps, and StepDetailPanel. Added console.info in handleSelectStep guard.
+
+```
+# Before (Issue 1 + 3)
+const { data: events } = useEvents(activeRunId ?? '', {}, undefined)
+const { data: steps } = useSteps(activeRunId ?? '', undefined)
+...
+runStatus={undefined}
+
+# After
+const runStatus = useMemo(() => {
+  const cached = queryClient.getQueryData(...)
+  return deriveRunStatus(wsStoreStatus, cached?.items ?? [])
+}, [wsStoreStatus, activeRunId, queryClient])
+
+const { data: events } = useEvents(activeRunId ?? '', {}, runStatus)
+const { data: steps } = useSteps(activeRunId ?? '', runStatus)
+...
+runStatus={runStatus}
+```
+
+```
+# Before (Issue 2 - live.tsx)
+if (item?.status === 'running') return
+
+# After
+if (item?.status === 'running') {
+  console.info('[LivePage] Step %d (%s) still in progress -- detail unavailable', stepNum, item.step_name)
+  return
+}
+```
+
+#### File: `llm_pipeline/ui/frontend/src/components/runs/StepTimeline.tsx`
+Added title attribute and cursor-not-allowed styling to running step buttons.
+
+```
+# Before
+'cursor-pointer hover:bg-muted/30',
+
+# After
+item.status === 'running'
+  ? 'cursor-not-allowed opacity-70'
+  : 'cursor-pointer hover:bg-muted/30',
+title={item.status === 'running' ? 'Step still in progress' : undefined}
+```
+
+### Verification
+[x] TypeScript compiles with no errors
+[x] ESLint passes with 0 errors (only pre-existing StepTimeline fast-refresh warning)
+[x] deriveRunStatus returns 'running' when wsStatus is connected/connecting/replaying
+[x] deriveRunStatus returns 'completed'/'failed' from terminal pipeline events when WS closed
+[x] runStatus flows to useEvents, useSteps, and StepDetailPanel
+[x] Running step buttons show cursor-not-allowed, opacity-70, and title tooltip
+[x] console.info logged when clicking a running step
