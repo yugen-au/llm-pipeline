@@ -172,6 +172,20 @@ class SQLiteEventHandler:
                 conn.commit()
         except OperationalError:
             pass  # column already exists
+        # Ensure composite index exists for existing DBs.
+        # create_all does not add indexes to existing tables.
+        try:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_pipeline_events_run_step "
+                        "ON pipeline_events (run_id, step_name)"
+                    )
+                )
+                conn.commit()
+        except OperationalError:
+            pass  # index already exists or table doesn't exist yet
 
     def emit(self, event: "PipelineEvent") -> None:
         """Persist a single event as a :class:`PipelineEventRecord` row."""

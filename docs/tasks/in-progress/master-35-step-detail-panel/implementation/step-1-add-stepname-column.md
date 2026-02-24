@@ -128,3 +128,45 @@ from sqlmodel import Session, SQLModel
 [x] emit extracts step_name via getattr and passes to PipelineEventRecord constructor
 [x] All 405 event tests pass
 [x] All 10 SQLite-specific tests pass
+
+## Review Fix Iteration 1
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM: ALTER TABLE migration adds step_name column for existing DBs but does NOT create composite index (run_id, step_name). New DBs get index via create_all but existing DBs miss it.
+
+### Changes Made
+#### File: `llm_pipeline/events/handlers.py`
+Added second try/except block after ALTER TABLE migration to create the composite index using `CREATE INDEX IF NOT EXISTS` (idempotent in SQLite).
+```python
+# Before
+        except OperationalError:
+            pass  # column already exists
+
+    def emit(self, event: "PipelineEvent") -> None:
+
+# After
+        except OperationalError:
+            pass  # column already exists
+        # Ensure composite index exists for existing DBs.
+        # create_all does not add indexes to existing tables.
+        try:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_pipeline_events_run_step "
+                        "ON pipeline_events (run_id, step_name)"
+                    )
+                )
+                conn.commit()
+        except OperationalError:
+            pass  # index already exists or table doesn't exist yet
+
+    def emit(self, event: "PipelineEvent") -> None:
+```
+
+### Verification
+[x] All 31 handler tests pass
+[x] CREATE INDEX IF NOT EXISTS is idempotent - safe for new and existing DBs
