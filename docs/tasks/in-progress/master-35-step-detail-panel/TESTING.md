@@ -5,6 +5,36 @@
 
 Backend: 766/767 tests pass. 1 pre-existing failure in `test_events_router_prefix` (introduced in task 21, not task 35 - see Issues). Frontend: 90/90 tests pass, TypeScript build succeeds with no errors or warnings.
 
+---
+
+## Re-verification Run (after review fixes)
+
+**Status:** passed - identical result to initial run. Review fixes confirmed present and no regressions introduced.
+
+### Review Fix 1: CREATE INDEX migration (Step 1)
+`handlers.py` line 181: `CREATE INDEX IF NOT EXISTS ix_pipeline_events_run_step` - confirmed present. Ensures the composite index is created on existing DBs that received the column via `ALTER TABLE` but not the index.
+
+### Review Fix 2: Cross-pipeline prompt isolation (Step 3)
+`pipelines.py` lines 153-172: Endpoint now uses `PipelineIntrospector` to collect `declared_keys` for the requested step within the named pipeline, then queries `Prompt` filtered by those keys only. Prevents prompt rows from a same-named step in a different pipeline from appearing in results.
+
+### Backend Pass Rate: 766/767 (unchanged)
+```
+1 failed, 766 passed, 3 warnings in 119.78s
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix (pre-existing, task 21)
+```
+
+### Frontend Pass Rate: 90/90 (unchanged)
+```
+Test Files  9 passed (9)
+      Tests  90 passed (90)
+  Duration  8.24s
+```
+
+### Build: clean (unchanged)
+```
+tsc -b && vite build - 2090 modules transformed, built in 6.10s, no errors
+```
+
 ## Automated Testing
 
 ### Test Scripts Created
