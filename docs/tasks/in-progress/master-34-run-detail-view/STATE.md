@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/master/34-run-detail-view
 ## Plugins: frontend-mobile-development, backend-development
@@ -26,4 +26,4 @@
 | ContextEvolution Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | abacf06278bb700a5 | edb03e4,5d5fb92 | /shadcn-ui/ui |
 | StepDetailPanel Skeleton | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 0 | a90b9b79b591cf3df | 5d5fb92 | - |
 | RunDetailPage Assembly | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a37956b18d9c6471d | 5d4a82e | /tanstack/router |
-| Component Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | pending | pending | - |
+| Component Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | in-progress | 0 | pending | pending | - |
