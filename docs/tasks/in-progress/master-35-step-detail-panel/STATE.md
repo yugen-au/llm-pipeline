@@ -16,5 +16,5 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| UI Component Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | needs-input | 0 | acfad06ac5c543767 | pending | - |
-| Data Layer Research | backend-development:backend-architect | research | 2 | - | A | needs-input | 0 | abf5507b0fc84b2a3 | pending | - |
+| UI Component Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | complete | 0 | acfad06ac5c543767 | pending | - |
+| Data Layer Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | abf5507b0fc84b2a3 | pending | - |
