@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-02-24 14:58
+## Last Updated: 2026-02-24 15:02
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -25,6 +25,6 @@
 | Wire run_created broadcast | backend-development:backend-architect | implementation | 3 | - | A | complete | 0 | a3cba215c08fc3782 | 733e053,1ecdcc5 | /fastapi/fastapi |
 | Add WsRunCreated type | frontend-mobile-development:frontend-developer | implementation | 4 | - | A | complete | 0 | a497388322d3e531f | 3377245,1ecdcc5 | - |
 | useRunNotifications hook | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | in-progress | 0 | pending | pending | /tanstack/query,/pmndrs/zustand |
-| PipelineSelector component | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
+| PipelineSelector component | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | complete | 0 | a040cc78f2c8d5167 | 1c25c35 | /tanstack/query |
 | EventStream component | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
 | LivePage route | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | pending | 0 | pending | pending | /tanstack/router,/tanstack/query,/pmndrs/zustand |
