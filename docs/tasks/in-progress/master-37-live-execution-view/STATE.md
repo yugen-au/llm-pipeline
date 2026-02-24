@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-02-24 14:51
+## Last Updated: 2026-02-24 14:55
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -23,7 +23,7 @@
 | Extend ConnectionManager | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 0 | pending | pending | /fastapi/fastapi |
 | Add /ws/runs endpoint | backend-development:backend-architect | implementation | 2 | - | A | in-progress | 0 | pending | pending | /fastapi/fastapi |
 | Wire run_created broadcast | backend-development:backend-architect | implementation | 3 | - | A | in-progress | 0 | pending | pending | /fastapi/fastapi |
-| Add WsRunCreated type | frontend-mobile-development:frontend-developer | implementation | 4 | - | A | in-progress | 0 | pending | pending | - |
+| Add WsRunCreated type | frontend-mobile-development:frontend-developer | implementation | 4 | - | A | complete | 0 | a497388322d3e531f | 3377245 | - |
 | useRunNotifications hook | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | /tanstack/query,/pmndrs/zustand |
 | PipelineSelector component | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | pending | 0 | pending | pending | /tanstack/query |
 | EventStream component | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | pending | 0 | pending | pending | /tanstack/query |
