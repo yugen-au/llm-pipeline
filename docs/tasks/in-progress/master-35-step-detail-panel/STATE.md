@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: dev
 ## Task Branch: sam/master/35-step-detail-panel
 ## Plugins: frontend-mobile-development, backend-development
@@ -26,5 +26,5 @@
 | Update TypeScript types | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | complete | 0 | ae8c14858750ee97b | 131d501 | /shadcn-ui/ui |
 | Install shadcn Sheet Tabs | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | aee1dccd3051f5324 | dbf673b,131d501 | /shadcn-ui/ui |
 | Create hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 0 | a361b2abfb5a2811b | 3da8801 | - |
-| Rewrite StepDetailPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | E | pending | 0 | pending | pending | /shadcn-ui/ui |
-| Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | pending | pending | /shadcn-ui/ui |
+| Rewrite StepDetailPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | E | in-progress | 0 | pending | pending | /shadcn-ui/ui |
+| Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | in-progress | 0 | pending | pending | /shadcn-ui/ui |
