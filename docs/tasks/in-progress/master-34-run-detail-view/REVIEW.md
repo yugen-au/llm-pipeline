@@ -77,3 +77,66 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation matches plan, all tests pass (86/86), TypeScript compiles clean, conventions consistent with task 33. Medium issues are acknowledged temporary limitations that task 35 resolves. Low issues are minor test hygiene items that do not affect correctness.
+
+---
+
+# Re-Review: Post-Fix Verification
+
+## Overall Assessment
+**Status:** complete
+All 5 previously reported issues resolved. 88 tests pass (2 new), TypeScript compiles clean.
+
+## Fix Verification
+
+### MEDIUM - Step 5: StepDetailPanel focus trap / Escape key -- RESOLVED
+**Verified:** `StepDetailPanel.tsx` now has:
+- `useEffect` Escape key handler on `document.keydown`, guarded by `visible`, with cleanup
+- `useEffect` to focus close button on open via `closeBtnRef`
+- `handleKeyDown` callback for Tab key focus trapping using `FOCUSABLE` selector
+- `role="dialog"`, `aria-modal`, `aria-label` attributes on panel
+Implementation is clean; focus trap logic is correct (first/last element wrapping with Shift+Tab support).
+
+### MEDIUM - Step 5: Missing backdrop/overlay click-to-close -- RESOLVED
+**Verified:** Conditional `<div className="fixed inset-0 z-40 bg-black/50" aria-hidden="true" onClick={onClose} />` renders when `visible`. Panel z-index (z-50) correctly sits above backdrop (z-40).
+
+### LOW - Step 6: Unsafe `as RunStatus` cast -- RESOLVED
+**Verified:** `$runId.tsx` now defines `RUN_STATUSES` array and `isRunStatus()` type guard. Line 118: `isRunStatus(run?.status) ? run.status : undefined` -- safely narrows to `RunStatus` or falls back to `undefined`. No unsafe casts remain.
+
+### LOW - Step 7: Unnecessary mocks in ContextEvolution.test.tsx -- RESOLVED
+**Verified:** File contains no `vi.mock` calls. Clean imports: only `render`, `screen`, `describe`, `expect`, `it`, component, and type.
+
+### LOW - Step 7: Unnecessary mocks in StepTimeline.test.tsx -- RESOLVED
+**Verified:** No `vi.mock('@tanstack/react-router')` or `vi.mock('@/lib/time')` present. Only `userEvent` and vitest imports alongside component/type imports.
+
+### New tests added (Step 7)
+- `StepDetailPanel.test.tsx`: "calls onClose when Escape key is pressed" -- uses `fireEvent.keyDown(document, { key: 'Escape' })`
+- `StepDetailPanel.test.tsx`: "calls onClose when backdrop is clicked" -- queries `[aria-hidden="true"]` and clicks
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/ui/frontend/src/components/runs/StepDetailPanel.tsx` | pass | Focus trap, Escape handler, backdrop overlay all correct |
+| `llm_pipeline/ui/frontend/src/routes/runs/$runId.tsx` | pass | `isRunStatus` type guard replaces unsafe cast |
+| `llm_pipeline/ui/frontend/src/components/runs/ContextEvolution.test.tsx` | pass | Unnecessary mocks removed |
+| `llm_pipeline/ui/frontend/src/components/runs/StepTimeline.test.tsx` | pass | Unnecessary mocks removed |
+| `llm_pipeline/ui/frontend/src/components/runs/StepDetailPanel.test.tsx` | pass | 8 tests (6 original + 2 new for Escape/backdrop) |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All 5 previous issues resolved cleanly. 88/88 tests pass, TypeScript compiles clean. No new issues introduced by fixes.
