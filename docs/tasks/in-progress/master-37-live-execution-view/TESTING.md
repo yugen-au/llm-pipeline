@@ -3,7 +3,7 @@
 ## Summary
 **Status:** passed
 
-766/767 Python tests pass (1 pre-existing failure unrelated to task 37). TypeScript builds clean with 0 errors. ESLint: 0 errors, 0 warnings in new files. Circular import check passes. All task 37 files present and structurally correct.
+766/767 Python tests pass (1 pre-existing failure unrelated to task 37). TypeScript builds clean with 0 errors after fixing a Step 8 `Array.findLast` ES2023 incompatibility (replaced with reverse loop, ES2020-compatible). ESLint: 0 errors, 0 new warnings in task 37 files. Circular import check passes.
 
 ## Automated Testing
 ### Test Scripts Created
@@ -81,10 +81,41 @@ Circular import: OK
 **Expected Result:** Three tabs appear: "Pipeline", "Events", "Steps". Each tab shows the corresponding column content. On `lg+` all three columns show side by side.
 
 ## Issues Found
-None
+### Array.findLast ES2020 incompatibility in deriveRunStatus
+**Severity:** high (blocked TypeScript build)
+**Step:** Step 8 (live.tsx)
+**Details:** `events.findLast(...)` at live.tsx:51 requires `lib: es2023` but tsconfig.app.json targets ES2020. Fixed in-place: replaced with a reverse `for` loop equivalent. TypeScript now compiles clean.
 
 ## Recommendations
 1. The pre-existing `test_events_router_prefix` failure should be addressed in a separate task: update the test to assert `'/runs/{run_id}/events'` matching the actual router prefix.
 2. Human validation of the 5 runtime criteria above is required before marking task 37 complete; they cannot be verified without a running backend + registered pipeline.
 3. Consider adding a pytest test for `ConnectionManager.connect_global`, `disconnect_global`, and `broadcast_global` methods -- they are functional and thread-safe but have no dedicated unit tests yet.
 4. Consider a vitest unit test for `useRunNotifications` hook to verify reconnect backoff logic and message parsing without a real WebSocket server.
+
+---
+
+## Re-verification Run (post-review fixes: Steps 1, 7, 8)
+
+### Changes Verified
+- **Step 1** (`websocket.py`): `broadcast_global`/`broadcast_to_run` copy list before iteration -- no new test failures
+- **Step 7** (`EventStream.tsx`): ref-based scroll viewport approach replacing `querySelector` -- TypeScript clean, lint clean
+- **Step 8** (`live.tsx`): derived `runStatus`, `StepDetailPanel` receives `runStatus`, toast on running step click; **`Array.findLast` ES2020 fix applied** (reverse loop)
+- **StepTimeline.tsx**: `cursor-not-allowed` for running steps -- pre-existing lint warning unchanged (react-refresh/only-export-components, not new)
+
+### Test Execution
+**Pass Rate:** 766/767 Python (same pre-existing failure)
+
+```
+1 failed, 766 passed, 3 warnings in 117.36s
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix (pre-existing)
+
+TypeScript type-check: 0 errors (clean after findLast fix)
+ESLint task-37 files: 0 errors, 0 new warnings
+Circular import (from llm_pipeline.ui.routes.runs import trigger_run): OK
+```
+
+### Build Verification (re-run)
+- [x] pytest 766/767 -- no regressions from review fixes
+- [x] `npm run type-check` exits 0 -- fixed ES2020 incompatibility in live.tsx
+- [x] ESLint clean on all task 37 files (useRunNotifications.ts, PipelineSelector.tsx, EventStream.tsx, live.tsx, types.ts, StepTimeline.tsx)
+- [x] Circular import check passes

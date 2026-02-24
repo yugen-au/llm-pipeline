@@ -48,7 +48,14 @@ function deriveRunStatus(
   }
 
   // WS closed or errored -- check events for terminal status
-  const lastTerminal = events.findLast((e) => TERMINAL_EVENT_TYPES.has(e.event_type))
+  // Use reverse loop instead of findLast (tsconfig lib: ES2020, findLast needs ES2023)
+  let lastTerminal: EventItem | undefined
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (TERMINAL_EVENT_TYPES.has(events[i].event_type)) {
+      lastTerminal = events[i]
+      break
+    }
+  }
   if (lastTerminal) {
     return lastTerminal.event_type === 'pipeline_completed' ? 'completed' : 'failed'
   }
