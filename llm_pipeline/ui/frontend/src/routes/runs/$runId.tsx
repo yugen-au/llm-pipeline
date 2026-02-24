@@ -23,6 +23,12 @@ import { Separator } from '@/components/ui/separator'
 import { formatDuration, formatRelative, formatAbsolute } from '@/lib/time'
 import type { RunStatus } from '@/api/types'
 
+const RUN_STATUSES: readonly RunStatus[] = ['running', 'completed', 'failed'] as const
+
+function isRunStatus(s: string | undefined): s is RunStatus {
+  return s != null && (RUN_STATUSES as readonly string[]).includes(s)
+}
+
 const runDetailSearchSchema = z.object({
   tab: fallback(z.string(), 'steps').default('steps'),
 })
@@ -109,7 +115,7 @@ function RunDetailPage() {
   const { data: events, isLoading: eventsLoading, isError: eventsError } = useEvents(runId, {}, run?.status)
   const { data: context, isLoading: contextLoading, isError: contextError } = useRunContext(
     runId,
-    run?.status as RunStatus,
+    isRunStatus(run?.status) ? run.status : undefined,
   )
 
   // UI state

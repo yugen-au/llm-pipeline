@@ -54,5 +54,40 @@ Simple div with runId and tab text
 [x] Back link to '/' using TanStack Router Link
 [x] Loading skeleton shown while useRun loading
 [x] 404 "Run not found" with back link on error
-[x] run?.status as string for useSteps/useEvents; cast to RunStatus for useRunContext
+[x] run?.status as string for useSteps/useEvents; runtime guard for useRunContext
 [x] TypeScript build passes with no errors
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] `run?.status as RunStatus` unsafe cast -- replaced with runtime type guard
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/runs/$runId.tsx`
+Added `isRunStatus` guard and `RUN_STATUSES` const array. Replaced `as RunStatus` cast with guard call.
+
+```
+# Before
+const { data: context, ... } = useRunContext(
+  runId,
+  run?.status as RunStatus,
+)
+
+# After
+const RUN_STATUSES: readonly RunStatus[] = ['running', 'completed', 'failed'] as const
+
+function isRunStatus(s: string | undefined): s is RunStatus {
+  return s != null && (RUN_STATUSES as readonly string[]).includes(s)
+}
+
+const { data: context, ... } = useRunContext(
+  runId,
+  isRunStatus(run?.status) ? run.status : undefined,
+)
+```
+
+### Verification
+[x] TypeScript build passes with no errors
+[x] Unknown status values fall through to `undefined`, letting useRunContext use default 30s staleTime
