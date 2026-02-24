@@ -1,12 +1,8 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { StepDetailPanel } from './StepDetailPanel'
 import type { StepDetail } from '@/api/types'
-
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
-}))
 
 vi.mock('@/lib/time', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/time')>()
@@ -55,7 +51,7 @@ describe('StepDetailPanel', () => {
 
   it('renders with translate-x-full when open=false', () => {
     mockUseStep.mockReturnValue({ data: undefined, isLoading: false, isError: false })
-    const { container } = render(
+    render(
       <StepDetailPanel
         runId="r1"
         stepNumber={1}
@@ -63,14 +59,14 @@ describe('StepDetailPanel', () => {
         onClose={vi.fn()}
       />,
     )
-    const panel = container.firstElementChild as HTMLElement
+    const panel = screen.getByRole('dialog', { hidden: true })
     expect(panel.className).toContain('translate-x-full')
     expect(panel.className).not.toContain('translate-x-0')
   })
 
   it('renders panel content when open=true and step loaded', () => {
     mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
-    const { container } = render(
+    render(
       <StepDetailPanel
         runId="r1"
         stepNumber={1}
@@ -78,7 +74,7 @@ describe('StepDetailPanel', () => {
         onClose={vi.fn()}
       />,
     )
-    const panel = container.firstElementChild as HTMLElement
+    const panel = screen.getByRole('dialog')
     expect(panel.className).toContain('translate-x-0')
 
     expect(screen.getByText('extract')).toBeInTheDocument()
@@ -146,6 +142,40 @@ describe('StepDetailPanel', () => {
     )
     // Panel should be closed (translated out) when stepNumber is null
     expect(screen.queryByText('extract')).not.toBeInTheDocument()
-    // useStep should not be called when panel is not visible
+  })
+
+  it('calls onClose when Escape key is pressed', () => {
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    const onClose = vi.fn()
+    render(
+      <StepDetailPanel
+        runId="r1"
+        stepNumber={1}
+        open={true}
+        onClose={onClose}
+      />,
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('calls onClose when backdrop is clicked', async () => {
+    vi.useRealTimers()
+    const user = userEvent.setup()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    const onClose = vi.fn()
+    render(
+      <StepDetailPanel
+        runId="r1"
+        stepNumber={1}
+        open={true}
+        onClose={onClose}
+      />,
+    )
+    // Backdrop is the aria-hidden overlay element
+    const backdrop = document.querySelector('[aria-hidden="true"]') as HTMLElement
+    expect(backdrop).toBeTruthy()
+    await user.click(backdrop)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

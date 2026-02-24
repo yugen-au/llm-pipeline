@@ -5,19 +5,6 @@ import { StepTimeline, deriveStepStatus } from './StepTimeline'
 import type { StepTimelineItem } from './StepTimeline'
 import type { StepListItem, EventItem } from '@/api/types'
 
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
-}))
-
-vi.mock('@/lib/time', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/time')>()
-  return {
-    ...actual,
-    formatRelative: (iso: string) => `relative(${iso})`,
-    formatAbsolute: (iso: string) => `absolute(${iso})`,
-  }
-})
-
 const NOW = '2025-06-15T12:00:00.000Z'
 
 const mockItems: StepTimelineItem[] = [

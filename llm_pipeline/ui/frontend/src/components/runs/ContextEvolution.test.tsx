@@ -1,22 +1,7 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { ContextEvolution } from './ContextEvolution'
 import type { ContextSnapshot } from '@/api/types'
-
-vi.mock('@tanstack/react-router', () => ({
-  useNavigate: () => vi.fn(),
-}))
-
-vi.mock('@/lib/time', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/time')>()
-  return {
-    ...actual,
-    formatRelative: (iso: string) => `relative(${iso})`,
-    formatAbsolute: (iso: string) => `absolute(${iso})`,
-  }
-})
-
-const NOW = '2025-06-15T12:00:00.000Z'
 
 const mockSnapshots: ContextSnapshot[] = [
   {
@@ -32,15 +17,6 @@ const mockSnapshots: ContextSnapshot[] = [
 ]
 
 describe('ContextEvolution', () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(NOW))
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
-  })
-
   it('renders step names as headers', () => {
     render(
       <ContextEvolution snapshots={mockSnapshots} isLoading={false} isError={false} />,

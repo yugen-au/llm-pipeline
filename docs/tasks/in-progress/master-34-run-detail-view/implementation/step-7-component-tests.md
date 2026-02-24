@@ -34,3 +34,29 @@ Vitest component tests for StepTimeline, ContextEvolution, and StepDetailPanel. 
 [x] TypeScript build passes with no errors
 [x] No new warnings
 [x] Follows RunsTable.test.tsx mock/setup patterns (vi.useFakeTimers, vi.mock router/time)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] ContextEvolution.test.tsx mocks unused modules (@tanstack/react-router, @/lib/time) -- removed both mock blocks and unused timer setup
+[x] StepTimeline.test.tsx mocks unused useNavigate from @tanstack/react-router -- removed router mock block
+[x] StepDetailPanel.test.tsx missing Escape key close test -- added fireEvent.keyDown(document, {key:'Escape'}) test
+[x] StepDetailPanel.test.tsx missing backdrop click close test -- added userEvent.click on aria-hidden overlay test
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/runs/ContextEvolution.test.tsx`
+Removed `vi.mock('@tanstack/react-router')` block, `vi.mock('@/lib/time')` block, `beforeEach`/`afterEach` timer setup, unused `NOW` constant, and unused `beforeEach`/`afterEach` imports.
+
+#### File: `llm_pipeline/ui/frontend/src/components/runs/StepTimeline.test.tsx`
+Removed `vi.mock('@tanstack/react-router')` block.
+
+#### File: `llm_pipeline/ui/frontend/src/components/runs/StepDetailPanel.test.tsx`
+Removed `vi.mock('@tanstack/react-router')` block. Added `fireEvent` import. Updated panel detection from `container.firstElementChild` to `screen.getByRole('dialog')` for fragment-based rendering. Added 2 new tests: Escape key closes panel, backdrop click closes panel.
+
+### Verification
+[x] All 27 tests pass (25 original + 2 new Escape/backdrop tests)
+[x] Full suite 88/88 tests pass with no regressions
+[x] TypeScript build passes with no errors
+[x] No new warnings
