@@ -421,6 +421,19 @@ export type WsMessage =
   | WsError
   | WsPipelineEvent
 
+/**
+ * Global run-creation notification received on /ws/runs.
+ *
+ * Standalone type -- NOT part of WsMessage union which is per-run only.
+ * Used by useRunNotifications hook to detect externally-started runs.
+ */
+export interface WsRunCreated {
+  type: 'run_created'
+  run_id: string
+  pipeline_name: string
+  started_at: string
+}
+
 // ---------------------------------------------------------------------------
 // Shared utilities
 // ---------------------------------------------------------------------------
