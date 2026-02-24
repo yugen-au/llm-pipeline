@@ -6,7 +6,11 @@ Consolidated findings from UI component research (step-1) and data layer researc
 
 Cross-referencing against actual source code revealed one significant factual correction: the ContextEvolution API returns per-step `{step_name: serialized_output}` blobs, NOT cumulative pipeline context -- making it unsuitable as a diff source. The ContextUpdated event's `context_snapshot` field contains the true cumulative pipeline context needed for diffing.
 
-Five decisions require CEO input before planning: Input tab semantics, Instructions tab viability, event pagination strategy, Context Diff data source, and downstream extensibility for task 49.
+All 5 CEO questions resolved. **Scope expanded** -- task 35 now includes 2 backend features in addition to the UI panel:
+1. Add `step_name` filter to events API (backend + frontend params)
+2. Extend introspection API with actual instruction/prompt content (new endpoint, requires DB access)
+
+Planning must order backend work before frontend tabs that depend on it.
 
 ## Domain Findings
 
@@ -75,7 +79,11 @@ The task description code accesses `llmStarting?.rendered_system_prompt` directl
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| [Pending -- see Questions below] | [Awaiting CEO response] | [TBD] |
+| Q1: What should Input tab display? | Pipeline context (true input) -- use previous step's accumulated pipeline context from ContextUpdated events | Input tab shows what the step received. Data source = ContextUpdated event from previous step (or empty for step 1). Requires step_name event filter to efficiently fetch. |
+| Q2: Instructions tab -- minimal event data acceptable? | Full content via new API -- extend pipeline introspection to return actual instruction text/content | SCOPE EXPANSION: new backend endpoint needed. Prompt table has content field. PipelineIntrospector currently class-level only (no DB). Need new endpoint with DB session to load Prompt.content by key. |
+| Q3: Context Diff tab data source? | ContextUpdated events -- use cumulative pipeline context for true before/after diff | Confirmed: ContextUpdated.context_snapshot = dict(self._context) at pipeline.py:381. Use N-1 vs N step events for diff. ContextEvolution API NOT suitable (per-step output blobs, not cumulative). |
+| Q4: Event pagination strategy? | Add step_name event filter NOW -- build backend filter on events API | SCOPE EXPANSION: PipelineEventRecord has no step_name column. Must add column (follows existing pattern of duplicating event_data fields for query efficiency) + update EventListParams + events.py WHERE clause. Frontend useStepEvents becomes server-side filtered. |
+| Q5: Task 49 forward-compat? | Ignore for now -- task 49 adds its own results prop when needed | No impact on task 35 architecture. Keep clean separation between data-fetching and rendering for future extensibility but don't add unused props. |
 
 ## Assumptions Validated
 - [x] Sheet and Tabs shadcn components are not installed (confirmed via component listing)
@@ -93,22 +101,87 @@ The task description code accesses `llmStarting?.rendered_system_prompt` directl
 - [x] result_data and context_snapshot are effectively redundant for same step (confirmed in pipeline.py lines 930-964)
 
 ## Open Items
-- Q1: Input tab data source -- what should "Input" display? (see Questions)
-- Q2: Instructions tab viability with minimal event data (see Questions)
-- Q3: Event pagination strategy for runs with >100 events (see Questions)
-- Q4: Context Diff tab data source -- ContextUpdated events vs ContextEvolution API (see Questions)
-- Q5: Forward compatibility with task 49's `results` prop pattern (see Questions)
-- TypeScript discriminated union interfaces for event_data payloads -- technical decision, can be made during planning
-- Multi-call (consensus) display strategy for Prompts/Response tabs -- technical decision, can be made during planning
+- DB migration for step_name column on PipelineEventRecord -- create_all() won't add columns to existing tables. Need ALTER TABLE or migration script for existing DBs. Technical decision for planning phase.
+- Instruction content endpoint design -- PipelineIntrospector is pure class-level (no DB). New endpoint needs DB session to load Prompt.content by prompt_key. Decide: extend GET /pipelines/{name} or add new GET /pipelines/{name}/steps/{step_name}/instructions. Technical decision for planning phase.
+- TypeScript discriminated union interfaces for event_data payloads -- at minimum: LLMCallStartingData, LLMCallCompletedData, ContextUpdatedData, ExtractionCompletedData, ExtractionErrorData, InstructionsLoggedData. Technical decision for planning phase.
+- Multi-call (consensus) display strategy for Prompts/Response tabs -- .filter() returns array of events; UI must handle 1-N LLM calls per step. Technical decision for planning phase.
+- Backfill strategy for step_name on existing PipelineEventRecord rows -- existing rows have step_name only inside event_data JSON. Could backfill via json_extract or leave NULL. Technical decision for planning phase.
 
 ## Recommendations for Planning
-1. **Resolve all 5 CEO questions before creating implementation plan** -- Q1 and Q2 directly affect tab count and content; Q4 affects data fetching strategy
-2. **Install Sheet + Tabs as first implementation step** -- no dependencies, unblocks all UI work
-3. **Create useStepEvents derived hook** -- filter from RunDetailPage's cached events using `select` option on useQuery; avoids duplicate network requests
-4. **Define TypeScript interfaces for event_data payloads** -- at minimum: LLMCallStartingData, LLMCallCompletedData, ContextUpdatedData, ExtractionCompletedData, ExtractionErrorData
-5. **Use .filter() not .find() for event matching** -- consensus steps produce multiple LLM call events; tabs must handle arrays, not single values
-6. **Build tab content components as private sub-components initially** -- extract to shared components only if task 37/49 needs them
-7. **Increase event fetch limit to 500 for StepDetailPanel** (pending Q3 decision) -- or create separate useEvents call with higher limit
-8. **Context Diff tab should use ContextUpdated events** (pending Q4 decision) -- ContextEvolution API snapshots are per-step output, not diffable cumulative context
-9. **Keep component extensible but don't add task 49's results prop yet** (pending Q5 decision) -- use clean separation between data fetching and rendering so future data-override mode is straightforward
-10. **Rewrite all 8 existing tests** -- Sheet renders via Radix portal; test queries will need updating for portal-based DOM structure
+
+### Execution Order (backend-first, then frontend)
+
+1. **Backend: Add step_name column to PipelineEventRecord** -- follows existing pattern (table already duplicates run_id/event_type/timestamp from event_data for query efficiency). Add column, index, populate from event_data on persist in SQLiteEventHandler. Handle ALTER TABLE for existing DBs.
+2. **Backend: Add step_name filter to events API** -- add `step_name: Optional[str]` to EventListParams, add WHERE clause in events.py list_events endpoint. Update count query too.
+3. **Backend: Instruction content endpoint** -- new endpoint (e.g. GET /pipelines/{name}/steps/{step_name}/prompts) that loads Prompt.content from DB by prompt_key. Prompt table already has content, prompt_key, prompt_type, step_name fields. Requires DB session dependency (unlike existing introspection which is class-level only).
+4. **Frontend: Install shadcn Sheet + Tabs** -- no dependencies, unblocks all UI work
+5. **Frontend: Update TypeScript types** -- add step_name to EventListParams, define discriminated union interfaces for event_data payloads, add instruction content response types
+6. **Frontend: Create useStepEvents hook** -- server-side filtered via new step_name param (not client-side filter). Pass step_name to useEvents filters.
+7. **Frontend: Replace div-based panel with Sheet+Tabs** -- rewrite StepDetailPanel using Sheet (removes ~50 lines custom a11y code), add 7 TabsTrigger/TabsContent pairs
+8. **Frontend: Build tab content sub-components** -- private components within StepDetailPanel.tsx initially. Use .filter() for event matching (consensus = multiple LLM calls per step).
+9. **Frontend: Input tab** -- fetch ContextUpdated events for this step's step_name; use previous step's snapshot as "what this step received" (empty object for step 1)
+10. **Frontend: Context Diff tab** -- use ContextUpdated events for cumulative diff (N-1 vs N). Defer rich diff visualization to task 36; show raw JSON comparison for now.
+11. **Frontend: Instructions tab** -- fetch instruction content from new backend endpoint by pipeline_name + step_name. Show prompt templates + instructions_schema from introspection.
+12. **Frontend: Rewrite all 8 existing tests** -- Sheet renders via Radix portal; test queries need updating for portal-based DOM structure
+13. **Keep component extensible but don't add task 49's results prop** -- clean separation between data-fetching and rendering for future extensibility
+
+---
+
+## Revision 1: CEO Decisions & Scope Expansion (2026-02-24)
+
+### Scope Change Summary
+
+Task 35 expanded from UI-only (Step Detail Panel with 7 tabs) to include 2 backend features:
+
+| Scope Item | Type | Complexity | Blocking |
+| --- | --- | --- | --- |
+| step_name column + filter on events API | Backend (DB schema + route) | Medium | Blocks useStepEvents hook, Input tab, Context Diff tab |
+| Instruction content endpoint | Backend (new route + DB query) | Medium | Blocks Instructions tab |
+| Step Detail Panel with 7 tabs | Frontend (Sheet+Tabs+sub-components) | High | Original scope |
+
+### Backend Scope: step_name Event Filter
+
+**Current state:** PipelineEventRecord has columns: id, run_id, event_type, pipeline_name, timestamp, event_data (JSON). The step_name value exists only inside event_data JSON blob. No server-side step_name filtering.
+
+**Required changes:**
+1. Add `step_name: Optional[str]` column to PipelineEventRecord (nullable for pipeline-level events like pipeline_started/completed)
+2. Add index: `ix_pipeline_events_run_step` on (run_id, step_name)
+3. Populate step_name from event dataclass in SQLiteEventHandler._persist() -- extract from event.step_name attribute before serialization
+4. Add `step_name: Optional[str]` to EventListParams in events.py
+5. Add WHERE clause in list_events for step_name filter (both count + data queries)
+6. Handle existing DBs: create_all() won't add columns. Need ALTER TABLE migration or startup check.
+
+**Key code locations:**
+- `llm_pipeline/events/models.py` -- PipelineEventRecord model (add column + index)
+- `llm_pipeline/events/handlers.py` -- SQLiteEventHandler._persist() (populate step_name on save)
+- `llm_pipeline/ui/routes/events.py` -- EventListParams + list_events endpoint (add filter)
+- `llm_pipeline/ui/frontend/src/api/types.ts` -- EventListParams TS type (add step_name)
+
+### Backend Scope: Instruction Content Endpoint
+
+**Current state:** PipelineIntrospector.get_metadata() returns per-step: system_key, user_key, instructions_class, instructions_schema (JSON schema). But NO actual prompt template content. The Prompt table (llm_pipeline/db/prompt.py) stores the content with fields: prompt_key, prompt_type (system/user), content, step_name, required_variables.
+
+**Required changes:**
+1. New endpoint: GET /pipelines/{name}/steps/{step_name}/prompts (or similar)
+2. Requires DBSession dependency (unlike existing /pipelines routes which are class-level introspection only)
+3. Query Prompt table by step_name + prompt_key (keys available from introspection metadata)
+4. Return: system prompt content, user prompt content, required_variables, version
+5. Frontend: new hook + types for instruction content response
+
+**Key code locations:**
+- `llm_pipeline/ui/routes/pipelines.py` -- add new endpoint or sub-router
+- `llm_pipeline/db/prompt.py` -- Prompt model (read-only access)
+- `llm_pipeline/ui/frontend/src/api/types.ts` -- new response types
+- New hook file or extend existing API hooks
+
+### Impact on Frontend Architecture
+
+With server-side step_name filter:
+- `useStepEvents(runId, stepName, runStatus?)` calls `useEvents(runId, { step_name: stepName }, runStatus)` -- no client-side filtering needed
+- Event pagination no longer a concern per step (typical step has 5-15 events, well under limit=100)
+- RunDetailPage's existing useEvents call (no step_name filter) remains unchanged for the timeline/event log
+
+With instruction content endpoint:
+- Instructions tab has full prompt templates to display (not just logged_keys/instruction_count)
+- New `useStepInstructions(pipelineName, stepName)` hook needed
+- Data is static per pipeline definition (staleTime: Infinity appropriate)
