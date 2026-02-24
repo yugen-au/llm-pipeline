@@ -12,6 +12,7 @@ from sqlmodel import Session, select
 from llm_pipeline.state import PipelineRun, PipelineStepState
 from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
+from llm_pipeline.ui.routes.websocket import manager as ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +207,14 @@ def trigger_run(
 
     run_id = str(uuid.uuid4())
     engine = request.app.state.engine
+
+    # Notify global WS subscribers before background task starts
+    ws_manager.broadcast_global({
+        "type": "run_created",
+        "run_id": run_id,
+        "pipeline_name": body.pipeline_name,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+    })
 
     def run_pipeline() -> None:
         bridge = UIBridge(run_id=run_id)
