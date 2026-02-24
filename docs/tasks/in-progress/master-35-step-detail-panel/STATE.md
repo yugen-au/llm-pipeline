@@ -1,7 +1,7 @@
 ## Task: master-35-step-detail-panel
 ## Description: Implement Step Detail slide-over panel with 7 tabs (Input, Prompts, LLM Response, Instructions, Context Diff, Extractions, Meta) using shadcn/ui Sheet and Tabs components. Consumes step and event data from existing hooks.
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -29,4 +29,5 @@
 | Rewrite StepDetailPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | E | complete | 0 | a86248d2382f42090 | 34e79ff | /shadcn-ui/ui |
 | Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | a6b7a6092c237d227 | 34e79ff | /shadcn-ui/ui |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | aa0843726feafb51c | 930a28c,f39d9d7 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | ab769aa554b13a3ea | 2b7bcd8 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | ab769aa554b13a3ea | 2b7bcd8,2b80fcc | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
