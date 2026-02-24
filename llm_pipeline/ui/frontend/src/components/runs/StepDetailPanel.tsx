@@ -12,6 +12,52 @@ interface StepDetailPanelProps {
   runStatus?: string
 }
 
+function StepContent({
+  runId,
+  stepNumber,
+  runStatus,
+}: {
+  runId: string
+  stepNumber: number
+  runStatus?: string
+}) {
+  const { data: step, isLoading, isError } = useStep(runId, stepNumber, runStatus)
+
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="h-5 w-40 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+        <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return <p className="text-sm text-destructive">Failed to load step</p>
+  }
+
+  if (!step) return null
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-base font-semibold">{step.step_name}</h3>
+        <p className="text-xs text-muted-foreground">Step {step.step_number}</p>
+      </div>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-muted-foreground">Model</dt>
+        <dd>{step.model ?? '\u2014'}</dd>
+        <dt className="text-muted-foreground">Duration</dt>
+        <dd>{formatDuration(step.execution_time_ms)}</dd>
+        <dt className="text-muted-foreground">Created</dt>
+        <dd>{formatAbsolute(step.created_at)}</dd>
+      </dl>
+      {/* Task 35: replace with tabbed implementation */}
+    </div>
+  )
+}
+
 export function StepDetailPanel({
   runId,
   stepNumber,
@@ -19,18 +65,13 @@ export function StepDetailPanel({
   onClose,
   runStatus,
 }: StepDetailPanelProps) {
-  const canFetch = open && stepNumber != null
-  const { data: step, isLoading, isError } = useStep(
-    runId,
-    stepNumber ?? 0,
-    runStatus,
-  )
+  const visible = open && stepNumber != null
 
   return (
     <div
       className={cn(
         'fixed inset-y-0 right-0 z-50 w-96 bg-background border-l border-border shadow-xl transition-transform duration-200',
-        canFetch ? 'translate-x-0' : 'translate-x-full',
+        visible ? 'translate-x-0' : 'translate-x-full',
       )}
     >
       {/* Header */}
@@ -48,32 +89,12 @@ export function StepDetailPanel({
 
       {/* Body */}
       <div className="p-4">
-        {!canFetch ? null : isLoading ? (
-          <div className="space-y-3">
-            <div className="h-5 w-40 animate-pulse rounded bg-muted" />
-            <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
-          </div>
-        ) : isError ? (
-          <p className="text-sm text-destructive">Failed to load step</p>
-        ) : step ? (
-          <div className="space-y-3">
-            <div>
-              <h3 className="text-base font-semibold">{step.step_name}</h3>
-              <p className="text-xs text-muted-foreground">
-                Step {step.step_number}
-              </p>
-            </div>
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-muted-foreground">Model</dt>
-              <dd>{step.model ?? '\u2014'}</dd>
-              <dt className="text-muted-foreground">Duration</dt>
-              <dd>{formatDuration(step.execution_time_ms)}</dd>
-              <dt className="text-muted-foreground">Created</dt>
-              <dd>{formatAbsolute(step.created_at)}</dd>
-            </dl>
-            {/* Task 35: replace with tabbed implementation */}
-          </div>
+        {visible ? (
+          <StepContent
+            runId={runId}
+            stepNumber={stepNumber}
+            runStatus={runStatus}
+          />
         ) : null}
       </div>
     </div>
