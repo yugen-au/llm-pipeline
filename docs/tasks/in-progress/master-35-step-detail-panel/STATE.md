@@ -1,9 +1,9 @@
 ## Task: master-35-step-detail-panel
 ## Description: Implement Step Detail slide-over panel with 7 tabs (Input, Prompts, LLM Response, Instructions, Context Diff, Extractions, Meta) using shadcn/ui Sheet and Tabs components. Consumes step and event data from existing hooks.
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: E
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/35-step-detail-panel
 ## Plugins: frontend-mobile-development, backend-development
@@ -26,5 +26,6 @@
 | Update TypeScript types | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | complete | 0 | ae8c14858750ee97b | 131d501 | /shadcn-ui/ui |
 | Install shadcn Sheet Tabs | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | aee1dccd3051f5324 | dbf673b,131d501 | /shadcn-ui/ui |
 | Create hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 0 | a361b2abfb5a2811b | 3da8801 | - |
-| Rewrite StepDetailPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | E | complete | 0 | a86248d2382f42090 | pending | /shadcn-ui/ui |
-| Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | a6b7a6092c237d227 | pending | /shadcn-ui/ui |
+| Rewrite StepDetailPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | E | complete | 0 | a86248d2382f42090 | 34e79ff | /shadcn-ui/ui |
+| Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | a6b7a6092c237d227 | 34e79ff | /shadcn-ui/ui |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
