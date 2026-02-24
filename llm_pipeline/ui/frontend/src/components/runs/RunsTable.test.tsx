@@ -11,10 +11,15 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 // Mock formatRelative/formatAbsolute to avoid flaky time-dependent output.
-vi.mock('@/lib/time', () => ({
-  formatRelative: (iso: string) => `relative(${iso})`,
-  formatAbsolute: (iso: string) => `absolute(${iso})`,
-}))
+// formatDuration uses real implementation for rendered-value assertions.
+vi.mock('@/lib/time', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/time')>()
+  return {
+    ...actual,
+    formatRelative: (iso: string) => `relative(${iso})`,
+    formatAbsolute: (iso: string) => `absolute(${iso})`,
+  }
+})
 
 // Fixed "now" so mock dates are self-documenting regardless of when tests run
 const NOW = '2025-06-15T12:00:00.000Z'

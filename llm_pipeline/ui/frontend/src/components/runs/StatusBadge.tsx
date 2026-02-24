@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 
 type BadgeConfig = { variant: 'outline' | 'destructive' | 'secondary'; className: string }
 
-const statusConfig: Record<RunStatus, BadgeConfig> = {
+const statusConfig: Record<string, BadgeConfig> = {
   running: {
     variant: 'outline',
     className: 'border-amber-500 text-amber-600 dark:text-amber-400',
@@ -17,6 +17,14 @@ const statusConfig: Record<RunStatus, BadgeConfig> = {
     variant: 'destructive',
     className: '',
   },
+  skipped: {
+    variant: 'secondary',
+    className: 'text-muted-foreground',
+  },
+  pending: {
+    variant: 'secondary',
+    className: 'text-muted-foreground',
+  },
 }
 
 interface StatusBadgeProps {
@@ -25,7 +33,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  const config = statusConfig[status as RunStatus] as BadgeConfig | undefined
+  const config = statusConfig[status] as BadgeConfig | undefined
 
   if (!config) {
     return <Badge variant="secondary">{status}</Badge>
