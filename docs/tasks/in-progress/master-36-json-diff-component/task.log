@@ -5,3 +5,9 @@
 [2026-02-25 10:15:56] [INFO] Created: STATE.md
 [2026-02-25 10:15:56] [INFO] ============================================================
 [2026-02-25 10:15:57] [DEBUG] STATE.md atomic write complete
+[2026-02-25 10:17:42] [ERROR] BLOCKED: Invalid AgentRow 'UI Component Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-25 10:17:50] [ERROR] BLOCKED: Invalid agent 'javascript-typescript:frontend-developer': subagent 'frontend-developer' not found in 'javascript-typescript'
+[2026-02-25 10:18:00] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-25 10:18:08] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-25 10:18:08] [INFO] Auto-updated agent statuses: UI Component Research: pending -> in-progress, JSON Diff Library Research: pending -> in-progress
+[2026-02-25 10:18:08] [DEBUG] STATE.md atomic write complete
