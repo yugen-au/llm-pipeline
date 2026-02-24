@@ -27,4 +27,4 @@
 | Install shadcn Sheet Tabs | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | aee1dccd3051f5324 | dbf673b,131d501 | /shadcn-ui/ui |
 | Create hooks | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 0 | a361b2abfb5a2811b | 3da8801 | - |
 | Rewrite StepDetailPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | E | complete | 0 | a86248d2382f42090 | pending | /shadcn-ui/ui |
-| Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | in-progress | 0 | pending | pending | /shadcn-ui/ui |
+| Rewrite tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | a6b7a6092c237d227 | pending | /shadcn-ui/ui |
