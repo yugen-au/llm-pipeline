@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/34-run-detail-view
 ## Plugins: frontend-mobile-development, backend-development
@@ -21,9 +21,9 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 2 | a3a58ff8cd7cbf7fa | 28db380,1d658de | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a1fb3879a439dae6a | 94dab22 | - |
 | Shared Utilities | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | afb7f3af4bcb2a985 | 1e7529e | - |
-| Install shadcn Components | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | ab331571cbec598b2 | 79eb90e | /shadcn-ui/ui |
-| StepTimeline Component | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | pending | pending | /tanstack/router |
-| ContextEvolution Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | pending | 0 | pending | pending | /shadcn-ui/ui |
-| StepDetailPanel Skeleton | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | - |
+| Install shadcn Components | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | ab331571cbec598b2 | 79eb90e,1e7529e | /shadcn-ui/ui |
+| StepTimeline Component | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | in-progress | 0 | pending | pending | /tanstack/router |
+| ContextEvolution Component | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | in-progress | 0 | pending | pending | /shadcn-ui/ui |
+| StepDetailPanel Skeleton | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | in-progress | 0 | pending | pending | - |
 | RunDetailPage Assembly | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | pending | 0 | pending | pending | /tanstack/router |
 | Component Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | pending | pending | - |
