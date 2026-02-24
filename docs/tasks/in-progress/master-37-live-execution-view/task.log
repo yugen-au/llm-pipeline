@@ -124,3 +124,5 @@
 [2026-02-24 15:40:19] [INFO] Task call: backend-development:backend-architect (phase: fixing-review)
 [2026-02-24 15:40:19] [INFO] Incremented Revisions: 0 -> 1
 [2026-02-24 15:40:19] [DEBUG] STATE.md atomic write complete
+[2026-02-24 15:43:23] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-24 15:43:37] [DEBUG] STATE.md atomic write complete
