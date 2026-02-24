@@ -76,3 +76,5 @@ To proceed, either:
 [2026-02-24 12:57:05] [INFO] Task call: backend-development:backend-architect (phase: implementation)
 [2026-02-24 12:57:05] [INFO] Incremented Revisions: 0 -> 1
 [2026-02-24 12:57:05] [DEBUG] STATE.md atomic write complete
+[2026-02-24 12:57:50] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-24 12:58:04] [DEBUG] STATE.md atomic write complete
