@@ -108,3 +108,11 @@
 [2026-02-24 11:39:18] [DEBUG] STATE.md atomic write complete
 [2026-02-24 11:39:34] [INFO] Task call: comprehensive-review:architect-review (phase: review)
 [2026-02-24 11:43:22] [DEBUG] STATE.md atomic write complete
+[2026-02-24 11:46:36] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '5,6,7'
+[2026-02-24 11:46:45] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-02-24 11:46:47] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-02-24 11:46:47] [INFO] Updated Commits for 'Architecture review': 3ccdf20
+[2026-02-24 11:46:47] [INFO] Auto-set Current Group -> B (entering fixing-review)
+[2026-02-24 11:46:47] [INFO] Auto-updated agent statuses: StepDetailPanel Skeleton: complete -> in-progress, RunDetailPage Assembly: complete -> pending, Component Tests: complete -> pending, Architecture review: complete -> pending
+[2026-02-24 11:46:47] [INFO] Deleted 1 old contract file(s)
+[2026-02-24 11:46:47] [DEBUG] STATE.md atomic write complete
