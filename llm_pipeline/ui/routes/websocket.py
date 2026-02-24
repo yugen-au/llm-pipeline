@@ -27,6 +27,7 @@ class ConnectionManager:
     def __init__(self) -> None:
         self._connections: dict[str, list[WebSocket]] = defaultdict(list)
         self._queues: dict[str, list[thread_queue.Queue]] = defaultdict(list)
+        self._global_queues: list[thread_queue.Queue] = []
 
     def connect(self, run_id: str, ws: WebSocket) -> thread_queue.Queue:
         """Register a client, return its dedicated event queue."""
@@ -52,13 +53,33 @@ class ConnectionManager:
 
     def broadcast_to_run(self, run_id: str, event_data: dict) -> None:
         """Fan-out an event dict to every client watching this run. Sync."""
-        for q in self._queues.get(run_id, []):
+        for q in list(self._queues.get(run_id, [])):
             q.put_nowait(event_data)
 
     def signal_run_complete(self, run_id: str) -> None:
         """Send None sentinel to every client watching this run. Sync."""
-        for q in self._queues.get(run_id, []):
+        for q in list(self._queues.get(run_id, [])):
             q.put_nowait(None)
+
+    # -- Global subscriber support (for /ws/runs broadcast) --
+
+    def connect_global(self, ws: WebSocket) -> thread_queue.Queue:
+        """Register a global subscriber, return its dedicated event queue."""
+        queue: thread_queue.Queue = thread_queue.Queue()
+        self._global_queues.append(queue)
+        return queue
+
+    def disconnect_global(self, queue: thread_queue.Queue) -> None:
+        """Unregister a global subscriber. Safe if not present."""
+        try:
+            self._global_queues.remove(queue)
+        except ValueError:
+            pass
+
+    def broadcast_global(self, event_data: dict) -> None:
+        """Fan-out an event dict to every global subscriber. Sync, thread-safe."""
+        for q in list(self._global_queues):
+            q.put_nowait(event_data)
 
 
 manager = ConnectionManager()
@@ -101,6 +122,43 @@ async def _stream_events(websocket: WebSocket, queue: thread_queue.Queue, run_id
             await websocket.send_json({"type": "stream_complete", "run_id": run_id})
             break
         await websocket.send_json(event)
+
+
+@router.websocket("/ws/runs")
+async def global_websocket_endpoint(websocket: WebSocket) -> None:
+    """Global WebSocket endpoint for run-creation notifications.
+
+    Streams run_created events to connected clients so the UI can
+    auto-detect Python-initiated runs. Never sends a None sentinel;
+    heartbeats keep the connection alive until the client disconnects.
+    """
+    await websocket.accept()
+    queue: thread_queue.Queue = manager.connect_global(websocket)
+    try:
+        while True:
+            try:
+                event = await asyncio.to_thread(
+                    queue.get, True, HEARTBEAT_INTERVAL_S
+                )
+            except thread_queue.Empty:
+                await websocket.send_json({
+                    "type": "heartbeat",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+                continue
+            # Global stream ignores None sentinel (no terminal event)
+            if event is None:
+                continue
+            await websocket.send_json(event)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        try:
+            await websocket.close(1011)
+        except Exception:
+            pass
+    finally:
+        manager.disconnect_global(queue)
 
 
 @router.websocket("/ws/runs/{run_id}")
