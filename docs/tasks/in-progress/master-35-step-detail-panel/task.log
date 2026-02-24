@@ -53,3 +53,26 @@
 [2026-02-24 12:53:09] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-02-24 12:53:38] [ERROR] BLOCKED: Invalid commit message format
 [2026-02-24 12:53:59] [DEBUG] STATE.md atomic write complete
+[2026-02-24 12:54:08] [ERROR] BLOCKED: Write not allowed in task dir
+[2026-02-24 12:54:09] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude_projects\llm-pipeline\docs\tasks\in-progress\master-35-step-detail-panel\implementation\step-1-add-stepname-column.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-02-24 12:54:29] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-02-24 12:54:40] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude_projects\llm-pipeline\docs\tasks\in-progress\master-35-step-detail-panel\implementation\step-1-add-stepname-column.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-02-24 12:56:29] [ERROR] BLOCKED: Cannot transition from implementation-A
+[2026-02-24 12:56:39] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-02-24 12:56:45] [ERROR] BLOCKED: Cannot commit implementation-A: missing output files
+[2026-02-24 12:56:56] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-02-24 12:57:05] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-02-24 12:57:05] [INFO] Incremented Revisions: 0 -> 1
+[2026-02-24 12:57:05] [DEBUG] STATE.md atomic write complete
