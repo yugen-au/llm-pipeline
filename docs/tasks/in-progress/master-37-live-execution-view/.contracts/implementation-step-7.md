@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\master-37-live-execution-view
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-1-extend-connectionmanager.md (if already exists, APPEND to file)
+- Output Files: implementation\step-7-eventstream-component.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 1
+- Step to fix: 7
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /fastapi/fastapi
+3. Context7 library IDs to query: /tanstack/query
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 1
+1. Read REVIEW.md for issues assigned to Step 7
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-1-extend-connectionmanager.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-7-eventstream-component.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
