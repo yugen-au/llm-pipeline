@@ -96,3 +96,48 @@ Two items warrant attention before merge:
 2. **Prompt cross-pipeline awareness (HIGH):** Document the known limitation that the instruction endpoint returns all prompts matching step_name regardless of pipeline. If step name collisions across pipelines are possible in the deployment, this needs a TODO or follow-up task. If step names are guaranteed unique, document that assumption.
 
 Everything else is production-ready. The Sheet+Tabs rewrite is clean, the backend changes follow established patterns, and test coverage is adequate.
+
+---
+
+# Re-Review: Fix Verification
+
+## Overall Assessment
+**Status:** complete
+
+Both previously flagged issues resolved correctly. No new issues introduced by the fixes.
+
+## Fix 1: Index migration for existing DBs (MEDIUM - Step 1)
+**File:** `llm_pipeline/events/handlers.py` lines 175-188
+**Verdict:** RESOLVED
+
+The fix adds a second try/except block after ALTER TABLE that runs `CREATE INDEX IF NOT EXISTS ix_pipeline_events_run_step ON pipeline_events (run_id, step_name)`. This is correct:
+- `IF NOT EXISTS` makes it idempotent for both new and existing DBs
+- Separate connection context from ALTER TABLE (clean isolation)
+- OperationalError catch covers edge cases (e.g., table not yet created by some other code path)
+- Index name matches `__table_args__` definition in models.py
+- Comment explains why this is needed (create_all does not add indexes to existing tables)
+
+## Fix 2: Prompt cross-pipeline scoping (HIGH - Step 3)
+**File:** `llm_pipeline/ui/routes/pipelines.py` lines 153-171
+**Verdict:** RESOLVED
+
+The fix collects `declared_keys` from introspection metadata for the specific pipeline+step combination, then queries `Prompt.prompt_key.in_(declared_keys)` instead of filtering by step_name. This is a better approach than adding pipeline_name to the Prompt table because:
+- Uses introspection (class-level) to determine which prompt_keys belong to this pipeline's step
+- Queries by prompt_key (unique per prompt definition) rather than step_name (shared across pipelines)
+- Returns empty prompts list when no declared_keys found (correct edge case handling)
+- No schema changes required -- works with existing Prompt table structure
+- The `.in_()` query is parameterized via SQLAlchemy (no injection risk)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/events/handlers.py | pass | Index migration added correctly after ALTER TABLE, idempotent via IF NOT EXISTS |
+| llm_pipeline/ui/routes/pipelines.py | pass | Prompt query scoped by introspection-derived prompt_keys, eliminates cross-pipeline leakage |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+Both CONDITIONAL items from initial review are resolved. Remaining issues (MEDIUM: empty step_name cache key, LOW: array index keys, LOW: loading state granularity) are all non-blocking and do not affect correctness or security. Implementation is production-ready.
