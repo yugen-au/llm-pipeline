@@ -20,3 +20,11 @@
 | Backend WebSocket Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a512a475c508b639c | 1f106c8 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a7ea87d098c6353ff | fbcf897 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a66ae4f698dfa308a | pending | - |
+| Extend ConnectionManager | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /fastapi/fastapi |
+| Add /ws/runs endpoint | backend-development:backend-architect | implementation | 2 | - | A | pending | 0 | pending | pending | /fastapi/fastapi |
+| Wire run_created broadcast | backend-development:backend-architect | implementation | 3 | - | A | pending | 0 | pending | pending | /fastapi/fastapi |
+| Add WsRunCreated type | frontend-mobile-development:frontend-developer | implementation | 4 | - | A | pending | 0 | pending | pending | - |
+| useRunNotifications hook | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | /tanstack/query,/pmndrs/zustand |
+| PipelineSelector component | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | pending | 0 | pending | pending | /tanstack/query |
+| EventStream component | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | pending | 0 | pending | pending | /tanstack/query |
+| LivePage route | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | pending | 0 | pending | pending | /tanstack/router,/tanstack/query,/pmndrs/zustand |
