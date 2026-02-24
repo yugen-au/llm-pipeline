@@ -30,3 +30,29 @@ export function useEvents(
     refetchInterval: runStatus && !isTerminalStatus(runStatus) ? 3_000 : false,
   })
 }
+
+/**
+ * Fetch events scoped to a single pipeline step.
+ *
+ * Thin wrapper around {@link useEvents} that passes `step_name` as a
+ * server-side filter. Disabled until both `runId` and `stepName` are
+ * truthy (step name is unknown until `useStep` resolves).
+ *
+ * @param runId - Pipeline run ID
+ * @param stepName - Step name to filter events by
+ * @param runStatus - Current run status for dynamic staleTime/polling
+ */
+export function useStepEvents(
+  runId: string,
+  stepName: string,
+  runStatus?: RunStatus | string,
+) {
+  // Guard: disable query when stepName is falsy (unknown until useStep resolves).
+  // Pass empty runId to trigger useEvents' own `enabled: Boolean(runId)` guard.
+  const effectiveRunId = stepName ? runId : ''
+  return useEvents(
+    effectiveRunId,
+    { step_name: stepName },
+    runStatus,
+  )
+}
