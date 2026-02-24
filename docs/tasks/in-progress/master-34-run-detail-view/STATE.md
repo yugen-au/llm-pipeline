@@ -1,7 +1,7 @@
 ## Task: master-34-run-detail-view
 ## Description: Implement Run Detail View with step timeline, context evolution panel, and step detail slide-over. Route: runs/$runId. Components: StepTimeline, ContextEvolution, StepDetailPanel.
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -27,5 +27,5 @@
 | StepDetailPanel Skeleton | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 1 | a90b9b79b591cf3df | 5d5fb92,ab4887c | - |
 | RunDetailPage Assembly | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 1 | a37956b18d9c6471d | 5d4a82e,ef003ff | /tanstack/router |
 | Component Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 1 | ab6ae892f28553602 | a453cb9,f1b62a3 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | affc74972bb6bd931 | 90a8cb1 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a25ea4521843d1f62 | 3ccdf20 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | affc74972bb6bd931 | 90a8cb1,42c0c57 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | a25ea4521843d1f62 | 3ccdf20 | - |
