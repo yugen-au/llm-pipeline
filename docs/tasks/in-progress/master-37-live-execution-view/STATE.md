@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/37-live-execution-view
 ## Plugins: frontend-mobile-development, backend-development
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-02-24 14:57
+## Last Updated: 2026-02-24 14:58
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,11 +20,11 @@
 | Backend WebSocket Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a512a475c508b639c | 1f106c8 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a7ea87d098c6353ff | fbcf897 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a66ae4f698dfa308a | a0afa61 | - |
-| Extend ConnectionManager | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a310a9b1311234b03 | bbe7b33 | /fastapi/fastapi |
-| Add /ws/runs endpoint | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | aeaba147804ee17fb | bbe7b33 | /fastapi/fastapi |
-| Wire run_created broadcast | backend-development:backend-architect | implementation | 3 | - | A | complete | 0 | a3cba215c08fc3782 | 733e053 | /fastapi/fastapi |
-| Add WsRunCreated type | frontend-mobile-development:frontend-developer | implementation | 4 | - | A | complete | 0 | a497388322d3e531f | 3377245 | - |
-| useRunNotifications hook | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | /tanstack/query,/pmndrs/zustand |
-| PipelineSelector component | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | pending | 0 | pending | pending | /tanstack/query |
-| EventStream component | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | pending | 0 | pending | pending | /tanstack/query |
+| Extend ConnectionManager | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a310a9b1311234b03 | bbe7b33,1ecdcc5 | /fastapi/fastapi |
+| Add /ws/runs endpoint | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | aeaba147804ee17fb | bbe7b33,1ecdcc5 | /fastapi/fastapi |
+| Wire run_created broadcast | backend-development:backend-architect | implementation | 3 | - | A | complete | 0 | a3cba215c08fc3782 | 733e053,1ecdcc5 | /fastapi/fastapi |
+| Add WsRunCreated type | frontend-mobile-development:frontend-developer | implementation | 4 | - | A | complete | 0 | a497388322d3e531f | 3377245,1ecdcc5 | - |
+| useRunNotifications hook | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | in-progress | 0 | pending | pending | /tanstack/query,/pmndrs/zustand |
+| PipelineSelector component | frontend-mobile-development:frontend-developer | implementation | 6 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
+| EventStream component | frontend-mobile-development:frontend-developer | implementation | 7 | - | B | in-progress | 0 | pending | pending | /tanstack/query |
 | LivePage route | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | pending | 0 | pending | pending | /tanstack/router,/tanstack/query,/pmndrs/zustand |
