@@ -17,4 +17,4 @@
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Frontend Architecture Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | needs-input | 0 | a7a66ce65b3ccdbcb | pending | - |
-| Backend WebSocket Research | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | pending | pending | - |
+| Backend WebSocket Research | backend-development:backend-architect | research | 2 | - | A | needs-input | 0 | a512a475c508b639c | pending | - |
