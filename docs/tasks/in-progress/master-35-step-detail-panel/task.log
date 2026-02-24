@@ -48,3 +48,8 @@
 [2026-02-24 12:50:45] [INFO] Auto-updated agent statuses: Add step_name column: pending -> in-progress, Add step_name event filter: pending -> in-progress
 [2026-02-24 12:50:45] [INFO] Deleted 1 old contract file(s)
 [2026-02-24 12:50:45] [DEBUG] STATE.md atomic write complete
+[2026-02-24 12:51:05] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-02-24 12:51:06] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-02-24 12:53:09] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-24 12:53:38] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-24 12:53:59] [DEBUG] STATE.md atomic write complete
