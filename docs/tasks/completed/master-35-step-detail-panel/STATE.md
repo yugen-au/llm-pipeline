@@ -1,7 +1,7 @@
 ## Task: master-35-step-detail-panel
 ## Description: Implement Step Detail slide-over panel with 7 tabs (Input, Prompts, LLM Response, Instructions, Context Diff, Extractions, Meta) using shadcn/ui Sheet and Tabs components. Consumes step and event data from existing hooks.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
