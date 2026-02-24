@@ -61,3 +61,43 @@ def get_step_prompts(name, step_name, request, db: DBSession) -> StepPromptsResp
 [x] Endpoint returns 404 when pipeline not in registry
 [x] Endpoint returns empty prompts list when no prompts found (not 404)
 [x] Response model matches spec: pipeline_name, step_name, prompts[]
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH: Cross-pipeline prompt leakage -- endpoint queried Prompt table by step_name only, without scoping to the pipeline. Two pipelines sharing a step_name would return prompts from the wrong pipeline.
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/pipelines.py`
+Replaced step_name-only Prompt query with introspection-based prompt_key scoping. The endpoint now introspects the pipeline class to collect declared prompt keys (system_key, user_key) for the matching step, then queries Prompt by those specific keys via `Prompt.prompt_key.in_(declared_keys)`. Returns empty list if no keys declared.
+
+```
+# Before
+stmt = select(Prompt).where(Prompt.step_name == step_name)
+prompts = db.exec(stmt).all()
+
+# After
+pipeline_cls = registry[name]
+metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+declared_keys: set[str] = set()
+for strategy in metadata.get("strategies", []):
+    for step in strategy.get("steps", []):
+        if step.get("step_name") == step_name:
+            if step.get("system_key"):
+                declared_keys.add(step["system_key"])
+            if step.get("user_key"):
+                declared_keys.add(step["user_key"])
+
+if not declared_keys:
+    return StepPromptsResponse(pipeline_name=name, step_name=step_name, prompts=[])
+
+stmt = select(Prompt).where(Prompt.prompt_key.in_(declared_keys))
+prompts = db.exec(stmt).all()
+```
+
+### Verification
+[x] Import check passes
+[x] 766 tests pass (1 pre-existing failure unrelated)
+[x] Prompt query now scoped to pipeline's declared prompt keys via introspection

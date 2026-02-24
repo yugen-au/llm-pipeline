@@ -150,7 +150,26 @@ def get_step_prompts(
             status_code=404, detail=f"Pipeline '{name}' not found"
         )
 
-    stmt = select(Prompt).where(Prompt.step_name == step_name)
+    # Collect prompt keys declared by this step in this pipeline via
+    # introspection to prevent cross-pipeline leakage when two pipelines
+    # share the same step_name.
+    pipeline_cls = registry[name]
+    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+    declared_keys: set[str] = set()
+    for strategy in metadata.get("strategies", []):
+        for step in strategy.get("steps", []):
+            if step.get("step_name") == step_name:
+                if step.get("system_key"):
+                    declared_keys.add(step["system_key"])
+                if step.get("user_key"):
+                    declared_keys.add(step["user_key"])
+
+    if not declared_keys:
+        return StepPromptsResponse(
+            pipeline_name=name, step_name=step_name, prompts=[]
+        )
+
+    stmt = select(Prompt).where(Prompt.prompt_key.in_(declared_keys))  # type: ignore[union-attr]
     prompts = db.exec(stmt).all()
 
     return StepPromptsResponse(
