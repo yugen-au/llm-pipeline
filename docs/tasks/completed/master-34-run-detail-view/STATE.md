@@ -1,7 +1,7 @@
 ## Task: master-34-run-detail-view
 ## Description: Implement Run Detail View with step timeline, context evolution panel, and step detail slide-over. Route: runs/$runId. Components: StepTimeline, ContextEvolution, StepDetailPanel.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
