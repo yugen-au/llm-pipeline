@@ -53,12 +53,12 @@ class ConnectionManager:
 
     def broadcast_to_run(self, run_id: str, event_data: dict) -> None:
         """Fan-out an event dict to every client watching this run. Sync."""
-        for q in self._queues.get(run_id, []):
+        for q in list(self._queues.get(run_id, [])):
             q.put_nowait(event_data)
 
     def signal_run_complete(self, run_id: str) -> None:
         """Send None sentinel to every client watching this run. Sync."""
-        for q in self._queues.get(run_id, []):
+        for q in list(self._queues.get(run_id, [])):
             q.put_nowait(None)
 
     # -- Global subscriber support (for /ws/runs broadcast) --
@@ -78,7 +78,7 @@ class ConnectionManager:
 
     def broadcast_global(self, event_data: dict) -> None:
         """Fan-out an event dict to every global subscriber. Sync, thread-safe."""
-        for q in self._global_queues:
+        for q in list(self._global_queues):
             q.put_nowait(event_data)
 
 

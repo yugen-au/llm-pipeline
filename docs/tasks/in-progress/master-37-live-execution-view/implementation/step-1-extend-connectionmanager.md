@@ -63,3 +63,43 @@ def broadcast_global(self, event_data: dict) -> None:
 [x] `_global_queues` initialized as empty list
 [x] 16/16 existing websocket tests pass (no regressions)
 [x] Pre-existing failure (`test_events_router_prefix`) unrelated to this change
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Thread safety of `_global_queues` list iteration during concurrent mutation in `broadcast_global`
+[x] Same issue in pre-existing `broadcast_to_run` and `signal_run_complete`
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/websocket.py`
+Snapshot list before iteration in all three broadcast/signal methods to prevent IndexError or skipped items from concurrent connect/disconnect mutations.
+
+```python
+# Before (broadcast_to_run)
+for q in self._queues.get(run_id, []):
+
+# After
+for q in list(self._queues.get(run_id, [])):
+```
+
+```python
+# Before (signal_run_complete)
+for q in self._queues.get(run_id, []):
+
+# After
+for q in list(self._queues.get(run_id, [])):
+```
+
+```python
+# Before (broadcast_global)
+for q in self._global_queues:
+
+# After
+for q in list(self._global_queues):
+```
+
+### Verification
+[x] 16/16 websocket tests pass
+[x] `list()` snapshot is O(n) but n is tiny (number of connected WS clients per run)
