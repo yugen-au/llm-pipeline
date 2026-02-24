@@ -4,8 +4,11 @@ from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from sqlmodel import select
 
+from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.introspection import PipelineIntrospector
+from llm_pipeline.ui.deps import DBSession
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,20 @@ class PipelineMetadata(BaseModel):
     registry_models: List[str] = []
     strategies: List[StrategyMetadata] = []
     execution_order: List[str] = []
+
+
+class StepPromptItem(BaseModel):
+    prompt_key: str
+    prompt_type: str
+    content: str
+    required_variables: Optional[List[str]] = None
+    version: str
+
+
+class StepPromptsResponse(BaseModel):
+    pipeline_name: str
+    step_name: str
+    prompts: List[StepPromptItem]
 
 
 # ---------------------------------------------------------------------------
@@ -117,3 +134,55 @@ def get_pipeline(name: str, request: Request) -> PipelineMetadata:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return PipelineMetadata(**metadata)
+
+
+@router.get("/{name}/steps/{step_name}/prompts", response_model=StepPromptsResponse)
+def get_step_prompts(
+    name: str,
+    step_name: str,
+    request: Request,
+    db: DBSession,
+) -> StepPromptsResponse:
+    """Return prompt/instruction content for a pipeline step."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+    if name not in registry:
+        raise HTTPException(
+            status_code=404, detail=f"Pipeline '{name}' not found"
+        )
+
+    # Collect prompt keys declared by this step in this pipeline via
+    # introspection to prevent cross-pipeline leakage when two pipelines
+    # share the same step_name.
+    pipeline_cls = registry[name]
+    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+    declared_keys: set[str] = set()
+    for strategy in metadata.get("strategies", []):
+        for step in strategy.get("steps", []):
+            if step.get("step_name") == step_name:
+                if step.get("system_key"):
+                    declared_keys.add(step["system_key"])
+                if step.get("user_key"):
+                    declared_keys.add(step["user_key"])
+
+    if not declared_keys:
+        return StepPromptsResponse(
+            pipeline_name=name, step_name=step_name, prompts=[]
+        )
+
+    stmt = select(Prompt).where(Prompt.prompt_key.in_(declared_keys))  # type: ignore[union-attr]
+    prompts = db.exec(stmt).all()
+
+    return StepPromptsResponse(
+        pipeline_name=name,
+        step_name=step_name,
+        prompts=[
+            StepPromptItem(
+                prompt_key=p.prompt_key,
+                prompt_type=p.prompt_type,
+                content=p.content,
+                required_variables=p.required_variables,
+                version=p.version,
+            )
+            for p in prompts
+        ],
+    )

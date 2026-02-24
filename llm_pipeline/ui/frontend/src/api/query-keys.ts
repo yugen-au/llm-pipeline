@@ -28,6 +28,8 @@ export const queryKeys = {
   pipelines: {
     all: ['pipelines'] as const,
     detail: (name: string) => ['pipelines', name] as const,
+    stepPrompts: (name: string, stepName: string) =>
+      ['pipelines', name, 'steps', stepName, 'prompts'] as const,
   },
 } as const
 

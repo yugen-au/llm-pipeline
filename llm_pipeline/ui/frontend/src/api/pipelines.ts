@@ -11,7 +11,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
-import type { PipelineListItem, PipelineMetadata } from './types'
+import type { PipelineListItem, PipelineMetadata, StepPromptsResponse } from './types'
 
 /**
  * Fetch all registered pipelines.
@@ -45,5 +45,28 @@ export function usePipeline(name: string) {
     queryFn: () =>
       apiClient<PipelineMetadata>('/pipelines/' + name),
     enabled: Boolean(name),
+  })
+}
+
+/**
+ * Fetch prompt/instruction content for a specific pipeline step.
+ *
+ * Pipeline definitions are static -- `staleTime: Infinity` prevents
+ * refetching since prompt content does not change at runtime.
+ * Disabled until both `pipelineName` and `stepName` are truthy
+ * (values are unknown until parent queries resolve).
+ *
+ * @param pipelineName - Pipeline name
+ * @param stepName - Step name within the pipeline
+ */
+export function useStepInstructions(pipelineName: string, stepName: string) {
+  return useQuery({
+    queryKey: queryKeys.pipelines.stepPrompts(pipelineName, stepName),
+    queryFn: () =>
+      apiClient<StepPromptsResponse>(
+        '/pipelines/' + pipelineName + '/steps/' + stepName + '/prompts',
+      ),
+    enabled: Boolean(pipelineName && stepName),
+    staleTime: Infinity,
   })
 }

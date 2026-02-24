@@ -40,6 +40,7 @@ class EventListResponse(BaseModel):
 
 class EventListParams(BaseModel):
     event_type: Optional[str] = None
+    step_name: Optional[str] = None
     offset: int = Query(default=0, ge=0)
     limit: int = Query(default=100, ge=1, le=500)
 
@@ -82,6 +83,10 @@ def list_events(
         count_stmt = count_stmt.where(
             PipelineEventRecord.event_type == params.event_type
         )
+    if params.step_name is not None:
+        count_stmt = count_stmt.where(
+            PipelineEventRecord.step_name == params.step_name
+        )
     total: int = db.scalar(count_stmt) or 0
 
     # Data query
@@ -92,6 +97,10 @@ def list_events(
     if params.event_type is not None:
         data_stmt = data_stmt.where(
             PipelineEventRecord.event_type == params.event_type
+        )
+    if params.step_name is not None:
+        data_stmt = data_stmt.where(
+            PipelineEventRecord.step_name == params.step_name
         )
     data_stmt = (
         data_stmt
