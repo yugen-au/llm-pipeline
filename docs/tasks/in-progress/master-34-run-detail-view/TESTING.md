@@ -85,3 +85,46 @@ None
 1. Human validation of RunDetailPage layout and live WS behavior required before marking task 34 complete
 2. StepDetailPanel uses div-based slide-over (by design); task 35 will replace with shadcn Sheet
 3. ContextEvolution always-expanded JSON is intentionally minimal; task 36 will replace with JsonDiff
+
+---
+
+# Re-run: Review Fixes Verification (2026-02-24)
+
+## Summary
+**Status:** passed
+Post-review fixes verified. 88/88 tests pass (2 new tests added for Escape key and backdrop click). TypeScript build remains clean. All 3 changed areas (StepDetailPanel.tsx, $runId.tsx, test files) are consistent and type-safe.
+
+## Changes Verified
+- StepDetailPanel.tsx: focus trap, Escape key handler, backdrop overlay added
+- $runId.tsx: `as RunStatus` cast replaced with runtime type guard
+- ContextEvolution.test.tsx / StepTimeline.test.tsx: unnecessary mocks removed
+- StepDetailPanel.test.tsx: 2 new tests added (Escape key, backdrop click)
+
+## Automated Testing
+### Test Execution
+**Pass Rate:** 88/88 tests (+2 from previous run)
+```
+ Test Files  9 passed (9)
+      Tests  88 passed (88)
+   Start at  11:55:54
+   Duration  6.34s (transform 1.52s, setup 3.43s, collect 13.15s, tests 3.63s, environment 19.11s, prepare 3.70s)
+
+New tests added in this re-run:
+- StepDetailPanel.test.tsx: "calls onClose when Escape key is pressed"
+- StepDetailPanel.test.tsx: "calls onClose when backdrop is clicked"
+
+StepDetailPanel.test.tsx now: 8 tests total (was 6)
+ContextEvolution.test.tsx: 5 tests (unchanged count, unnecessary mocks removed)
+StepTimeline.test.tsx: 14 tests (unchanged count, unnecessary mocks removed)
+```
+
+### Failed Tests
+None
+
+## Build Verification
+- [x] TypeScript build check run (`npx tsc --noEmit`) - exit code 0, zero errors
+- [x] No TypeScript errors or warnings emitted
+- [x] Vitest test suite run (`npx vitest run --reporter=verbose`) - 88/88 pass
+
+## Issues Found
+None
