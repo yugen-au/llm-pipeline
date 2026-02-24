@@ -40,6 +40,11 @@ class PipelineEventRecord(SQLModel, table=True):
         max_length=100,
         description="Pipeline name in snake_case",
     )
+    step_name: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="Step name for step-scoped events, None for pipeline-level events",
+    )
     timestamp: datetime = Field(
         default_factory=utc_now,
         description="UTC timestamp of event emission",
@@ -52,6 +57,7 @@ class PipelineEventRecord(SQLModel, table=True):
     __table_args__ = (
         Index("ix_pipeline_events_run_event", "run_id", "event_type"),
         Index("ix_pipeline_events_type", "event_type"),
+        Index("ix_pipeline_events_run_step", "run_id", "step_name"),
     )
 
     def __repr__(self) -> str:

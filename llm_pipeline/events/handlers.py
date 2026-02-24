@@ -12,7 +12,8 @@ import logging
 import threading
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel
 
 from llm_pipeline.events.models import PipelineEventRecord
@@ -158,15 +159,30 @@ class SQLiteEventHandler:
         SQLModel.metadata.create_all(
             engine, tables=[PipelineEventRecord.__table__]
         )
+        # Migrate existing DBs: add step_name column if missing.
+        # create_all does not add columns to existing tables.
+        try:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE pipeline_events "
+                        "ADD COLUMN step_name VARCHAR(100)"
+                    )
+                )
+                conn.commit()
+        except OperationalError:
+            pass  # column already exists
 
     def emit(self, event: "PipelineEvent") -> None:
         """Persist a single event as a :class:`PipelineEventRecord` row."""
+        step_name: str | None = getattr(event, "step_name", None)
         session = Session(self._engine)
         try:
             record = PipelineEventRecord(
                 run_id=event.run_id,
                 event_type=event.event_type,
                 pipeline_name=event.pipeline_name,
+                step_name=step_name,
                 timestamp=event.timestamp,
                 event_data=event.to_dict(),
             )
