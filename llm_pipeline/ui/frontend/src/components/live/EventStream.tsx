@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import type { EventItem } from '@/api/types'
 import type { WsConnectionStatus } from '@/stores/websocket'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -103,26 +103,19 @@ const SCROLL_THRESHOLD = 40
 
 export function EventStream({ events, wsStatus, runId }: EventStreamProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
-  const viewportRef = useRef<HTMLDivElement | null>(null)
+  /** Ref on the inner content wrapper; its parentElement is the scrollable viewport. */
+  const contentRef = useRef<HTMLDivElement>(null)
   const autoScrollRef = useRef(true)
 
-  // Capture the ScrollArea viewport element via callback ref
-  const containerRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node) return
-    // The radix ScrollArea viewport is the first child with data-slot="scroll-area-viewport"
-    const viewport = node.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]')
-    if (viewport) {
-      viewportRef.current = viewport
-    }
-  }, [])
-
-  // Handle scroll events to detect user scrolling up
+  // Handle scroll events to detect user scrolling up.
+  // The Radix ScrollArea viewport is the direct parent of our content wrapper,
+  // so we walk up one level via parentElement -- no internal selector needed.
   useEffect(() => {
-    const viewport = viewportRef.current
-    if (!viewport) return
+    const viewport = contentRef.current?.parentElement
+    if (!(viewport instanceof HTMLElement)) return
 
     function handleScroll() {
-      if (!viewport) return
+      if (!(viewport instanceof HTMLElement)) return
       const { scrollTop, scrollHeight, clientHeight } = viewport
       const atBottom = scrollHeight - scrollTop - clientHeight < SCROLL_THRESHOLD
       autoScrollRef.current = atBottom
@@ -168,8 +161,8 @@ export function EventStream({ events, wsStatus, runId }: EventStreamProps) {
   return (
     <div className="flex h-full flex-col">
       <ConnectionIndicator status={wsStatus} />
-      <ScrollArea className="flex-1" ref={containerRef}>
-        <div className="space-y-0.5 p-2">
+      <ScrollArea className="flex-1">
+        <div ref={contentRef} className="space-y-0.5 p-2">
           {events.map((event, index) => {
             const stepName = (event.event_data?.step_name as string) ?? null
             const config = getEventBadgeConfig(event.event_type)

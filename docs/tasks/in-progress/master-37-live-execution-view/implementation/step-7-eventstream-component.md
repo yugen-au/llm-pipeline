@@ -42,3 +42,46 @@ New component with the following structure:
 [x] Connection status indicator shows all 6 WsConnectionStatus values
 [x] Empty states match plan: "Waiting for run..." / "No events yet"
 [x] Badge variants cover all known event type categories
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Radix ScrollArea internal selector coupling -- `querySelector('[data-slot="scroll-area-viewport"]')` replaced with `parentElement` traversal from content wrapper ref
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/live/EventStream.tsx`
+Replaced callback ref + querySelector approach with a `contentRef` on the inner content wrapper div. The Radix ScrollArea Viewport is the direct parent of children passed to `<ScrollArea>`, so `contentRef.current?.parentElement` reliably reaches the scrollable viewport without depending on any internal attribute name.
+
+```
+# Before
+const containerRef = useCallback((node: HTMLDivElement | null) => {
+  if (!node) return
+  const viewport = node.querySelector<HTMLDivElement>('[data-slot="scroll-area-viewport"]')
+  if (viewport) { viewportRef.current = viewport }
+}, [])
+// ...
+<ScrollArea className="flex-1" ref={containerRef}>
+  <div className="space-y-0.5 p-2">
+
+# After
+const contentRef = useRef<HTMLDivElement>(null)
+// ...
+useEffect(() => {
+  const viewport = contentRef.current?.parentElement
+  if (!(viewport instanceof HTMLElement)) return
+  // ... scroll listener attached to viewport
+}, [runId])
+// ...
+<ScrollArea className="flex-1">
+  <div ref={contentRef} className="space-y-0.5 p-2">
+```
+
+Also removed unused `useCallback` import (only `useEffect` and `useRef` remain).
+
+### Verification
+[x] TypeScript compiles with zero errors (`npx tsc --noEmit`)
+[x] ESLint passes with zero warnings
+[x] No `data-slot` or `querySelector` references remain in EventStream.tsx
+[x] `parentElement` traversal is structurally sound (Radix Viewport wraps children directly)
