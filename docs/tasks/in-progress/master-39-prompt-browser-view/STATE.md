@@ -1,18 +1,20 @@
 ## Task: master-39-prompt-browser-view
-## Description: pending
+## Description: Implement Prompt Browser view with template listing, variable highlighting, filtering, and prompt detail viewer
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/39-prompt-browser-view
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: frontend-mobile-development, backend-development
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Work Mode: pending
-## Last Updated: 2026-02-25 16:33
+## Work Mode: standard
+## Last Updated: 2026-02-25 16:56
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Frontend Patterns Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | in-progress | 0 | pending | pending | - |
+| API & Data Layer Research | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | pending | pending | - |
