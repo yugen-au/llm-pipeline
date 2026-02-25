@@ -16,5 +16,5 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Frontend Component Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | needs-input | 0 | ade5a5864c97c16d5 | pending | - |
-| Pydantic Schema Research | python-development:python-pro | research | 2 | - | A | needs-input | 0 | aa2d51ff887b5d37a | pending | - |
+| Frontend Component Research | frontend-mobile-development:frontend-developer | research | 1 | - | A | complete | 0 | ade5a5864c97c16d5 | pending | - |
+| Pydantic Schema Research | python-development:python-pro | research | 2 | - | A | complete | 0 | aa2d51ff887b5d37a | pending | - |
