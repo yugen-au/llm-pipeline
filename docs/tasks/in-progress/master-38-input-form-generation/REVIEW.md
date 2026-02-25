@@ -74,3 +74,52 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve once the two HIGH issues are resolved: (1) fix 422 error mapping so Pydantic validation errors display inline, and (2) add at least one test asserting input_data reaches the factory. The architecture, component design, and backend changes are solid. The 422 fix can be done in apiClient (stringify non-string detail) or in live.tsx (type-check before JSON.parse). The test gap is straightforward to fill with an assertion in TestTriggerRun.
+
+---
+
+# Re-Review (Round 2)
+
+## Overall Assessment
+**Status:** complete
+All three issues from round 1 resolved correctly. The fixes are minimal, targeted, and introduce no regressions or new issues.
+
+## Issues Resolved
+### HIGH - 422 error mapping (Step 5) -- RESOLVED
+client.ts L16-21: `body` now typed `{ detail?: unknown }`, with `typeof` dispatch -- strings pass through, non-strings get `JSON.stringify`. `ApiError.detail` is now always a string. `JSON.parse(error.detail)` in live.tsx will correctly round-trip Pydantic's array-of-objects format. Fix is clean and backwards-compatible with non-422 error responses that already have string detail.
+
+### HIGH - input_data test coverage (Step 2) -- RESOLVED
+test_runs.py L220-251: `test_input_data_threaded_to_factory_and_execute` uses spy pattern -- `_SpyPipeline.__init__` captures factory kwargs, `execute` captures execute kwargs. Asserts `factory_kwargs_log[0]["input_data"] == payload` and `execute_kwargs_log[0]["initial_context"] == payload`. Covers the full POST body -> factory -> execute threading path. Regression on either call site would fail this test.
+
+### LOW - Stale comment (Step 5) -- RESOLVED
+live.tsx L291: comment now reads `{/* Col 1: Pipeline selector + run button + InputForm */}`.
+
+## Remaining Notes (accepted from round 1)
+- MEDIUM: usePipeline fires on selection -- accepted, cached by TanStack Query, required for Task 43
+- LOW: validateForm only checks required-ness -- by design, backend Pydantic handles type validation; now that 422 mapping works, type errors will display inline correctly
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/frontend/src/api/client.ts | pass | typeof dispatch for detail serialization correct; unknown typing accurate |
+| llm_pipeline/ui/frontend/src/routes/live.tsx | pass | Comment updated; no other changes; 422 path now functional via client.ts fix |
+| tests/ui/test_runs.py | pass | Spy test covers factory kwargs + execute kwargs; assertions match runs.py call sites |
+
+## New Issues Introduced
+None detected
+
+## Recommendation
+**Decision:** APPROVE
+All HIGH issues resolved. Implementation is architecturally sound with clean component boundaries, proper error handling, and adequate test coverage. No blocking issues remain.
