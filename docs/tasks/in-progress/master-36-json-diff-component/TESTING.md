@@ -85,3 +85,38 @@ collected 767 items
 ## Recommendations
 1. Fix `test_events_router_prefix` assertion in `tests/test_ui.py` in a separate task - update expected value to `/runs/{run_id}/events` to match actual router prefix.
 2. Add dedicated unit tests for `JsonDiff.tsx` component (e.g., using @testing-library/react) covering CREATE/REMOVE/CHANGE rendering and collapse toggle behavior - current coverage is via integration through ContextEvolution tests only.
+
+---
+
+## Re-Verification Run (post-review fix: String coercion in buildDiffTree)
+
+**Date:** 2026-02-25
+**Fix applied:** `changedKeys.add(String(key))` in `buildDiffTree` to handle numeric array indices emitted by microdiff for array element diffs.
+
+### Build Verification
+- [x] TypeScript type check: `npx tsc --noEmit` - no errors, no output
+- [x] Vite production build: `npm run build` - succeeded in 5.99s, 2095 modules transformed
+- [x] Vitest suite: `npx vitest run` - 91/91 tests pass across 9 test files
+
+### Test Execution
+**Pass Rate:** 91/91 tests
+```
+ RUN  v3.2.4 C:/Users/SamSG/Documents/claude_projects/llm-pipeline/llm_pipeline/ui/frontend
+
+ v src/test/smoke.test.ts (2 tests) 11ms
+ v src/lib/time.test.ts (24 tests) 36ms
+ v src/components/runs/StatusBadge.test.tsx (5 tests) 139ms
+ v src/components/runs/ContextEvolution.test.tsx (6 tests) 401ms
+ v src/components/runs/StepTimeline.test.tsx (14 tests) 373ms
+ v src/components/runs/Pagination.test.tsx (12 tests) 629ms
+ v src/components/runs/RunsTable.test.tsx (12 tests) 749ms
+ v src/components/runs/FilterBar.test.tsx (6 tests) 1091ms
+ v src/components/runs/StepDetailPanel.test.tsx (10 tests) 1199ms
+
+ Test Files  9 passed (9)
+       Tests  91 passed (91)
+    Start at  13:36:53
+    Duration  6.71s
+```
+
+**Status:** passed - all checks clean after String coercion fix. No regressions introduced.
