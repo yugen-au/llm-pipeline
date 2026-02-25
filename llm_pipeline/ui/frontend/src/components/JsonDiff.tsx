@@ -54,10 +54,11 @@ function buildDiffTree(
 
   const nodes: DiffTreeNode[] = []
 
-  // Process changed keys
-  const changedKeys = new Set<string | number>()
+  // Process changed keys (normalize to string -- Object.keys returns strings
+  // but microdiff path segments can be numeric for array indices)
+  const changedKeys = new Set<string>()
   for (const [key, group] of grouped) {
-    changedKeys.add(key)
+    changedKeys.add(String(key))
     const strKey = String(key)
 
     // Check if all diffs in group are leaf-level (path.length === 1)

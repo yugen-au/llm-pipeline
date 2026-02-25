@@ -49,3 +49,30 @@ New file. Key implementation details:
 [x] useMemo on tree construction keyed on [diffs, before, after]
 [x] Empty diff renders muted "No changes" text
 [x] `verbatimModuleSyntax` compatible imports (import type for Difference)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Array index type mismatch in `buildDiffTree` recursion -- `changedKeys` Set stored raw numeric keys from microdiff but `Object.keys(after)` returns strings, causing duplicate unchanged entries for array-valued context keys
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/JsonDiff.tsx`
+Normalized `changedKeys` to `Set<string>` and coerce keys via `String(key)` before insertion.
+
+```
+# Before
+const changedKeys = new Set<string | number>()
+for (const [key, group] of grouped) {
+  changedKeys.add(key)
+
+# After
+const changedKeys = new Set<string>()
+for (const [key, group] of grouped) {
+  changedKeys.add(String(key))
+```
+
+### Verification
+[x] TypeScript compiles with zero errors (`npx tsc --noEmit`)
+[x] `changedKeys` type narrowed from `Set<string | number>` to `Set<string>` -- matches `Object.keys()` return type
