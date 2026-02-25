@@ -74,7 +74,7 @@ def _make_failing_pipeline_factory():
             self._run_id = run_id
             self._engine = engine
 
-        def execute(self):
+        def execute(self, **kwargs):
             with Session(self._engine) as session:
                 run = PipelineRun(
                     run_id=self._run_id,
@@ -116,7 +116,7 @@ def _make_no_op_factory(gate: threading.Event):
             self._run_id = run_id
             self._engine = engine
 
-        def execute(self):
+        def execute(self, **kwargs):
             with Session(self._engine) as session:
                 session.add(PipelineRun(
                     run_id=self._run_id,

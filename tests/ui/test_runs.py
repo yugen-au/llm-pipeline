@@ -151,7 +151,7 @@ class TestTriggerRun:
             def __init__(self, run_id, engine):
                 self._run_id = run_id
 
-            def execute(self):
+            def execute(self, **kwargs):
                 executed.append(self._run_id)
 
             def save(self):
@@ -170,7 +170,7 @@ class TestTriggerRun:
     def test_run_id_is_valid_uuid(self):
         app = create_app(
             db_path=":memory:",
-            pipeline_registry={"p": lambda run_id, engine, **kw: type("P", (), {"execute": lambda s: None, "save": lambda s: None})()},
+            pipeline_registry={"p": lambda run_id, engine, **kw: type("P", (), {"execute": lambda s, **kw: None, "save": lambda s: None})()},
         )
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "p"})
@@ -200,7 +200,7 @@ class TestTriggerRun:
             def __init__(self, run_id, engine):
                 self._run_id = run_id
 
-            def execute(self):
+            def execute(self, **kwargs):
                 executed.append(self._run_id)
 
             def save(self):
