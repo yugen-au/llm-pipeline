@@ -1,7 +1,7 @@
 ## Task: master-38-input-form-generation
 ## Description: Implement InputForm component that generates form fields from Pydantic schema with JSON editor fallback
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
