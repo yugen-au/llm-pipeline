@@ -13,9 +13,12 @@ export async function apiClient<T>(path: string, options?: RequestInit): Promise
   if (!response.ok) {
     let detail: string = response.statusText
     try {
-      const body = (await response.json()) as { detail?: string }
-      if (body.detail) {
-        detail = body.detail
+      const body = (await response.json()) as { detail?: unknown }
+      if (body.detail != null) {
+        detail =
+          typeof body.detail === 'string'
+            ? body.detail
+            : JSON.stringify(body.detail)
       }
     } catch {
       // body not parseable as JSON, keep statusText

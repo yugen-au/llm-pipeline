@@ -59,6 +59,7 @@ class PipelineMetadata(BaseModel):
     registry_models: List[str] = []
     strategies: List[StrategyMetadata] = []
     execution_order: List[str] = []
+    pipeline_input_schema: Optional[Any] = None
 
 
 class StepPromptItem(BaseModel):

@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Play } from 'lucide-react'
 import { useCreateRun } from '@/api/runs'
+import { usePipeline } from '@/api/pipelines'
 import { useSteps } from '@/api/steps'
 import { useEvents } from '@/api/events'
 import { useWebSocket } from '@/api/websocket'
@@ -12,9 +13,11 @@ import { useWsStore } from '@/stores/websocket'
 import type { WsConnectionStatus } from '@/stores/websocket'
 import { queryKeys } from '@/api/query-keys'
 import type { RunStatus, EventItem } from '@/api/types'
+import { ApiError } from '@/api/types'
 import { StepTimeline, deriveStepStatus } from '@/components/runs/StepTimeline'
 import { StepDetailPanel } from '@/components/runs/StepDetailPanel'
 import { PipelineSelector } from '@/components/live/PipelineSelector'
+import { InputForm, validateForm } from '@/components/live/InputForm'
 import { EventStream } from '@/components/live/EventStream'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -80,10 +83,15 @@ function LivePage() {
   // -- Local state --
   const [selectedPipeline, setSelectedPipeline] = useState<string | null>(null)
   const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [inputValues, setInputValues] = useState<Record<string, unknown>>({})
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // -- Hooks --
   const queryClient = useQueryClient()
   const createRun = useCreateRun()
+  const { data: pipelineDetail } = usePipeline(selectedPipeline ?? '')
+  const inputSchema = pipelineDetail?.pipeline_input_schema ?? null
+
   useWebSocket(activeRunId)
   const wsStoreStatus = useWsStore((s) => s.status)
   const { latestRun } = useRunNotifications()
@@ -107,8 +115,20 @@ function LivePage() {
   // -- Event cache seeding + run creation --
   const handleRunPipeline = useCallback(() => {
     if (!selectedPipeline) return
+
+    // Frontend required-field validation
+    const errors = validateForm(inputSchema, inputValues)
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+    setFieldErrors({})
+
     createRun.mutate(
-      { pipeline_name: selectedPipeline },
+      {
+        pipeline_name: selectedPipeline,
+        input_data: inputSchema ? inputValues : undefined,
+      },
       {
         onSuccess: (data) => {
           // Seed event cache BEFORE setting activeRunId (order matters).
@@ -121,10 +141,32 @@ function LivePage() {
             limit: 50,
           })
           setActiveRunId(data.run_id)
+          setInputValues({})
+          setFieldErrors({})
+        },
+        onError: (error) => {
+          if (error instanceof ApiError && error.status === 422) {
+            try {
+              const details = JSON.parse(error.detail) as Array<{
+                loc: string[]
+                msg: string
+              }>
+              const mapped: Record<string, string> = {}
+              for (const item of details) {
+                const field = item.loc[item.loc.length - 1]
+                mapped[field] = item.msg
+              }
+              if (Object.keys(mapped).length > 0) {
+                setFieldErrors(mapped)
+              }
+            } catch {
+              // detail was not structured JSON, nothing to map
+            }
+          }
         },
       },
     )
-  }, [selectedPipeline, createRun, queryClient])
+  }, [selectedPipeline, createRun, queryClient, inputSchema, inputValues])
 
   // -- Python-initiated run detection --
   // Auto-attach to runs started externally (e.g. another client, CLI).
@@ -150,6 +192,12 @@ function LivePage() {
       setSelectedPipeline(latestRun.pipeline_name)
     })
   }, [latestRun, queryClient])
+
+  // -- Reset form when pipeline selection changes --
+  useEffect(() => {
+    setInputValues({})
+    setFieldErrors({})
+  }, [selectedPipeline])
 
   // -- Timeline items from DB steps + WS events --
   const timelineItems = useMemo(
@@ -192,8 +240,16 @@ function LivePage() {
           {createRun.isPending ? 'Starting...' : 'Run Pipeline'}
         </Button>
 
-        {/* Task 38: InputForm will render here */}
-        <div data-testid="input-form-placeholder" />
+        {/* Task 38: InputForm -- renders null when schema is null */}
+        <InputForm
+          schema={inputSchema}
+          values={inputValues}
+          onChange={(field, value) =>
+            setInputValues((prev) => ({ ...prev, [field]: value }))
+          }
+          fieldErrors={fieldErrors}
+          isSubmitting={createRun.isPending}
+        />
       </CardContent>
     </Card>
   )
@@ -232,7 +288,7 @@ function LivePage() {
 
       {/* Desktop layout (lg+): 3-column grid */}
       <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-3 lg:gap-4">
-        {/* Col 1: Pipeline selector + run button + placeholder */}
+        {/* Col 1: Pipeline selector + run button + InputForm */}
         <div className="overflow-auto">{pipelineColumn}</div>
 
         {/* Col 2: Event stream */}

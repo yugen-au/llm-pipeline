@@ -56,11 +56,12 @@ export interface RunDetail {
 /**
  * POST /api/runs request body.
  *
- * Note: currently only `pipeline_name` is supported by the backend.
- * Task 37 (Live Execution) may require adding `input_data` later.
+ * `input_data` is optional and forwarded to the pipeline factory as
+ * initial context when provided (task 38).
  */
 export interface TriggerRunRequest {
   pipeline_name: string
+  input_data?: Record<string, unknown>
 }
 
 /** POST /api/runs response body (202 Accepted). */
@@ -354,6 +355,7 @@ export interface PipelineMetadata {
   registry_models: string[]
   strategies: PipelineStrategyMetadata[]
   execution_order: string[]
+  pipeline_input_schema: Record<string, unknown> | null
 }
 
 /**
@@ -367,6 +369,14 @@ export interface PipelineListItem {
   step_count: number
   has_input_schema: boolean
 }
+
+/**
+ * Minimal JSON Schema type alias.
+ *
+ * Intentionally loose -- full JSON Schema typing is out of scope.
+ * Used as the prop type for InputForm's `schema` parameter.
+ */
+export type JsonSchema = Record<string, unknown>
 
 // ---------------------------------------------------------------------------
 // WebSocket message types (WS /ws/runs/{run_id})
