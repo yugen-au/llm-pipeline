@@ -88,3 +88,46 @@ Added useEffect to reset form on pipeline selection change.
 [x] Form values reset on success and on pipeline change
 [x] 422 structured errors parsed and mapped to fieldErrors
 [x] Frontend validateForm called before mutation
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH: 422 error mapping broken at runtime -- apiClient stores non-string body.detail (Pydantic array) as-is, causing JSON.parse to fail on `[object Object]`
+[x] LOW: Stale comment on line 291 still says "placeholder" after InputForm replacement
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/client.ts`
+Fixed detail serialization: when body.detail is not a string (e.g. Pydantic 422 array), JSON.stringify it before storing in ApiError. Keeps ApiError.detail consistently as a string.
+```
+# Before
+const body = (await response.json()) as { detail?: string }
+if (body.detail) {
+  detail = body.detail
+}
+
+# After
+const body = (await response.json()) as { detail?: unknown }
+if (body.detail != null) {
+  detail =
+    typeof body.detail === 'string'
+      ? body.detail
+      : JSON.stringify(body.detail)
+}
+```
+
+#### File: `llm_pipeline/ui/frontend/src/routes/live.tsx`
+Updated stale comment from "placeholder" to "InputForm".
+```
+# Before
+{/* Col 1: Pipeline selector + run button + placeholder */}
+
+# After
+{/* Col 1: Pipeline selector + run button + InputForm */}
+```
+
+### Verification
+[x] TypeScript type-check passes (npm run type-check)
+[x] apiClient now JSON.stringify's non-string detail values, ensuring JSON.parse in live.tsx 422 handler works correctly
+[x] Stale comment updated
