@@ -216,3 +216,36 @@ class TestTriggerRun:
         # TestClient context exit flushes background tasks
         assert len(executed) == 1
         assert uuid.UUID(executed[0])
+
+    def test_input_data_threaded_to_factory_and_execute(self):
+        """input_data from POST body reaches factory kwargs and pipeline.execute initial_context."""
+        factory_kwargs_log = []
+        execute_kwargs_log = []
+
+        class _SpyPipeline:
+            def __init__(self, **kwargs):
+                factory_kwargs_log.append(kwargs)
+
+            def execute(self, **kwargs):
+                execute_kwargs_log.append(kwargs)
+
+            def save(self):
+                pass
+
+        def _spy_factory(run_id, engine, **kw):
+            return _SpyPipeline(run_id=run_id, engine=engine, **kw)
+
+        app = create_app(
+            db_path=":memory:",
+            pipeline_registry={"spy": _spy_factory},
+        )
+        payload = {"foo": "bar", "count": 42}
+        with TestClient(app) as client:
+            resp = client.post("/api/runs", json={"pipeline_name": "spy", "input_data": payload})
+            assert resp.status_code == 202
+        # factory received input_data kwarg
+        assert len(factory_kwargs_log) == 1
+        assert factory_kwargs_log[0]["input_data"] == payload
+        # execute received initial_context matching input_data
+        assert len(execute_kwargs_log) == 1
+        assert execute_kwargs_log[0]["initial_context"] == payload

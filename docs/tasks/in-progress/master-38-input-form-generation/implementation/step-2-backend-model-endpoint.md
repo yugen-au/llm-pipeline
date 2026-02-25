@@ -80,3 +80,46 @@ Updated `_FailingPipeline.execute()` and `_NoOpPipeline.execute()` to accept `**
 [x] input_data forwarded to factory as kwarg
 [x] PipelineMetadata has pipeline_input_schema field (defaults to None)
 [x] All existing Python tests pass (79 passed in affected files)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] No test coverage for input_data threading -- added test that verifies input_data from POST body reaches factory kwargs and pipeline.execute() initial_context
+
+### Changes Made
+#### File: `tests/ui/test_runs.py`
+Added `test_input_data_threaded_to_factory_and_execute` to `TestTriggerRun`. Uses spy factory and spy pipeline that log kwargs. POSTs `{"pipeline_name": "spy", "input_data": {"foo": "bar", "count": 42}}` and asserts:
+- `factory_kwargs["input_data"] == {"foo": "bar", "count": 42}`
+- `execute_kwargs["initial_context"] == {"foo": "bar", "count": 42}`
+
+```
+# Added test
+def test_input_data_threaded_to_factory_and_execute(self):
+    factory_kwargs_log = []
+    execute_kwargs_log = []
+
+    class _SpyPipeline:
+        def __init__(self, **kwargs):
+            factory_kwargs_log.append(kwargs)
+        def execute(self, **kwargs):
+            execute_kwargs_log.append(kwargs)
+        def save(self):
+            pass
+
+    def _spy_factory(run_id, engine, **kw):
+        return _SpyPipeline(run_id=run_id, engine=engine, **kw)
+
+    app = create_app(db_path=":memory:", pipeline_registry={"spy": _spy_factory})
+    payload = {"foo": "bar", "count": 42}
+    with TestClient(app) as client:
+        resp = client.post("/api/runs", json={"pipeline_name": "spy", "input_data": payload})
+        assert resp.status_code == 202
+    assert factory_kwargs_log[0]["input_data"] == payload
+    assert execute_kwargs_log[0]["initial_context"] == payload
+```
+
+### Verification
+[x] New test passes in isolation (1 passed)
+[x] All 24 tests in test_runs.py pass (no regressions)
