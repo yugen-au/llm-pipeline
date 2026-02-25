@@ -943,7 +943,7 @@ class PipelineConfig(ABC):
             else:
                 serialized.append({"result": str(instruction)})
 
-        context_snapshot = {step.step_name: serialized}
+        context_snapshot = dict(self._context)
         prompt_system_key = getattr(step, "system_instruction_key", None)
         prompt_user_key = getattr(step, "user_prompt_key", None)
         prompt_version = None

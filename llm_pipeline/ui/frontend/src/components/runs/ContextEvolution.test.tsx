@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ContextEvolution } from './ContextEvolution'
 import type { ContextSnapshot } from '@/api/types'
 
+// Accumulated context shape: each step includes all prior keys plus new ones
 const mockSnapshots: ContextSnapshot[] = [
   {
     step_name: 'extract',
@@ -12,7 +13,7 @@ const mockSnapshots: ContextSnapshot[] = [
   {
     step_name: 'transform',
     step_number: 2,
-    context_snapshot: { result: 42, tags: ['a', 'b'] },
+    context_snapshot: { input: 'raw data', extracted: true, result: 42, tags: ['a', 'b'] },
   },
 ]
 
@@ -30,13 +31,33 @@ describe('ContextEvolution', () => {
     expect(headings[1].textContent).toContain('2')
   })
 
-  it('renders JSON snapshots as formatted text', () => {
+  it('renders addition for first step keys', () => {
     render(
       <ContextEvolution snapshots={mockSnapshots} isLoading={false} isError={false} />,
     )
-    // Check that the JSON content is rendered
-    expect(screen.getByText(/"input": "raw data"/)).toBeInTheDocument()
-    expect(screen.getByText(/"result": 42/)).toBeInTheDocument()
+    // Step 1 gets before={} so all keys render as green CREATE additions
+    // JsonDiff renders key names as text nodes; input and extracted appear as additions
+    const additionMarkers = screen.getAllByText('+')
+    // At minimum step 1's 2 keys (input, extracted) render as additions
+    expect(additionMarkers.length).toBeGreaterThanOrEqual(2)
+    // Key names are present in the document
+    expect(screen.getAllByText((_, el) => el?.tagName === 'SPAN' && el.textContent?.includes('input') === true).length).toBeGreaterThan(0)
+    expect(screen.getAllByText((_, el) => el?.tagName === 'SPAN' && el.textContent?.includes('extracted') === true).length).toBeGreaterThan(0)
+  })
+
+  it('renders changes between steps', () => {
+    render(
+      <ContextEvolution snapshots={mockSnapshots} isLoading={false} isError={false} />,
+    )
+    // Step 2 adds result and tags; those appear as green additions (CREATE)
+    // Step 2's context has input/extracted as unchanged (muted) and result/tags as new (green +)
+    // getAllByText('+') covers additions across both steps; step 2 adds result and tags
+    const additionMarkers = screen.getAllByText('+')
+    // step 1: 2 additions (input, extracted); step 2: 2 new keys (result, tags) = at least 4 total
+    expect(additionMarkers.length).toBeGreaterThanOrEqual(4)
+    // New key names from step 2 are present
+    expect(screen.getAllByText((_, el) => el?.tagName === 'SPAN' && el.textContent?.includes('result') === true).length).toBeGreaterThan(0)
+    expect(screen.getAllByText((_, el) => el?.tagName === 'SPAN' && el.textContent?.includes('tags') === true).length).toBeGreaterThan(0)
   })
 
   it('shows loading skeleton with animate-pulse elements', () => {
