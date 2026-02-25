@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Cross-referenced both research files against actual codebase (14 source files inspected). 14 factual claims validated; 7 hidden assumptions identified, 3 of which are blocking. The central issue: Task 38's code snippet references `pipelineData?.input_schema` but this field exists nowhere -- not on PipelineMetadata (backend or TS), not in PipelineIntrospector output. Task 43 (PipelineInputData) creates the base class but does NOT add the introspection/API/TS plumbing to expose it. Additionally, the existing `has_input_schema` boolean is derived from step-level `instructions_schema` (LLM output schema), not pipeline input data -- a semantic mismatch that will confuse developers. The factory contract (pre-bound execute() with zero args) means user-provided input_data has no path to pipeline execution without backend changes. Six CEO questions raised before planning can proceed.
+Cross-referenced both research files against actual codebase (14 source files inspected). 14 factual claims validated; 7 hidden assumptions identified, all now resolved via CEO Q&A. Task 38 is END-TO-END: InputForm component (pure, generic `schema: JsonSchema | null` prop) + TriggerRunRequest.input_data field + backend threading input_data as initial_context to execute(). No Task 43 dependency -- component mock-tested with synthetic schemas. Backend flattens $ref/$defs via existing flatten_schema(). Hybrid validation: frontend required-field checks + backend Pydantic 422 with per-field errors. No new deps (no RHF, no ajv). has_input_schema rename deferred to Task 43.
 
 ## Domain Findings
 
@@ -71,12 +71,12 @@ Cross-referenced both research files against actual codebase (14 source files in
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Q1: Scope -- is Task 38 frontend-only component or end-to-end with backend wiring? | PENDING | Determines ~50% of work. Frontend-only means just the component; end-to-end means TriggerRunRequest + factory contract changes |
-| Q2: What schema should InputForm render given PipelineInputData doesn't exist? Build against generic JSON Schema prop (mock-tested) or use step-level schema as interim? | PENDING | Defines interim contract and testability approach |
-| Q3: How does user input_data reach execute() given factories pre-bind args? Change factory contract, add new param, or defer? | PENDING | Determines whether form data actually does anything or is UI-only |
-| Q4: Should we rename has_input_schema (currently means "has step instructions_schema") to avoid confusion with pipeline input data? | PENDING | Naming clarity, prevents future bugs |
-| Q5: Should $ref/$defs flattening happen backend-side (via existing flatten_schema()) or frontend-side? | PENDING | Affects component complexity and API contract |
-| Q6: Form validation approach -- manual JSON Schema checks, Zod runtime conversion, RHF, or backend-only validation? | PENDING | Affects dependencies and implementation complexity |
+| Q1: Scope -- is Task 38 frontend-only component or end-to-end with backend wiring? | END-TO-END. No downstream task covers TriggerRunRequest. Task 38 includes InputForm component + TriggerRunRequest input_data field + minimal backend wiring to pass input_data through. | Full scope confirmed: frontend InputForm + backend TriggerRunRequest.input_data + threading input_data as initial_context to execute(). Eliminates "UI-only" option. |
+| Q2: What schema should InputForm render given PipelineInputData doesn't exist? Build against generic JSON Schema prop (mock-tested) or use step-level schema as interim? | GENERIC PROP. Build against `schema: JsonSchema \| null` prop, mock-tested with synthetic schemas. No Task 43 dependency. Do NOT use step-level instructions_schema. | Confirms research recommendation. InputForm is a pure component decoupled from schema source. No interim hack with instructions_schema. |
+| Q3: How does user input_data reach execute() given factories pre-bind args? Change factory contract, add new param, or defer? | Add input_data to TriggerRunRequest, pass as initial_context to pipeline.execute(). Minimal factory changes -- don't restructure factory contract, just thread input_data through existing context mechanism. | Key decision: input_data merges into initial_context dict, NOT a new execute() param. Factory receives input_data and merges into the context it already pre-binds. Minimal disruption. |
+| Q4: Should we rename has_input_schema (currently means "has step instructions_schema") to avoid confusion with pipeline input data? | DEFER. Keep existing field. Add separate pipeline_input_schema field when Task 43 lands. | No rename needed now. Future task adds distinct field. |
+| Q5: Should $ref/$defs flattening happen backend-side (via existing flatten_schema()) or frontend-side? | BACKEND. Use existing flatten_schema() in llm/schema.py. Frontend receives pre-flattened schemas. | Frontend InputForm can assume flat schemas with no $ref/$defs. Simplifies component. Backend uses existing utility. |
+| Q6: Form validation approach -- manual JSON Schema checks, Zod runtime conversion, RHF, or backend-only validation? | HYBRID. Manual required-field checks on frontend + backend Pydantic validation on submit. No new deps. Frontend shows required indicators from schema.required, type-appropriate inputs. Backend returns structured 422 errors mapped to inline per-field messages. | No new dependencies (no RHF, no ajv, no json-schema-to-zod). Frontend does lightweight required/type checks. Backend Pydantic does authoritative validation. 422 response must include field-level error mapping for inline display. |
 
 ## Assumptions Validated
 - [x] PipelineInputData does not exist in codebase (context.py only has PipelineContext)
@@ -92,21 +92,30 @@ Cross-referenced both research files against actual codebase (14 source files in
 - [x] Pydantic v2 JSON Schema patterns (simple, nested/$defs, Optional/anyOf, arrays) documented accurately
 - [x] LLMResultMixin adds confidence_score + notes to all instructions_schema (always with defaults)
 - [x] has_input_schema is derived from step-level instructions_schema, not pipeline input data
+- [x] Task 38 scope is end-to-end: InputForm + TriggerRunRequest.input_data + backend threading (CEO confirmed)
+- [x] InputForm accepts generic schema prop, no Task 43 dependency (CEO confirmed)
+- [x] input_data flows as initial_context, no factory contract restructure (CEO confirmed)
+- [x] has_input_schema rename deferred to Task 43 (CEO confirmed)
+- [x] Backend flattens $ref/$defs via existing flatten_schema() (CEO confirmed)
+- [x] Hybrid validation: frontend required checks + backend Pydantic 422 per-field errors, no new deps (CEO confirmed)
 
 ## Open Items
-- Task 43 dependency gap: even after Task 43, 4 plumbing changes needed (introspector, backend model, API endpoint, TS type) before real schema flows to InputForm
-- Factory contract change: no mechanism exists to pass user input_data from HTTP request to pipeline.execute()
-- has_input_schema semantic mismatch: name suggests pipeline input, computed from LLM output schema
-- Form reset behavior after successful pipeline run submission not addressed in research
-- Loading state UX while usePipeline() fetches schema not addressed
-- When pipeline has NO schema at all (no PipelineInputData defined): should UI show JSON editor, empty state, or just the Run button?
-- TransformationMetadata.input_schema naming collision risk with future pipeline-level input_schema
+- RESOLVED: Factory contract -- input_data threads through as initial_context, no restructure needed
+- RESOLVED: has_input_schema -- defer rename, add separate pipeline_input_schema field in Task 43
+- DEFERRED TO TASK 43: introspector + backend model + API endpoint + TS type plumbing for real PipelineInputData schema exposure (4 items)
+- Form reset behavior after successful pipeline run submission -- define during planning
+- Loading state UX while usePipeline() fetches schema -- define during planning
+- When pipeline has NO schema (null prop): InputForm should render nothing or just the Run button -- define during planning
+- TransformationMetadata.input_schema naming collision risk with future pipeline-level input_schema -- low risk, different TS interfaces
+- Backend 422 error response shape: must define structured field-level error format (e.g. `{ detail: [{ field: "name", message: "required" }] }`) during planning
 
 ## Recommendations for Planning
-1. Build InputForm as a pure component accepting `schema: JsonSchema | null` prop -- fully decoupled from schema source, testable with synthetic schemas, no Task 43 dependency
-2. Backend flattening preferred: use existing flatten_schema() in introspection layer rather than duplicating $ref resolution in frontend
-3. Do NOT use instructions_schema as interim -- it's LLM output schema, semantically wrong for user input
-4. Consider splitting: (a) InputForm component + FormField components + JSON editor fallback (frontend-only, this task), (b) backend plumbing (introspector + API + TriggerRunRequest + factory contract, separate task or Task 43 extension)
-5. Install missing shadcn components (input, label, checkbox, textarea) as first implementation step
-6. Form validation: manual JSON Schema required-field checks + type coercion sufficient for v1; avoid adding json-schema-to-zod dependency
-7. Wire InputForm into live.tsx by replacing placeholder div, passing collected data via onSubmit callback to handleRunPipeline -- the callback can include input_data even before backend accepts it (no-op field, forward-compatible)
+1. **InputForm component**: pure component accepting `schema: JsonSchema | null` prop + `onSubmit: (data: Record<string, unknown>) => void` callback. Decoupled from schema source, mock-tested with synthetic schemas
+2. **Backend flattening**: use existing flatten_schema() in llm/schema.py. Frontend assumes flat schemas (no $ref/$defs). Apply in introspection layer when serving schema to API
+3. **Do NOT use instructions_schema** as interim -- it's LLM output schema, semantically wrong for user input (CEO confirmed)
+4. **End-to-end scope** (CEO confirmed): (a) InputForm component + FormField components, (b) TriggerRunRequest gains optional `input_data: dict | None`, (c) trigger_run() merges input_data into initial_context before calling factory/execute, (d) wire into live.tsx replacing placeholder
+5. **Install missing shadcn**: input, label, checkbox, textarea as first implementation step
+6. **Hybrid validation**: frontend shows required indicators from schema.required + type-appropriate inputs. Backend Pydantic validates on submit, returns structured 422 with per-field error mapping. No new deps
+7. **422 error contract**: backend returns `{ detail: [{ loc: ["field_name"], msg: "error message", type: "error_type" }] }` (Pydantic v2 native ValidationError format). Frontend maps loc to inline field errors
+8. **Factory threading**: input_data from TriggerRunRequest merges into initial_context dict that factory already pre-binds. Factory contract unchanged -- just receives richer initial_context
+9. **Null schema handling**: when schema is null, InputForm renders nothing (just the Run button, no form fields). JSON editor fallback is out of scope for Task 38
