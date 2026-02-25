@@ -2,7 +2,7 @@
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -60,6 +60,7 @@ class RunDetail(BaseModel):
 
 class TriggerRunRequest(BaseModel):
     pipeline_name: str
+    input_data: Optional[Dict[str, Any]] = None
 
 
 class TriggerRunResponse(BaseModel):
@@ -219,8 +220,8 @@ def trigger_run(
     def run_pipeline() -> None:
         bridge = UIBridge(run_id=run_id)
         try:
-            pipeline = factory(run_id=run_id, engine=engine, event_emitter=bridge)
-            pipeline.execute()
+            pipeline = factory(run_id=run_id, engine=engine, event_emitter=bridge, input_data=body.input_data or {})
+            pipeline.execute(data=None, initial_context=body.input_data or {})
             pipeline.save()
         except Exception:
             logger.exception("Background pipeline execution failed for run_id=%s", run_id)

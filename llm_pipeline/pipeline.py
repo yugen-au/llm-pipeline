@@ -423,12 +423,15 @@ class PipelineConfig(ABC):
 
     def execute(
         self,
-        data: Any,
-        initial_context: Dict[str, Any],
+        data: Any = None,
+        initial_context: Optional[Dict[str, Any]] = None,
         use_cache: bool = False,
         consensus_polling: Optional[Dict[str, Any]] = None,
     ) -> "PipelineConfig":
         """Execute pipeline steps with optional caching and consensus polling."""
+        if initial_context is None:
+            initial_context = {}
+
         from llm_pipeline.llm.executor import execute_llm_step
         from llm_pipeline.prompts.service import PromptService
         from llm_pipeline.state import PipelineRun
