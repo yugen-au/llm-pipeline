@@ -4,6 +4,31 @@
 **Status:** passed
 All automated checks pass. 766/767 Python tests pass; the 1 failure is a pre-existing unrelated test. TypeScript type-check passes with zero errors. Frontend build succeeds. All Task 38 success criteria are met by the implementation already in place.
 
+---
+
+## Re-run After Review Fixes (2026-02-25)
+
+**Status:** passed
+767/768 Python tests pass after new `test_input_data_threading` test added to `test_runs.py` (+1 test vs prior run). New test passes. TypeScript type-check clean. Frontend build clean (2101 modules, 5.70s). The only failure remains the pre-existing `test_events_router_prefix` (unrelated to Task 38).
+
+### Test Execution
+**Pass Rate:** 767/768 (1 pre-existing failure)
+```
+1 failed, 767 passed, 3 warnings in 119.26s (0:01:59)
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
+  assert '/runs/{run_id}/events' == '/events'
+```
+
+### Changes Verified
+- `tests/ui/test_runs.py`: new `test_input_data_threading` test collected and passes -- confirms `input_data` kwarg is forwarded from factory call through `pipeline.execute()`
+- `client.ts` 422 fix: `JSON.stringify` applied to non-string `detail` values before storing in `ApiError` -- TypeScript type-check passes with no errors
+- Frontend build output unchanged (same chunk sizes), confirming client.ts change is minimal
+
+### Build Verification
+- [x] Python tests: 767/768 pass (`pytest` from project root)
+- [x] TypeScript type-check: `npm run type-check` -- clean exit, zero errors
+- [x] Frontend build: `npm run build` -- 2101 modules, built in 5.70s, zero errors
+
 ## Automated Testing
 ### Test Scripts Created
 | Script | Purpose | Location |
