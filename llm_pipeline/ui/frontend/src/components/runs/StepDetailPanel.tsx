@@ -3,6 +3,7 @@ import { useStepEvents } from '@/api/events'
 import { useStepInstructions } from '@/api/pipelines'
 import { useRunContext } from '@/api/runs'
 import { formatDuration, formatAbsolute } from '@/lib/time'
+import { JsonDiff } from '@/components/JsonDiff'
 import {
   Sheet,
   SheetContent,
@@ -260,30 +261,11 @@ function ContextDiffTab({
             </div>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">
-              Before {beforeSnapshot ? `(step ${beforeSnapshot.step_number})` : ''}
-            </p>
-            <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-              {beforeSnapshot
-                ? formatJson(beforeSnapshot.context_snapshot)
-                : step.step_number === 1
-                  ? '{}'
-                  : '(not available)'}
-            </pre>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">
-              After (step {step.step_number})
-            </p>
-            <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-              {afterSnapshot
-                ? formatJson(afterSnapshot.context_snapshot)
-                : formatJson(step.context_snapshot)}
-            </pre>
-          </div>
-        </div>
+        <JsonDiff
+          before={beforeSnapshot?.context_snapshot ?? {}}
+          after={afterSnapshot?.context_snapshot ?? step.context_snapshot}
+          maxDepth={3}
+        />
       </div>
     </ScrollArea>
   )

@@ -1,4 +1,5 @@
 import type { ContextSnapshot } from '@/api/types'
+import { JsonDiff } from '@/components/JsonDiff'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface ContextEvolutionProps {
@@ -40,18 +41,21 @@ export function ContextEvolution({ snapshots, isLoading, isError }: ContextEvolu
   return (
     <ScrollArea className="h-full">
       <div className="space-y-0 divide-y">
-        {snapshots.map((snapshot) => (
-          <div key={snapshot.step_number} className="p-4">
-            <h4 className="mb-2 text-sm font-semibold">
-              Step {snapshot.step_number} &mdash; {snapshot.step_name}
-            </h4>
-            <div className="overflow-x-auto">
-              <pre className="text-xs font-mono whitespace-pre-wrap break-all rounded bg-muted p-3">
-                {JSON.stringify(snapshot.context_snapshot, null, 2)}
-              </pre>
+        {snapshots.map((snapshot, index) => {
+          const prev = snapshots[index - 1]
+          return (
+            <div key={snapshot.step_number} className="p-4">
+              <h4 className="mb-2 text-sm font-semibold">
+                Step {snapshot.step_number} &mdash; {snapshot.step_name}
+              </h4>
+              <JsonDiff
+                before={prev?.context_snapshot ?? {}}
+                after={snapshot.context_snapshot}
+                maxDepth={3}
+              />
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </ScrollArea>
   )
