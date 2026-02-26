@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { useQueries } from '@tanstack/react-query'
@@ -48,39 +48,42 @@ function PromptsPage() {
     [pipelines.data],
   )
 
-  // Fetch metadata for each pipeline in parallel to build prompt_key -> pipeline[] map
-  const pipelineMetaQueries = useQueries({
+  // Build prompt_key -> pipeline_name[] map via combine (structurally shared)
+  const combinePipelineMeta = useCallback(
+    (results: { data: PipelineMetadata | undefined }[]) => {
+      const map = new Map<string, string[]>()
+      results.forEach((q, idx) => {
+        if (!q.data) return
+        const pipelineName = pipelineNames[idx]
+        for (const strategy of q.data.strategies) {
+          for (const step of strategy.steps) {
+            for (const promptKey of [step.system_key, step.user_key]) {
+              if (!promptKey) continue
+              const existing = map.get(promptKey)
+              if (existing) {
+                if (!existing.includes(pipelineName)) {
+                  existing.push(pipelineName)
+                }
+              } else {
+                map.set(promptKey, [pipelineName])
+              }
+            }
+          }
+        }
+      })
+      return map
+    },
+    [pipelineNames],
+  )
+
+  const promptKeyToPipelines = useQueries({
     queries: pipelineNames.map((name) => ({
       queryKey: queryKeys.pipelines.detail(name),
       queryFn: () => apiClient<PipelineMetadata>('/pipelines/' + name),
       staleTime: Infinity,
     })),
+    combine: combinePipelineMeta,
   })
-
-  // Build Map<prompt_key, string[]> from pipeline metadata
-  const promptKeyToPipelines = useMemo(() => {
-    const map = new Map<string, string[]>()
-    pipelineMetaQueries.forEach((q, idx) => {
-      if (!q.data) return
-      const pipelineName = pipelineNames[idx]
-      for (const strategy of q.data.strategies) {
-        for (const step of strategy.steps) {
-          for (const promptKey of [step.system_key, step.user_key]) {
-            if (!promptKey) continue
-            const existing = map.get(promptKey)
-            if (existing) {
-              if (!existing.includes(pipelineName)) {
-                existing.push(pipelineName)
-              }
-            } else {
-              map.set(promptKey, [pipelineName])
-            }
-          }
-        }
-      }
-    })
-    return map
-  }, [pipelineMetaQueries, pipelineNames])
 
   // Derive unique prompt types for filter dropdown
   const promptTypes = useMemo(
