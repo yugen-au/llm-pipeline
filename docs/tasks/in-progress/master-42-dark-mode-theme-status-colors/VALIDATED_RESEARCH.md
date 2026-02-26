@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Validated both research outputs against actual codebase state. Research correctly identifies Tailwind v4 CSS-first config, existing dark mode infrastructure from task 29, and WCAG contrast failures for 3 of 6 proposed status colors. Found 6 hidden assumptions/gaps requiring CEO input before planning: (1) 'cached' is not an actual backend step status, (2) contrast was calculated against wrong background, (3) running status color mismatch between current code and spec, (4) EventStream scope unclear, (5) font loading strategy for internal tool, (6) color-scheme bug when light mode toggle exists.
+Validated both research outputs against codebase. All 6 ambiguities resolved via CEO input. Final scope: 5 status tokens (pending/running/completed/failed/skipped -- no cached), running=amber (not blue), -400 variants accepted for contrast, EventStream in scope (partial -- step lifecycle events only), fontsource for fonts (next/font unavailable in Vite), color-scheme corrected for light/dark toggle support.
 
 ## Domain Findings
 
@@ -30,27 +30,38 @@ Status badges appear on BOTH surfaces. Card background is lighter, meaning contr
 
 Proposed two-layer pattern (CSS vars in :root/.dark + @theme inline aliases) correctly follows existing shadcn pattern. OKLCH color space matches existing tokens.
 
-**Critical gap found:** 'cached' is NOT a backend step status. Backend StepStatus values: completed, running, failed, skipped, pending. When a step hits cache, it still completes as 'completed' -- CacheHit is a separate event with cached_at field. The frontend StepTimeline derives status from events but has no 'cached' derivation logic. Proposing --status-cached token without corresponding backend/frontend status is premature.
+**Gap found and resolved:** 'cached' is NOT a backend step status. Backend StepStatus values: completed, running, failed, skipped, pending. CEO decision: SKIP cached token. Define 5 tokens only (pending, running, completed, failed, skipped).
 
-### Running Status Color Mismatch
+### Running Status Color -- Resolved
 **Source:** step-2-status-color-tokens-research.md, StatusBadge.tsx
 
-Current StatusBadge uses AMBER for 'running' (border-amber-500 text-amber-600 dark:text-amber-400). Task 42 spec and research propose BLUE for 'running' (blue-400/blue-600). This is a visible color change that research does not call out. Needs explicit decision.
+Current StatusBadge uses AMBER for 'running'. Task 42 spec proposed BLUE. CEO decision: keep AMBER. Token values for running: amber-400 (dark), amber-600 (light). Research OKLCH values for running must be updated from blue to amber equivalents.
 
-### EventStream Hardcoded Colors
+### EventStream Migration -- In Scope (Partial)
 **Source:** EventStream.tsx
 
-EventStream uses event_type-based colors (step_started=blue, step_completed=green, llm_call=purple, extraction=amber, context=teal). These are event-type colors, not status colors. Research only discusses StatusBadge refactoring. Scope of EventStream migration is unclear.
+CEO decision: EventStream IN SCOPE for task 42. However, only step lifecycle events map cleanly to status tokens:
+- `step_started` -> --status-running (amber)
+- `step_completed` -> --status-completed (green)
+- `step_failed` / `pipeline_failed` -> --status-failed (red)
+- `step_skipped` -> --status-skipped (yellow)
 
-### color-scheme Property Bug
+Non-status event types (`llm_call`=purple, `extraction`/`transformation`=amber, `context`=teal, `pipeline_started`/`pipeline_completed`=default) do NOT map to step status tokens. These need either (a) separate event-type tokens or (b) remain as hardcoded Tailwind classes. Planning must address this split.
+
+### color-scheme Property -- Corrected
 **Source:** step-1-tailwind-dark-mode-research.md, ui.ts
 
-Research recommends `color-scheme: dark` on both `:root` and `.dark`. Since the store supports theme toggling (light/dark exist), `:root` should be `color-scheme: light` and `.dark` should override to `color-scheme: dark`. Otherwise light-mode users see dark scrollbars/form controls.
+Research recommended `color-scheme: dark` on both `:root` and `.dark`. CEO confirmed correction: `:root` gets `color-scheme: light`, `.dark` gets `color-scheme: dark`. This ensures light-mode users see correct scrollbars/form controls.
 
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| (pending -- see Questions below) | | |
+| Define --status-cached token? Backend has no 'cached' step status. | SKIP. 5 tokens only (pending/running/completed/failed/skipped). | Removes 1 token + avoids orphan token with no backend state |
+| Running color: blue (task spec) or amber (current code)? | AMBER. Keep current. | Research OKLCH values for running must use amber-400/amber-600, not blue |
+| Contrast: recalculate against actual card surface? | Accept -400 variants as sufficient margin. | No recalculation needed, proceed with -400 for failed/running adjustments |
+| EventStream hardcoded colors in scope? | YES, include. Migrate to status tokens. | Expands scope; only step lifecycle events map to status tokens, non-status events need separate handling |
+| Font loading: CDN vs fontsource vs next/font? | CEO said next/font but project is Vite+React (no Next.js). Equivalent: fontsource npm package (self-hosted, no CDN). | Use @fontsource packages, auto-bundled by Vite |
+| color-scheme: dark on :root correct when light toggle exists? | NO. :root=light, .dark=dark. Confirmed correction. | Fixes research recommendation bug |
 
 ## Assumptions Validated
 - [x] Tailwind v4 uses CSS-first config, no tailwind.config.ts -- confirmed in codebase
@@ -66,14 +77,16 @@ Research recommends `color-scheme: dark` on both `:root` and `.dark`. Since the 
 - [x] StatusBadge currently uses raw Tailwind classes, not semantic tokens
 
 ## Open Items
-- Contrast ratios should be recalculated against actual card surface oklch(0.205 0 0) not just gray-900
-- EventStream.tsx also has event-type colors (teal for context events, etc.) that may need tokens later
+- EventStream non-status event types (llm_call, extraction, transformation, context, pipeline_started/completed) need either separate event-type tokens or remain hardcoded -- planning must decide
 - @tailwindcss/typography deferred -- may be needed by future tasks with markdown/LLM output rendering
+- fontsource package selection: Inter is common for dashboards, but specific font choice not yet decided
 
 ## Recommendations for Planning
-1. Fix color-scheme: use `color-scheme: light` on `:root` and `color-scheme: dark` on `.dark`
-2. Use -400 variants for running/failed/cached (if cached is kept) per research recommendation -- simpler and accessible
-3. Add FOUC prevention inline script to index.html as described in research
-4. Keep font loading decision separate from color token work -- can be decided independently
-5. If 'cached' token is approved, add StepStatus type update + derivation logic in StepTimeline as part of this task to avoid orphan token
-6. Clearly scope EventStream migration as in/out -- recommend out-of-scope for task 42, create follow-up task
+1. Define 5 status tokens: --status-pending (gray-400/gray-500), --status-running (amber-400/amber-600), --status-completed (green-500/green-600), --status-failed (red-400/red-600), --status-skipped (yellow-500/yellow-600)
+2. Use CSS custom properties in :root/.dark + @theme inline aliases (existing shadcn pattern)
+3. Add `color-scheme: light` on `:root`, `color-scheme: dark` on `.dark`
+4. Add FOUC prevention inline script to index.html (read localStorage, apply .dark before paint)
+5. Use @fontsource npm packages for font loading (Vite self-hosts, no CDN dependency)
+6. Migrate StatusBadge.tsx to semantic tokens (`text-status-failed` instead of `text-red-400 dark:text-red-400`)
+7. Migrate EventStream.tsx step lifecycle events to status tokens; decide on non-status events during planning (keep hardcoded or add event-type tokens)
+8. All OKLCH values for running status must use amber equivalents, not blue as in original research
