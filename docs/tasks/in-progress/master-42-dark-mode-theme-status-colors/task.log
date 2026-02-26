@@ -17,3 +17,7 @@
 [2026-02-26 12:32:53] [INFO] STATE.md updated: phase=research, status=in-progress
 [2026-02-26 12:32:53] [INFO] Auto-updated agent statuses: Tailwind Dark Mode Research: pending -> in-progress, Status Color Tokens Research: pending -> in-progress
 [2026-02-26 12:32:53] [DEBUG] STATE.md atomic write complete
+[2026-02-26 12:33:06] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: research)
+[2026-02-26 12:33:13] [INFO] Task call: ui-design:design-system-architect (phase: research)
+[2026-02-26 12:37:24] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-26 12:38:31] [DEBUG] STATE.md atomic write complete
