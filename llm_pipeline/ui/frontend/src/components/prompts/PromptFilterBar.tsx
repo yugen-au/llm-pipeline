@@ -45,13 +45,14 @@ export function PromptFilterBar({
   return (
     <div className="flex flex-col gap-2 p-3">
       <Input
+        aria-label="Search prompts"
         placeholder="Search prompts..."
         value={searchText}
         onChange={(e) => onSearchChange(e.target.value)}
       />
       <div className="flex items-center gap-2">
         <Select value={typeValue} onValueChange={handleTypeChange}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger aria-label="Filter by prompt type" className="w-full">
             <SelectValue placeholder="All types" />
           </SelectTrigger>
           <SelectContent>
@@ -64,7 +65,7 @@ export function PromptFilterBar({
           </SelectContent>
         </Select>
         <Select value={pipelineValue} onValueChange={handlePipelineChange}>
-          <SelectTrigger className="w-full">
+          <SelectTrigger aria-label="Filter by pipeline" className="w-full">
             <SelectValue placeholder="All pipelines" />
           </SelectTrigger>
           <SelectContent>

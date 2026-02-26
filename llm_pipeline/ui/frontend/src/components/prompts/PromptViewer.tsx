@@ -16,7 +16,7 @@ function highlightVariables(content: string): React.ReactNode[] {
   const parts = content.split(/(\{[a-zA-Z_][a-zA-Z0-9_]*\})/g)
   return parts.map((part, i) =>
     /^\{[a-zA-Z_][a-zA-Z0-9_]*\}$/.test(part) ? (
-      <span key={i} className="rounded bg-blue-900/30 px-0.5 text-blue-400">
+      <span key={i} className="rounded bg-primary/20 px-0.5 text-primary">
         {part}
       </span>
     ) : (
@@ -66,7 +66,7 @@ interface PromptViewerProps {
   promptKey: string | null
 }
 
-function PromptViewer({ promptKey }: PromptViewerProps) {
+export function PromptViewer({ promptKey }: PromptViewerProps) {
   const { data, isLoading, error } = usePromptDetail(promptKey ?? '')
 
   // Empty state -- nothing selected
@@ -135,4 +135,3 @@ function PromptViewer({ promptKey }: PromptViewerProps) {
   )
 }
 
-export { PromptViewer }

@@ -34,3 +34,31 @@ New component with:
 [x] ALL_SENTINEL pattern matches FilterBar.tsx
 [x] Props match PLAN.md Step 2 specification exactly
 [x] shadcn imports from @/components/ui/
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] No accessibility labels on Select dropdowns and search Input
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/prompts/PromptFilterBar.tsx`
+Added aria-label attributes to all interactive controls.
+```
+# Before
+<Input placeholder="Search prompts..." .../>
+<SelectTrigger className="w-full">  <!-- type -->
+<SelectTrigger className="w-full">  <!-- pipeline -->
+
+# After
+<Input aria-label="Search prompts" placeholder="Search prompts..." .../>
+<SelectTrigger aria-label="Filter by prompt type" className="w-full">
+<SelectTrigger aria-label="Filter by pipeline" className="w-full">
+```
+
+### Verification
+[x] ESLint passes with zero errors
+[x] aria-label on search Input
+[x] aria-label on prompt type SelectTrigger
+[x] aria-label on pipeline SelectTrigger

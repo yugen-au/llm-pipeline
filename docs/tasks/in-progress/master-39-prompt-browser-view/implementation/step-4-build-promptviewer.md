@@ -38,3 +38,39 @@ New component with:
 [x] Empty/loading/error states all handled
 [x] Tabs conditional on variants.length > 1
 [x] Imports from established API layer and shadcn components
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - Export style inconsistency: changed from `function PromptViewer` + bottom `export { PromptViewer }` to `export function PromptViewer` at declaration site, matching codebase convention
+[x] LOW - Variable highlighting hardcoded dark theme colors: replaced `bg-blue-900/30 text-blue-400` with semantic tokens `bg-primary/20 text-primary`
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/prompts/PromptViewer.tsx`
+Two fixes applied:
+
+```
+# Before (issue 1)
+function PromptViewer({ promptKey }: PromptViewerProps) {
+...
+export { PromptViewer }
+
+# After (issue 1)
+export function PromptViewer({ promptKey }: PromptViewerProps) {
+// bottom export statement removed
+```
+
+```
+# Before (issue 2)
+<span key={i} className="rounded bg-blue-900/30 px-0.5 text-blue-400">
+
+# After (issue 2)
+<span key={i} className="rounded bg-primary/20 px-0.5 text-primary">
+```
+
+### Verification
+[x] ESLint passes with no errors or warnings
+[x] Export style matches codebase convention (`export function` at declaration)
+[x] Highlight colors use semantic design tokens for theme compatibility
