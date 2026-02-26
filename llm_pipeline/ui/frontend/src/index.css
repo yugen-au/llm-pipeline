@@ -88,7 +88,7 @@
   --status-pending: oklch(0.551 0.018 256.802);
   --status-running: oklch(0.666 0.179 58.318);
   --status-completed: oklch(0.627 0.194 149.214);
-  --status-failed: oklch(0.577 0.245 27.325);
+  --status-failed: var(--destructive);
   --status-skipped: oklch(0.681 0.162 75.834);
 }
 
@@ -128,7 +128,7 @@
   --status-pending: oklch(0.716 0.013 256.788);
   --status-running: oklch(0.828 0.189 84.429);
   --status-completed: oklch(0.765 0.177 163.223);
-  --status-failed: oklch(0.704 0.191 22.216);
+  --status-failed: var(--destructive);
   --status-skipped: oklch(0.795 0.184 86.047);
 }
 

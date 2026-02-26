@@ -93,3 +93,38 @@ None - all values and patterns were pre-defined in PLAN.md.
 [x] --font-mono token in @theme inline block
 [x] Follows existing shadcn two-layer pattern (CSS vars + @theme inline aliases)
 [x] All OKLCH values match PLAN.md Step 1 specification
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Duplicate OKLCH values for --status-failed and --destructive - consolidated --status-failed to reference var(--destructive) in both :root and .dark blocks
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/index.css`
+Replaced duplicate OKLCH literals with var(--destructive) so --status-failed chains through --destructive. If shadcn rebrands --destructive, --status-failed follows automatically.
+
+```
+# Before (:root)
+  --status-failed: oklch(0.577 0.245 27.325);
+
+# After (:root)
+  --status-failed: var(--destructive);
+```
+
+```
+# Before (.dark)
+  --status-failed: oklch(0.704 0.191 22.216);
+
+# After (.dark)
+  --status-failed: var(--destructive);
+```
+
+Token chain: `text-status-failed` -> `--color-status-failed` -> `var(--status-failed)` -> `var(--destructive)` -> OKLCH value from :root or .dark
+
+### Verification
+[x] :root --status-failed now references var(--destructive) instead of duplicate oklch(0.577 0.245 27.325)
+[x] .dark --status-failed now references var(--destructive) instead of duplicate oklch(0.704 0.191 22.216)
+[x] @theme inline alias --color-status-failed unchanged (still var(--status-failed))
+[x] No other tokens affected
