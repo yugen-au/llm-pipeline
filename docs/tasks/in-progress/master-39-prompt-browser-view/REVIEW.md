@@ -72,3 +72,42 @@ None
 ## Recommendation
 **Decision:** APPROVE
 All implementation steps are architecturally sound and follow codebase conventions. The two medium issues (export style, useMemo dependency stability) are minor consistency/optimization concerns that do not affect correctness or user experience. The low issues (hardcoded theme colors, missing a11y labels) are pre-existing patterns in the codebase. No blocking changes required.
+
+---
+
+# Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+All 4 issues from initial review resolved correctly. No new issues introduced by the fixes.
+
+## Issue Resolution Verification
+
+### MEDIUM - Step 4: PromptViewer export style -- RESOLVED
+Line 69 now reads `export function PromptViewer(...)` at the declaration site. Matches project convention exactly. The trailing `export { }` block is removed. File ends cleanly at line 138 (blank line after closing brace).
+
+### MEDIUM - Step 5: useMemo dependency re-render churn -- RESOLVED
+`useQueries` now uses `combine` option (line 85) with a `useCallback`-wrapped `combinePipelineMeta` function (lines 52-77). The `combine` callback receives query results and returns a structurally-shared `Map<string, string[]>` directly. `promptKeyToPipelines` is now the Map itself (not an array of query results), so the downstream `filteredPrompts` useMemo (line 127) depends on a stable reference that only changes when actual pipeline data changes. The `useCallback` dependency on `pipelineNames` is correct since pipeline names determine the index-to-name mapping.
+
+### LOW - Step 4: Variable highlighting hardcoded theme colors -- RESOLVED
+Line 19 now uses `bg-primary/20 text-primary` (semantic design tokens) instead of `bg-blue-900/30 text-blue-400`. These tokens adapt to both light and dark themes automatically via CSS custom properties.
+
+### LOW - Step 2: Missing a11y labels on PromptFilterBar -- RESOLVED
+- Input (line 48): `aria-label="Search prompts"`
+- Type Select trigger (line 55): `aria-label="Filter by prompt type"`
+- Pipeline Select trigger (line 68): `aria-label="Filter by pipeline"`
+All three interactive elements now have proper accessible names for screen readers.
+
+## Files Re-Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/ui/frontend/src/components/prompts/PromptFilterBar.tsx` | pass | 3 aria-label attributes added correctly |
+| `llm_pipeline/ui/frontend/src/components/prompts/PromptViewer.tsx` | pass | Export style fixed, semantic color tokens applied |
+| `llm_pipeline/ui/frontend/src/routes/prompts.tsx` | pass | combine option stabilizes Map reference; useCallback deps correct |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All 4 issues fully resolved. Implementation is clean and consistent with codebase conventions. No further changes needed.
