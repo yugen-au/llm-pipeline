@@ -118,3 +118,24 @@ None
 1. Proceed to review phase - all automated checks pass, build is clean.
 2. Visual validation of FOUC behavior requires interactive browser testing; consider including in PM sign-off checklist.
 3. Future task: define `--event-type-*` tokens for non-status EventStream events (llm_call, extraction, transformation, context) to eliminate remaining hardcoded `dark:` prefix classes noted in PLAN.md risks.
+
+---
+
+## Re-run: Post-Review Fix Verification
+
+**Trigger:** Review change - `--status-failed` in `:root` and `.dark` blocks now references `var(--destructive)` instead of duplicating OKLCH values.
+
+### Change Verified
+`src/index.css` `:root` block: `--status-failed: var(--destructive)` (was `oklch(0.577 0.245 27.325)`)
+`src/index.css` `.dark` block: `--status-failed: var(--destructive)` (was `oklch(0.704 0.191 22.216)`)
+`@theme inline`: `--color-status-failed: var(--status-failed)` unchanged (resolves transitively to `--destructive`)
+
+### Build Result
+```
+npm run build: tsc -b && vite build
+2106 modules transformed
+built in 5.86s
+0 errors, 0 warnings
+```
+
+**Status:** passed - build succeeds with the `var(--destructive)` reference change.
