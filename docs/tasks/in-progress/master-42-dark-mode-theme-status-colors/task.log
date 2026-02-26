@@ -5,3 +5,15 @@
 [2026-02-26 12:02:39] [INFO] Created: STATE.md
 [2026-02-26 12:02:39] [INFO] ============================================================
 [2026-02-26 12:02:40] [DEBUG] STATE.md atomic write complete
+[2026-02-26 12:17:09] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-26 12:17:27] [ERROR] BLOCKED: Cannot enter research: no agents in table
+[2026-02-26 12:17:34] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-26 12:17:40] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-26 12:17:52] [ERROR] BLOCKED: Invalid AgentRow 'Tailwind Dark Mode Research': skills: Skill must be '-' or 'plugin:skill' format, commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-26 12:17:59] [ERROR] BLOCKED: Invalid AgentRow 'Status Color Tokens Research': skills: Skill must be '-' or 'plugin:skill' format
+[2026-02-26 12:18:08] [ERROR] BLOCKED: Invalid skill 'frontend-mobile-development:tailwind-design-system': skill 'tailwind-design-system' not found in 'frontend-mobile-development'
+[2026-02-26 12:18:49] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-26 12:32:45] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-26 12:32:53] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-26 12:32:53] [INFO] Auto-updated agent statuses: Tailwind Dark Mode Research: pending -> in-progress, Status Color Tokens Research: pending -> in-progress
+[2026-02-26 12:32:53] [DEBUG] STATE.md atomic write complete
