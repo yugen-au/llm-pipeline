@@ -56,3 +56,38 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is clean, follows the plan exactly, respects architectural boundaries (shadcn pattern, scope exclusions), and introduces no regressions. The medium-severity duplicate OKLCH observation is informational and non-blocking.
+
+---
+
+# Re-Review (post-fix)
+
+## Overall Assessment
+**Status:** complete
+Previous medium issue resolved. `--status-failed` now aliases `var(--destructive)` in both `:root` (line 91) and `.dark` (line 131), eliminating OKLCH duplication. The token will automatically track any future `--destructive` changes. No new issues introduced by the fix.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None (previous duplicate OKLCH issue resolved)
+
+### Low
+#### BadgeVariant type in EventStream includes unused variants for migrated branches
+**Step:** 5
+**Details:** Carried forward from initial review. `'destructive'` variant unused by any branch but retained for type breadth. Cosmetic only.
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/frontend/src/index.css | pass | Lines 91 and 131: `--status-failed: var(--destructive)` confirmed in both :root and .dark. No raw OKLCH duplication remains. |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previous issues resolved. Implementation is clean with no remaining concerns beyond the cosmetic low-severity type observation.
