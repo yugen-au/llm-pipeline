@@ -20,3 +20,8 @@
 | Status Color Tokens Research | ui-design:design-system-architect | research | 2 | ui-design:design-system-patterns | A | complete | 0 | a3848fc55a250fce9 | fb8e9e6 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a886201691a899de7 | ad4acda | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | ab06d5f4dd02cf17b | pending | - |
+| Status Tokens and Color-Scheme | frontend-mobile-development:frontend-developer | implementation | 1 | frontend-mobile-development:tailwind-design-system | A | pending | 0 | pending | pending | /websites/tailwindcss |
+| FOUC Script | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| Fontsource Install | frontend-mobile-development:frontend-developer | implementation | 3 | - | A | pending | 0 | pending | pending | - |
+| StatusBadge Migration | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| EventStream Migration | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | pending | 0 | pending | pending | - |
