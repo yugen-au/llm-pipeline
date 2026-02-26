@@ -90,3 +90,38 @@ None of these are in files created or modified by this implementation.
 1. Run manual validation steps above when backend `/api/prompts` and `/api/pipelines/{name}` endpoints are available (backend task 22).
 2. Consider adding vitest unit tests for `highlightVariables()` helper (pure function, easy to test) and `PromptList`/`PromptFilterBar` components following the existing `FilterBar.test.tsx` pattern.
 3. Address pre-existing `react-hooks/set-state-in-effect` error in `src/routes/live.tsx` in a separate task to unblock `npm run lint` passing with `--max-warnings=0`.
+
+---
+
+## Re-verification After Review Fixes
+
+**Date:** 2026-02-26
+**Trigger:** Three files modified during fixing-review phase:
+- `PromptFilterBar.tsx` -- aria-labels added to Select dropdowns and Input
+- `PromptViewer.tsx` -- changed to `export function` declaration, replaced hardcoded colors with semantic tokens
+- `prompts.tsx` -- stabilized `useQueries` dependency via `combine` option
+
+### Build Verification
+- [x] TypeScript type-check (`npm run type-check`) -- zero errors, clean exit
+- [x] Vite production build (`npm run build`) -- succeeded, 2105 modules transformed, built in 5.63s
+- [x] ESLint on three modified files -- zero errors, zero warnings
+- [x] All 91 vitest tests pass, 9 test files
+
+### Test Execution
+**Pass Rate:** 91/91 tests
+```
+ ✓ src/test/smoke.test.ts (2 tests) 11ms
+ ✓ src/lib/time.test.ts (24 tests) 61ms
+ ✓ src/components/runs/StatusBadge.test.tsx (5 tests) 121ms
+ ✓ src/components/runs/ContextEvolution.test.tsx (6 tests) 394ms
+ ✓ src/components/runs/StepTimeline.test.tsx (14 tests) 354ms
+ ✓ src/components/runs/Pagination.test.tsx (12 tests) 521ms
+ ✓ src/components/runs/RunsTable.test.tsx (12 tests) 580ms
+ ✓ src/components/runs/FilterBar.test.tsx (6 tests) 902ms
+ ✓ src/components/runs/StepDetailPanel.test.tsx (10 tests) 1033ms
+
+ Test Files  9 passed (9)
+       Tests  91 passed (91)
+```
+
+**Re-verification Status:** passed -- no regressions introduced by review fixes.
