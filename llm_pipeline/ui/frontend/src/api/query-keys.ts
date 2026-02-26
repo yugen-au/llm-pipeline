@@ -24,6 +24,7 @@ export const queryKeys = {
   prompts: {
     all: ['prompts'] as const,
     list: (filters: Partial<PromptListParams>) => ['prompts', filters] as const,
+    detail: (key: string) => ['prompts', key] as const,
   },
   pipelines: {
     all: ['pipelines'] as const,
