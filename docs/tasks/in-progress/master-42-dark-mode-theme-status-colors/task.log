@@ -148,3 +148,10 @@
 [2026-02-27 10:10:48] [ERROR] BLOCKED: Expected one of ['code-documentation:docs-architect']. Got: planning
 [2026-02-27 10:10:56] [INFO] Task call: code-documentation:docs-architect (phase: summary)
 [2026-02-27 10:16:10] [DEBUG] STATE.md atomic write complete
+[2026-02-27 10:18:52] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-27 10:19:09] [INFO] Already committed summary-A: ['SUMMARY.md']
+[2026-02-27 10:19:12] [INFO] STATE.md updated: phase=pending-merge, status=in-progress
+[2026-02-27 10:19:12] [INFO] Updated Commits for 'Create summary': 8b9b03a
+[2026-02-27 10:19:12] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
+[2026-02-27 10:19:12] [INFO] Deleted 1 old contract file(s)
+[2026-02-27 10:19:12] [DEBUG] STATE.md atomic write complete
