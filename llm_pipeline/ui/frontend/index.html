@@ -4,6 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>llm-pipeline</title>
+    <script>
+      try {
+        var s = JSON.parse(localStorage.getItem('llm-pipeline-ui'))
+        if (!s || !s.state || s.state.theme !== 'light')
+          document.documentElement.classList.add('dark')
+      } catch(e) { document.documentElement.classList.add('dark') }
+    </script>
   </head>
   <body>
     <div id="root"></div>
