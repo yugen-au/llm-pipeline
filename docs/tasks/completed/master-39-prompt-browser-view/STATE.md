@@ -1,7 +1,7 @@
 ## Task: master-39-prompt-browser-view
 ## Description: Implement Prompt Browser view with template listing, variable highlighting, filtering, and prompt detail viewer
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
