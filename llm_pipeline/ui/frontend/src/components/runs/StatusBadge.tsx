@@ -2,28 +2,28 @@ import type { RunStatus } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
-type BadgeConfig = { variant: 'outline' | 'destructive' | 'secondary'; className: string }
+type BadgeConfig = { variant: 'outline'; className: string }
 
 const statusConfig: Record<string, BadgeConfig> = {
   running: {
     variant: 'outline',
-    className: 'border-amber-500 text-amber-600 dark:text-amber-400',
+    className: 'border-status-running text-status-running',
   },
   completed: {
     variant: 'outline',
-    className: 'border-green-500 text-green-600 dark:text-green-400',
+    className: 'border-status-completed text-status-completed',
   },
   failed: {
-    variant: 'destructive',
-    className: '',
+    variant: 'outline',
+    className: 'border-status-failed text-status-failed',
   },
   skipped: {
-    variant: 'secondary',
-    className: 'text-muted-foreground',
+    variant: 'outline',
+    className: 'border-status-skipped text-status-skipped',
   },
   pending: {
-    variant: 'secondary',
-    className: 'text-muted-foreground',
+    variant: 'outline',
+    className: 'border-status-pending text-status-pending',
   },
 }
 

@@ -30,16 +30,16 @@ interface EventBadgeConfig {
 /** Map event_type prefixes/names to badge styling. */
 function getEventBadgeConfig(eventType: string): EventBadgeConfig {
   if (eventType.startsWith('step_started')) {
-    return { variant: 'outline', className: 'border-blue-500 text-blue-600 dark:text-blue-400' }
+    return { variant: 'outline', className: 'border-status-running text-status-running' }
   }
   if (eventType.startsWith('step_completed')) {
-    return { variant: 'outline', className: 'border-green-500 text-green-600 dark:text-green-400' }
+    return { variant: 'outline', className: 'border-status-completed text-status-completed' }
   }
   if (eventType.startsWith('step_failed') || eventType.startsWith('pipeline_failed')) {
-    return { variant: 'destructive', className: '' }
+    return { variant: 'outline', className: 'border-status-failed text-status-failed' }
   }
   if (eventType.startsWith('step_skipped')) {
-    return { variant: 'secondary', className: 'text-muted-foreground' }
+    return { variant: 'outline', className: 'border-status-skipped text-status-skipped' }
   }
   if (eventType.startsWith('llm_call')) {
     return { variant: 'outline', className: 'border-purple-500 text-purple-600 dark:text-purple-400' }
