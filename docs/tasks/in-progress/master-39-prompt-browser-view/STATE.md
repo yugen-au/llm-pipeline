@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/master/39-prompt-browser-view
 ## Plugins: frontend-mobile-development, backend-development
@@ -21,7 +21,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 0 | ab8b1eb5b33550be1 | 95e9c05 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aa854895e22a4aae9 | 6ffddf9 | - |
 | Extend API Layer | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | af11e095dcfd619a3 | 97f650a | /tanstack/query |
-| Build PromptFilterBar | frontend-mobile-development:frontend-developer | implementation | 2 | - | B | complete | 0 | a44070ff715f0e749 | 90db917 | /tanstack/router |
-| Build PromptList | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | a8bd09b90449245b8 | 255c42a | - |
+| Build PromptFilterBar | frontend-mobile-development:frontend-developer | implementation | 2 | - | B | complete | 0 | a44070ff715f0e749 | 90db917,4321db3 | /tanstack/router |
+| Build PromptList | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | a8bd09b90449245b8 | 255c42a,4321db3 | - |
 | Build PromptViewer | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | a11d535ff7c4a9932 | 4321db3 | - |
-| Implement PromptsPage Route | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | pending | 0 | pending | pending | /tanstack/router,/tanstack/query |
+| Implement PromptsPage Route | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | in-progress | 0 | pending | pending | /tanstack/router,/tanstack/query |
