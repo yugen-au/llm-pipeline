@@ -71,3 +71,6 @@
 [2026-02-27 17:19:28] [INFO] Task call: python-development:python-pro (phase: implementation)
 [2026-02-27 17:24:07] [ERROR] BLOCKED: Invalid commit message format
 [2026-02-27 17:24:33] [DEBUG] STATE.md atomic write complete
+[2026-02-27 17:26:19] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-02-27 17:27:22] [ERROR] BLOCKED: Invalid commit message format
+[2026-02-27 17:29:38] [DEBUG] STATE.md atomic write complete
