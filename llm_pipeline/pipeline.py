@@ -197,6 +197,9 @@ class PipelineConfig(ABC):
         self.data = StepKeyDict()
         self.extractions: Dict[Type[SQLModel], List[SQLModel]] = {}
 
+        # Validated input (populated by execute() when INPUT_DATA declared)
+        self._validated_input = None
+
         # Execution tracking
         self._step_order: Dict[Type, int] = {}
         self._model_extraction_step: Dict[Type[SQLModel], Type] = {}
@@ -243,6 +246,11 @@ class PipelineConfig(ABC):
     def context(self) -> Dict[str, Any]:
         """Read-write access to derived context values."""
         return self._context
+
+    @property
+    def validated_input(self) -> Any:
+        """Validated input data from execute(input_data=...). Returns PipelineInputData instance if INPUT_DATA declared, raw dict otherwise, None if not provided."""
+        return self._validated_input
 
     @property
     def pipeline_name(self) -> str:

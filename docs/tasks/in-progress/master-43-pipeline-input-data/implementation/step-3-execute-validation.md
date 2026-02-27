@@ -90,3 +90,54 @@ def execute(
 [x] _validated_input stores validated model instance (or raw dict if no schema)
 [x] Syntax check passes (ast.parse)
 [x] Backward compatible -- input_data defaults to None, existing calls unaffected
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] _validated_input stored on pipeline but not exposed to steps -- added public `validated_input` property
+[x] No unit tests for execute() input_data validation -- added 12 tests in 2 new test classes
+
+### Changes Made
+#### File: `llm_pipeline/pipeline.py`
+Added `_validated_input = None` init in `__init__()` and public `validated_input` property.
+
+```
+# Before (__init__, after self._context init)
+        # Execution tracking
+
+# After
+        # Validated input (populated by execute() when INPUT_DATA declared)
+        self._validated_input = None
+
+        # Execution tracking
+```
+
+```
+# Before (after context property)
+    @property
+    def pipeline_name(self) -> str:
+
+# After
+    @property
+    def validated_input(self) -> Any:
+        """Validated input data from execute(input_data=...). Returns PipelineInputData instance if INPUT_DATA declared, raw dict otherwise, None if not provided."""
+        return self._validated_input
+
+    @property
+    def pipeline_name(self) -> str:
+```
+
+#### File: `tests/test_pipeline_input_data.py`
+Added imports, test infrastructure (MockProvider, EmptyStrategy, two pipeline classes with matching registry/strategies), and two test classes:
+
+- `TestExecuteInputDataValidation` (8 tests): raises on None input, raises on empty dict, valid input succeeds, schema mismatch error, missing required field error, error includes pipeline name, no-schema pipeline skips validation, no-schema pipeline stores raw dict
+- `TestValidatedInputProperty` (4 tests): returns PydanticModel after execute, returns None before execute, returns None when no schema and no input, returns raw dict when no schema
+
+### Verification
+[x] All 35 tests in test_pipeline_input_data.py pass
+[x] Full test suite: 803 passed, 1 pre-existing failure (unrelated test_ui.py events router prefix)
+[x] validated_input property accessible on pipeline instance before and after execute()
+[x] _validated_input initialized in __init__ prevents AttributeError before execute()
+[x] Syntax check passes

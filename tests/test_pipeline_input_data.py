@@ -1,13 +1,19 @@
 """
-Tests for PipelineInputData base class and INPUT_DATA type guard.
+Tests for PipelineInputData base class, INPUT_DATA type guard, and execute() validation.
 """
-from typing import ClassVar, Optional, Type
+import json
+from typing import Any, ClassVar, Dict, List, Optional, Type
 
 import pytest
 from pydantic import BaseModel, ValidationError
+from sqlmodel import SQLModel, Field, Session, create_engine
 
 from llm_pipeline.context import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
+from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
+from llm_pipeline.registry import PipelineDatabaseRegistry
+from llm_pipeline.llm.provider import LLMProvider
+from llm_pipeline.llm.result import LLMCallResult
 
 
 class TestPipelineInputDataBase:
@@ -186,3 +192,157 @@ class TestInputDataTypeGuard:
         with pytest.raises(TypeError, match="NamedBadPipeline"):
             class NamedBadPipeline(PipelineConfig):
                 INPUT_DATA: ClassVar[Optional[Type[PipelineInputData]]] = str
+
+
+# ---------- Execute validation test infrastructure ----------
+
+class OrderInput(PipelineInputData):
+    order_id: str
+    quantity: int
+
+
+class MockProvider(LLMProvider):
+    """Minimal mock provider for validation tests."""
+
+    def call_structured(self, prompt, system_instruction, result_class, **kwargs):
+        return LLMCallResult(
+            parsed=None, raw_response="", model_name="mock", attempt_count=1,
+            validation_errors=[],
+        )
+
+
+class EmptyStrategy(PipelineStrategy):
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return []
+
+
+class _DummyModel(SQLModel, table=True):
+    __tablename__ = "input_data_test_dummy"
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+
+class ValidateRegistry(PipelineDatabaseRegistry, models=[_DummyModel]):
+    pass
+
+
+class ValidateStrategies(PipelineStrategies, strategies=[EmptyStrategy]):
+    pass
+
+
+class ValidatePipeline(PipelineConfig, registry=ValidateRegistry, strategies=ValidateStrategies):
+    INPUT_DATA: ClassVar[Optional[Type[PipelineInputData]]] = OrderInput
+
+
+class NoInputRegistry(PipelineDatabaseRegistry, models=[_DummyModel]):
+    pass
+
+
+class NoInputStrategies(PipelineStrategies, strategies=[EmptyStrategy]):
+    pass
+
+
+class NoInputPipeline(PipelineConfig, registry=NoInputRegistry, strategies=NoInputStrategies):
+    """Pipeline without INPUT_DATA -- no validation enforced."""
+    pass
+
+
+@pytest.fixture
+def input_engine():
+    eng = create_engine("sqlite:///:memory:", echo=False)
+    SQLModel.metadata.create_all(eng)
+    return eng
+
+
+@pytest.fixture
+def input_session(input_engine):
+    with Session(input_engine) as sess:
+        yield sess
+
+
+# ---------- Execute validation tests ----------
+
+class TestExecuteInputDataValidation:
+    """execute() validates input_data against INPUT_DATA schema."""
+
+    def test_raises_when_input_data_none(self, input_session):
+        """ValueError when INPUT_DATA declared but input_data not provided."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        with pytest.raises(ValueError, match="requires input_data"):
+            pipeline.execute(data="x")
+
+    def test_raises_when_input_data_empty_dict(self, input_session):
+        """ValueError when INPUT_DATA declared and input_data is empty dict."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        with pytest.raises(ValueError, match="requires input_data"):
+            pipeline.execute(data="x", input_data={})
+
+    def test_valid_input_succeeds(self, input_session):
+        """Valid input_data passes validation and execute completes."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        result = pipeline.execute(
+            data="x", input_data={"order_id": "ORD-1", "quantity": 5}
+        )
+        assert result is pipeline
+
+    def test_raises_on_schema_mismatch(self, input_session):
+        """ValueError on input_data that doesn't match INPUT_DATA schema."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        with pytest.raises(ValueError, match="input_data validation failed"):
+            pipeline.execute(data="x", input_data={"order_id": "ORD-1", "quantity": "bad"})
+
+    def test_raises_on_missing_required_field(self, input_session):
+        """ValueError when required field missing from input_data."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        with pytest.raises(ValueError, match="input_data validation failed"):
+            pipeline.execute(data="x", input_data={"order_id": "ORD-1"})
+
+    def test_error_includes_pipeline_name(self, input_session):
+        """Error message includes pipeline name for debugging."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        with pytest.raises(ValueError, match="validate"):
+            pipeline.execute(data="x", input_data={})
+
+    def test_no_input_data_pipeline_skips_validation(self, input_session):
+        """Pipeline without INPUT_DATA executes fine without input_data."""
+        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        result = pipeline.execute(data="x")
+        assert result is pipeline
+
+    def test_no_input_data_pipeline_accepts_raw_dict(self, input_session):
+        """Pipeline without INPUT_DATA stores raw dict as validated_input."""
+        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline.execute(data="x", input_data={"arbitrary": "data"})
+        assert pipeline.validated_input == {"arbitrary": "data"}
+
+
+class TestValidatedInputProperty:
+    """validated_input property exposes validated data to steps."""
+
+    def test_returns_pydantic_model_after_execute(self, input_session):
+        """validated_input returns PipelineInputData instance after valid execute."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline.execute(data="x", input_data={"order_id": "ORD-1", "quantity": 5})
+        result = pipeline.validated_input
+        assert isinstance(result, OrderInput)
+        assert result.order_id == "ORD-1"
+        assert result.quantity == 5
+
+    def test_returns_none_before_execute(self, input_session):
+        """validated_input is None before execute() is called."""
+        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        assert pipeline.validated_input is None
+
+    def test_returns_none_when_no_input_data_and_no_schema(self, input_session):
+        """validated_input is None when no INPUT_DATA and no input_data provided."""
+        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline.execute(data="x")
+        assert pipeline.validated_input is None
+
+    def test_returns_raw_dict_when_no_schema(self, input_session):
+        """validated_input returns raw dict when INPUT_DATA not declared."""
+        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline.execute(data="x", input_data={"key": "val"})
+        assert pipeline.validated_input == {"key": "val"}
