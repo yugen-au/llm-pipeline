@@ -1,18 +1,21 @@
 ## Task: master-56-perf-benchmarking
-## Description: pending
+## Description: Benchmark event system overhead and API response times against NFR targets. Create tests/benchmarks/, optimize queries with proper indexes if benchmarks fail.
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/56-perf-benchmarking
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: application-performance, python-development, backend-development
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Work Mode: pending
-## Last Updated: 2026-02-27 14:03
+## Work Mode: standard
+## Last Updated: 2026-02-27 14:42
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| perf-patterns | application-performance:performance-engineer | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| pytest-bench | python-development:python-pro | research | 2 | - | A | in-progress | 0 | - | pending | - |
+| api-bench | backend-development:backend-architect | research | 3 | - | A | in-progress | 0 | - | pending | - |

@@ -5,3 +5,11 @@
 [2026-02-27 14:03:36] [INFO] Created: STATE.md
 [2026-02-27 14:03:36] [INFO] ============================================================
 [2026-02-27 14:03:37] [DEBUG] STATE.md atomic write complete
+[2026-02-27 14:41:50] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-02-27 14:42:10] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-27 14:42:15] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-27 14:42:33] [ERROR] BLOCKED: Invalid AgentRow 'perf-patterns': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-02-27 14:42:41] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-02-27 14:42:48] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-02-27 14:42:48] [INFO] Auto-updated agent statuses: perf-patterns: pending -> in-progress, pytest-bench: pending -> in-progress, api-bench: pending -> in-progress
+[2026-02-27 14:42:48] [DEBUG] STATE.md atomic write complete
