@@ -1,7 +1,7 @@
 ## Task: master-43-pipeline-input-data
 ## Description: Create PipelineInputData Pydantic base class for declaring pipeline input schemas, enabling UI form generation. Add INPUT_DATA ClassVar to PipelineConfig, validate input data in execute().
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
