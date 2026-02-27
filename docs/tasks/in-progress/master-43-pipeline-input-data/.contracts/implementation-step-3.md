@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-43-pipeline-input-data
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-1-base-class.md (if already exists, APPEND to file)
+- Output Files: implementation\step-3-execute-validation.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 1
+- Step to fix: 3
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. Context7 library IDs to query: /pydantic/pydantic
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 1
+1. Read REVIEW.md for issues assigned to Step 3
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-1-base-class.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-3-execute-validation.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
