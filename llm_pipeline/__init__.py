@@ -19,7 +19,7 @@ Usage::
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.step import LLMStep, LLMResultMixin, step_definition
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies, StepDefinition
-from llm_pipeline.context import PipelineContext
+from llm_pipeline.context import PipelineContext, PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.registry import PipelineDatabaseRegistry
@@ -48,6 +48,7 @@ __all__ = [
     "StepDefinition",
     # Data handling
     "PipelineContext",
+    "PipelineInputData",
     "PipelineExtraction",
     "PipelineTransformation",
     "PipelineDatabaseRegistry",
