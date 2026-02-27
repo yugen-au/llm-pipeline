@@ -95,11 +95,7 @@ def list_pipelines(request: Request) -> PipelineListResponse:
             step_count = sum(len(s.get("steps", [])) for s in strategies)
             registry_models = metadata.get("registry_models", [])
 
-            has_input_schema = any(
-                step.get("instructions_schema") is not None
-                for strategy in strategies
-                for step in strategy.get("steps", [])
-            )
+            has_input_schema = metadata.get("pipeline_input_schema") is not None
 
             items.append(PipelineListItem(
                 name=name,
