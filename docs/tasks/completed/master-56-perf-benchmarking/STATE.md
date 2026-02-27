@@ -1,7 +1,7 @@
 ## Task: master-56-perf-benchmarking
 ## Description: Benchmark event system overhead and API response times against NFR targets. Create tests/benchmarks/, optimize queries with proper indexes if benchmarks fail.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
