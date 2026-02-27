@@ -26,7 +26,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
 
@@ -436,6 +436,7 @@ class PipelineConfig(ABC):
         self,
         data: Any = None,
         initial_context: Optional[Dict[str, Any]] = None,
+        input_data: Optional[Dict[str, Any]] = None,
         use_cache: bool = False,
         consensus_polling: Optional[Dict[str, Any]] = None,
     ) -> "PipelineConfig":
@@ -471,6 +472,24 @@ class PipelineConfig(ABC):
                     raise ValueError("consensus_threshold must be >= 2")
                 if maximum_step_calls < consensus_threshold:
                     raise ValueError("maximum_step_calls must be >= consensus_threshold")
+
+        # Validate input_data against INPUT_DATA schema if declared
+        cls = self.__class__
+        self._validated_input = None
+        if cls.INPUT_DATA is not None:
+            if input_data is None or not input_data:
+                raise ValueError(
+                    f"Pipeline '{self.pipeline_name}' requires input_data "
+                    f"matching {cls.INPUT_DATA.__name__} schema but none provided"
+                )
+            try:
+                self._validated_input = cls.INPUT_DATA.model_validate(input_data)
+            except ValidationError as e:
+                raise ValueError(
+                    f"Pipeline '{self.pipeline_name}' input_data validation failed: {e}"
+                ) from e
+        elif input_data is not None:
+            self._validated_input = input_data
 
         self._context = initial_context.copy()
         self.data = {"raw": data, "sanitized": self.sanitize(data)}
