@@ -195,7 +195,7 @@ class PipelineIntrospector:
         """Full pipeline metadata (cached by pipeline class identity).
 
         Returns dict with keys: ``pipeline_name``, ``registry_models``,
-        ``strategies``, ``execution_order``.
+        ``strategies``, ``execution_order``, ``pipeline_input_schema``.
         """
         cache_key = id(self._pipeline_cls)
         if cache_key in self._cache:
@@ -252,11 +252,17 @@ class PipelineIntrospector:
                     seen_step_classes.add(sc)
                     execution_order.append(self._step_name(sc))
 
+        # Pipeline input schema (from INPUT_DATA ClassVar if declared)
+        pipeline_input_schema = self._get_schema(
+            getattr(self._pipeline_cls, "INPUT_DATA", None)
+        )
+
         metadata: Dict[str, Any] = {
             "pipeline_name": pipeline_name,
             "registry_models": registry_models,
             "strategies": strategies,
             "execution_order": execution_order,
+            "pipeline_input_schema": pipeline_input_schema,
         }
 
         self._cache[cache_key] = metadata
