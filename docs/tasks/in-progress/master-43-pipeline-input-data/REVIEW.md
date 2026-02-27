@@ -69,3 +69,61 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Implementation is architecturally sound and follows all codebase conventions. Two medium issues: (1) _validated_input is stored but unreachable by steps -- acceptable if deferred to a follow-up task, needs explicit acknowledgment; (2) core INPUT_DATA behaviors lack direct unit tests -- the UI tests provide indirect coverage but dedicated tests for the type guard, missing-input error, invalid-input error, and valid-input success paths should be added before merge or tracked as immediate follow-up task.
+
+---
+
+# Architecture Re-Review (Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+Both medium issues from initial review fully resolved. The `validated_input` property follows the existing `instructions`/`context` property pattern on PipelineConfig. Test coverage is thorough with 26 test cases across 5 test classes covering base class, subclassing, schema generation, type guard, execute validation, and property access.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Tests pass | pass | All new tests verified passing by test automator |
+| Error handling present | pass | Property returns None pre-execute -- safe default, no exception |
+| No hardcoded values | pass | Test fixtures use in-memory SQLite, no hardcoded paths |
+| Project conventions followed | pass | Property placement between `context` and `pipeline_name` -- consistent ordering |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None -- both prior medium issues resolved.
+
+### Low
+#### Return type annotation is `Any` instead of `Optional[Union[PipelineInputData, Dict]]`
+**Step:** 3
+**Details:** `validated_input` property has return type `Any`. The docstring correctly describes the three states (PipelineInputData instance, raw dict, None), but the type annotation doesn't encode this. A more precise type like `Optional[Union[PipelineInputData, Dict[str, Any]]]` would improve IDE autocompletion and static analysis. Low severity because the docstring is accurate and `Any` is not incorrect.
+
+#### Test file uses broad imports
+**Step:** 1, 2, 3
+**Details:** `tests/test_pipeline_input_data.py` imports `json`, `List`, `Dict`, `Type` which are unused in the test body. Minor lint issue, no functional impact.
+
+## Review Checklist
+[x] Architecture patterns followed -- `validated_input` property mirrors `instructions`/`context` property pattern
+[x] Code quality and maintainability -- property is read-only, docstring describes all return states
+[x] Error handling present -- returns None before execute() rather than raising
+[x] No hardcoded values
+[x] Project conventions followed -- property positioned correctly in property block
+[x] Security considerations -- read-only property, no mutation path
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- simple property, no unnecessary abstraction
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/pipeline.py | pass | `validated_input` property at L250-253, clean read-only accessor, `_validated_input` init at L201 |
+| tests/test_pipeline_input_data.py | pass | 26 tests across 5 classes: base, subclassing, schema, type guard, execute validation, property access |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+Both medium issues from initial review fully addressed. Property follows existing codebase patterns. Test coverage is comprehensive -- covers happy path, error paths, edge cases (pre-execute access, no-schema passthrough, instance rejection in type guard). Two low issues remain from initial review (empty dict rejection, cache fragility) plus two new lows (Any return type, unused imports) -- none warrant blocking merge.
