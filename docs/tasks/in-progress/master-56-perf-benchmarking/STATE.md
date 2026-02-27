@@ -21,3 +21,8 @@
 | api-bench | backend-development:backend-architect | research | 3 | - | A | complete | 0 | a1c82e1 | 366d628 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | af74fe5 | 20a1fec | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | ae29b88 | pending | - |
+| pytest-bench-dep | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| db-indexes | python-development:python-pro | implementation | 2 | - | A | pending | 0 | pending | pending | /sqlmodel/tiangolo,/sqlalchemy/sqlalchemy |
+| bench-infra | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest-benchmark |
+| event-benchmarks | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | /pytest-dev/pytest-benchmark |
+| query-benchmarks | python-development:python-pro | implementation | 5 | - | C | pending | 0 | pending | pending | /pytest-dev/pytest-benchmark,/sqlmodel/tiangolo |
