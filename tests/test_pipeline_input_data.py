@@ -1,12 +1,13 @@
 """
-Tests for PipelineInputData base class.
+Tests for PipelineInputData base class and INPUT_DATA type guard.
 """
-from typing import Optional
+from typing import ClassVar, Optional, Type
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
 from llm_pipeline.context import PipelineInputData
+from llm_pipeline.pipeline import PipelineConfig
 
 
 class TestPipelineInputDataBase:
