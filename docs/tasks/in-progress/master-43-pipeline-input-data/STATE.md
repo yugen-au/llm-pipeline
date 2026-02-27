@@ -1,7 +1,7 @@
 ## Task: master-43-pipeline-input-data
 ## Description: Create PipelineInputData Pydantic base class for declaring pipeline input schemas, enabling UI form generation. Add INPUT_DATA ClassVar to PipelineConfig, validate input data in execute().
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -27,5 +27,5 @@
 | UI Pipelines Route | python-development:python-pro | implementation | 5 | - | C | complete | 1 | ab3a98a | e704be4,96f1ce2,9f106dc | - |
 | UI Runs Route | backend-development:backend-architect | implementation | 6 | - | C | complete | 1 | aafd2a9 | d33a7db,96f1ce2,2581ae9 | - |
 | Package Exports | python-development:python-pro | implementation | 7 | - | C | complete | 0 | af779af | e704be4,96f1ce2 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 2 | a9571fc | 5de9993,836044b | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | aa29f64 | 7243a1a | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 2 | a9571fc | 5de9993,836044b,0089bf6 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | aa29f64 | 7243a1a | - |
