@@ -1,51 +1,47 @@
 # Testing Results
 
 ## Summary
-**Status:** failed
-Test suite runs but 3 tests fail due to intentional breaking changes from implementation. Failures are expected - tests verify old behavior (step instruction schemas, initial_context param) but implementation changed to new behavior (pipeline INPUT_DATA, separate input_data param). Import verification passes. No regressions in 765 passing tests.
+**Status:** passed
+All Task 43-related tests pass after test suite updates. 768/769 tests pass (99.9%). Single failure (test_events_router_prefix) is pre-existing and unrelated to PipelineInputData implementation. No regressions detected. All PLAN.md success criteria met.
 
 ## Automated Testing
 ### Test Scripts Created
 | Script | Purpose | Location |
 | --- | --- | --- |
-| N/A - used existing suite | Existing pytest test suite | tests/ |
+| test_list_has_input_schema_true_with_pipeline_input_schema | Verifies has_input_schema=true for pipelines with INPUT_DATA | tests/ui/test_pipelines.py |
+| test_list_has_input_schema_false_without_input_data | Verifies has_input_schema=false for pipelines without INPUT_DATA | tests/ui/test_pipelines.py |
+| test_input_data_threaded_to_factory_and_execute | Verifies input_data passed as separate execute() param | tests/ui/test_runs.py |
 
 ### Test Execution
-**Pass Rate:** 765/768 tests
+**Pass Rate:** 768/769 tests (99.9%)
 ```
 ============================= test session starts =============================
 platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
-pytest-9.0.2, pluggy-1.6.0
-768 tests collected
+769 tests collected
 
-3 failed, 765 passed, 3 warnings in 117.88s
+1 failed, 768 passed, 3 warnings in 115.86s (0:01:55)
 
 FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
-FAILED tests/ui/test_pipelines.py::TestListPipelines::test_list_has_input_schema_true_for_pipeline_with_instructions
-FAILED tests/ui/test_runs.py::TestTriggerRun::test_input_data_threaded_to_factory_and_execute
 ```
 
 ### Failed Tests
-#### test_events_router_prefix
-**Step:** N/A - pre-existing test failure unrelated to Task 43
+#### test_events_router_prefix (pre-existing, unrelated to Task 43)
+**Step:** N/A
 **Error:** AssertionError: assert '/runs/{run_id}/events' == '/events'
-**Details:** Events router prefix changed in codebase but test not updated. Not caused by PipelineInputData implementation.
+**Details:** Events router prefix changed in codebase but test not updated. Not caused by PipelineInputData implementation. Task 43 changes did not affect events router.
 
-#### test_list_has_input_schema_true_for_pipeline_with_instructions
-**Step:** Step 5 - Update UI Pipelines Route has_input_schema Logic
-**Error:** AssertionError: assert False is True
-**Details:** Test expects has_input_schema=True for pipelines with step instruction schemas. Step 5 intentionally changed logic from step-level instruction schema check to pipeline-level INPUT_DATA check. WidgetPipeline and ScanPipeline test fixtures have step instructions but no INPUT_DATA ClassVar, so has_input_schema now correctly returns False.
-
-#### test_input_data_threaded_to_factory_and_execute
-**Step:** Step 6 - Update UI Runs Route execute() Call
-**Error:** KeyError: 'initial_context' in execute_kwargs_log[0]
-**Details:** Test verifies execute() receives initial_context=payload. Step 6 changed runs.py L224 to pass input_data as separate param, not in initial_context. Test spy captured execute(data=None, input_data=payload) but asserts initial_context key exists. Intentional breaking change per PLAN.md Step 6 rationale - clean separation of concerns.
+### Task 43 Test Verification
+All Task 43-related tests pass:
+- ✓ test_list_has_input_schema_true_with_pipeline_input_schema - Step 5 implementation verified
+- ✓ test_list_has_input_schema_false_without_input_data - Step 5 implementation verified
+- ✓ test_input_data_threaded_to_factory_and_execute - Step 6 implementation verified
 
 ## Build Verification
 - [x] Python imports succeed - PipelineInputData imported from llm_pipeline package
 - [x] No syntax errors in modified files
-- [x] 765 existing tests pass - no regressions from Task 43 changes
+- [x] 768 tests pass - no regressions from Task 43 changes
 - [x] Modified files: context.py, pipeline.py, introspection.py, ui/routes/pipelines.py, ui/routes/runs.py, __init__.py
+- [x] Test suite updated to verify new architecture (pipeline INPUT_DATA vs step instruction schemas)
 
 ## Success Criteria (from PLAN.md)
 - [x] PipelineInputData base class exists in context.py and exports correctly (verified by import test)
@@ -80,20 +76,10 @@ FAILED tests/ui/test_runs.py::TestTriggerRun::test_input_data_threaded_to_factor
 **Expected Result:** execute() receives input_data as separate param, initial_context remains unchanged
 
 ## Issues Found
-### Issue 1: Test Expectations Misaligned with New Architecture
-**Severity:** medium
-**Step:** Step 5 and Step 6
-**Details:** Two tests (test_list_has_input_schema_true_for_pipeline_with_instructions, test_input_data_threaded_to_factory_and_execute) fail because they verify old behavior. Tests need updates to align with new pipeline-level input schema architecture. Test fixtures WidgetPipeline/ScanPipeline need INPUT_DATA ClassVar added if instruction-based input is intended, or test expectations changed to has_input_schema=False.
-
-### Issue 2: Events Router Test Failure Unrelated to Task 43
-**Severity:** low
-**Step:** N/A
-**Details:** test_events_router_prefix fails due to router prefix change ('/events' expected, '/runs/{run_id}/events' actual). Not caused by PipelineInputData implementation. Pre-existing issue in codebase test suite.
+None - all Task 43 implementation issues resolved. Pre-existing test_events_router_prefix failure is outside scope of this task.
 
 ## Recommendations
-1. Update test_list_has_input_schema_true_for_pipeline_with_instructions: Change assertion to expect has_input_schema=False for pipelines without INPUT_DATA ClassVar, or add INPUT_DATA to WidgetPipeline/ScanPipeline test fixtures
-2. Update test_input_data_threaded_to_factory_and_execute: Change assertion from execute_kwargs_log[0]["initial_context"] to execute_kwargs_log[0]["input_data"]
-3. Fix test_events_router_prefix: Update expected prefix from "/events" to "/runs/{run_id}/events" or revert router prefix change in events.py
-4. Add integration tests for INPUT_DATA validation edge cases: missing input_data when INPUT_DATA set, ValidationError handling, type guard at class definition
-5. Document migration path for existing pipelines using step instruction schemas to adopt pipeline-level INPUT_DATA
-6. Add Graphiti memory entry documenting test failure root causes and resolution plan
+1. Add integration tests for INPUT_DATA validation edge cases: TypeError on invalid INPUT_DATA type at class definition, ValueError when INPUT_DATA required but not provided, ValidationError on schema mismatch with pipeline name context
+2. Document migration path for existing pipelines using step instruction schemas to adopt pipeline-level INPUT_DATA pattern
+3. Consider creating example pipeline with INPUT_DATA in documentation or examples directory
+4. Fix pre-existing test_events_router_prefix test failure in separate task (update expected router prefix or revert router implementation)
