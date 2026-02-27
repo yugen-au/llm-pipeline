@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/master/43-pipeline-input-data
 ## Plugins: python-development, backend-development
@@ -22,8 +22,8 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | ac25f76 | 686da9a | - |
 | Base Class | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a1e60d5 | abf19bc | /pydantic/pydantic |
 | ClassVar Type Guard | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a266144 | abf19bc | /pydantic/pydantic |
-| Execute Validation | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a8915ce | 685e20d | /pydantic/pydantic |
-| Introspection Metadata | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | a68836f | b02bed4 | /pydantic/pydantic |
-| UI Pipelines Route | python-development:python-pro | implementation | 5 | - | C | pending | 0 | pending | pending | - |
-| UI Runs Route | backend-development:backend-architect | implementation | 6 | - | C | pending | 0 | pending | pending | - |
-| Package Exports | python-development:python-pro | implementation | 7 | - | C | pending | 0 | pending | pending | - |
+| Execute Validation | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a8915ce | 685e20d,3befff3 | /pydantic/pydantic |
+| Introspection Metadata | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | a68836f | b02bed4,3befff3 | /pydantic/pydantic |
+| UI Pipelines Route | python-development:python-pro | implementation | 5 | - | C | in-progress | 0 | pending | pending | - |
+| UI Runs Route | backend-development:backend-architect | implementation | 6 | - | C | in-progress | 0 | pending | pending | - |
+| Package Exports | python-development:python-pro | implementation | 7 | - | C | in-progress | 0 | pending | pending | - |
