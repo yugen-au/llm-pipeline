@@ -221,7 +221,7 @@ def trigger_run(
         bridge = UIBridge(run_id=run_id)
         try:
             pipeline = factory(run_id=run_id, engine=engine, event_emitter=bridge, input_data=body.input_data or {})
-            pipeline.execute(data=None, initial_context=body.input_data or {})
+            pipeline.execute(data=None, input_data=body.input_data)
             pipeline.save()
         except Exception:
             logger.exception("Background pipeline execution failed for run_id=%s", run_id)

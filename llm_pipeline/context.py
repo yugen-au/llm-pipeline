@@ -33,4 +33,12 @@ class PipelineContext(BaseModel):
     pass
 
 
-__all__ = ["PipelineContext"]
+class PipelineInputData(BaseModel):
+    """
+    Base class for pipeline input data. Pipelines that require structured
+    input should define an InputData class inheriting from this base.
+    """
+    pass
+
+
+__all__ = ["PipelineContext", "PipelineInputData"]

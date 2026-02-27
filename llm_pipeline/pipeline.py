@@ -26,9 +26,11 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
+
+from llm_pipeline.context import PipelineInputData
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +106,7 @@ class PipelineConfig(ABC):
 
     REGISTRY: ClassVar[Type["PipelineDatabaseRegistry"]] = None
     STRATEGIES: ClassVar[Type["PipelineStrategies"]] = None
+    INPUT_DATA: ClassVar[Optional[Type["PipelineInputData"]]] = None
 
     def __init_subclass__(cls, registry=None, strategies=None, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -135,6 +138,14 @@ class PipelineConfig(ABC):
             cls.REGISTRY = registry
         if strategies is not None:
             cls.STRATEGIES = strategies
+
+        if cls.INPUT_DATA is not None and not (
+            isinstance(cls.INPUT_DATA, type) and issubclass(cls.INPUT_DATA, PipelineInputData)
+        ):
+            raise TypeError(
+                f"{cls.__name__}.INPUT_DATA must be a PipelineInputData subclass, "
+                f"got {cls.INPUT_DATA!r}"
+            )
 
     def __init__(
         self,
@@ -186,6 +197,9 @@ class PipelineConfig(ABC):
         self.data = StepKeyDict()
         self.extractions: Dict[Type[SQLModel], List[SQLModel]] = {}
 
+        # Validated input (populated by execute() when INPUT_DATA declared)
+        self._validated_input = None
+
         # Execution tracking
         self._step_order: Dict[Type, int] = {}
         self._model_extraction_step: Dict[Type[SQLModel], Type] = {}
@@ -232,6 +246,11 @@ class PipelineConfig(ABC):
     def context(self) -> Dict[str, Any]:
         """Read-write access to derived context values."""
         return self._context
+
+    @property
+    def validated_input(self) -> Any:
+        """Validated input data from execute(input_data=...). Returns PipelineInputData instance if INPUT_DATA declared, raw dict otherwise, None if not provided."""
+        return self._validated_input
 
     @property
     def pipeline_name(self) -> str:
@@ -425,6 +444,7 @@ class PipelineConfig(ABC):
         self,
         data: Any = None,
         initial_context: Optional[Dict[str, Any]] = None,
+        input_data: Optional[Dict[str, Any]] = None,
         use_cache: bool = False,
         consensus_polling: Optional[Dict[str, Any]] = None,
     ) -> "PipelineConfig":
@@ -460,6 +480,24 @@ class PipelineConfig(ABC):
                     raise ValueError("consensus_threshold must be >= 2")
                 if maximum_step_calls < consensus_threshold:
                     raise ValueError("maximum_step_calls must be >= consensus_threshold")
+
+        # Validate input_data against INPUT_DATA schema if declared
+        cls = self.__class__
+        self._validated_input = None
+        if cls.INPUT_DATA is not None:
+            if input_data is None or not input_data:
+                raise ValueError(
+                    f"Pipeline '{self.pipeline_name}' requires input_data "
+                    f"matching {cls.INPUT_DATA.__name__} schema but none provided"
+                )
+            try:
+                self._validated_input = cls.INPUT_DATA.model_validate(input_data)
+            except ValidationError as e:
+                raise ValueError(
+                    f"Pipeline '{self.pipeline_name}' input_data validation failed: {e}"
+                ) from e
+        elif input_data is not None:
+            self._validated_input = input_data
 
         self._context = initial_context.copy()
         self.data = {"raw": data, "sanitized": self.sanitize(data)}

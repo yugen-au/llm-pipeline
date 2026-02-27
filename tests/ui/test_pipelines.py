@@ -152,12 +152,33 @@ class TestListPipelines:
         assert resp.status_code == 200
         assert resp.json() == {"pipelines": []}
 
-    def test_list_has_input_schema_true_for_pipeline_with_instructions(self, populated_introspection_client):
-        """WidgetPipeline and ScanPipeline both have instructions classes, so has_input_schema=True."""
+    def test_list_has_input_schema_false_without_input_data(self, populated_introspection_client):
+        """WidgetPipeline/ScanPipeline have step instructions but no INPUT_DATA ClassVar, so has_input_schema=False."""
         resp = populated_introspection_client.get("/api/pipelines")
         body = resp.json()
         for item in body["pipelines"]:
-            assert item["has_input_schema"] is True
+            assert item["has_input_schema"] is False
+
+    def test_list_has_input_schema_true_with_pipeline_input_schema(self):
+        """has_input_schema=True when introspection metadata includes pipeline_input_schema."""
+        app = _make_app()
+        app.state.introspection_registry = {"widget": WidgetPipeline}
+
+        fake_schema = {"type": "object", "properties": {"x": {"type": "integer"}}}
+        orig_get_metadata = PipelineIntrospector.get_metadata
+
+        def _with_input_schema(self):
+            meta = orig_get_metadata(self)
+            meta["pipeline_input_schema"] = fake_schema
+            return meta
+
+        with patch.object(PipelineIntrospector, "get_metadata", _with_input_schema):
+            with TestClient(app) as client:
+                resp = client.get("/api/pipelines")
+
+        body = resp.json()
+        assert len(body["pipelines"]) == 1
+        assert body["pipelines"][0]["has_input_schema"] is True
 
 
 # ---------------------------------------------------------------------------
