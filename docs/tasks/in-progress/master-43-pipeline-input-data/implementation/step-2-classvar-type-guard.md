@@ -76,3 +76,39 @@ from llm_pipeline.context import PipelineInputData
 [x] isinstance(cls.INPUT_DATA, type) check prevents issubclass crash on non-type values
 [x] TypeError raised (not ValueError) matching Python convention for type mismatches
 [x] Error message includes cls.__name__ for debuggability
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] No unit tests for INPUT_DATA type guard behavior (medium, Step 2 portion)
+
+### Changes Made
+#### File: `tests/test_pipeline_input_data.py`
+Added TestInputDataTypeGuard class (9 tests) covering all type guard paths:
+
+```python
+# Before
+# (no type guard tests -- only base class and subclassing tests from Step 1)
+
+# After
+class TestInputDataTypeGuard:
+    test_valid_input_data_subclass        # valid PipelineInputData subclass succeeds
+    test_default_none_succeeds            # no INPUT_DATA (default None) succeeds
+    test_explicit_none_succeeds           # INPUT_DATA=None explicitly succeeds
+    test_bare_base_class_succeeds         # PipelineInputData itself accepted
+    test_invalid_str_raises_type_error    # str rejected with TypeError
+    test_invalid_int_raises_type_error    # int rejected with TypeError
+    test_invalid_plain_basemodel_raises   # plain BaseModel (not PipelineInputData) rejected
+    test_invalid_instance_raises          # instance (not class) rejected
+    test_error_message_includes_class_name # TypeError message has pipeline class name
+```
+
+### Verification
+[x] All 23 tests pass (14 existing + 9 new)
+[x] Valid INPUT_DATA (subclass) case covered
+[x] Invalid INPUT_DATA (str, int, plain BaseModel, instance) cases covered
+[x] Default None case covered
+[x] Explicit None case covered
+[x] TypeError message includes class name verified
