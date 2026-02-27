@@ -8,7 +8,8 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Engine, event
+from sqlalchemy import Engine, event, text
+from sqlalchemy.exc import OperationalError
 from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.prompt import Prompt
@@ -19,6 +20,34 @@ logger = logging.getLogger(__name__)
 
 _engine: Optional[Engine] = None
 _wal_registered_engines: set = set()
+
+
+def add_missing_indexes(engine: Engine) -> None:
+    """Add performance indexes that create_all skips on existing tables.
+
+    Uses CREATE INDEX IF NOT EXISTS matching the SQLiteEventHandler pattern
+    (handlers.py L175-188). Supports NFR-004 (<200ms run listing) and
+    NFR-005 (<100ms step detail) at 10k+ rows.
+    """
+    _INDEX_STATEMENTS = [
+        # Standalone started_at index for unfiltered ORDER BY started_at DESC
+        (
+            "CREATE INDEX IF NOT EXISTS ix_pipeline_runs_started "
+            "ON pipeline_runs (started_at)"
+        ),
+        # Composite index for status-filtered queries with ORDER BY started_at
+        (
+            "CREATE INDEX IF NOT EXISTS ix_pipeline_runs_status_started "
+            "ON pipeline_runs (status, started_at)"
+        ),
+    ]
+    for stmt in _INDEX_STATEMENTS:
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(stmt))
+                conn.commit()
+        except OperationalError:
+            pass  # index already exists or table doesn't exist yet
 
 
 def get_default_db_path() -> Path:
@@ -79,6 +108,9 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
         ],
     )
 
+    # Add performance indexes that create_all skips on existing tables
+    add_missing_indexes(engine)
+
     return engine
 
 
@@ -96,6 +128,7 @@ def get_session() -> Session:
 
 
 __all__ = [
+    "add_missing_indexes",
     "init_pipeline_db",
     "get_engine",
     "get_session",
