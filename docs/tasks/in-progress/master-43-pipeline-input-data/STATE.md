@@ -24,6 +24,6 @@
 | ClassVar Type Guard | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a266144 | abf19bc | /pydantic/pydantic |
 | Execute Validation | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a8915ce | 685e20d,3befff3 | /pydantic/pydantic |
 | Introspection Metadata | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | a68836f | b02bed4,3befff3 | /pydantic/pydantic |
-| UI Pipelines Route | python-development:python-pro | implementation | 5 | - | C | in-progress | 0 | pending | pending | - |
+| UI Pipelines Route | python-development:python-pro | implementation | 5 | - | C | complete | 0 | ab3a98a | e704be4 | - |
 | UI Runs Route | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | aafd2a9 | d33a7db | - |
 | Package Exports | python-development:python-pro | implementation | 7 | - | C | complete | 0 | af779af | e704be4 | - |
