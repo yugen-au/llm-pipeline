@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/master/56-perf-benchmarking
 ## Plugins: application-performance, python-development, backend-development
@@ -24,5 +24,5 @@
 | pytest-bench-dep | python-development:python-pro | implementation | 1 | - | A | complete | 0 | aed031d | 40c2b6a,df705be | - |
 | db-indexes | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a931c91 | bd9dd6a,df705be | /sqlmodel/tiangolo,/sqlalchemy/sqlalchemy |
 | bench-infra | python-development:python-pro | implementation | 3 | - | B | complete | 0 | a675784 | 7dcf421 | /pytest-dev/pytest-benchmark |
-| event-benchmarks | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a2923ac | 00291ab | /pytest-dev/pytest-benchmark |
-| query-benchmarks | python-development:python-pro | implementation | 5 | - | C | pending | 0 | pending | pending | /pytest-dev/pytest-benchmark,/sqlmodel/tiangolo |
+| event-benchmarks | python-development:python-pro | implementation | 4 | - | B | complete | 0 | a2923ac | 00291ab,7dcf421 | /pytest-dev/pytest-benchmark |
+| query-benchmarks | python-development:python-pro | implementation | 5 | - | C | in-progress | 0 | pending | pending | /pytest-dev/pytest-benchmark,/sqlmodel/tiangolo |
