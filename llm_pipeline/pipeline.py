@@ -30,6 +30,8 @@ from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
 
+from llm_pipeline.context import PipelineInputData
+
 logger = logging.getLogger(__name__)
 
 from llm_pipeline.events.types import (
@@ -104,6 +106,7 @@ class PipelineConfig(ABC):
 
     REGISTRY: ClassVar[Type["PipelineDatabaseRegistry"]] = None
     STRATEGIES: ClassVar[Type["PipelineStrategies"]] = None
+    INPUT_DATA: ClassVar[Optional[Type["PipelineInputData"]]] = None
 
     def __init_subclass__(cls, registry=None, strategies=None, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -135,6 +138,14 @@ class PipelineConfig(ABC):
             cls.REGISTRY = registry
         if strategies is not None:
             cls.STRATEGIES = strategies
+
+        if cls.INPUT_DATA is not None and not (
+            isinstance(cls.INPUT_DATA, type) and issubclass(cls.INPUT_DATA, PipelineInputData)
+        ):
+            raise TypeError(
+                f"{cls.__name__}.INPUT_DATA must be a PipelineInputData subclass, "
+                f"got {cls.INPUT_DATA!r}"
+            )
 
     def __init__(
         self,
