@@ -33,3 +33,30 @@ Key: removed `or {}` default -- execute() Step 3 validation handles None vs miss
 [x] factory() call on L223 unchanged (passes input_data as constructor param -- different concern)
 [x] No other references to initial_context in the execute call
 [x] body.input_data passed directly without `or {}` coercion
+
+## Fix Iteration 0
+**Issues Source:** TESTING.md
+**Status:** fixed
+
+### Issues Addressed
+[x] test_input_data_threaded_to_factory_and_execute fails with KeyError: 'initial_context' - test asserted execute_kwargs_log[0]["initial_context"] but Step 6 changed runs.py to pass input_data as separate param
+
+### Changes Made
+#### File: `tests/ui/test_runs.py`
+Updated assertion and docstring to match new execute() call signature.
+
+```
+# Before
+"""input_data from POST body reaches factory kwargs and pipeline.execute initial_context."""
+# execute received initial_context matching input_data
+assert execute_kwargs_log[0]["initial_context"] == payload
+
+# After
+"""input_data from POST body reaches factory kwargs and pipeline.execute input_data param."""
+# execute received input_data as separate param
+assert execute_kwargs_log[0]["input_data"] == payload
+```
+
+### Verification
+[x] test_input_data_threaded_to_factory_and_execute passes
+[x] Assertion checks execute_kwargs_log[0]["input_data"] matching new param name

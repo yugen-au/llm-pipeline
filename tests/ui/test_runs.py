@@ -218,7 +218,7 @@ class TestTriggerRun:
         assert uuid.UUID(executed[0])
 
     def test_input_data_threaded_to_factory_and_execute(self):
-        """input_data from POST body reaches factory kwargs and pipeline.execute initial_context."""
+        """input_data from POST body reaches factory kwargs and pipeline.execute input_data param."""
         factory_kwargs_log = []
         execute_kwargs_log = []
 
@@ -246,6 +246,6 @@ class TestTriggerRun:
         # factory received input_data kwarg
         assert len(factory_kwargs_log) == 1
         assert factory_kwargs_log[0]["input_data"] == payload
-        # execute received initial_context matching input_data
+        # execute received input_data as separate param
         assert len(execute_kwargs_log) == 1
-        assert execute_kwargs_log[0]["initial_context"] == payload
+        assert execute_kwargs_log[0]["input_data"] == payload
