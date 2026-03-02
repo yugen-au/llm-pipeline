@@ -18,4 +18,4 @@
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Pipeline Architecture Research | python-development:python-pro | research | 1 | - | A | complete | 0 | a186cf5297d83565c | pending | - |
 | Frontend Patterns Research | frontend-mobile-development:frontend-developer | research | 2 | - | A | in-progress | 0 | - | pending | - |
-| API Design Research | backend-development:backend-architect | research | 3 | - | A | in-progress | 0 | - | pending | - |
+| API Design Research | backend-development:backend-architect | research | 3 | - | A | complete | 0 | a7224fc472ea04af3 | pending | - |
