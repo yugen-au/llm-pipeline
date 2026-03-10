@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-55-frontend-component-tests
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-8-pipelinelist-tests.md (if already exists, APPEND to file)
+- Output Files: implementation\step-11-pipelinedetail-tests.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 8 - implement ONLY this step, not others
+- Step: 11 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-8-pipelinelist-tests.md
+4. Document decisions in implementation\step-11-pipelinedetail-tests.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 8: PIPELINELIST TESTS
+# IMPLEMENTATION - STEP 11: PIPELINEDETAIL TESTS
 **Status:** [completed/failed/blocked]
 
 ## Summary

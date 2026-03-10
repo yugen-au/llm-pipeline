@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/master/55-frontend-component-tests
 ## Plugins: frontend-mobile-development, javascript-typescript
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-11 10:57
+## Last Updated: 2026-03-11 10:58
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -25,12 +25,12 @@
 | JsonDiff Tests | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | ae7ec91f15a3d0088 | 9fdcdb8,ae4686a | /vitest-dev/vitest,/testing-library/react-testing-library |
 | FormField InputForm Tests | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | a4595ccafcb4bbda1 | ae4686a | /vitest-dev/vitest,/testing-library/react-testing-library |
 | EventStream Tests | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 0 | a7d61c90d62af8d32 | 9fdcdb8,ae4686a | /vitest-dev/vitest,/testing-library/react-testing-library |
-| PromptFilterBar Tests | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a47add6e8704afd49 | aa4089c | /vitest-dev/vitest,/testing-library/react-testing-library |
+| PromptFilterBar Tests | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a47add6e8704afd49 | aa4089c,96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PromptList Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | complete | 0 | a0e0c5d9b0643214b | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineList Tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a53e4977a3e25f2d6 | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
-| PipelineSelector Tests | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
-| PromptViewer Tests | frontend-mobile-development:frontend-developer | implementation | 10 | - | D | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
-| PipelineDetail Tests | frontend-mobile-development:frontend-developer | implementation | 11 | - | D | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| PipelineSelector Tests | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| PromptViewer Tests | frontend-mobile-development:frontend-developer | implementation | 10 | - | D | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| PipelineDetail Tests | frontend-mobile-development:frontend-developer | implementation | 11 | - | D | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | Sidebar Smoke Test | frontend-mobile-development:frontend-developer | implementation | 12 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | JsonTree Boundary Tests | frontend-mobile-development:frontend-developer | implementation | 13 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | StrategySection Smoke Test | frontend-mobile-development:frontend-developer | implementation | 14 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
