@@ -68,7 +68,10 @@ Verified against actual file system and source:
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| [pending - see Questions below] | [awaiting CEO input] | [TBD] |
+| Q1: Route structure -- flat pipelines.tsx or directory pipelines/index.tsx? | **Flat pipelines.tsx** -- keep single file, matches current pattern | No route restructuring needed. Implement everything in existing pipelines.tsx stub. |
+| Q2: Schema viewer complexity -- JSON tree vs schema-aware table? | **Collapsible JSON tree** -- simple impl, upgrade later if needed | Start minimal. Use recursive collapsible tree component. No schema-aware table in task 40 scope. |
+| Q3: Prompt key click-through to /prompts page? | **Yes** -- navigate to /prompts?key=&lt;key&gt; on click | Prompt keys in step detail become clickable links. Uses existing prompts page URL param pattern. |
+| Q4: Remove @provisional tags on types being modified? | **Yes** -- remove tags on types being modified | Clean up @provisional from PipelineListItem and PipelineStepMetadata during type fixes. |
 
 ## Assumptions Validated
 - [x] Backend GET /api/pipelines returns PipelineListResponse with per-pipeline error isolation
@@ -91,18 +94,19 @@ Verified against actual file system and source:
 - [x] Task 51 (Visual Pipeline Editor) depends on task 40 and is OUT OF SCOPE
 
 ## Open Items
-- Route restructuring decision: flat `pipelines.tsx` vs directory `pipelines/index.tsx` (see Q1)
-- Schema viewer complexity: JSON tree vs schema-aware table vs both (see Q2)
-- Prompt key navigation: click-through to /prompts page or not (see Q3)
-- @provisional tag cleanup scope confirmation (see Q4)
-- Research internal contradiction: step-2 section 9 says "Response shapes match frontend types exactly" while section 8 of same document lists type mismatches. The mismatches are real.
-- Test count: 21 not 20 as research claimed (non-blocking)
+- ~~Route restructuring decision~~ RESOLVED: flat pipelines.tsx (Q1)
+- ~~Schema viewer complexity~~ RESOLVED: collapsible JSON tree (Q2)
+- ~~Prompt key navigation~~ RESOLVED: yes, click-through to /prompts?key= (Q3)
+- ~~@provisional tag cleanup~~ RESOLVED: yes, remove on modified types (Q4)
+- ~~Research internal contradiction~~: step-2 section 9 vs section 8 -- mismatches are real, section 9 was wrong. Non-blocking, type fixes captured in recommendations.
+- ~~Test count~~: 21 not 20 as research claimed. Non-blocking, no action needed.
 
 ## Recommendations for Planning
-1. Fix 2 TS interfaces (PipelineListItem: add 2 fields + fix 2 nullabilities; PipelineStepMetadata: fix 2 nullabilities) and remove @provisional tags as first implementation step
+1. Fix 2 TS interfaces (PipelineListItem: add 2 fields + fix 2 nullabilities; PipelineStepMetadata: fix 2 nullabilities) and remove @provisional tags from modified types as first implementation step
 2. Follow existing prompts.tsx left-right panel pattern for consistency
 3. Use URL search params (?pipeline=name) for selected pipeline state (matches prompts page pattern, enables shareable links)
-4. Start with simple collapsible JSON tree for schema display; upgrade to schema-aware table later if needed
+4. Collapsible JSON tree for schema display (CEO decision -- upgrade to schema-aware table deferred to future task if needed)
 5. Create src/components/pipelines/ directory following existing domain component organization pattern
 6. No new dependencies, Zustand stores, or backend changes needed
-7. Keep flat pipelines.tsx route unless CEO decides nested routes are needed for task 40
+7. Keep flat pipelines.tsx route file (CEO decision -- single file, matches current pattern)
+8. Prompt keys in step detail are clickable, navigating to /prompts?key=<key> (CEO decision -- reuses existing prompts page URL param pattern)
