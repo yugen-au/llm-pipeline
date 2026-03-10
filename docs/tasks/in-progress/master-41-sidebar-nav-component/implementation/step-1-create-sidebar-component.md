@@ -50,3 +50,78 @@ New file. Single-file sidebar component containing:
 [x] `transition-all duration-200` on aside for smooth width animation
 [x] Single file architecture, under 200 lines
 [x] Only lucide-react icons, no heroicons
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - Tablet tooltip gap: `max-lg:w-16` forced sidebar narrow via CSS but Zustand `sidebarCollapsed` stayed false, so tooltips didn't render on tablet viewports
+[x] LOW - Mobile hamburger overlay: floating `div.fixed.top-4.left-4` obscured page content
+[x] LOW - border-l-2 + rounded-md cosmetic: left border on rounded element created corner artifact
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/hooks/use-media-query.ts`
+New reusable hook. SSR-safe `useMediaQuery` that tracks a CSS media query string via `window.matchMedia`, returns boolean.
+
+#### File: `llm_pipeline/ui/frontend/src/components/Sidebar.tsx`
+Three fixes applied:
+
+**1. Tablet tooltip gap** -- Added `useMediaQuery('(max-width: 1023px)')` to detect below-lg viewport. Derived `isEffectivelyCollapsed = sidebarCollapsed || belowLg`. This single boolean now drives NavLinks `collapsed` prop, aside width class, and header label visibility. Removed `max-lg:w-16` CSS override (no longer needed since JS drives the width). Removed `responsiveCollapse` prop from NavLinks (no longer needed since collapsed state is accurate at React level).
+```
+# Before
+const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
+// ...
+<aside className={cn('...', sidebarCollapsed ? 'w-16' : 'w-60', 'max-lg:w-16')}>
+<NavLinks collapsed={sidebarCollapsed} responsiveCollapse />
+
+# After
+const belowLg = useMediaQuery('(max-width: 1023px)')
+const isEffectivelyCollapsed = sidebarCollapsed || belowLg
+// ...
+<aside className={cn('...', isEffectivelyCollapsed ? 'w-16' : 'w-60')}>
+<NavLinks collapsed={isEffectivelyCollapsed} />
+```
+
+**2. Mobile hamburger overlay** -- Replaced floating `div.fixed.top-4.left-4` with a full-width `header.fixed.top-0.inset-x-0` mobile top bar. Contains hamburger + "llm-pipeline" label. Uses `bg-sidebar border-b border-sidebar-border` to match sidebar theme. `h-12` gives consistent height. Main content below md should use `pt-12` to avoid overlap (handled by layout integration in Step 2).
+```
+# Before
+<div className="md:hidden fixed top-4 left-4 z-50">
+  <Sheet>
+    <SheetTrigger asChild>
+      <Button ...><Menu /></Button>
+    </SheetTrigger>
+    ...
+  </Sheet>
+</div>
+
+# After
+<header className="md:hidden fixed top-0 inset-x-0 z-50 flex items-center h-12 px-3 bg-sidebar border-b border-sidebar-border">
+  <Sheet>
+    <SheetTrigger asChild>
+      <Button ...><Menu /></Button>
+    </SheetTrigger>
+    ...
+  </Sheet>
+  <span className="ml-2 text-sm font-semibold text-sidebar-foreground">llm-pipeline</span>
+</header>
+```
+
+**3. Border radius cosmetic** -- Changed `rounded-md` to `rounded-r-md rounded-l-none` on `baseLinkClasses` so left border edge is straight.
+```
+# Before
+const baseLinkClasses = '... rounded-md ...'
+
+# After
+const baseLinkClasses = '... rounded-r-md rounded-l-none ...'
+```
+
+### Verification
+[x] TypeScript compiles without errors (`npx tsc --noEmit` clean)
+[x] `useMediaQuery` hook created at `src/hooks/use-media-query.ts`
+[x] `isEffectivelyCollapsed` derived from `sidebarCollapsed || belowLg`
+[x] Tooltips render when `isEffectivelyCollapsed` is true (covers both explicit collapse and tablet viewport)
+[x] `max-lg:w-16` CSS removed, width driven by `isEffectivelyCollapsed` ternary
+[x] `responsiveCollapse` prop removed from NavLinks (simplified)
+[x] Mobile hamburger in full-width top bar, no longer floating over content
+[x] `rounded-r-md rounded-l-none` on link base classes, straight left edge for border-l-2

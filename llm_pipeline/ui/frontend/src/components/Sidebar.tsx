@@ -11,6 +11,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { useMediaQuery } from '@/hooks/use-media-query'
 import { useUIStore } from '@/stores/ui'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -45,15 +46,9 @@ const activeLinkClasses =
   'bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-sidebar-primary font-medium'
 const inactiveLinkClasses =
   'text-sidebar-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground border-l-2 border-transparent'
-const baseLinkClasses = 'flex items-center gap-3 px-3 py-2 rounded-md text-sm w-full'
+const baseLinkClasses = 'flex items-center gap-3 px-3 py-2 rounded-r-md rounded-l-none text-sm w-full'
 
-function NavLinks({
-  collapsed,
-  responsiveCollapse = false,
-}: {
-  collapsed: boolean
-  responsiveCollapse?: boolean
-}) {
+function NavLinks({ collapsed }: { collapsed: boolean }) {
   return (
     <ul role="list" className="flex flex-col gap-1 px-2">
       {navItems.map((item) => {
@@ -61,12 +56,7 @@ function NavLinks({
         const linkContent = (
           <>
             <Icon aria-hidden="true" className="size-5 shrink-0" />
-            <span
-              className={cn(
-                collapsed && 'sr-only',
-                responsiveCollapse && 'max-lg:sr-only',
-              )}
-            >
+            <span className={cn(collapsed && 'sr-only')}>
               {item.label}
             </span>
           </>
@@ -120,11 +110,13 @@ function NavLinks({
 export function Sidebar() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed)
   const toggleSidebar = useUIStore((s) => s.toggleSidebar)
+  const belowLg = useMediaQuery('(max-width: 1023px)')
+  const isEffectivelyCollapsed = sidebarCollapsed || belowLg
 
   return (
     <>
-      {/* Mobile hamburger trigger */}
-      <div className="md:hidden fixed top-4 left-4 z-50">
+      {/* Mobile top bar with hamburger -- visible below md only */}
+      <header className="md:hidden fixed top-0 inset-x-0 z-50 flex items-center h-12 px-3 bg-sidebar border-b border-sidebar-border">
         <Sheet>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Open navigation">
@@ -141,14 +133,16 @@ export function Sidebar() {
             </nav>
           </SheetContent>
         </Sheet>
-      </div>
+        <span className="ml-2 text-sm font-semibold text-sidebar-foreground">
+          llm-pipeline
+        </span>
+      </header>
 
       {/* Desktop/tablet sidebar */}
       <aside
         className={cn(
           'bg-sidebar border-r border-sidebar-border shrink-0 flex-col transition-all duration-200 hidden md:flex',
-          sidebarCollapsed ? 'w-16' : 'w-60',
-          'max-lg:w-16',
+          isEffectivelyCollapsed ? 'w-16' : 'w-60',
         )}
       >
         {/* Header */}
@@ -170,8 +164,7 @@ export function Sidebar() {
           <span
             className={cn(
               'text-sm font-semibold text-sidebar-foreground',
-              sidebarCollapsed && 'sr-only',
-              'max-lg:sr-only',
+              isEffectivelyCollapsed && 'sr-only',
             )}
           >
             llm-pipeline
@@ -183,7 +176,7 @@ export function Sidebar() {
         {/* Navigation */}
         <TooltipProvider delayDuration={0}>
           <nav aria-label="Main navigation" id="sidebar-nav" className="flex-1 py-2">
-            <NavLinks collapsed={sidebarCollapsed} responsiveCollapse />
+            <NavLinks collapsed={isEffectivelyCollapsed} />
           </nav>
         </TooltipProvider>
       </aside>
