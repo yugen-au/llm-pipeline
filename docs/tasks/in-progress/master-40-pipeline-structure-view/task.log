@@ -103,3 +103,12 @@ To proceed, either:
 [2026-03-10 11:29:18] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-03-10 11:29:18] [INFO] Deleted 1 old contract file(s)
 [2026-03-10 11:29:18] [DEBUG] STATE.md atomic write complete
+[2026-03-10 11:29:35] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-03-10 11:31:53] [INFO] WARNING: No active agent found for 'code-documentation:docs-architect'
+[2026-03-10 11:32:08] [INFO] STATE.md updated: phase=summary, status=in-progress
+[2026-03-10 11:32:16] [INFO] Committed summary-A: ['SUMMARY.md'] -> fc97396
+[2026-03-10 11:32:18] [INFO] STATE.md updated: phase=pending-merge, status=in-progress
+[2026-03-10 11:32:18] [INFO] Updated Commits for 'Create summary': fc97396
+[2026-03-10 11:32:18] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
+[2026-03-10 11:32:18] [INFO] Deleted 1 old contract file(s)
+[2026-03-10 11:32:18] [DEBUG] STATE.md atomic write complete
