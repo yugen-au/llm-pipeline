@@ -114,3 +114,4 @@ To proceed, either:
 [2026-03-10 11:32:18] [DEBUG] STATE.md atomic write complete
 [2026-03-10 12:25:38] [INFO] Cleaned up stale semaphores: subagent, state, git
 [2026-03-10 12:26:28] [INFO] Moved task folder from in-progress/ to completed/
+[2026-03-10 12:26:30] [DEBUG] STATE.md atomic write complete
