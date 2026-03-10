@@ -9,7 +9,7 @@
 ## Plugins: frontend-mobile-development, python-development, application-performance, shell-scripting
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [2]
 ## Work Mode: standard
 ## Last Updated: 2026-03-10 17:08
 
