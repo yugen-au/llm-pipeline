@@ -61,3 +61,65 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve pending acknowledgement of the tablet tooltip gap. Either fix by adding a media-query hook to sync responsive collapse state with tooltip rendering, or explicitly document the limitation as accepted. The two low items are cosmetic and can be deferred.
+
+---
+
+# Architecture Re-Review (commit 5d10465)
+
+## Overall Assessment
+**Status:** complete
+All 3 previously flagged issues addressed. Fixes are clean and well-scoped. One new low-severity issue introduced by the mobile header fix (missing top padding on main content). Component reduced to 185 lines and gained a reusable `useMediaQuery` hook.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| No hardcoded values | pass | `1023px` breakpoint correctly mirrors Tailwind `lg` (1024px); design tokens retained |
+| Error handling present | pass | `useMediaQuery` hook is SSR-safe with `useState(false)` default; proper event listener cleanup |
+| Tests pass | pass | TypeScript compiles clean; existing test suite passes per fix report |
+| Warnings fixed | pass | No new warnings introduced |
+
+## Previous Issues Resolution
+| Issue | Severity | Status | Verification |
+| --- | --- | --- | --- |
+| Tablet tooltip gap | MEDIUM | RESOLVED | `useMediaQuery('(max-width: 1023px)')` derives `isEffectivelyCollapsed` passed to `NavLinks`; tooltips now render on tablet viewports |
+| Mobile hamburger overlay | LOW | RESOLVED | Replaced floating button with full-width `<header>` bar (`fixed top-0 inset-x-0 h-12`); no content overlap from trigger itself |
+| border-l-2 + rounded-md | LOW | RESOLVED | `baseLinkClasses` now uses `rounded-r-md rounded-l-none` (line 49); clean left-border accent |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+#### Fixed mobile header lacks corresponding main content offset
+**Step:** 1
+**Details:** The mobile `<header>` is `fixed` with `h-12` (3rem). The `<main>` in `__root.tsx` has no `pt-12 md:pt-0` to compensate, so page content renders behind the fixed header on viewports below `md`. Add `pt-12 md:pt-0` to `<main>` in `__root.tsx` or wrap content in a spacer div.
+
+## Review Checklist
+[x] Architecture patterns followed -- `useMediaQuery` hook cleanly separates concern; follows React hooks convention in `src/hooks/`
+[x] Code quality and maintainability -- hook is generic/reusable; SSR-safe; proper cleanup in useEffect
+[x] Error handling present -- hook defaults to `false` before hydration; no crash on SSR
+[x] No hardcoded values -- breakpoint `1023px` directly mirrors Tailwind config; could extract to constant but acceptable inline
+[x] Project conventions followed -- hook file uses `use-` prefix kebab-case; named export; no default export
+[x] Security considerations -- no new attack surface
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- hook is minimal (20 lines); no unnecessary abstraction
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/frontend/src/components/Sidebar.tsx | pass | 185 lines post-fix; `isEffectivelyCollapsed` cleanly replaces CSS-only responsive collapse; `rounded-r-md rounded-l-none` applied; mobile header restructured |
+| llm_pipeline/ui/frontend/src/hooks/use-media-query.ts | pass | 20-line reusable hook; SSR-safe; proper event listener cleanup; generic query param |
+| llm_pipeline/ui/frontend/src/routes/__root.tsx | pass (with caveat) | No changes since Step 2; needs `pt-12 md:pt-0` on main for mobile header offset |
+
+## New Issues Introduced
+- Mobile fixed header missing main content offset (low) -- `<main>` needs `pt-12 md:pt-0` to avoid content hidden behind fixed `<header>` on mobile
+
+## Recommendation
+**Decision:** CONDITIONAL
+All 3 original issues resolved cleanly. One new low issue: `<main>` in `__root.tsx` needs `pt-12 md:pt-0` to offset the fixed mobile header. Approve pending that one-line fix.
