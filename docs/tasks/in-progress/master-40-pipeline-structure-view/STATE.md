@@ -1,9 +1,9 @@
 ## Task: master-40-pipeline-structure-view
 ## Description: Create Pipeline Structure view showing introspected pipeline metadata: strategies, steps, schemas, prompts. React frontend component with backend API for pipeline introspection.
 
-## Phase: implementation
+## Phase: summary
 ## Status: in-progress
-## Current Group: C
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/40-pipeline-structure-view
 ## Plugins: frontend-mobile-development, backend-development, python-development
@@ -27,3 +27,4 @@
 | Create StrategySection & StepRow | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | ab4d6b923c7800475 | 27568c2 | /shadcn-ui/ui,/tanstack/router |
 | Create PipelineDetail | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 0 | a1a7c35b632a91d8f | c2c72ea,27568c2 | /shadcn-ui/ui |
 | Replace Stub pipelines.tsx | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a6f2a380ddd9fd564 | d6fc886 | /tanstack/router,/shadcn-ui/ui |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
