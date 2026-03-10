@@ -29,3 +29,14 @@
 [2026-03-02 12:26:34] [DEBUG] STATE.md atomic write complete
 [2026-03-02 12:26:51] [INFO] Task call: code-documentation:code-reviewer (phase: validate)
 [2026-03-02 12:30:10] [DEBUG] STATE.md atomic write complete
+[2026-03-10 10:58:04] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-10 11:00:17] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude_projects\llm-pipeline\docs\tasks\in-progress\master-40-pipeline-structure-view\VALIDATED_RESEARCH.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-10 11:00:33] [INFO] Task call: code-documentation:code-reviewer (phase: validate)
+[2026-03-10 11:00:33] [INFO] Incremented Revisions: 0 -> 1
+[2026-03-10 11:00:33] [DEBUG] STATE.md atomic write complete
