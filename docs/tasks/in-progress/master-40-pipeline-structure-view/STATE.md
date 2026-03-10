@@ -23,7 +23,7 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | acdf2351659748ef1 | 17b0a8e | - |
 | Fix TS Interface Mismatches | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | a010ec38d50ed8bc1 | f8dd862 | /tanstack/router |
 | Create PipelineList | frontend-mobile-development:frontend-developer | implementation | 2 | - | B | complete | 0 | a208ee53508d2d2d3 | d3bf029 | /shadcn-ui/ui |
-| Create JsonTree | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | in-progress | 0 | pending | pending | /shadcn-ui/ui |
+| Create JsonTree | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | ab97bcf68a72d2a95 | d3bf029 | /shadcn-ui/ui |
 | Create StrategySection & StepRow | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | in-progress | 0 | pending | pending | /shadcn-ui/ui,/tanstack/router |
 | Create PipelineDetail | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | in-progress | 0 | pending | pending | /shadcn-ui/ui |
 | Replace Stub pipelines.tsx | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | pending | 0 | pending | pending | /tanstack/router,/shadcn-ui/ui |
