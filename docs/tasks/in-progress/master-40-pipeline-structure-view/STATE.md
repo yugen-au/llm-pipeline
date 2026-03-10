@@ -11,7 +11,7 @@
 ## Excluded Phases: testing, review
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-10 11:26
+## Last Updated: 2026-03-10 11:29
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,4 +26,4 @@
 | Create JsonTree | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | ab97bcf68a72d2a95 | d3bf029,27568c2 | /shadcn-ui/ui |
 | Create StrategySection & StepRow | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | ab4d6b923c7800475 | 27568c2 | /shadcn-ui/ui,/tanstack/router |
 | Create PipelineDetail | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 0 | a1a7c35b632a91d8f | c2c72ea,27568c2 | /shadcn-ui/ui |
-| Replace Stub pipelines.tsx | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | in-progress | 0 | pending | pending | /tanstack/router,/shadcn-ui/ui |
+| Replace Stub pipelines.tsx | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a6f2a380ddd9fd564 | d6fc886 | /tanstack/router,/shadcn-ui/ui |
