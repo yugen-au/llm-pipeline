@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Three research outputs validated against actual codebase. Core findings are sound: NFR-009 passes at ~210KB gzip (58% headroom), StaticFiles serving is already implemented correctly in cli.py, and the manualChunks strategy is appropriate for cache efficiency. However, validation uncovered three contradictions (bundle size estimate mismatch, GZipMiddleware claimed but absent, misleading zod chunk placement rationale), one build-ordering gap (no npm->hatch orchestration), and a missing dependency in the bundle analysis (@tanstack/zod-adapter). Five questions require CEO input before planning can proceed.
+Three research outputs validated against actual codebase. Core findings are sound: NFR-009 passes at ~210KB gzip (58% headroom), StaticFiles serving is already correctly implemented in cli.py, and the manualChunks strategy is appropriate for cache efficiency. Validation uncovered three contradictions (bundle size estimate mismatch, GZipMiddleware claimed but absent, misleading zod chunk placement rationale), one build-ordering gap (no npm->hatch orchestration), and a missing dependency in the bundle analysis (@tanstack/zod-adapter). All five CEO questions resolved -- task 44 scope now includes: vite.config.ts production config, GZipMiddleware addition, scripts/build.sh orchestration, rollup-plugin-visualizer, and sourcemap: false.
 
 ## Domain Findings
 
@@ -14,6 +14,8 @@ Three research outputs validated against actual codebase. Core findings are soun
 - manualChunks splitting react/react-dom, @tanstack/react-router, @tanstack/react-query is appropriate for cache efficiency, not size reduction
 - autoCodeSplitting (route-level) and manualChunks (library-level) are complementary, not conflicting -- CONFIRMED via Vite/Rollup architecture
 - Vite 7 uses `rollupOptions` (NOT `rolldownOptions` which is Vite 8+) -- CONFIRMED via package.json `"vite": "^7.3.1"`
+- **DECISION:** Keep `^7.3.1` (caret). Rely on lockfile for stability. Accept minor bump risk.
+- **DECISION:** sourcemap: false. No error tracking planned.
 
 **CONTRADICTION:** Step 1 estimated ~90-120KB gzip total. Step 3 measured ~210KB gzip from actual build. Step 1 underestimated by ~75%. Trust step 3's measured values.
 
@@ -31,7 +33,9 @@ Three research outputs validated against actual codebase. Core findings are soun
 - Route priority: API routes (/api/*) registered in create_app(), WebSocket (/ws/*) registered without prefix, StaticFiles (/) mounted last in cli.py -- CONFIRMED no conflicts
 - create_app() in app.py contains NO StaticFiles mount -- CONFIRMED (app.py is pure API factory)
 
-**DEVIATION FROM TASK SPEC:** Task 44 spec says mount StaticFiles in app.py's create_app(). Current cli.py implementation is architecturally better (keeps create_app testable, static serving is deployment concern). Needs CEO confirmation to keep.
+**DECISION (StaticFiles location):** Keep cli.py approach. Skip app.py changes from original task spec. cli.py correctly keeps create_app() as a pure testable factory.
+
+**DECISION (GZipMiddleware):** Add GZipMiddleware to FastAPI app for standalone compression. This is NEW SCOPE for task 44 -- research incorrectly claimed it was already present. Implementation: `app.add_middleware(GZipMiddleware, minimum_size=1000)` in app.py's create_app().
 
 ### Bundle Size & Performance
 **Source:** step-3-bundle-performance.md
@@ -42,7 +46,7 @@ Three research outputs validated against actual codebase. Core findings are soun
 - ReactQueryDevtools excluded from production via `import.meta.env.DEV` guard in main.tsx -- CONFIRMED at main.tsx lines 11-17
 - Radix-UI imports match research: Slot, Label, Checkbox, ScrollArea, Separator, Dialog (Sheet), Select, Tabs, Tooltip -- CONFIRMED via grep
 
-**FACTUAL ERROR:** Step 3 section 6 states "FastAPI's GZipMiddleware handles dynamic compression" as if already active. Actual app.py has NO GZipMiddleware -- only CORSMiddleware. Static files from dist/ are served uncompressed unless a reverse proxy handles it.
+**FACTUAL ERROR (now resolved):** Step 3 stated "FastAPI's GZipMiddleware handles dynamic compression" as if already active. It was NOT configured. CEO approved adding it -- now in scope.
 
 ### Hatchling Build Integration
 **Source:** step-1-vite-build-research.md, step-2-fastapi-static-serving.md
@@ -51,12 +55,16 @@ Three research outputs validated against actual codebase. Core findings are soun
 - Excludes for node_modules, src, config files -- CONFIRMED at pyproject.toml lines 40-54
 - `packages = ["llm_pipeline"]` -- CONFIRMED
 
-**BUILD ORDERING GAP:** No mechanism chains `npm run build` before `hatch build`. Hatchling's `artifacts` silently includes nothing if dist/ doesn't exist -- the wheel will lack frontend assets without error. No top-level Makefile, build.sh, or similar orchestration exists.
+**DECISION (build orchestration):** Add `scripts/build.sh` chaining `npm run build` -> `hatch build`. No CI task exists yet, so this script is in scope for task 44. Hatchling's `artifacts` silently includes nothing if dist/ missing -- the build script must ensure correct ordering.
 
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| (pending -- iteration 0, questions below) | | |
+| Build orchestration: include scripts/build.sh chaining npm->hatch? | YES, add scripts/build.sh. No CI task exists yet. | Adds new deliverable to task 44: scripts/build.sh |
+| GZipMiddleware: add to app.py or expect reverse proxy? | YES, add GZipMiddleware for standalone compression. | Adds new deliverable: GZipMiddleware in app.py create_app() |
+| StaticFiles location: keep cli.py or move to app.py per task spec? | Keep cli.py. Skip app.py changes. cli.py is correct. | Confirms deviation from task spec is intentional. No StaticFiles work needed. |
+| Vite version pinning: tilde (~7.3.1) or keep caret (^7.3.1)? | Keep ^7.3.1 (caret). Rely on lockfile. | No change to package.json version range |
+| Sourcemaps: false or 'hidden' for error tracking? | false. No error tracking planned. | Simple config: sourcemap: false |
 
 ## Assumptions Validated
 - [x] autoCodeSplitting and manualChunks are complementary mechanisms (route-level vs library-level splitting)
@@ -69,18 +77,21 @@ Three research outputs validated against actual codebase. Core findings are soun
 - [x] Current package.json "build" script is correct (tsc -b && vite build)
 - [x] tsconfig.app.json has noEmit: true (tsc -b is type-check only)
 - [x] Radix-UI primitives are correctly tree-shaken via sub-path exports
+- [x] cli.py is correct location for StaticFiles (CEO confirmed)
+- [x] sourcemap: false appropriate (no error tracking planned)
+- [x] Caret versioning (^7.3.1) acceptable with lockfile discipline
 
 ## Open Items
-- GZipMiddleware not present in app.py despite research claiming it handles compression
-- No build orchestration (npm build -> hatch build) documented or scripted
-- @tanstack/zod-adapter compatibility with @zod/mini unverified (blocks future optimization recommendation)
-- Vite ^7.3.1 semver range could theoretically allow Vite 8 if published under ^7 (unlikely but undocumented risk)
-- sourcemap strategy (false vs 'hidden') depends on error tracking plans
+- @tanstack/zod-adapter compatibility with @zod/mini unverified (deferred -- future optimization, not task 44 scope)
 
 ## Recommendations for Planning
 1. Trust step 3's measured bundle sizes (~210KB gzip), not step 1's estimates (~90-120KB gzip)
-2. Keep StaticFiles mount in cli.py (not app.py) per current implementation -- better separation of concerns
-3. Scope task 44 to: vite.config.ts changes (manualChunks, function form, visualizer), package.json script additions (build:analyze), rollup-plugin-visualizer devDep installation
-4. Defer GZipMiddleware and build orchestration decisions to CEO input
-5. Consider adding `build:check` script that verifies dist/ exists and measures gzip size for CI
-6. Pin Vite to `~7.3.1` (tilde, not caret) to prevent accidental Vite 8 upgrade that would break rollupOptions config
+2. Keep StaticFiles mount in cli.py (not app.py) -- confirmed by CEO, no work needed here
+3. Task 44 final scope (5 deliverables):
+   - vite.config.ts: function-form defineConfig, manualChunks, emptyOutDir, sourcemap: false
+   - package.json: add build:analyze script
+   - rollup-plugin-visualizer: install as devDependency, conditional load in vite.config.ts
+   - app.py: add GZipMiddleware(minimum_size=1000) to create_app()
+   - scripts/build.sh: chain `cd frontend && npm run build` -> `hatch build`, fail-fast on missing dist/
+4. Verify build succeeds and total gzip < 500KB after all changes applied
+5. Defer @zod/mini optimization to future task (zod-adapter compatibility unknown)
