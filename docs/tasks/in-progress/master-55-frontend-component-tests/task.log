@@ -50,3 +50,7 @@
 [2026-03-11 10:44:19] [INFO] Auto-updated agent statuses: Fix StatusBadge: pending -> in-progress
 [2026-03-11 10:44:19] [INFO] Deleted 1 old contract file(s)
 [2026-03-11 10:44:19] [DEBUG] STATE.md atomic write complete
+[2026-03-11 10:44:37] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: implementation)
+[2026-03-11 10:46:04] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-03-11 10:46:42] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-11 10:46:59] [DEBUG] STATE.md atomic write complete
