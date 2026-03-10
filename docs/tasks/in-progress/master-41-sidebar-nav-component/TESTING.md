@@ -104,3 +104,77 @@ None
 ## Recommendations
 1. Fix pre-existing StatusBadge test failures in a separate task - tests assert hardcoded Tailwind color classes (`border-amber-500`, `border-green-500`) but the component uses design tokens (`border-status-running`, `border-status-completed`). Tests should be updated to match the design token approach.
 2. Add Sidebar-specific unit tests (collapse toggle, nav item rendering, active route class application) to prevent regressions as the component evolves.
+
+---
+
+# Re-verification: Review Fixes (commit 5d10465)
+
+## Summary
+**Status:** passed
+TypeScript compilation clean after review fixes. All 88 previously passing tests still pass. The 3 StatusBadge failures remain unchanged (pre-existing, unrelated to task 41). New `src/hooks/use-media-query.ts` compiles correctly. `isEffectivelyCollapsed` logic using `useMediaQuery` type-checks cleanly.
+
+## Automated Testing
+### Test Scripts Created
+| Script | Purpose | Location |
+| --- | --- | --- |
+| N/A (existing suite) | Full vitest suite re-run | llm_pipeline/ui/frontend/src/**/*.test.* |
+
+### Test Execution
+**Pass Rate:** 88/91 tests (3 pre-existing failures unchanged)
+```
+RUN  v3.2.4
+
+ ✓ src/test/smoke.test.ts (2 tests) 9ms
+ ✓ src/lib/time.test.ts (24 tests) 59ms
+ ❯ src/components/runs/StatusBadge.test.tsx (5 tests | 3 failed) 207ms
+ ✓ src/components/runs/StepTimeline.test.tsx (14 tests) 325ms
+ ✓ src/components/runs/ContextEvolution.test.tsx (6 tests) 366ms
+ ✓ src/components/runs/Pagination.test.tsx (12 tests) 508ms
+ ✓ src/components/runs/RunsTable.test.tsx (12 tests) 623ms
+ ✓ src/components/runs/FilterBar.test.tsx (6 tests) 1047ms
+ ✓ src/components/runs/StepDetailPanel.test.tsx (10 tests) 1101ms
+
+Test Files  1 failed | 8 passed (9)
+Tests  3 failed | 88 passed (91)
+Duration  7.57s
+```
+
+### Failed Tests
+Same 3 pre-existing StatusBadge failures as previous run. No new failures introduced by review fixes.
+
+## Build Verification
+- [x] `npx tsc -b --noEmit` passes with zero errors or warnings after review fixes
+- [x] `src/hooks/use-media-query.ts` compiles cleanly - useEffect/useState imports valid, MediaQueryListEvent typed correctly
+- [x] `src/components/Sidebar.tsx` compiles after changes - `useMediaQuery` import resolves, `isEffectivelyCollapsed` boolean type flows correctly through `NavLinks` and aside className
+- [x] `rounded-r-md rounded-l-none` Tailwind classes valid (replaced `rounded-md` in `baseLinkClasses` line 49)
+- [x] Mobile `<header>` with `md:hidden fixed top-0 inset-x-0` restructuring compiles without errors
+- [x] `belowLg = useMediaQuery('(max-width: 1023px)')` and `isEffectivelyCollapsed = sidebarCollapsed || belowLg` type-check as `boolean`
+
+## Success Criteria (from PLAN.md)
+- [x] All previous criteria still met - no regressions introduced
+- [x] Below `lg` breakpoint now uses `useMediaQuery` hook (`isEffectivelyCollapsed`) rather than CSS-only approach - more reliable for tooltip rendering decisions
+- [x] Mobile hamburger repositioned to full-width top bar (`header.md:hidden fixed top-0 inset-x-0 h-12`) eliminating content overlap
+- [x] Nav link pill shape corrected: `rounded-r-md rounded-l-none` preserves left border accent without corner conflict
+
+## Human Validation Required
+### Tablet Tooltip Behaviour
+**Step:** Step 1 (Create Sidebar Component) - review fix
+**Instructions:** Set viewport between 768px and 1023px. Hover over nav icons.
+**Expected Result:** Tooltips appear (previously tooltips may not have shown at tablet widths because `isEffectivelyCollapsed` was not aware of media query; now `useMediaQuery` drives the collapsed prop passed to NavLinks).
+
+### Mobile Top Bar Positioning
+**Step:** Step 1 (Create Sidebar Component) - review fix
+**Instructions:** Set viewport below 768px. Verify top bar sits flush at top of viewport with no overlap of page content. Scroll the page.
+**Expected Result:** Top bar (h-12) is fixed at top, page content is not obscured by floating hamburger button.
+
+### Left Border Pill Shape
+**Step:** Step 1 (Create Sidebar Component) - review fix
+**Instructions:** On desktop, navigate to any route and inspect the active nav link visually.
+**Expected Result:** Active link pill is rounded on the right side only, flush on the left, so the left accent border (`border-l-2 border-sidebar-primary`) sits cleanly against the edge with no gap.
+
+## Issues Found
+None
+
+## Recommendations
+1. Fix pre-existing StatusBadge test failures in a separate task.
+2. Add Sidebar-specific unit tests covering `isEffectivelyCollapsed` logic with `useMediaQuery` mocked to verify tooltip rendering at tablet widths.
