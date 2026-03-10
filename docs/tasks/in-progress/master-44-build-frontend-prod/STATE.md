@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/master/44-build-frontend-prod
 ## Plugins: frontend-mobile-development, python-development, application-performance, shell-scripting
@@ -22,6 +22,6 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | ae3ad515e6855dc4d | ba10d05 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a0d4978e6356e4551 | de27692 | - |
 | Vite Config | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | complete | 0 | aaa127128f219df9a | 647141c | /vitejs/vite |
-| Package.json Build | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a3870f180a57a5111 | e5efa06 | /btd/rollup-plugin-visualizer |
-| GZip Middleware | python-development:fastapi-pro | implementation | 3 | - | B | pending | 0 | pending | pending | /fastapi/fastapi |
+| Package.json Build | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a3870f180a57a5111 | e5efa06,647141c | /btd/rollup-plugin-visualizer |
+| GZip Middleware | python-development:fastapi-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | /fastapi/fastapi |
 | Build Script | shell-scripting:bash-pro | implementation | 4 | - | C | pending | 0 | pending | pending | - |
