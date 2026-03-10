@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Type
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 from sqlmodel import create_engine
 
 from llm_pipeline.db import init_pipeline_db
@@ -50,6 +51,9 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # GZip compression for API responses
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
 
     # Database engine
     # NOTE: init_pipeline_db() sets the module-level _engine global in
