@@ -1,8 +1,8 @@
 ## Task: master-41-sidebar-nav-component
 ## Description: Implement collapsible sidebar navigation component with route links, active route highlighting, and collapse/expand toggle using TanStack Router and Zustand UI store
 
-## Phase: pending-merge
-## Status: in-progress
+## Phase: complete
+## Status: complete
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/41-sidebar-nav-component
