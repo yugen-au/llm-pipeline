@@ -6,7 +6,7 @@
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/master/44-build-frontend-prod
-## Plugins: frontend-mobile-development, python-development, application-performance
+## Plugins: frontend-mobile-development, python-development, application-performance, shell-scripting
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
@@ -21,3 +21,7 @@
 | Bundle Performance | application-performance:performance-engineer | research | 3 | - | A | complete | 0 | a116a874ce73a83d4 | 7cc3ced | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | ae3ad515e6855dc4d | ba10d05 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a0d4978e6356e4551 | pending | - |
+| Vite Config | frontend-mobile-development:frontend-developer | implementation | 1 | - | A | pending | 0 | pending | pending | /vitejs/vite |
+| Package.json Build | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | pending | 0 | pending | pending | /btd/rollup-plugin-visualizer |
+| GZip Middleware | python-development:fastapi-pro | implementation | 3 | - | B | pending | 0 | pending | pending | /fastapi/fastapi |
+| Build Script | shell-scripting:bash-pro | implementation | 4 | - | C | pending | 0 | pending | pending | - |
