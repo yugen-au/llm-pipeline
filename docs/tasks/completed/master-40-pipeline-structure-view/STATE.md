@@ -1,7 +1,7 @@
 ## Task: master-40-pipeline-structure-view
 ## Description: Create Pipeline Structure view showing introspected pipeline metadata: strategies, steps, schemas, prompts. React frontend component with backend API for pipeline introspection.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev

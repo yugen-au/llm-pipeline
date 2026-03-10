@@ -112,3 +112,5 @@ To proceed, either:
 [2026-03-10 11:32:18] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
 [2026-03-10 11:32:18] [INFO] Deleted 1 old contract file(s)
 [2026-03-10 11:32:18] [DEBUG] STATE.md atomic write complete
+[2026-03-10 12:25:38] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-10 12:26:28] [INFO] Moved task folder from in-progress/ to completed/
