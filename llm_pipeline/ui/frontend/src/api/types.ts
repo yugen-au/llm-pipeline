@@ -312,16 +312,12 @@ export interface TransformationMetadata {
   output_schema: Record<string, unknown> | null
 }
 
-/**
- * Individual step metadata within a pipeline strategy.
- *
- * @provisional - shape from PipelineIntrospector.get_metadata().
- */
+/** Individual step metadata within a pipeline strategy. */
 export interface PipelineStepMetadata {
   step_name: string
   class_name: string
-  system_key: string
-  user_key: string
+  system_key: string | null
+  user_key: string | null
   instructions_class: string | null
   instructions_schema: Record<string, unknown> | null
   context_class: string | null
@@ -358,16 +354,14 @@ export interface PipelineMetadata {
   pipeline_input_schema: Record<string, unknown> | null
 }
 
-/**
- * Simplified pipeline list item (anticipated shape for GET /api/pipelines).
- *
- * @provisional - backend endpoint does not exist until task 24.
- */
+/** Simplified pipeline list item for GET /api/pipelines. */
 export interface PipelineListItem {
   name: string
-  strategy_count: number
-  step_count: number
+  strategy_count: number | null
+  step_count: number | null
   has_input_schema: boolean
+  registry_model_count: number | null
+  error: string | null
 }
 
 /**
