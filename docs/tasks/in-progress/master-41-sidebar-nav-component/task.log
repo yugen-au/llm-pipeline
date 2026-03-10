@@ -5,3 +5,8 @@
 [2026-03-10 12:42:07] [INFO] Created: STATE.md
 [2026-03-10 12:42:07] [INFO] ============================================================
 [2026-03-10 12:42:08] [DEBUG] STATE.md atomic write complete
+[2026-03-10 12:42:39] [ERROR] BLOCKED: Invalid AgentRow 'Frontend Architecture Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-03-10 12:42:49] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-03-10 12:42:57] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-03-10 12:42:57] [INFO] Auto-updated agent statuses: Frontend Architecture Research: pending -> in-progress, UI/UX Patterns Research: pending -> in-progress
+[2026-03-10 12:42:57] [DEBUG] STATE.md atomic write complete
