@@ -41,3 +41,5 @@
 [2026-03-11 10:14:17] [INFO] Auto-updated agent statuses: Plan: pending -> in-progress
 [2026-03-11 10:14:17] [INFO] Deleted 1 old contract file(s)
 [2026-03-11 10:14:17] [DEBUG] STATE.md atomic write complete
+[2026-03-11 10:14:36] [INFO] Task call: planning (phase: planning)
+[2026-03-11 10:20:38] [DEBUG] STATE.md atomic write complete
