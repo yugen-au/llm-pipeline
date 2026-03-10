@@ -77,3 +77,31 @@ None
 ## Recommendations
 1. The `build:analyze` script uses Unix env var syntax (`ANALYZE=true cmd`). For Windows dev environments without WSL, consider adding `cross-env` devDependency and updating the script to `cross-env ANALYZE=true tsc -b && cross-env ANALYZE=true vite build` in a follow-up task.
 2. Pre-existing test failure `test_events_router_prefix` should be addressed separately -- the test expectation does not match the actual router prefix and will continue to show as failed in CI.
+
+---
+
+## Re-run After Review Fix (commit 8379095)
+
+### Fix Applied
+`build:analyze` script scoping corrected: `ANALYZE=true tsc -b && vite build` -> `tsc -b && ANALYZE=true vite build`. Env var now scoped only to `vite build`, fixing Windows/CI env var inheritance issue where `tsc` received `ANALYZE=true` unnecessarily and the var was not propagated to `vite build` in some shells.
+
+### Test Execution (re-run)
+**Pass Rate:** 803/804 tests (same pre-existing failure, unchanged)
+```
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
+1 failed, 803 passed, 6 skipped, 1 warning in 126.26s (0:02:06)
+```
+
+### Build Verification (re-run)
+- [x] `npm run build` succeeds, 8.06s, 2112 modules transformed
+- [x] Bundle gzip totals unchanged: vendor 60.53KB, router 27.29KB, query 11.41KB, CSS 13.26KB, index 57.72KB -- total ~209.41KB (under 500KB)
+- [x] vendor, router, query chunks confirmed present in dist/assets/
+- [x] No `.map` files in dist/assets/ (exit 2, no files found)
+- [x] GZipMiddleware: `Middleware(GZipMiddleware, minimum_size=1000)` still registered
+- [x] scripts/build.sh: -rwxr-xr-x, 902 bytes, unchanged
+
+### Success Criteria Update
+- [x] `npm run build:analyze` env var scoping fix verified in package.json -- `tsc -b && ANALYZE=true vite build` is correct Unix syntax; human validation on Unix/CI still required to confirm stats.html is produced
+
+### Issues Found
+None -- fix is correct and non-breaking.
