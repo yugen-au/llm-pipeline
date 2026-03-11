@@ -97,11 +97,36 @@ class CustomProvider(LLMProvider):
         prompt: str,
         system_instruction: str,
         result_class: Type[BaseModel],
+        max_retries: int = 3,
         **kwargs
     ) -> LLMCallResult:
-        # Implement custom provider logic
-        response = self.api.generate(prompt, system_instruction)
-        return validate_and_return(response, result_class)
+        errors = []
+        for attempt in range(max_retries):
+            try:
+                # Call your provider API
+                response_text = self.api.generate(prompt)
+                response_json = parse_json(response_text)
+
+                # Validate with Pydantic
+                result_class(**response_json)
+
+                return LLMCallResult.success(
+                    parsed=response_json,
+                    raw_response=response_text,
+                    model_name=self.model_name,
+                    attempt_count=attempt + 1,
+                    validation_errors=errors,
+                )
+            except Exception as e:
+                errors.append(str(e))
+
+        return LLMCallResult(
+            parsed=None,
+            raw_response=None,
+            model_name=self.model_name,
+            attempt_count=max_retries,
+            validation_errors=errors,
+        )
 ```
 
 ---

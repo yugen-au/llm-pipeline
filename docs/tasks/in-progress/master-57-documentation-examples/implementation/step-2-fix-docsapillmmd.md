@@ -100,3 +100,61 @@ No ambiguous decisions - all changes directly match provider.py:34-71 and result
 [x] GeminiProvider example uses `result.is_success` and `result.parsed`
 [x] `result.parsed` is confirmed valid attribute on LLMCallResult (result.py:20)
 [x] `result.is_success` is confirmed valid property on LLMCallResult (result.py:39)
+
+---
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] CustomProvider example references non-existent `validate_and_return(response, result_class)` helper - replaced with realistic retry loop using `LLMCallResult.success()` and `LLMCallResult(parsed=None, ...)` matching the pattern in gemini.py:237-304
+
+### Changes Made
+#### File: `docs/api/llm.md`
+Replaced the placeholder `validate_and_return()` call with a realistic implementation skeleton that mirrors the actual pattern used in `llm_pipeline/llm/gemini.py`.
+
+```
+# Before
+        # Implement custom provider logic
+        response = self.api.generate(prompt, system_instruction)
+        return validate_and_return(response, result_class)
+
+# After
+        errors = []
+        for attempt in range(max_retries):
+            try:
+                # Call your provider API
+                response_text = self.api.generate(prompt)
+                response_json = parse_json(response_text)
+
+                # Validate with Pydantic
+                result_class(**response_json)
+
+                return LLMCallResult.success(
+                    parsed=response_json,
+                    raw_response=response_text,
+                    model_name=self.model_name,
+                    attempt_count=attempt + 1,
+                    validation_errors=errors,
+                )
+            except Exception as e:
+                errors.append(str(e))
+
+        return LLMCallResult(
+            parsed=None,
+            raw_response=None,
+            model_name=self.model_name,
+            attempt_count=max_retries,
+            validation_errors=errors,
+        )
+```
+
+Also added `max_retries: int = 3` to the method signature to make the retry loop coherent.
+
+### Verification
+[x] `LLMCallResult.success()` factory confirmed in result.py:54-76
+[x] `LLMCallResult(parsed=None, ...)` direct construction confirmed in gemini.py:298-304
+[x] `LLMCallResult.success()` call pattern matches gemini.py:237-243 exactly
+[x] No non-existent helpers referenced in the example
+[x] `max_retries` added to example signature (was already in abstract signature block above)
