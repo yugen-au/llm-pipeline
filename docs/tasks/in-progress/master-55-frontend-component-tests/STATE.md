@@ -28,7 +28,7 @@
 | PromptFilterBar Tests | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a47add6e8704afd49 | aa4089c,96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PromptList Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | complete | 0 | a0e0c5d9b0643214b | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineList Tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a53e4977a3e25f2d6 | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
-| PipelineSelector Tests | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| PipelineSelector Tests | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | a67083625f62acf9b | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PromptViewer Tests | frontend-mobile-development:frontend-developer | implementation | 10 | - | D | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineDetail Tests | frontend-mobile-development:frontend-developer | implementation | 11 | - | D | complete | 0 | ac7de2de7f6c3b14e | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | Sidebar Smoke Test | frontend-mobile-development:frontend-developer | implementation | 12 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
