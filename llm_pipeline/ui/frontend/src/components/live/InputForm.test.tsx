@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { InputForm, validateForm } from './InputForm'
+import { InputForm } from './InputForm'
 import type { InputFormProps } from './InputForm'
 import type { JsonSchema } from '@/api/types'
 
@@ -59,27 +59,5 @@ describe('InputForm', () => {
 
     await user.type(screen.getByRole('textbox'), 'a')
     expect(onChange).toHaveBeenCalledWith('name', 'a')
-  })
-})
-
-describe('validateForm', () => {
-  it('returns error for missing required field', () => {
-    const errors = validateForm(twoFieldSchema, {})
-    expect(errors).toEqual({ name: 'Name is required' })
-  })
-
-  it('returns empty object when all required fields present', () => {
-    const errors = validateForm(twoFieldSchema, { name: 'Alice' })
-    expect(errors).toEqual({})
-  })
-
-  it('returns empty object when schema is null', () => {
-    const errors = validateForm(null, {})
-    expect(errors).toEqual({})
-  })
-
-  it('treats empty string as missing', () => {
-    const errors = validateForm(twoFieldSchema, { name: '' })
-    expect(errors).toEqual({ name: 'Name is required' })
   })
 })

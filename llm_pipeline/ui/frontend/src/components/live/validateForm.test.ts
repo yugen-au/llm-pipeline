@@ -68,7 +68,7 @@ describe('validateForm', () => {
     })
   })
 
-  it('accepts non-string truthy values as valid', () => {
+  it('treats 0 and false as present values', () => {
     const schema = {
       required: ['count', 'active'],
       properties: {
