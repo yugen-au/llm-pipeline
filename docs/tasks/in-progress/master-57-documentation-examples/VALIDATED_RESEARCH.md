@@ -2,9 +2,11 @@
 
 ## Executive Summary
 
-Cross-referenced all 3 research files against actual source code, upstream task artifacts (53, 54), Graphiti memory, and test files. Core findings are accurate with one file-path error and several scope ambiguities requiring CEO clarification before planning.
+Cross-referenced all 3 research files against actual source code, upstream task artifacts (53, 54), Graphiti memory, and test files. Core findings are accurate with one file-path error corrected, scope now confirmed by CEO.
 
-Key validated findings: (1) README is 3 lines, confirmed empty, (2) task 57 description has 2 bugs in event example -- dict access not dot notation, execute() uses initial_context not context -- both confirmed via source + test evidence, (3) docs/api/llm.md return type mismatch confirmed (Optional[Dict] vs LLMCallResult), (4) 31 concrete event types (research said "28+"), (5) typo exists but research points to wrong file.
+Key validated findings: (1) README is 3 lines, confirmed empty, (2) task 57 description has 2 bugs in event example -- dict access not dot notation, execute() uses initial_context not context -- both confirmed via source + test evidence, (3) docs/api/llm.md return type mismatch confirmed (Optional[Dict] vs LLMCallResult), (4) 31 concrete event types (research said "28+"), (5) typo exists in `llm_pipeline/__init__.py` line 16, not `events/__init__.py` as research claimed.
+
+**Confirmed scope** (CEO decision): README + usage examples with self-contained runnable snippets, fix existing outdated docs (llm.md, index.md, overview.md), fix `__init__.py` typo. NOT creating new docs like docs/api/events.md. Document current API only, no version comparison framing.
 
 ## Domain Findings
 
@@ -58,7 +60,10 @@ Key validated findings: (1) README is 3 lines, confirmed empty, (2) task 57 desc
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| pending -- see Questions section | -- | -- |
+| Is task 57 scoped to README + usage examples only, or does it include fixing/updating existing docs and creating new ones like docs/api/events.md? | README + fix existing outdated docs (llm.md return type, index.md events row, overview.md observability). NOT creating new docs like events.md. | Removes ~40% of research-proposed work (events.md API reference). Keeps scope focused. |
+| Should __init__.py docstring typo (LLMCallStarted -> LLMCallStarting) be fixed in this task? | Yes, fix in this task. | Small code change added to scope. Target: `llm_pipeline/__init__.py` line 16. |
+| README examples: self-contained runnable snippets or hypothetical user classes? | Self-contained runnable snippets with real imports and minimal setup. No hypothetical user classes. | Examples must show real working code. Event example needs a real pipeline or just the handler directly. LLMCallResult example can use factory methods. |
+| LLMCallResult: Before/After version comparison or current API only? | Current API only, no version comparison. | Simplifies LLMCallResult section. No need to document pre-0.2.x dict return behavior. |
 
 ## Assumptions Validated
 
@@ -79,16 +84,29 @@ Key validated findings: (1) README is 3 lines, confirmed empty, (2) task 57 desc
 
 ## Open Items
 
-- Scope boundary: task 57 description says "Update README and create usage examples" -- research proposes work across 6+ files including creating new docs/api/events.md, fixing existing docs, and a code typo fix. CEO must clarify scope.
-- Whether LLMCallResult "Before/After" framing (version comparison) is appropriate or if we should just document current API
-- Whether README examples should be self-contained runnable snippets or can reference hypothetical user-defined classes (MyPipeline, etc.)
+None -- all scope questions resolved by CEO.
+
+## Confirmed Scope (CEO Decisions)
+
+### In Scope
+- README.md: rewrite with self-contained runnable examples (event system, UI, LLMCallResult)
+- Fix `docs/api/llm.md`: return type Optional[Dict] -> LLMCallResult, add missing params
+- Fix `docs/index.md`: add Events row to module table
+- Fix `docs/architecture/overview.md`: update observability section
+- Fix `llm_pipeline/__init__.py` line 16: LLMCallStarted -> LLMCallStarting typo
+
+### Out of Scope
+- Creating new docs/api/events.md (full event API reference)
+- Version comparison / migration guide framing
+- Hypothetical user class examples (MyPipeline etc.)
 
 ## Recommendations for Planning
 
 1. Fix the 2 confirmed bugs in task 57's example code before using them as basis for README content (dict access, initial_context param name)
 2. Correct the typo location reference: the fix target is `llm_pipeline/__init__.py` line 16, not `events/__init__.py`
-3. Consider splitting task 57 into tiers: (a) README examples (core scope), (b) existing doc fixes (llm.md return type, index.md events row), (c) new doc creation (events.md API reference) -- get CEO approval on which tiers are in scope
-4. Use 31 as exact event count, not "28+"
-5. All README event examples must use dict bracket notation, never dot notation
-6. Include `attempt_count` and `is_success`/`is_failure` in LLMCallResult examples -- these are the most useful properties for users
-7. Mention `--db` flag in UI CLI examples for completeness
+3. Use 31 as exact event count, not "28+"
+4. All README event examples must use dict bracket notation, never dot notation
+5. Include `attempt_count` and `is_success`/`is_failure` in LLMCallResult examples -- most useful properties for users
+6. Mention `--db` flag in UI CLI examples for completeness
+7. README examples must be self-contained: for event system, show InMemoryEventHandler + emit + get_events directly (no need to instantiate a full pipeline). For LLMCallResult, use factory methods. For UI, show CLI commands.
+8. Files to modify (5 total): README.md, docs/api/llm.md, docs/index.md, docs/architecture/overview.md, llm_pipeline/__init__.py
