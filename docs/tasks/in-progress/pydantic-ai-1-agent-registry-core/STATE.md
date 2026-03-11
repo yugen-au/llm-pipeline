@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/1-agent-registry-core
 ## Plugins: backend-development, python-development, llm-application-dev
@@ -22,9 +22,9 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a1480359d8940a630 | 7468bd4 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a9cc8439dc516d921 | f019c3c | - |
 | Create naming.py Utility | python-development:python-pro | implementation | 1 | - | A | complete | 0 | abc4a97d1d7f0fbc9 | e38efca | - |
-| Fix LLMStep.step_name | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
-| Fix StepDefinition snake_case | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
-| Fix StepKeyDict._normalize_key | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| Fix LLMStep.step_name | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
+| Fix StepDefinition snake_case | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
+| Fix StepKeyDict._normalize_key | python-development:python-pro | implementation | 4 | - | B | in-progress | 0 | pending | pending | - |
 | Create agent_registry.py | backend-development:backend-architect | implementation | 5 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Create agent_builders.py | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Update StepDefinition | python-development:python-pro | implementation | 7 | - | D | pending | 0 | pending | pending | - |
