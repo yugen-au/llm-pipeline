@@ -966,6 +966,63 @@ result = instruction_class.create_failure("API timeout")
 
 ### Monitoring and Observability
 
+**Event System**:
+
+The primary real-time observability mechanism is the event system. The pipeline emits events at every significant execution point; handlers receive them synchronously as the pipeline runs.
+
+`InMemoryEventHandler` captures all events as dicts for inspection after a run. Events are stored via `PipelineEvent.to_dict()` so all fields are accessed with bracket notation, not attribute access:
+
+```python
+from llm_pipeline.events.handlers import InMemoryEventHandler
+from llm_pipeline.events.emitter import CompositeEmitter
+
+handler = InMemoryEventHandler()
+emitter = CompositeEmitter(handlers=[handler])
+
+# Pass emitter into your pipeline config / strategy, then run...
+
+# Retrieve all events for a specific run
+events = handler.get_events(run_id="abc-123")
+for event in events:
+    print(event['event_type'], event['timestamp'])
+
+# Filter by type
+llm_events = handler.get_events_by_type('llm_call_completed', run_id="abc-123")
+for event in llm_events:
+    print(event['step_name'], event['raw_response'])
+
+# Retrieve all events regardless of run
+all_events = handler.get_events()
+```
+
+The event system covers 31 event types across 9 categories:
+
+| Category | Events |
+|---|---|
+| `pipeline_lifecycle` | `PipelineStarted`, `PipelineCompleted`, `PipelineError` |
+| `step_lifecycle` | `StepSelecting`, `StepSelected`, `StepSkipped`, `StepStarted`, `StepCompleted` |
+| `llm_call` | `LLMCallPrepared`, `LLMCallStarting`, `LLMCallCompleted`, `LLMCallRetry`, `LLMCallFailed`, `LLMCallRateLimited` |
+| `cache` | `CacheLookup`, `CacheHit`, `CacheMiss`, `CacheReconstruction` |
+| `consensus` | `ConsensusStarted`, `ConsensusAttempt`, `ConsensusReached`, `ConsensusFailed` |
+| `instructions_context` | `InstructionsStored`, `InstructionsLogged`, `ContextUpdated` |
+| `transformation` | `TransformationStarting`, `TransformationCompleted` |
+| `extraction` | `ExtractionStarting`, `ExtractionCompleted`, `ExtractionError` |
+| `state` | `StateSaved` |
+
+Use `CompositeEmitter` to attach multiple handlers simultaneously. A common pattern is pairing `InMemoryEventHandler` for programmatic access with `LoggingEventHandler` for structured logs:
+
+```python
+from llm_pipeline.events.handlers import InMemoryEventHandler, LoggingEventHandler
+from llm_pipeline.events.emitter import CompositeEmitter
+
+memory_handler = InMemoryEventHandler()
+log_handler = LoggingEventHandler()  # uses DEFAULT_LEVEL_MAP: lifecycle=INFO, cache/state=DEBUG
+emitter = CompositeEmitter(handlers=[memory_handler, log_handler])
+
+# CompositeEmitter isolates per-handler failures -- a failing handler
+# never prevents delivery to subsequent handlers.
+```
+
 **Execution Metrics**:
 ```python
 from llm_pipeline.state import PipelineStepState

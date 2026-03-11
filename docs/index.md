@@ -40,6 +40,7 @@ Comprehensive API documentation organized by module:
 | **[LLM Provider](api/llm.md)** | LLM provider system | `LLMProvider`, `GeminiProvider`, `RateLimiter` |
 | **[Prompts](api/prompts.md)** | Prompt management system | `PromptService`, `Prompt`, `VariableResolver` |
 | **[State](api/state.md)** | Execution state tracking | `PipelineStepState`, `PipelineRunInstance` |
+| **Events** | Event system for pipeline observability | `InMemoryEventHandler`, `CompositeEmitter`, `LoggingEventHandler` |
 | **[Registry](api/registry.md)** | Database registry with FK ordering | `PipelineDatabaseRegistry`, `ReadOnlySession` |
 
 **[API Reference Index](api/index.md)** - Complete import reference and installation details
@@ -148,6 +149,7 @@ Comprehensive API documentation organized by module:
 #### LLM Integration
 - [LLM Provider API Reference](api/llm.md)
 - [Getting Started](guides/getting-started.md)
+- [API Reference Index](api/index.md) - event system: `InMemoryEventHandler`, `CompositeEmitter` for observability
 
 ## Complete Table of Contents
 
@@ -258,6 +260,10 @@ from llm_pipeline import PipelineStrategy, PipelineStrategies
 
 # Database
 from llm_pipeline import PipelineDatabaseRegistry, ReadOnlySession
+
+# Events (observability)
+from llm_pipeline import InMemoryEventHandler, CompositeEmitter, LoggingEventHandler
+from llm_pipeline.events import PipelineStarted, LLMCallStarting  # concrete events
 
 # Prompts
 from llm_pipeline.prompts import PromptService, sync_prompts

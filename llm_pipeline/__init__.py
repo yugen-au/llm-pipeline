@@ -13,7 +13,7 @@ Usage::
     from llm_pipeline import LLMCallResult, PipelineEvent
 
     # Concrete events (submodule)
-    from llm_pipeline.events import PipelineStarted, StepStarted, LLMCallStarted
+    from llm_pipeline.events import PipelineStarted, StepStarted, LLMCallStarting
 """
 
 from llm_pipeline.pipeline import PipelineConfig

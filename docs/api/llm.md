@@ -59,8 +59,12 @@ def call_structured(
     strict_types: bool = True,
     array_validation: Optional[ArrayValidationConfig] = None,
     validation_context: Optional[ValidationContext] = None,
+    event_emitter: Optional[PipelineEventEmitter] = None,
+    step_name: Optional[str] = None,
+    run_id: Optional[str] = None,
+    pipeline_name: Optional[str] = None,
     **kwargs
-) -> Optional[Dict[str, Any]]
+) -> LLMCallResult
 ```
 
 **Parameters:**
@@ -73,13 +77,18 @@ def call_structured(
 - `strict_types` (bool): Validate field types strictly (default: True)
 - `array_validation` (Optional[ArrayValidationConfig]): Array validation configuration
 - `validation_context` (Optional[ValidationContext]): Context data for Pydantic validators
+- `event_emitter` (Optional[PipelineEventEmitter]): Event emitter for LLM call events
+- `step_name` (Optional[str]): Step name for event scoping
+- `run_id` (Optional[str]): Run identifier for event correlation
+- `pipeline_name` (Optional[str]): Pipeline name for event scoping
 
-**Returns:** `Optional[Dict[str, Any]]` - Validated JSON response dict, or None if all retries failed
+**Returns:** `LLMCallResult` - Result object containing parsed output, raw_response, model_name, attempt_count, and validation_errors
 
 **Example:**
 
 ```python
 from llm_pipeline.llm import LLMProvider
+from llm_pipeline.llm.result import LLMCallResult
 from pydantic import BaseModel
 
 class CustomProvider(LLMProvider):
@@ -88,11 +97,36 @@ class CustomProvider(LLMProvider):
         prompt: str,
         system_instruction: str,
         result_class: Type[BaseModel],
+        max_retries: int = 3,
         **kwargs
-    ) -> Optional[Dict[str, Any]]:
-        # Implement custom provider logic
-        response = self.api.generate(prompt, system_instruction)
-        return validate_and_return(response, result_class)
+    ) -> LLMCallResult:
+        errors = []
+        for attempt in range(max_retries):
+            try:
+                # Call your provider API
+                response_text = self.api.generate(prompt)
+                response_json = parse_json(response_text)
+
+                # Validate with Pydantic
+                result_class(**response_json)
+
+                return LLMCallResult.success(
+                    parsed=response_json,
+                    raw_response=response_text,
+                    model_name=self.model_name,
+                    attempt_count=attempt + 1,
+                    validation_errors=errors,
+                )
+            except Exception as e:
+                errors.append(str(e))
+
+        return LLMCallResult(
+            parsed=None,
+            raw_response=None,
+            model_name=self.model_name,
+            attempt_count=max_retries,
+            validation_errors=errors,
+        )
 ```
 
 ---
@@ -166,8 +200,8 @@ result = provider.call_structured(
     result_class=ParsedData
 )
 
-if result:
-    data = ParsedData(**result)
+if result.is_success:
+    data = ParsedData(**result.parsed)
     print(f"Parsed: {data.name} x {data.quantity}")
 ```
 
