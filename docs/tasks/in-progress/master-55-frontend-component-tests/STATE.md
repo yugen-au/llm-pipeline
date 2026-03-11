@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/master/55-frontend-component-tests
 ## Plugins: frontend-mobile-development, javascript-typescript
@@ -26,7 +26,7 @@
 | FormField InputForm Tests | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 1 | a4595ccafcb4bbda1 | ae4686a,36b02b1 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | EventStream Tests | frontend-mobile-development:frontend-developer | implementation | 5 | - | B | complete | 0 | a7d61c90d62af8d32 | 9fdcdb8,ae4686a | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PromptFilterBar Tests | frontend-mobile-development:frontend-developer | implementation | 6 | - | C | complete | 0 | a47add6e8704afd49 | aa4089c,96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
-| PromptList Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | pending | 0 | a0e0c5d9b0643214b | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
+| PromptList Tests | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | in-progress | 0 | a0e0c5d9b0643214b | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineList Tests | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a53e4977a3e25f2d6 | 96db4bb | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineSelector Tests | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | a67083625f62acf9b | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PromptViewer Tests | frontend-mobile-development:frontend-developer | implementation | 10 | - | D | complete | 0 | a7c8ea8d9d7856ef9 | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
