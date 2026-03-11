@@ -3,27 +3,44 @@ import { describe, expect, it } from 'vitest'
 import { StatusBadge } from './StatusBadge'
 
 describe('StatusBadge', () => {
-  it('renders "running" with amber outline styling', () => {
+  it('renders "running" with semantic outline styling', () => {
     render(<StatusBadge status="running" />)
     const badge = screen.getByText('running')
     expect(badge).toBeInTheDocument()
-    expect(badge).toHaveClass('border-amber-500')
-    expect(badge).toHaveClass('text-amber-600')
+    expect(badge).toHaveClass('border-status-running')
+    expect(badge).toHaveClass('text-status-running')
   })
 
-  it('renders "completed" with green outline styling', () => {
+  it('renders "completed" with semantic outline styling', () => {
     render(<StatusBadge status="completed" />)
     const badge = screen.getByText('completed')
     expect(badge).toBeInTheDocument()
-    expect(badge).toHaveClass('border-green-500')
-    expect(badge).toHaveClass('text-green-600')
+    expect(badge).toHaveClass('border-status-completed')
+    expect(badge).toHaveClass('text-status-completed')
   })
 
-  it('renders "failed" with destructive variant', () => {
+  it('renders "failed" with semantic outline styling', () => {
     render(<StatusBadge status="failed" />)
     const badge = screen.getByText('failed')
     expect(badge).toBeInTheDocument()
-    expect(badge.dataset.variant).toBe('destructive')
+    expect(badge).toHaveClass('border-status-failed')
+    expect(badge).toHaveClass('text-status-failed')
+  })
+
+  it('renders "skipped" with semantic outline styling', () => {
+    render(<StatusBadge status="skipped" />)
+    const badge = screen.getByText('skipped')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveClass('border-status-skipped')
+    expect(badge).toHaveClass('text-status-skipped')
+  })
+
+  it('renders "pending" with semantic outline styling', () => {
+    render(<StatusBadge status="pending" />)
+    const badge = screen.getByText('pending')
+    expect(badge).toBeInTheDocument()
+    expect(badge).toHaveClass('border-status-pending')
+    expect(badge).toHaveClass('text-status-pending')
   })
 
   it('renders unknown status as fallback with secondary variant', () => {
