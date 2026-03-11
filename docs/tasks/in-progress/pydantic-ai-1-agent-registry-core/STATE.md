@@ -20,4 +20,15 @@
 | Pydantic AI Agent Patterns | llm-application-dev:ai-engineer | research | 2 | - | A | complete | 0 | a2aa9cf3b169ff540 | 9edcf9b | - |
 | Python Registry & Deprecation Patterns | python-development:python-pro | research | 3 | - | A | complete | 0 | a63312bb750eafd8a | 9edcf9b | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a1480359d8940a630 | 7468bd4 | - |
-| Plan | planning | planning | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a9cc8439dc516d921 | pending | - |
+| Create naming.py Utility | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Fix LLMStep.step_name | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Fix StepDefinition snake_case | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Fix StepKeyDict._normalize_key | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| Create agent_registry.py | backend-development:backend-architect | implementation | 5 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Create agent_builders.py | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Update StepDefinition | python-development:python-pro | implementation | 7 | - | D | pending | 0 | pending | pending | - |
+| Update LLMStep | python-development:python-pro | implementation | 8 | - | D | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Update PipelineConfig | backend-development:backend-architect | implementation | 9 | - | E | pending | 0 | pending | pending | - |
+| Add pydantic-ai dep | python-development:python-pro | implementation | 10 | - | E | pending | 0 | pending | pending | - |
+| Update __init__.py exports | python-development:python-pro | implementation | 11 | - | F | pending | 0 | pending | pending | - |
