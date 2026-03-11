@@ -31,6 +31,7 @@ from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
 
 from llm_pipeline.context import PipelineInputData
+from llm_pipeline.naming import to_snake_case
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +63,7 @@ class StepKeyDict(dict):
     @staticmethod
     def _normalize_key(key):
         if isinstance(key, type) and key.__name__.endswith("Step"):
-            class_name = key.__name__[:-4]
-            step_name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", class_name)
-            step_name = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", step_name)
-            return step_name.lower()
+            return to_snake_case(key.__name__, strip_suffix="Step")
         return key
 
     def __getitem__(self, key):

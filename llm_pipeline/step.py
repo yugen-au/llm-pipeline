@@ -7,7 +7,6 @@ This module defines the foundation for implementing LLM-powered pipeline steps:
 - step_definition: Decorator for auto-generating step definition factories
 """
 import logging
-import re
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar, Tuple
@@ -20,6 +19,7 @@ from llm_pipeline.events.types import (
     ExtractionError,
     ExtractionStarting,
 )
+from llm_pipeline.naming import to_snake_case
 from llm_pipeline.types import StepCallParams
 
 logger = logging.getLogger(__name__)
@@ -257,9 +257,7 @@ class LLMStep(ABC):
             raise ValueError(
                 f"Step class '{class_name}' must end with 'Step' suffix."
             )
-        name = class_name[:-4]
-        snake_case = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
-        return snake_case
+        return to_snake_case(class_name, strip_suffix='Step')
 
     def store_extractions(self, model_class: Type[SQLModel], instances: List[SQLModel]) -> None:
         """Store extracted database models on the pipeline."""

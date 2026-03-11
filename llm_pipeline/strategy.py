@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Type, Optional, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field
 
+from llm_pipeline.naming import to_snake_case
+
 if TYPE_CHECKING:
     from llm_pipeline.extraction import PipelineExtraction
     from llm_pipeline.transformation import PipelineTransformation
@@ -53,12 +55,8 @@ class StepDefinition:
         from llm_pipeline.db.prompt import Prompt
 
         # Get step name for auto-discovery
-        import re
         step_class_name = self.step_class.__name__
-        step_name_prefix = step_class_name[:-4]  # Remove 'Step' suffix
-        snake_case = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', step_name_prefix)
-        snake_case = re.sub(r'([a-z\d])([A-Z])', r'\1_\2', snake_case)
-        step_name = snake_case.lower()
+        step_name = to_snake_case(step_class_name, strip_suffix='Step')
         
         # Determine final prompt keys with auto-discovery
         final_system_key = self.system_instruction_key
