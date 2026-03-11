@@ -108,3 +108,5 @@
 [2026-03-11 15:18:43] [INFO] Task call: code-documentation:docs-architect (phase: fixing-review)
 [2026-03-11 15:18:43] [INFO] Incremented Revisions: 0 -> 1
 [2026-03-11 15:18:43] [DEBUG] STATE.md atomic write complete
+[2026-03-11 15:19:23] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-11 15:19:36] [DEBUG] STATE.md atomic write complete
