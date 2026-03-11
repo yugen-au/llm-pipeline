@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-1-agent-registry-core
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-9-update-pipelineconfig.md (if already exists, APPEND to file)
+- Output Files: implementation\step-11-update-initpy-exports.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 9 - implement ONLY this step, not others
+- Step: 11 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-9-update-pipelineconfig.md
+4. Document decisions in implementation\step-11-update-initpy-exports.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 9: UPDATE PIPELINECONFIG
+# IMPLEMENTATION - STEP 11: UPDATE __INIT__.PY EXPORTS
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -73,7 +73,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-11-update-initpy-exports.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']

@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: E
+## Current Group: F
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/1-agent-registry-core
 ## Plugins: backend-development, python-development, llm-application-dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-12 10:20
+## Last Updated: 2026-03-12 10:21
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -29,6 +29,6 @@
 | Create agent_builders.py | llm-application-dev:ai-engineer | implementation | 6 | - | C | complete | 0 | a5eb624422d8bb682 | be173cf | /pydantic/pydantic-ai |
 | Update StepDefinition | python-development:python-pro | implementation | 7 | - | D | complete | 0 | a67d3b92314ec35c7 | 8881f18 | - |
 | Update LLMStep | python-development:python-pro | implementation | 8 | - | D | complete | 0 | aab48a789cf3e1579 | 8881f18 | /pydantic/pydantic-ai |
-| Update PipelineConfig | backend-development:backend-architect | implementation | 9 | - | E | complete | 0 | ac0a8efa743ba332e | pending | - |
-| Add pydantic-ai dep | python-development:python-pro | implementation | 10 | - | E | complete | 0 | a342bc724feaf9abe | 200b56a | - |
-| Update __init__.py exports | python-development:python-pro | implementation | 11 | - | F | pending | 0 | pending | pending | - |
+| Update PipelineConfig | backend-development:backend-architect | implementation | 9 | - | E | complete | 0 | ac0a8efa743ba332e | 5972079 | - |
+| Add pydantic-ai dep | python-development:python-pro | implementation | 10 | - | E | complete | 0 | a342bc724feaf9abe | 200b56a,5972079 | - |
+| Update __init__.py exports | python-development:python-pro | implementation | 11 | - | F | in-progress | 0 | pending | pending | - |
