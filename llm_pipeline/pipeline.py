@@ -48,6 +48,7 @@ from llm_pipeline.events.types import (
 if TYPE_CHECKING:
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
     from llm_pipeline.registry import PipelineDatabaseRegistry
+    from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.state import PipelineStepState
     from llm_pipeline.llm.provider import LLMProvider
     from llm_pipeline.prompts.variables import VariableResolver
@@ -104,12 +105,13 @@ class PipelineConfig(ABC):
 
     REGISTRY: ClassVar[Type["PipelineDatabaseRegistry"]] = None
     STRATEGIES: ClassVar[Type["PipelineStrategies"]] = None
+    AGENT_REGISTRY: ClassVar[Optional[Type["AgentRegistry"]]] = None
     INPUT_DATA: ClassVar[Optional[Type["PipelineInputData"]]] = None
 
-    def __init_subclass__(cls, registry=None, strategies=None, **kwargs):
+    def __init_subclass__(cls, registry=None, strategies=None, agent_registry=None, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        if registry is not None or strategies is not None:
+        if registry is not None or strategies is not None or agent_registry is not None:
             if not cls.__name__.endswith("Pipeline"):
                 raise ValueError(
                     f"Pipeline class '{cls.__name__}' must end with 'Pipeline' suffix."
@@ -132,10 +134,20 @@ class PipelineConfig(ABC):
                         f"got '{strategies.__name__}'"
                     )
 
+            if agent_registry is not None:
+                expected = f"{pipeline_name_prefix}AgentRegistry"
+                if agent_registry.__name__ != expected:
+                    raise ValueError(
+                        f"AgentRegistry for {cls.__name__} must be named '{expected}', "
+                        f"got '{agent_registry.__name__}'"
+                    )
+
         if registry is not None:
             cls.REGISTRY = registry
         if strategies is not None:
             cls.STRATEGIES = strategies
+        if agent_registry is not None:
+            cls.AGENT_REGISTRY = agent_registry
 
         if cls.INPUT_DATA is not None and not (
             isinstance(cls.INPUT_DATA, type) and issubclass(cls.INPUT_DATA, PipelineInputData)
