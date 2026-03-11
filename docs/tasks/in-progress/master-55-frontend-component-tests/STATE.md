@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: dev
 ## Task Branch: sam/master/55-frontend-component-tests
 ## Plugins: frontend-mobile-development, javascript-typescript
@@ -31,8 +31,8 @@
 | PipelineSelector Tests | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | a67083625f62acf9b | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PromptViewer Tests | frontend-mobile-development:frontend-developer | implementation | 10 | - | D | complete | 0 | a7c8ea8d9d7856ef9 | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineDetail Tests | frontend-mobile-development:frontend-developer | implementation | 11 | - | D | complete | 0 | ac7de2de7f6c3b14e | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
-| Sidebar Smoke Test | frontend-mobile-development:frontend-developer | implementation | 12 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
-| JsonTree Boundary Tests | frontend-mobile-development:frontend-developer | implementation | 13 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
-| StrategySection Smoke Test | frontend-mobile-development:frontend-developer | implementation | 14 | - | E | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| Sidebar Smoke Test | frontend-mobile-development:frontend-developer | implementation | 12 | - | E | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| JsonTree Boundary Tests | frontend-mobile-development:frontend-developer | implementation | 13 | - | E | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| StrategySection Smoke Test | frontend-mobile-development:frontend-developer | implementation | 14 | - | E | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | RunListPage Tests | frontend-mobile-development:frontend-developer | implementation | 15 | - | F | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | RunDetailPage Tests | frontend-mobile-development:frontend-developer | implementation | 16 | - | F | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
