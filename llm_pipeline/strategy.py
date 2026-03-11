@@ -35,7 +35,13 @@ class StepDefinition:
     extractions: List[Type['PipelineExtraction']] = field(default_factory=list)
     transformation: Optional[Type['PipelineTransformation']] = None
     context: Optional[Type] = None  # Type is PipelineContext but avoid circular import
-    
+    agent_name: str | None = None
+
+    @property
+    def step_name(self) -> str:
+        """Derived snake_case name from step_class (e.g. ConstraintExtractionStep -> 'constraint_extraction')."""
+        return to_snake_case(self.step_class.__name__, strip_suffix='Step')
+
     def create_step(self, pipeline: 'PipelineConfig'):
         """
         Create a configured step instance with pipeline reference.
@@ -126,10 +132,11 @@ class StepDefinition:
             instructions=self.instructions,
             pipeline=pipeline  # Pass pipeline to step
         )
-        # Store extractions, transformation, and context on the step instance
+        # Store extractions, transformation, context, and agent_name on the step instance
         step._extractions = self.extractions
         step._transformation = self.transformation
         step._context = self.context
+        step._agent_name = self.agent_name
         return step
 
 
