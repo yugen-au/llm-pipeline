@@ -54,3 +54,51 @@ None
 ## Recommendation
 **Decision:** APPROVE
 All changes are accurate, well-scoped, and verified against source code. The two issues found are pre-existing (validate_and_return) or cosmetic (MyPipeline comment). No new regressions. Documentation improvements are substantial and correct.
+
+---
+
+# Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+Both previously identified issues have been resolved. The CustomProvider example now uses realistic LLMCallResult-based code with correct factory method signatures. The MyPipeline inline comment clarifies it is the user's PipelineConfig subclass. No new issues introduced by the fixes.
+
+## Fix Verification
+
+### MEDIUM - Step 2: validate_and_return placeholder (RESOLVED)
+**Before:** `validate_and_return(response, result_class)` -- non-existent function.
+**After:** Full retry loop with `LLMCallResult.success()` on parse success, `LLMCallResult(parsed=None, ...)` constructor on exhaustion. Verified against `llm_pipeline/llm/result.py`:
+- `LLMCallResult.success(parsed, raw_response, model_name, attempt_count, validation_errors)` -- all params match classmethod signature (lines 54-76 of result.py)
+- Direct constructor for failure path correctly avoids `failure()` classmethod which requires `raw_response: str` (non-optional), while the example's exhaustion scenario legitimately passes `raw_response=None`
+- Error accumulation pattern (`errors.append(str(e))`) matches GeminiProvider's real retry logic
+
+### LOW - Step 5: MyPipeline placeholder (RESOLVED)
+**Before:** `pipeline = MyPipeline(provider=provider, event_emitter=handler)` -- no explanation.
+**After:** `pipeline = MyPipeline(provider=provider, event_emitter=handler)  # MyPipeline is your PipelineConfig subclass`
+Second usage (line 42) omits the comment appropriately -- first occurrence already establishes meaning.
+
+## New Issues Introduced
+- None detected
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| docs/api/llm.md | pass | CustomProvider example now uses LLMCallResult.success() and direct constructor with correct signatures |
+| README.md | pass | MyPipeline clarifying comment added on first usage (line 20) |
+
+## Recommendation
+**Decision:** APPROVE
+Both fixes are correct and complete. All previously identified issues resolved. No new issues. Ready to merge.
