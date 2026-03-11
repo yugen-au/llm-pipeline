@@ -3,13 +3,17 @@ import userEvent from '@testing-library/user-event'
 import type { Prompt } from '@/api/types'
 import { PromptList } from './PromptList'
 
-// Radix ScrollArea uses ResizeObserver internally (not in jsdom)
+// Radix ScrollArea uses ResizeObserver internally; polyfill for jsdom
+const originalRO = globalThis.ResizeObserver
 beforeAll(() => {
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
     disconnect() {}
   } as unknown as typeof ResizeObserver
+})
+afterAll(() => {
+  globalThis.ResizeObserver = originalRO
 })
 
 function makePrompt(overrides: Partial<Prompt> = {}): Prompt {

@@ -29,3 +29,43 @@ New test file with 6 tests:
 [x] No new npm packages added
 [x] No QueryClientProvider wrapping
 [x] Test file co-located next to source
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] ResizeObserver not restored in afterAll - store original and restore matching PipelineList.test.tsx pattern
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/prompts/PromptList.test.tsx`
+Added save/restore of original ResizeObserver reference to match PipelineList.test.tsx pattern.
+```
+# Before
+// Radix ScrollArea uses ResizeObserver internally (not in jsdom)
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+})
+
+# After
+// Radix ScrollArea uses ResizeObserver internally; polyfill for jsdom
+const originalRO = globalThis.ResizeObserver
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+})
+afterAll(() => {
+  globalThis.ResizeObserver = originalRO
+})
+```
+
+### Verification
+[x] All 6 tests pass (`npx vitest run PromptList`)
+[x] Pattern matches PipelineList.test.tsx
