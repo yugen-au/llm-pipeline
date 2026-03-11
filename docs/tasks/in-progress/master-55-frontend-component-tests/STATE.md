@@ -32,7 +32,7 @@
 | PromptViewer Tests | frontend-mobile-development:frontend-developer | implementation | 10 | - | D | complete | 0 | a7c8ea8d9d7856ef9 | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | PipelineDetail Tests | frontend-mobile-development:frontend-developer | implementation | 11 | - | D | complete | 0 | ac7de2de7f6c3b14e | 53b6986 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | Sidebar Smoke Test | frontend-mobile-development:frontend-developer | implementation | 12 | - | E | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
-| JsonTree Boundary Tests | frontend-mobile-development:frontend-developer | implementation | 13 | - | E | in-progress | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
+| JsonTree Boundary Tests | frontend-mobile-development:frontend-developer | implementation | 13 | - | E | complete | 0 | ac5da2ad196521869 | 599e4ce | /vitest-dev/vitest,/testing-library/react-testing-library |
 | StrategySection Smoke Test | frontend-mobile-development:frontend-developer | implementation | 14 | - | E | complete | 0 | a9c66372e01ca3b4e | 5709f46 | /vitest-dev/vitest,/testing-library/react-testing-library |
 | RunListPage Tests | frontend-mobile-development:frontend-developer | implementation | 15 | - | F | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
 | RunDetailPage Tests | frontend-mobile-development:frontend-developer | implementation | 16 | - | F | pending | 0 | pending | pending | /vitest-dev/vitest,/testing-library/react-testing-library |
