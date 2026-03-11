@@ -10,7 +10,6 @@ DESIGN PHILOSOPHY:
 import hashlib
 import json
 import logging
-import re
 import uuid
 from abc import ABC
 from datetime import datetime, timezone
@@ -270,9 +269,7 @@ class PipelineConfig(ABC):
             raise ValueError(
                 f"Pipeline class '{class_name}' must end with 'Pipeline' suffix."
             )
-        name = class_name[:-8]
-        snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
-        return snake_case
+        return to_snake_case(class_name, strip_suffix="Pipeline")
 
     def _build_execution_order(self) -> None:
         all_steps = []
