@@ -31,3 +31,30 @@ New test file with 4 InputForm tests (null schema -> empty, data-testid present,
 [x] Tests co-located next to source files
 [x] Follows existing vi.mock()/vi.fn() patterns
 [x] No new npm packages added
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Remove duplicate validateForm tests from InputForm.test.tsx (already covered by validateForm.test.ts with 10 comprehensive tests)
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/live/InputForm.test.tsx`
+Removed entire `describe('validateForm')` block (4 tests) and unused `validateForm` import. validateForm.test.ts provides superset coverage.
+
+```
+# Before
+import { InputForm, validateForm } from './InputForm'
+...
+describe('validateForm', () => { ... 4 tests ... })
+
+# After
+import { InputForm } from './InputForm'
+// validateForm describe block removed entirely
+```
+
+### Verification
+[x] 5 InputForm tests pass (npx vitest run InputForm)
+[x] No validateForm import remains in InputForm.test.tsx
+[x] validateForm.test.ts still provides full coverage separately
