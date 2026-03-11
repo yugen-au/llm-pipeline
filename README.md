@@ -17,7 +17,7 @@ from llm_pipeline import InMemoryEventHandler, CompositeEmitter
 
 # Attach handler to pipeline at construction
 handler = InMemoryEventHandler()
-pipeline = MyPipeline(provider=provider, event_emitter=handler)
+pipeline = MyPipeline(provider=provider, event_emitter=handler)  # MyPipeline is your PipelineConfig subclass
 pipeline.execute(data)
 
 # Events are stored as dicts

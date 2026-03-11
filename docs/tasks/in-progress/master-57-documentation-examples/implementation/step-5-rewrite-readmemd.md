@@ -52,3 +52,26 @@ Declarative LLM pipeline orchestration framework.
 [x] README.md contains LLMCallResult.success() and LLMCallResult.failure() factory methods
 [x] README.md shows parsed, raw_response, model_name, attempt_count, validation_errors, is_success, is_failure
 [x] README.md links to docs/
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MyPipeline used without clarifying it is the user's pipeline subclass
+
+### Changes Made
+#### File: `README.md`
+Added inline comment on first MyPipeline usage in the event system example.
+
+```
+# Before
+pipeline = MyPipeline(provider=provider, event_emitter=handler)
+
+# After
+pipeline = MyPipeline(provider=provider, event_emitter=handler)  # MyPipeline is your PipelineConfig subclass
+```
+
+### Verification
+[x] First occurrence of MyPipeline (line 20) has clarifying comment
+[x] Second occurrence (line 42, CompositeEmitter example) left without comment - context already established by first comment
