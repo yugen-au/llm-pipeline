@@ -32,5 +32,5 @@
 | Update PipelineConfig | backend-development:backend-architect | implementation | 9 | - | E | complete | 0 | ac0a8efa743ba332e | 5972079 | - |
 | Add pydantic-ai dep | python-development:python-pro | implementation | 10 | - | E | complete | 0 | a342bc724feaf9abe | 200b56a,5972079 | - |
 | Update __init__.py exports | python-development:python-pro | implementation | 11 | - | F | complete | 0 | a309527c755b4a8fe | 4ed29a8 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | ad831e960debee7a6 | 344306d | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 1 | ad831e960debee7a6 | 344306d | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a124071b0f3e82e53 | ae27d0f | - |
