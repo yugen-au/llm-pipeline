@@ -9,7 +9,7 @@
 ## Plugins: code-documentation, documentation-generation, python-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: testing
-## Steps to Fix: none
+## Steps to Fix: [2,5]
 ## Work Mode: standard
 ## Last Updated: 2026-03-11 15:15
 
