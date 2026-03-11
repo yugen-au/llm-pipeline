@@ -9,7 +9,7 @@
 ## Plugins: frontend-mobile-development, javascript-typescript
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [2,4,7]
 ## Work Mode: standard
 ## Last Updated: 2026-03-11 11:20
 
