@@ -815,5 +815,95 @@
         "master"
       ]
     }
+  },
+  "pydantic-ai": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Implement AgentRegistry and Core Agent Abstractions",
+        "description": "Create the AgentRegistry for mapping step names to pydantic.ai Agent instances, define the StepDeps dataclass for agent dependencies, and develop agent builder utilities. Update StepDefinition with an agent_name field and LLMStep with get_agent() and build_user_prompt() methods, deprecating create_llm_call().",
+        "details": "Create AgentRegistry in logistics_intelligence/core/schemas/pipeline/agent_registry.py following PipelineDatabaseRegistry.__init_subclass__ pattern. Implement StepDeps dataclass in logistics_intelligence/core/schemas/pipeline/agent_builders.py containing session, pipeline_context, prompt_service, validation_context. Develop build_step_agent factory in agent_builders.py to construct Agent instances, using @agent.instructions for dynamic prompt injection from PromptService. Add agent_name: str | None to StepDefinition in strategy.py, defaulting to step's snake_case name. Modify LLMStep in step.py to include get_agent(registry) -> Agent and build_user_prompt(variables) -> str. Mark create_llm_call() with warnings.warn for deprecation. Export new classes in schemas/pipeline/__init__.py. Add StepDeps to schemas/pydantic_models.py.",
+        "testStrategy": "Unit tests for AgentRegistry to verify subclass declaration and step name validation. Unit tests for StepDeps to confirm type checking and RunContext compatibility. Unit tests for build_step_agent to ensure correct Agent instance creation with dynamic instructions. Unit tests for LLMStep.get_agent() to confirm correct agent resolution. Unit tests for LLMStep.build_user_prompt() to verify prompt text generation matches existing logic. Verify create_llm_call() still functions (with warning).",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Rewrite Pipeline Executor to Use pydantic.ai Agents",
+        "description": "Refactor PipelineConfig.execute() to replace calls to execute_llm_step() with agent.run_sync(). This involves constructing StepDeps, handling RunResult.output, and managing failure cases. The task also includes updating _execute_with_consensus() and deleting obsolete LLM utility functions and the custom RateLimiter.",
+        "details": "In PipelineConfig.execute() (config.py), replace execute_llm_step(**call_kwargs) with agent.run_sync(user_prompt, deps=step_deps). Build StepDeps from session, pipeline_context, prompt_service. Extract result from run_result.output. Ensure caching, state saving, extraction, and transformation logic remain unchanged. Update _execute_with_consensus() to use agent.run_sync() in its loop and run_result.usage() for token logging (though logging is detailed in Task 4, the usage retrieval is here). Map UnexpectedModelBehavior from pydantic.ai to create_failure(). Delete execute_llm_step(), call_gemini_with_structured_output(), format_schema_for_llm(), validate_structured_output(), validate_array_response() from core/llm/utils.py. Delete RateLimiter from core/llm/rate_limiter.py and its global instance. Remove rate_limiter exports from core/llm/__init__.py. Deprecate ExecuteLLMStepParams in schemas/pydantic_models.py.",
+        "testStrategy": "Run all existing pipeline tests, adapting them for the new call pattern. Verify PipelineConfig.execute() correctly orchestrates steps using agent.run_sync(). Confirm consensus polling still functions as expected. Validate that caching, state saving, extraction, and transformation logic are preserved. Test error handling for LLM failures, ensuring create_failure() is invoked correctly. Verify that 429 rate limit errors are handled by pydantic.ai's internal retry mechanism. Run the rate card parser end-to-end test to ensure full pipeline functionality.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Port Custom Validation Logic to pydantic.ai Output Validators",
+        "description": "Migrate existing custom validation logic, including not_found_indicators and ArrayValidationConfig, to pydantic.ai's @agent.output_validator decorators. This involves creating validator factories, updating agent builders to register these validators, and deleting the old validation.py module.",
+        "details": "Create not_found_validator(indicators: list[str]) factory in logistics_intelligence/core/schemas/pipeline/validators.py. This validator should check string fields for indicator phrases and raise ModelRetry if found. Create array_length_validator(expected_length: int, match_field: str) factory in validators.py. This validator should check array length and raise ModelRetry on mismatch. Port check_not_found_response() logic into the not_found_validator. Port validate_array_response() logic into the array_length_validator, ensuring strip_number_prefix and allow_reordering logic is preserved, accessing ArrayValidationConfig data via StepDeps. Update build_step_agent in agent_builders.py to accept a list of validators and register them using @agent.output_validator. Replace ValidationContext usage by passing relevant data via StepDeps and accessing it through RunContext[StepDeps] in validators. Delete schemas/validation.py and move ArrayValidationConfig if still needed to validators.py or StepDeps. Delete check_not_found_response and validate_array_response from core/llm/utils.py. Drop strict_types as pydantic.ai handles native Pydantic model validation.",
+        "testStrategy": "Unit tests for not_found_validator factory to ensure it correctly identifies \"not found\" phrases and raises ModelRetry. Unit tests for array_length_validator factory to verify array length, order, and reordering logic. Integration tests for steps that previously used not_found_indicators or ArrayValidationConfig to confirm their validation still works correctly with the new output validators. Verify that ModelRetry correctly triggers LLM retries. Confirm validation.py is successfully deleted and no regressions occur.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Implement OpenTelemetry Integration and Pipeline Event System",
+        "description": "Enable pydantic.ai's OpenTelemetry instrumentation for all pipeline agents to capture operational metrics like token usage, retries, and latency. Additionally, create a new pipeline-level event system for real-time UI updates and log token usage per step for cost tracking.",
+        "details": "In agent_builders.py, add instrument=InstrumentationSettings(include_content=True) to agent construction, potentially using Agent.instrument_all() for global enablement. Define pipeline event types (StepPrepared, StepStarting, StepCompleted) as dataclasses or Pydantic models in schemas/pipeline/events.py. Modify PipelineConfig.execute() in config.py to emit these events at appropriate points, using a callback function or async generator pattern. After each agent.run_sync() call in config.py, log result.usage().request_tokens, response_tokens, total_tokens and store them in PipelineStepState (add new fields if necessary) in schemas/pipeline/state.py. Create docs/observability.md to document OTel setup, including configuration via standard OTel environment variables.",
+        "testStrategy": "Verify OTel spans are generated for model requests, retries, and token usage by configuring a console exporter or a local Jaeger instance during testing. Unit tests for the event system to ensure events are correctly defined and emitted by the executor. Confirm token usage is accurately logged and stored in PipelineStepState after each step execution. Validate that the OTel setup documentation is clear and accurate.",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Refactor Consensus Mechanism with Strategy Pattern",
+        "description": "Replace the current naive consensus logic with a flexible ConsensusStrategy abstraction. Implement several strategy variants, including MajorityVoteStrategy, ConfidenceWeightedStrategy, AdaptiveStrategy, and SoftVoteStrategy. Update PipelineConfig._execute_with_consensus() to use this strategy pattern and add consensus configuration options to StepDefinition.",
+        "details": "Create ConsensusStrategy ABC and ConsensusResult dataclass in logistics_intelligence/core/schemas/pipeline/consensus.py. Implement MajorityVoteStrategy (reproducing current behavior), ConfidenceWeightedStrategy, AdaptiveStrategy, and SoftVoteStrategy as subclasses of ConsensusStrategy in consensus.py. Modify PipelineConfig._execute_with_consensus() in config.py to accept a ConsensusStrategy parameter (defaulting to MajorityVoteStrategy). Use strategy.should_continue() to control the polling loop and strategy.select() to determine the final result, returning ConsensusResult. Add consensus_strategy: ConsensusStrategy | None to StepDefinition in strategy.py for per-step override. Move _smart_compare() and _instructions_match() from PipelineConfig to consensus.py as module-level utilities. Export new consensus classes in schemas/pipeline/__init__.py.",
+        "testStrategy": "Unit tests for each ConsensusStrategy implementation with known inputs and expected outputs. Verify MajorityVoteStrategy accurately reproduces the existing consensus behavior. Integration tests for _execute_with_consensus() to ensure it correctly applies the chosen strategy. Test pipelines configured with different consensus strategies to confirm their impact on results and sample counts. Validate that ConsensusResult correctly captures metadata like confidence, strategy name, and agreement ratio.",
+        "priority": "medium",
+        "dependencies": [
+          2
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Perform Final Integration, Comprehensive Testing, and Cleanup",
+        "description": "Conduct a thorough end-to-end integration test of the entire LLM pipeline after all migration tasks are complete. Ensure all existing pipeline subclasses (e.g., RateCardParser, TableExtraction, InvoiceParser) function correctly without modifications. Remove all deprecated code and temporary flags, and ensure the system is stable and performant.",
+        "details": "Run all existing integration tests for RateCardParser, TableExtraction, InvoiceParser, and any other pipeline subclasses to ensure full functionality with the new pydantic.ai agent system. Verify that create_llm_call() is fully removed and no longer referenced. Ensure PYDANTIC_AI_DEFER_MODEL_CHECK=True is only used in tests and not in production code. Review the codebase for any remaining deprecated functions, classes, or temporary flags and remove them. Conduct performance testing to ensure the new agent-based pipeline meets or exceeds previous performance benchmarks. Update any relevant documentation (e.g., developer guides, architecture diagrams) to reflect the new pydantic.ai agent architecture.",
+        "testStrategy": "Execute a full suite of end-to-end integration tests covering all critical pipeline functionalities. Perform regression testing to ensure no existing features are broken. Code review to confirm removal of all deprecated components and adherence to new architectural patterns. Load testing and performance profiling to validate system stability and efficiency under expected loads. Manual verification of documentation updates.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2026-03-11T05:57:09.226Z",
+      "updated": "2026-03-11T05:57:09.226Z",
+      "description": "Tasks for pydantic-ai context"
+    }
   }
 }
