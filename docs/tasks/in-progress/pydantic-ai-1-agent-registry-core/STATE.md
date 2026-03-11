@@ -27,7 +27,7 @@
 | Fix StepKeyDict._normalize_key | python-development:python-pro | implementation | 4 | - | B | complete | 1 | a8ea73b8a6d0b3627 | afa63ac,f41180b,52ff578 | - |
 | Create agent_registry.py | backend-development:backend-architect | implementation | 5 | - | C | complete | 0 | a18b3cf39e822d6f0 | be173cf | /pydantic/pydantic-ai |
 | Create agent_builders.py | llm-application-dev:ai-engineer | implementation | 6 | - | C | complete | 1 | a5eb624422d8bb682 | be173cf,b82f6f4 | /pydantic/pydantic-ai |
-| Update StepDefinition | python-development:python-pro | implementation | 7 | - | D | in-progress | 1 | a67d3b92314ec35c7 | 8881f18 | - |
+| Update StepDefinition | python-development:python-pro | implementation | 7 | - | D | complete | 1 | a67d3b92314ec35c7 | 8881f18,96f0071 | - |
 | Update LLMStep | python-development:python-pro | implementation | 8 | - | D | complete | 1 | aab48a789cf3e1579 | 8881f18,96f0071 | /pydantic/pydantic-ai |
 | Update PipelineConfig | backend-development:backend-architect | implementation | 9 | - | E | complete | 0 | ac0a8efa743ba332e | 5972079 | - |
 | Add pydantic-ai dep | python-development:python-pro | implementation | 10 | - | E | complete | 0 | a342bc724feaf9abe | 200b56a,5972079 | - |
