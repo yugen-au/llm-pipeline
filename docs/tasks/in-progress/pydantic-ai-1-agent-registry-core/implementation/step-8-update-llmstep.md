@@ -71,3 +71,42 @@ New methods added between step_name property and store_extractions:
 [x] create_llm_call() original implementation unchanged after warning
 [x] All existing tests pass (1 pre-existing failure in test_ui unrelated)
 [x] DeprecationWarning visible in test output from conftest calling create_llm_call()
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM: build_user_prompt() loses original Pydantic model instance -- passes dict as both variables= and variable_instance=, degrading PromptService diagnostic error messages that check hasattr(variable_instance, 'model_fields')
+
+### Changes Made
+#### File: `llm_pipeline/step.py`
+Preserve original model reference before model_dump() so variable_instance retains the Pydantic model for diagnostics.
+
+```
+# Before
+        if hasattr(variables, 'model_dump'):
+            variables = variables.model_dump()
+        return prompt_service.get_user_prompt(
+            self.user_prompt_key,
+            variables=variables,
+            variable_instance=variables,
+            context=context,
+        )
+
+# After
+        variable_instance = variables
+        if hasattr(variables, 'model_dump'):
+            variables = variables.model_dump()
+        return prompt_service.get_user_prompt(
+            self.user_prompt_key,
+            variables=variables,
+            variable_instance=variable_instance,
+            context=context,
+        )
+```
+
+### Verification
+[x] Original Pydantic model preserved as variable_instance
+[x] Dict from model_dump() still passed as variables
+[x] All 634 tests pass (1 pre-existing failure in test_ui unrelated)

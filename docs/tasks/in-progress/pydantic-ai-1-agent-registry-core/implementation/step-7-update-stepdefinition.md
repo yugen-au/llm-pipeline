@@ -52,3 +52,31 @@ None
 [x] step_name handles consecutive capitals (HTMLParserStep -> html_parser)
 [x] create_step() sets step._agent_name from self.agent_name
 [x] All existing tests pass (583 passed, 1 pre-existing UI failure unrelated)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] `test_create_step_sets_agent_name_on_instance` creates in-memory SQLite engine/Session but never closes them, producing `ResourceWarning: unclosed database`
+
+### Changes Made
+#### File: `tests/test_agent_registry_core.py`
+Added `session.close()` and `engine.dispose()` at end of test to prevent resource leak.
+
+```
+# Before
+        step = sd.create_step(fake_pipeline)
+        assert step._agent_name == "override_name"
+
+# After
+        step = sd.create_step(fake_pipeline)
+        assert step._agent_name == "override_name"
+
+        session.close()
+        engine.dispose()
+```
+
+### Verification
+[x] Test passes with `-W error::ResourceWarning` (no unclosed database warning)
+[x] No regressions in test suite

@@ -450,6 +450,9 @@ class TestStepDefinitionNewFields:
         step = sd.create_step(fake_pipeline)
         assert step._agent_name == "override_name"
 
+        session.close()
+        engine.dispose()
+
 
 # ============================================================
 # pipeline.py - PipelineConfig agent_registry= param
