@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/1-agent-registry-core
 ## Plugins: backend-development, python-development, llm-application-dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [4,6,7,8]
 ## Work Mode: standard
-## Last Updated: 2026-03-12 10:50
+## Last Updated: 2026-03-12 10:51
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,7 +26,7 @@
 | Fix StepDefinition snake_case | python-development:python-pro | implementation | 3 | - | B | complete | 0 | a58de518b2be4c2b6 | 1e4c51d,f41180b | - |
 | Fix StepKeyDict._normalize_key | python-development:python-pro | implementation | 4 | - | B | complete | 1 | a8ea73b8a6d0b3627 | afa63ac,f41180b,52ff578 | - |
 | Create agent_registry.py | backend-development:backend-architect | implementation | 5 | - | C | complete | 0 | a18b3cf39e822d6f0 | be173cf | /pydantic/pydantic-ai |
-| Create agent_builders.py | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | a5eb624422d8bb682 | be173cf | /pydantic/pydantic-ai |
+| Create agent_builders.py | llm-application-dev:ai-engineer | implementation | 6 | - | C | in-progress | 0 | a5eb624422d8bb682 | be173cf | /pydantic/pydantic-ai |
 | Update StepDefinition | python-development:python-pro | implementation | 7 | - | D | pending | 0 | a67d3b92314ec35c7 | 8881f18 | - |
 | Update LLMStep | python-development:python-pro | implementation | 8 | - | D | pending | 0 | aab48a789cf3e1579 | 8881f18 | /pydantic/pydantic-ai |
 | Update PipelineConfig | backend-development:backend-architect | implementation | 9 | - | E | complete | 0 | ac0a8efa743ba332e | 5972079 | - |
