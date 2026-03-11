@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-1-agent-registry-core
 ## Description: Implement AgentRegistry, StepDeps, agent builder utilities, update StepDefinition/LLMStep with pydantic-ai Agent integration, deprecate create_llm_call()
 
-## Phase: planning
+## Phase: implementation
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-11 17:31
+## Last Updated: 2026-03-12 09:50
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,8 +20,8 @@
 | Pydantic AI Agent Patterns | llm-application-dev:ai-engineer | research | 2 | - | A | complete | 0 | a2aa9cf3b169ff540 | 9edcf9b | - |
 | Python Registry & Deprecation Patterns | python-development:python-pro | research | 3 | - | A | complete | 0 | a63312bb750eafd8a | 9edcf9b | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a1480359d8940a630 | 7468bd4 | - |
-| Plan | planning | planning | 1 | - | A | complete | 0 | a9cc8439dc516d921 | pending | - |
-| Create naming.py Utility | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a9cc8439dc516d921 | f019c3c | - |
+| Create naming.py Utility | python-development:python-pro | implementation | 1 | - | A | in-progress | 0 | pending | pending | - |
 | Fix LLMStep.step_name | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | - |
 | Fix StepDefinition snake_case | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | - |
 | Fix StepKeyDict._normalize_key | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
