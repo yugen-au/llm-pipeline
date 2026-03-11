@@ -1,7 +1,7 @@
 ## Task: master-57-documentation-examples
 ## Description: Update README with usage examples for event system, UI, and LLMCallResult changes
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
