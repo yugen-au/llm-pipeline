@@ -30,3 +30,24 @@ Unit tests for toSearchParams, ApiError (api/types.ts), and validateForm (compon
 [x] No new dependencies added
 [x] Co-located test files next to source
 [x] No QueryClientProvider usage
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Misleading test name "accepts non-string truthy values as valid" -- 0 and false are falsy, not truthy
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/components/live/validateForm.test.ts`
+Renamed test to accurately describe behavior (validateForm treats 0/false as present, only null/undefined/'' as missing).
+```
+# Before
+it('accepts non-string truthy values as valid', () => {
+
+# After
+it('treats 0 and false as present values', () => {
+```
+
+### Verification
+[x] npx vitest run validateForm -- 10/10 passing
