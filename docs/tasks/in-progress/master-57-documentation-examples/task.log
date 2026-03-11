@@ -92,3 +92,12 @@
 [2026-03-11 15:10:06] [DEBUG] STATE.md atomic write complete
 [2026-03-11 15:10:23] [INFO] Task call: comprehensive-review:architect-review (phase: review)
 [2026-03-11 15:15:44] [DEBUG] STATE.md atomic write complete
+[2026-03-11 15:17:44] [ERROR] BLOCKED: Cannot enter fix loop 'fixing-review': steps_to_fix not set
+[2026-03-11 15:17:50] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '2,5'
+[2026-03-11 15:18:00] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-11 15:18:11] [INFO] Committed review-A: ['REVIEW.md'] -> e9ca0e8
+[2026-03-11 15:18:12] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-11 15:18:12] [INFO] Updated Commits for 'Architecture review': c62a2fa
+[2026-03-11 15:18:12] [INFO] Auto-updated agent statuses: Fix docs/api/llm.md: complete -> in-progress, Rewrite README.md: complete -> in-progress, Architecture review: complete -> pending
+[2026-03-11 15:18:12] [INFO] Deleted 1 old contract file(s)
+[2026-03-11 15:18:12] [DEBUG] STATE.md atomic write complete
