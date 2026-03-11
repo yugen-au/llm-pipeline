@@ -5,12 +5,13 @@ Provides StepDeps (dependency injection container) and build_step_agent()
 (factory function) for constructing agents with dynamic system prompt
 resolution via PromptService.
 """
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
-from pydantic_ai import Agent, RunContext
-
 if TYPE_CHECKING:
+    from pydantic_ai import Agent, RunContext
     from llm_pipeline.prompts.service import PromptService
     from llm_pipeline.prompts.variables import VariableResolver
     from llm_pipeline.events.emitter import PipelineEventEmitter
@@ -71,6 +72,8 @@ def build_step_agent(
     Returns:
         Configured Agent[StepDeps, Any] with dynamic instructions registered.
     """
+    from pydantic_ai import Agent, RunContext
+
     agent: Agent[StepDeps, Any] = Agent(
         model=model,
         output_type=output_type,
