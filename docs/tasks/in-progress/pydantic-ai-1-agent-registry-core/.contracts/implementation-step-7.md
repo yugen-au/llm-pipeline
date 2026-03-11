@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-1-agent-registry-core
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-6-create-agentbuilderspy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-7-update-stepdefinition.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 6
+- Step to fix: 7
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /pydantic/pydantic-ai
+3. [custom.context7_docs]
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 6
+1. Read REVIEW.md for issues assigned to Step 7
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-6-create-agentbuilderspy.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-7-update-stepdefinition.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
