@@ -25,4 +25,4 @@
 | Fix docs/api/llm.md | documentation-generation:docs-architect | implementation | 2 | - | A | in-progress | 0 | pending | pending | - |
 | Fix docs/index.md | documentation-generation:docs-architect | implementation | 3 | - | A | complete | 0 | ab7e67e1c57dfe016 | 719583f | - |
 | Fix docs/architecture/overview.md | documentation-generation:docs-architect | implementation | 4 | - | A | in-progress | 0 | pending | pending | - |
-| Rewrite README.md | code-documentation:docs-architect | implementation | 5 | - | A | in-progress | 0 | pending | pending | - |
+| Rewrite README.md | code-documentation:docs-architect | implementation | 5 | - | A | complete | 0 | a11cc069bd3da1c61 | 719583f | - |
