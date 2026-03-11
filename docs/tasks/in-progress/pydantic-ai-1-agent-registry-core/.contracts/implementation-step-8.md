@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-1-agent-registry-core
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-6-create-agentbuilderspy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-8-update-llmstep.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 6 - implement ONLY this step, not others
+- Step: 8 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-6-create-agentbuilderspy.md
+4. Document decisions in implementation\step-8-update-llmstep.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 6: CREATE AGENT_BUILDERS.PY
+# IMPLEMENTATION - STEP 8: UPDATE LLMSTEP
 **Status:** [completed/failed/blocked]
 
 ## Summary

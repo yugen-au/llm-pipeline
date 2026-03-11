@@ -4,28 +4,28 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-1-agent-registry-core
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-5-create-agentregistrypy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-7-update-stepdefinition.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 5 - implement ONLY this step, not others
+- Step: 7 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /pydantic/pydantic-ai
+3. [custom.context7_docs]
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-5-create-agentregistrypy.md
+4. Document decisions in implementation\step-7-update-stepdefinition.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 5: CREATE AGENT_REGISTRY.PY
+# IMPLEMENTATION - STEP 7: UPDATE STEPDEFINITION
 **Status:** [completed/failed/blocked]
 
 ## Summary
