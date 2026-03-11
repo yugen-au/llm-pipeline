@@ -81,3 +81,60 @@ None
 **Decision:** APPROVE
 
 All 17 test files are well-structured, consistent with established patterns, and correctly test their target components. The two medium-severity findings (duplicate validateForm tests and divergent Zustand mock patterns) are minor maintenance concerns, not correctness issues. The low-severity findings are purely cosmetic. No blocking issues.
+
+---
+
+# Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+
+Three fixes applied and verified. All previously raised issues are resolved or accepted.
+
+## Fixes Verified
+
+### Fix 1: validateForm.test.ts test name (Step 2 - LOW)
+**Previous:** Test named `accepts non-string truthy values as valid` -- misleading since `0` and `false` are falsy.
+**Fix:** Renamed to `treats 0 and false as present values` (line 71).
+**Verdict:** Resolved. Name now accurately describes the behavior being tested.
+
+### Fix 2: InputForm.test.tsx duplicate validateForm block (Step 4 - MEDIUM)
+**Previous:** `describe('validateForm')` block duplicated tests already covered by `validateForm.test.ts`.
+**Fix:** Removed the duplicate block. `InputForm.test.tsx` now contains only 5 component-level tests (lines 27-63).
+**Verdict:** Resolved. `validateForm.test.ts` retains comprehensive 10-test coverage; no test gaps introduced.
+
+### Fix 3: PromptList.test.tsx ResizeObserver cleanup (Step 7 - LOW)
+**Previous:** `globalThis.ResizeObserver` set in `beforeAll` but never restored.
+**Fix:** Added `const originalRO = globalThis.ResizeObserver` before `beforeAll` and `afterAll(() => { globalThis.ResizeObserver = originalRO })` (lines 7, 15-17). Matches `PipelineList.test.tsx` pattern.
+**Verdict:** Resolved. Cleanup pattern now consistent across both files.
+
+### Accepted: Zustand mock divergence (Steps 12/16 - MEDIUM)
+**Status:** Accepted as inherent to hook-level mocking. Sidebar uses selector pattern `useUIStore((s) => s.field)`, RunDetailPage uses direct destructure `const {...} = useUIStore()`. Both mocks correctly match their component's usage. No action needed.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Files Re-Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| src/components/live/validateForm.test.ts | pass | Test name corrected; 10 tests, all edge cases covered |
+| src/components/live/InputForm.test.tsx | pass | Duplicate validateForm block removed; 5 clean component tests remain |
+| src/components/prompts/PromptList.test.tsx | pass | afterAll cleanup added; matches PipelineList.test.tsx pattern |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+All previously identified issues are resolved or accepted. No new issues found in the 3 fixed files. The full test suite of 17 files is clean.
