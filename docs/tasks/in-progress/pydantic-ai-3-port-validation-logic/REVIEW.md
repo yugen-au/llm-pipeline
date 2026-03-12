@@ -78,3 +78,53 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation correctly ports validation logic to pydantic-ai output validators. Architecture decisions (factory closures, per-call StepDeps, unconditional validator registration with no-op fallback) are sound and well-documented. All 3 medium issues are low-risk (two test-only, one cosmetic comment) and none affect runtime correctness. The code is backward compatible and all tests pass. Recommend fixing the stale comments and event loop leak in a follow-up cleanup pass.
+
+---
+
+# Architecture Review (Re-review after fixes)
+
+## Overall Assessment
+**Status:** complete
+All 3 medium issues from the initial review have been resolved correctly. No new issues introduced. Both files are clean.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Code quality and maintainability | pass | Stale comments replaced with accurate documentation |
+| Tests pass | pass | asyncio.run() is correct replacement; test name now matches behavior |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/agent_builders.py | pass | StepDeps docstring (line 31-33) now documents validation fields purpose; field comments (lines 50-52) replaced "reserved for Task 3" with accurate descriptions |
+| tests/test_validators.py | pass | _run() helper now uses asyncio.run() (line 52) -- properly manages event loop lifecycle; test renamed to test_already_correct_order_preserved (line 355) -- accurately describes assertion |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All 3 medium issues fully resolved. Stale "Task 2/Task 3" references replaced with clear documentation of actual purpose. Event loop leak eliminated by switching to asyncio.run(). Misleading test name corrected. No regressions, no new issues. Implementation is ready for merge.
