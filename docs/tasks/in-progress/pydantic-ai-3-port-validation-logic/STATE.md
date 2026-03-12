@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/3-port-validation-logic
 ## Plugins: python-development, backend-development
@@ -22,8 +22,8 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | afee97c72f376ca33 | 737d3556 | - |
 | Add Config Fields | python-development:python-pro | implementation | 1 | - | A | complete | 0 | acecf944f2926bee2 | e944fd8d,4b43a73a | /pydantic/pydantic-ai |
 | Create validators.py | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a759fababece4dbdc | 4b43a73a | /pydantic/pydantic-ai |
-| Update build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | ab74672b18a3187ee | ffc53a2c | /pydantic/pydantic-ai |
-| Update pipeline.py | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | a34611cef48475c46 | pending | - |
-| Delete Obsolete Code | python-development:python-pro | implementation | 5 | - | C | pending | 0 | pending | pending | - |
-| Update Exports | python-development:python-pro | implementation | 6 | - | C | pending | 0 | pending | pending | - |
+| Update build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | ab74672b18a3187ee | ffc53a2c,96f07f7c | /pydantic/pydantic-ai |
+| Update pipeline.py | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | a34611cef48475c46 | 96f07f7c | - |
+| Delete Obsolete Code | python-development:python-pro | implementation | 5 | - | C | in-progress | 0 | pending | pending | - |
+| Update Exports | python-development:python-pro | implementation | 6 | - | C | in-progress | 0 | pending | pending | - |
 | Tests | backend-development:test-automator | implementation | 7 | - | D | pending | 0 | pending | pending | - |
