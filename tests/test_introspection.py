@@ -62,7 +62,7 @@ class WidgetExtraction(PipelineExtraction, model=WidgetModel):
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self):
-        return [self.create_llm_call(variables={"data": self.pipeline.get_sanitized_data()})]
+        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
 
     def process_instructions(self, instructions):
         return WidgetDetectionContext(category=instructions[0].category)
@@ -98,7 +98,7 @@ class ScanDetectionTransformation(PipelineTransformation,
 )
 class ScanDetectionStep(LLMStep):
     def prepare_calls(self):
-        return [self.create_llm_call(variables={})]
+        return [{"variables": {}}]
 
     def process_instructions(self, instructions):
         return None
@@ -154,7 +154,7 @@ class GadgetDetectionTransformation(PipelineTransformation,
 )
 class GadgetDetectionStep(LLMStep):
     def prepare_calls(self):
-        return [self.create_llm_call(variables={})]
+        return [{"variables": {}}]
 
     def process_instructions(self, instructions):
         return None

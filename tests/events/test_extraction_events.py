@@ -159,7 +159,7 @@ class FailingItemExtraction(PipelineExtraction, model=Item):
 class FailingItemDetectionStep(LLMStep):
     """Step with failing extraction for error event tests."""
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return FailingItemDetectionContext(category=instructions[0].category)

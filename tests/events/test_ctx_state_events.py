@@ -53,7 +53,7 @@ class EmptyContextStep(LLMStep):
     """Step that returns None from process_instructions (no context update)."""
 
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return None
