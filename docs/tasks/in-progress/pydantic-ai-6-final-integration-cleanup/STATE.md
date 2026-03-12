@@ -23,7 +23,7 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | aa0aebe3286874142 | 942142fc | - |
 | Update pyproject.toml deps | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a3746929552da9209 | ca2edbbd | - |
 | Delete llm/ dir and dead code | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a8325af6e72c2f431 | pending | - |
-| Fix test assertion | python-development:python-pro | implementation | 3 | - | A | in-progress | 0 | pending | pending | - |
+| Fix test assertion | python-development:python-pro | implementation | 3 | - | A | complete | 0 | a9ecd779c11c6f026 | pending | - |
 | Update source docstrings | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
 | Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | pending | 0 | pending | pending | - |
 | Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | pending | 0 | pending | pending | - |
