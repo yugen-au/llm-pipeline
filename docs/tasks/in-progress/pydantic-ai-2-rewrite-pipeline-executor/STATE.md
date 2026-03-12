@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/2-rewrite-pipeline-executor
 ## Plugins: backend-development, python-development
@@ -24,9 +24,9 @@
 | Delete Legacy LLM Files | python-development:python-pro | implementation | 1 | - | A | complete | 0 | abb50479b983744b4 | 4aae017f | /pydantic/pydantic-ai |
 | Add StepDeps Fields | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a14e7ab027f6f8153 | 2c6a8f33 | /pydantic/pydantic-ai |
 | Rewrite Execute Loop | backend-development:backend-architect | implementation | 3 | - | C | complete | 0 | ab74643827630c871 | 0ce2acda | /pydantic/pydantic-ai,/pydantic/pydantic |
-| Rewrite Consensus | backend-development:backend-architect | implementation | 4 | - | C | complete | 0 | a5cb488d0ac69e694 | 46197244 | /pydantic/pydantic-ai |
-| Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a05033b7763c79242 | ad39b29d | - |
-| Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | pending | 0 | pending | pending | - |
+| Rewrite Consensus | backend-development:backend-architect | implementation | 4 | - | C | complete | 0 | a5cb488d0ac69e694 | 46197244,0ce2acda | /pydantic/pydantic-ai |
+| Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a05033b7763c79242 | ad39b29d,0ce2acda | - |
+| Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | in-progress | 0 | pending | pending | - |
 | Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | pending | 0 | pending | pending | - |
 | Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | pending | 0 | pending | pending | - |
