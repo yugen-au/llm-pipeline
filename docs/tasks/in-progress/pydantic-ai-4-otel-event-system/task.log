@@ -5,3 +5,10 @@
 [2026-03-12 16:30:53] [INFO] Created: STATE.md
 [2026-03-12 16:30:53] [INFO] ============================================================
 [2026-03-12 16:30:53] [DEBUG] STATE.md atomic write complete
+[2026-03-12 16:39:54] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-12 16:40:14] [ERROR] BLOCKED: Cannot enter research: no agents in table
+[2026-03-12 16:40:26] [ERROR] BLOCKED: Invalid AgentRow 'OTel & pydantic-ai instrumentation': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-03-12 16:40:38] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-03-12 16:40:49] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-03-12 16:40:49] [INFO] Auto-updated agent statuses: OTel & pydantic-ai instrumentation: pending -> in-progress, Pipeline event system patterns: pending -> in-progress, Current codebase analysis: pending -> in-progress
+[2026-03-12 16:40:49] [DEBUG] STATE.md atomic write complete
