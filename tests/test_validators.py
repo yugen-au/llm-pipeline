@@ -49,7 +49,7 @@ def _make_deps(array_validation: Any = None, validation_context: Any = None) -> 
 
 
 def _run(coro: Any) -> Any:
-    return asyncio.new_event_loop().run_until_complete(coro)
+    return asyncio.run(coro)
 
 
 # ---------------------------------------------------------------------------
@@ -352,7 +352,7 @@ class TestArrayLengthValidator:
         with pytest.raises(ValueError, match="array_field_name"):
             _run(validator(ctx, DummyOutput()))
 
-    def test_already_correct_order_no_copy_needed(self):
+    def test_already_correct_order_preserved(self):
         input_array = ["alpha", "beta"]
         config = _make_config(input_array=input_array, allow_reordering=True)
         validator = array_length_validator()
