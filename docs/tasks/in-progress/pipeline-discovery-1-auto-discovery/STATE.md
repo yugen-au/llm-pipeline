@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/pipeline-discovery/1-auto-discovery
 ## Plugins: python-development, backend-development
@@ -21,4 +21,4 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a9a37cdcf9ac2e1cc | 76e29dc1 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a1f5cac4c50cfa68b | 86f980de | - |
 | Discovery Logic | python-development:python-pro | implementation | 1 | - | A | complete | 0 | acdbbd294e8ae60c3 | abdc09dd | /python/importlib_metadata |
-| Model Guard | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| Model Guard | backend-development:backend-architect | implementation | 2 | - | B | in-progress | 0 | pending | pending | - |
