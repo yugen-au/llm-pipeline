@@ -1,8 +1,8 @@
 ## Task: pydantic-ai-5-consensus-strategy
 ## Description: Refactor consensus mechanism with Strategy Pattern. Replace naive consensus logic with ConsensusStrategy ABC, implement MajorityVote/ConfidenceWeighted/Adaptive/SoftVote strategies, update PipelineConfig._execute_with_consensus(), add per-step consensus config.
 
-## Phase: pending-merge
-## Status: in-progress
+## Phase: complete
+## Status: complete
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/5-consensus-strategy
