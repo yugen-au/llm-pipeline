@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/2-rewrite-pipeline-executor
 ## Plugins: backend-development, python-development
@@ -27,6 +27,6 @@
 | Rewrite Consensus | backend-development:backend-architect | implementation | 4 | - | C | complete | 0 | a5cb488d0ac69e694 | 46197244,0ce2acda | /pydantic/pydantic-ai |
 | Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a05033b7763c79242 | ad39b29d,0ce2acda | - |
 | Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | complete | 0 | ab0698cae3d1db25f | 0a2ee157 | - |
-| Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | pending | 0 | pending | pending | - |
+| Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | in-progress | 0 | pending | pending | - |
 | Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | pending | 0 | pending | pending | - |
