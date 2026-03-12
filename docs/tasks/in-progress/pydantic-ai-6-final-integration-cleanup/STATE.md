@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/6-final-integration-cleanup
 ## Plugins: python-development, comprehensive-review
@@ -26,5 +26,5 @@
 | Fix test assertion | python-development:python-pro | implementation | 3 | - | A | complete | 0 | a9ecd779c11c6f026 | 5592dea0 | - |
 | Update source docstrings | python-development:python-pro | implementation | 4 | - | B | complete | 0 | abd038b2400c9413a | a04ecc5c | - |
 | Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | complete | 0 | a0d39f2531c916d9b | a04ecc5c | - |
-| Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | pending | 0 | pending | pending | - |
-| Update docs/api/index and delete llm.md | python-development:python-pro | implementation | 7 | - | C | pending | 0 | pending | pending | - |
+| Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | in-progress | 0 | pending | pending | - |
+| Update docs/api/index and delete llm.md | python-development:python-pro | implementation | 7 | - | C | in-progress | 0 | pending | pending | - |
