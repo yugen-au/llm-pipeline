@@ -82,3 +82,39 @@ def build_step_agent(
 [x] Docstring updated with validators param and validation_context docs
 [x] All 48 existing tests pass (test_agent_registry_core.py)
 [x] No new fields added to StepDeps (test_field_count unaffected)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Stale comments in StepDeps referencing "reserved for Task 3" / "unused in Task 2" (MEDIUM)
+
+### Changes Made
+#### File: `llm_pipeline/agent_builders.py`
+Updated docstring and inline comments for array_validation/validation_context fields.
+
+```
+# Before (docstring lines 31-32)
+    Note: array_validation and validation_context are reserved for
+    Task 3 output_validators. Unused in Task 2, default to None.
+
+# After
+    Validation fields (array_validation, validation_context) are per-call
+    config passed to output validators via ctx.deps. Default to None
+    when the step has no validation requirements.
+
+# Before (inline comment line 49)
+    # Forward-compat: Task 3 output_validators (unused in Task 2)
+    array_validation: Any | None = None
+    validation_context: Any | None = None
+
+# After
+    # Per-call validation config, read by output validators via ctx.deps
+    array_validation: Any | None = None  # ArrayValidationConfig
+    validation_context: Any | None = None  # ValidationContext for Pydantic field_validators
+```
+
+### Verification
+[x] All 53 tests pass (test_agent_registry_core.py)
+[x] No functional changes, comment-only fix
