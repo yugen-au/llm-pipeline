@@ -30,6 +30,6 @@
 | Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | complete | 1 | a9a18f5b853e3dea7 | f7345a30,5d0001a9 | - |
 | OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | complete | 0 | a83eee2b0b4f40da7 | 5e5ce8d1,5d7197e5 | - |
 | docs/observability.md | backend-development:backend-architect | implementation | 9 | - | E | complete | 1 | add36b13e23e02bba | 5d7197e5,a79e956d | /pydantic/pydantic-ai/v1_0_5 |
-| Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | in-progress | 0 | afb329ff0b69571d9 | 300ab1e7 | - |
+| Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | in-progress | 1 | afb329ff0b69571d9 | 300ab1e7 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a8178e374c6d82449 | 330f46d6 | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | ae3d687e7b61fec62 | 5b8e8da3 | - |
