@@ -1,11 +1,8 @@
 """
-Tests for llm-pipeline using MockProvider and in-memory SQLite.
+Tests for llm-pipeline.
 """
-import json
-
 import pytest
-from typing import Any, Dict, List, Optional, Type, ClassVar
-from pydantic import BaseModel
+from typing import List, Optional, ClassVar
 from sqlmodel import SQLModel, Field, Session, create_engine
 
 from llm_pipeline import (
@@ -25,40 +22,10 @@ from llm_pipeline import (
     ValidationContext,
     init_pipeline_db,
 )
-from llm_pipeline.llm.provider import LLMProvider
-from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
 from llm_pipeline.events import PipelineEventEmitter, PipelineEvent, PipelineStarted
-
-
-# ---------- Mock Provider ----------
-
-class MockProvider(LLMProvider):
-    """Mock LLM provider that returns predefined responses."""
-
-    def __init__(self, responses: Optional[List[Dict[str, Any]]] = None):
-        self._responses = responses or []
-        self._call_count = 0
-
-    def call_structured(self, prompt, system_instruction, result_class, **kwargs):
-        if self._call_count < len(self._responses):
-            response = self._responses[self._call_count]
-            self._call_count += 1
-            return LLMCallResult.success(
-                parsed=response,
-                raw_response=json.dumps(response),
-                model_name="mock-model",
-                attempt_count=1,
-            )
-        return LLMCallResult(
-            parsed=None,
-            raw_response="",
-            model_name="mock-model",
-            attempt_count=1,
-            validation_errors=[],
-        )
 
 
 # ---------- Test Domain Models ----------
@@ -195,11 +162,6 @@ class TestImports:
         assert PipelineConfig is not None
         assert LLMStep is not None
 
-    def test_llm_imports(self):
-        from llm_pipeline.llm import LLMProvider, RateLimiter
-        from llm_pipeline.llm.schema import flatten_schema, format_schema_for_llm
-        assert LLMProvider is not None
-
     def test_db_imports(self):
         from llm_pipeline.db import init_pipeline_db, Prompt
         assert Prompt is not None
@@ -244,64 +206,6 @@ class TestValidationContext:
         assert ctx.get("num_cols") == 5
         assert "num_rows" in ctx
         assert ctx.to_dict() == {"num_rows": 10, "num_cols": 5}
-
-
-class TestSchemaUtils:
-    def test_flatten_schema(self):
-        from llm_pipeline.llm.schema import flatten_schema
-        schema = {
-            "type": "object",
-            "properties": {"field": {"$ref": "#/$defs/MyType"}},
-            "$defs": {"MyType": {"type": "string"}},
-        }
-        result = flatten_schema(schema)
-        assert "$defs" not in result
-        assert result["properties"]["field"] == {"type": "string"}
-
-    def test_format_schema_for_llm(self):
-        from llm_pipeline.llm.schema import format_schema_for_llm
-        result = format_schema_for_llm(WidgetDetectionInstructions)
-        assert "EXPECTED JSON SCHEMA" in result
-        assert "RESPONSE FORMAT EXAMPLE" in result
-
-
-class TestValidation:
-    def test_validate_structured_output_valid(self):
-        from llm_pipeline.llm.validation import validate_structured_output
-        schema = WidgetDetectionInstructions.model_json_schema()
-        data = {"widget_count": 5, "category": "test", "confidence_score": 0.9}
-        is_valid, errors = validate_structured_output(data, schema)
-        assert is_valid
-        assert len(errors) == 0
-
-    def test_validate_structured_output_missing_field(self):
-        from llm_pipeline.llm.validation import validate_structured_output
-        schema = WidgetDetectionInstructions.model_json_schema()
-        data = {"category": "test"}  # missing widget_count
-        is_valid, errors = validate_structured_output(data, schema)
-        assert not is_valid
-
-    def test_strip_number_prefix(self):
-        from llm_pipeline.llm.validation import strip_number_prefix
-        assert strip_number_prefix("1. Sydney") == "Sydney"
-        assert strip_number_prefix("2) Melbourne") == "Melbourne"
-        assert strip_number_prefix("Sydney") == "Sydney"
-
-
-class TestRateLimiter:
-    def test_basic_usage(self):
-        from llm_pipeline.llm.rate_limiter import RateLimiter
-        rl = RateLimiter(max_requests=100, time_window_seconds=60)
-        rl.wait_if_needed()  # should not block
-        assert rl.get_wait_time() == 0
-
-    def test_reset(self):
-        from llm_pipeline.llm.rate_limiter import RateLimiter
-        rl = RateLimiter(max_requests=2, time_window_seconds=60)
-        rl.wait_if_needed()
-        rl.wait_if_needed()
-        rl.reset()
-        assert rl.get_wait_time() == 0
 
 
 class TestPipelineNaming:

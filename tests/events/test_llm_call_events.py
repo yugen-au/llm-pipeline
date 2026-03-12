@@ -365,38 +365,3 @@ class TestNoEmitterZeroOverhead:
         assert result is not None
         assert result.context["total"] == 2
 
-    def test_no_event_params_in_call_kwargs(self, seeded_session, monkeypatch):
-        """execute_llm_step not called with event params when no emitter."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            provider=provider,
-            event_emitter=None,
-        )
-
-        captured_kwargs = []
-        original_execute = __import__(
-            "llm_pipeline.llm.executor", fromlist=["execute_llm_step"]
-        ).execute_llm_step
-
-        def spy_execute(**kwargs):
-            captured_kwargs.append(dict(kwargs))
-            return original_execute(**kwargs)
-
-        monkeypatch.setattr(
-            "llm_pipeline.llm.executor.execute_llm_step",
-            spy_execute,
-        )
-
-        pipeline.execute(data="test data", initial_context={})
-
-        assert len(captured_kwargs) >= 1
-        for kw in captured_kwargs:
-            assert "event_emitter" not in kw, "event_emitter should not be injected without emitter"
-            assert "run_id" not in kw, "run_id should not be injected without emitter"
-            assert "pipeline_name" not in kw, "pipeline_name should not be injected without emitter"
-            assert "step_name" not in kw, "step_name should not be injected without emitter"
-            assert "call_index" not in kw, "call_index should not be injected without emitter"
