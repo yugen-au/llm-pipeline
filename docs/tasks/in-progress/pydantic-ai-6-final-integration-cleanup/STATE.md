@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-6-final-integration-cleanup
 ## Description: Final integration testing of pydantic-ai migration, remove deprecated code (create_llm_call), cleanup temp flags, verify all pipeline subclasses work with new agent system
 
-## Phase: planning
+## Phase: implementation
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: testing
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-12 23:42
+## Last Updated: 2026-03-12 23:50
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,10 +20,10 @@
 | Codebase Architecture Review | python-development:python-pro | research | 2 | - | A | complete | 0 | a8cbe39b6f913ce33 | d03eced6 | - |
 | Deprecated Code Detection | comprehensive-review:security-auditor | research | 3 | - | A | complete | 0 | a292afc8fb9d4f53b | d03eced6 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a93270226028f69e3 | f48c8ff2 | - |
-| Plan | planning | planning | 1 | - | A | complete | 0 | aa0aebe3286874142 | pending | - |
-| Update pyproject.toml deps | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
-| Delete llm/ dir and dead code | python-development:python-pro | implementation | 2 | - | A | pending | 0 | pending | pending | - |
-| Fix test assertion | python-development:python-pro | implementation | 3 | - | A | pending | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | aa0aebe3286874142 | 942142fc | - |
+| Update pyproject.toml deps | python-development:python-pro | implementation | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Delete llm/ dir and dead code | python-development:python-pro | implementation | 2 | - | A | in-progress | 0 | pending | pending | - |
+| Fix test assertion | python-development:python-pro | implementation | 3 | - | A | in-progress | 0 | pending | pending | - |
 | Update source docstrings | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
 | Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | pending | 0 | pending | pending | - |
 | Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | pending | 0 | pending | pending | - |
