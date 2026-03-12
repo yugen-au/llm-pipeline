@@ -8,7 +8,7 @@
 ## Task Branch: sam/pydantic-ai/6-final-integration-cleanup
 ## Plugins: python-development, comprehensive-review
 ## Graphiti Group ID: llm-pipeline
-## Excluded Phases: none
+## Excluded Phases: testing
 ## Steps to Fix: none
 ## Work Mode: standard
 ## Last Updated: 2026-03-12 23:42
@@ -21,3 +21,10 @@
 | Deprecated Code Detection | comprehensive-review:security-auditor | research | 3 | - | A | complete | 0 | a292afc8fb9d4f53b | d03eced6 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a93270226028f69e3 | f48c8ff2 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aa0aebe3286874142 | pending | - |
+| Update pyproject.toml deps | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| Delete llm/ dir and dead code | python-development:python-pro | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| Fix test assertion | python-development:python-pro | implementation | 3 | - | A | pending | 0 | pending | pending | - |
+| Update source docstrings | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | pending | 0 | pending | pending | - |
+| Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | pending | 0 | pending | pending | - |
+| Update docs/api/index and delete llm.md | python-development:python-pro | implementation | 7 | - | C | pending | 0 | pending | pending | - |
