@@ -8,16 +8,22 @@ Contains the core data structures for the TextAnalyzer demo:
 - TextAnalyzerRegistry: database registry declaring managed models
 - Instructions, Context, and Extraction classes for 3 pipeline steps
 - Step definitions: SentimentAnalysis, TopicExtraction, Summary
+- TextAnalyzerAgentRegistry, DefaultStrategy, TextAnalyzerStrategies
+- TextAnalyzerPipeline: fully wired PipelineConfig subclass
 """
-from typing import ClassVar, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 from pydantic import BaseModel
+from sqlalchemy import Engine
 from sqlmodel import SQLModel, Field
 
+from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.context import PipelineContext, PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
+from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.registry import PipelineDatabaseRegistry
 from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
 
 
 # ---------------------------------------------------------------------------
@@ -217,3 +223,65 @@ class SummaryStep(LLMStep):
 
     def process_instructions(self, instructions):
         return SummaryContext(summary=instructions[0].summary)
+
+
+# ---------------------------------------------------------------------------
+# Agent registry
+# ---------------------------------------------------------------------------
+
+class TextAnalyzerAgentRegistry(AgentRegistry, agents={
+    "sentiment_analysis": SentimentAnalysisInstructions,
+    "topic_extraction": TopicExtractionInstructions,
+    "summary": SummaryInstructions,
+}):
+    """Agent registry mapping step names to their structured output types."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Strategy
+# ---------------------------------------------------------------------------
+
+class DefaultStrategy(PipelineStrategy):
+    """Single strategy that always applies; runs all 3 steps sequentially."""
+
+    NAME = "default"
+
+    def can_handle(self, context: Dict[str, Any]) -> bool:
+        return True
+
+    def get_steps(self):
+        return [
+            SentimentAnalysisStep.create_definition(),
+            TopicExtractionStep.create_definition(),
+            SummaryStep.create_definition(),
+        ]
+
+
+class TextAnalyzerStrategies(PipelineStrategies, strategies=[DefaultStrategy]):
+    """Strategies container for the TextAnalyzer pipeline."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Pipeline
+# ---------------------------------------------------------------------------
+
+class TextAnalyzerPipeline(
+    PipelineConfig,
+    registry=TextAnalyzerRegistry,
+    strategies=TextAnalyzerStrategies,
+    agent_registry=TextAnalyzerAgentRegistry,
+):
+    """Demo pipeline: sentiment -> topic extraction -> summary."""
+
+    INPUT_DATA: ClassVar[type] = TextAnalyzerInputData
+
+    @classmethod
+    def seed_prompts(cls, engine: Engine) -> None:
+        """Create demo_topics table and seed prompts idempotently."""
+        from llm_pipeline.demo.prompts import seed_prompts
+
+        seed_prompts(cls, engine)

@@ -20,6 +20,9 @@ dependencies = [
 [project.scripts]
 llm-pipeline = "llm_pipeline.ui.cli:main"
 
+[project.entry-points."llm_pipeline.pipelines"]
+text_analyzer = "llm_pipeline.demo:TextAnalyzerPipeline"
+
 [project.optional-dependencies]
 ui = ["fastapi>=0.115.0", "uvicorn[standard]>=0.32.0", "python-multipart>=0.0.9"]
 otel = [
