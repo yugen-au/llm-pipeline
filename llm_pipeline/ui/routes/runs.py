@@ -206,6 +206,14 @@ def trigger_run(
             detail=f"Pipeline '{body.pipeline_name}' not found in registry",
         )
 
+    # Guard: model must be configured before pipeline execution
+    default_model = getattr(request.app.state, "default_model", None)
+    if default_model is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No model configured. Set LLM_PIPELINE_MODEL env var or pass --model flag.",
+        )
+
     run_id = str(uuid.uuid4())
     engine = request.app.state.engine
 
