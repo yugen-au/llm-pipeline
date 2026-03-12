@@ -16,6 +16,6 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Migration Status Audit | comprehensive-review:code-reviewer | research | 1 | - | A | needs-input | 0 | aaffd3dfb535257a4 | pending | - |
+| Migration Status Audit | comprehensive-review:code-reviewer | research | 1 | - | A | complete | 0 | aaffd3dfb535257a4 | pending | - |
 | Codebase Architecture Review | python-development:python-pro | research | 2 | - | A | complete | 0 | a8cbe39b6f913ce33 | pending | - |
-| Deprecated Code Detection | comprehensive-review:security-auditor | research | 3 | - | A | needs-input | 0 | a292afc8fb9d4f53b | pending | - |
+| Deprecated Code Detection | comprehensive-review:security-auditor | research | 3 | - | A | complete | 0 | a292afc8fb9d4f53b | pending | - |
