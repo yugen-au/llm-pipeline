@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-4-otel-event-system
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-5-token-capture-normal-path.md (if already exists, APPEND to file)
+- Output Files: implementation\step-7-persist-tokens-in-savestepstate.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 5
+- Step to fix: 7
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /pydantic/pydantic-ai/v1_0_5
+3. [custom.context7_docs]
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 5
+1. Read REVIEW.md for issues assigned to Step 7
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-5-token-capture-normal-path.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-7-persist-tokens-in-savestepstate.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-7-persist-tokens-in-savestepstate.md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
