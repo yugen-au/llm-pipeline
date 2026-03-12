@@ -79,3 +79,88 @@ None
 **Decision:** APPROVE
 
 Implementation is architecturally sound, well-tested, and consistent with existing codebase patterns. The medium issues are documentation gaps, not code defects. The low issues are minor DRY/documentation improvements that can be addressed in a follow-up. No blocking issues found.
+
+---
+
+# Re-Review: Post-Fix Verification
+
+## Overall Assessment
+**Status:** complete
+
+All 6 issues (2 MEDIUM + 4 LOW) from the initial review have been properly addressed. The fixes are clean, minimal, and introduce no new problems.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Tests pass | pass | 865 passed, 1 pre-existing failure (test_events_router_prefix), 6 skipped -- unchanged from initial review |
+| No hardcoded values | pass | No regression |
+| Error handling present | pass | No regression |
+| Pydantic v2 / SQLModel patterns | pass | No regression |
+| Build with hatchling | pass | No regression |
+
+## Fix Verification
+
+### Fix 1 (MEDIUM - Step 1): SQLite-only docstring on _migrate_step_state_token_columns
+**Verdict:** RESOLVED
+**Evidence:** `llm_pipeline/db/__init__.py` lines 25-32 now has a docstring explicitly stating "**SQLite-only.**" with explanation that non-SQLite engines are skipped silently and users must add columns manually. Additionally, an early `return` guard (`if not engine.url.drivername.startswith("sqlite"): return`) at line 33 replaces the previous silent-catch-all behavior, making the skip explicit rather than relying on OperationalError. The `docs/observability.md` lines 109-113 include a blockquote documenting the non-SQLite manual migration path.
+
+### Fix 2 (MEDIUM - Step 5): Cached-path token behavior documentation
+**Verdict:** RESOLVED
+**Evidence:** `llm_pipeline/pipeline.py` line 937 has an inline comment "Token fields are None on cached path (no LLM calls made)." at the StepCompleted emission site. `docs/observability.md` line 145 has a blockquote: "**Cached steps:** When a step is served from cache, `StepCompleted` is emitted with all token fields set to `None` because no LLM calls were made."
+
+### Fix 3 (LOW - Step 7): Redundant total_tokens computation guard removed
+**Verdict:** RESOLVED
+**Evidence:** `_save_step_state()` (lines 1111-1156) now passes `total_tokens` directly through to `PipelineStepState(...)` without any fallback computation guard. The `total_tokens` parameter flows straight from caller to constructor at line 1154.
+
+### Fix 4 (LOW - Step 9): total_requests clarity in docs
+**Verdict:** RESOLVED
+**Evidence:** `docs/observability.md` line 81 now reads: `total_requests` ... "**DB-only** -- not available on event objects." The StepCompleted section at line 143 adds: "To count requests per step, query the database rather than accumulating from events."
+
+### Fix 5 (LOW - Step 10): Consolidated _mock_usage helper
+**Verdict:** RESOLVED
+**Evidence:** `tests/conftest.py` defines the single `_mock_usage(input_tokens=10, output_tokens=5)` helper (lines 8-14). `tests/events/conftest.py` line 374 imports it: `from tests.conftest import _mock_usage`. `tests/test_token_tracking.py` line 103 imports it: `from tests.conftest import _mock_usage`. No duplicate definitions remain. The consolidated version accepts optional params, satisfying both the no-args usage pattern (events) and the configurable usage pattern (token tracking tests).
+
+### Fix 6 (LOW - Step 6): consensus _has_any_usage -- not a fix item
+**Note:** This was identified as an acceptable behavior in the initial review ("Matches test expectations") and was not included in the 6 fixes. Confirmed it remains unchanged and consistent.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed - no regression from fixes
+[x] Code quality and maintainability - docstrings and comments are clear, concise
+[x] Error handling present - explicit SQLite guard is cleaner than silent catch
+[x] No hardcoded values - no regression
+[x] Project conventions followed - import style in test conftest files is consistent
+[x] Security considerations - no regression
+[x] Properly scoped (DRY, YAGNI, no over-engineering) - _mock_usage consolidation removes duplication without over-abstracting
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/db/__init__.py | pass | SQLite-only docstring present (lines 25-32); explicit drivername guard at line 33 |
+| llm_pipeline/pipeline.py | pass | Cached-path comment at line 937; redundant total_tokens guard removed from _save_step_state |
+| docs/observability.md | pass | SQLite migration note (line 113), cached tokens note (line 145), total_requests DB-only clarification (lines 81, 143) |
+| tests/conftest.py | pass | Single _mock_usage definition with optional params (lines 8-14) |
+| tests/events/conftest.py | pass | Imports _mock_usage from tests.conftest (line 374); no local definition |
+| tests/test_token_tracking.py | pass | Imports _mock_usage from tests.conftest (line 103); no local definition |
+
+## New Issues Introduced
+- None detected. All fixes are documentation additions, dead code removal, or test helper consolidation. No behavioral changes.
+
+## Recommendation
+**Decision:** APPROVE
+
+All 6 prior issues are resolved. The explicit SQLite drivername guard in db/__init__.py is a slight improvement over the original (silent OperationalError catch). Documentation additions are well-placed and concise. Test helper consolidation is clean. No new issues found.
