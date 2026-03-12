@@ -496,3 +496,56 @@ class TestPipelineConfigAgentRegistry:
     def test_class_var_agent_registry_on_base_is_none(self):
         from llm_pipeline.pipeline import PipelineConfig
         assert PipelineConfig.AGENT_REGISTRY is None
+
+
+# ============================================================
+# agent_builders.py - build_step_agent validators param
+# ============================================================
+
+class TestBuildStepAgentValidators:
+    def test_validators_param_accepted(self):
+        # empty list must not raise
+        agent = build_step_agent("step", SimpleOutput, validators=[])
+        assert agent is not None
+
+    def test_validators_none_accepted(self):
+        # None (default) must not raise
+        agent = build_step_agent("step", SimpleOutput, validators=None)
+        assert agent is not None
+
+    def test_validators_registered(self):
+        from pydantic_ai import RunContext
+
+        async def dummy_validator(ctx: RunContext, output: Any) -> Any:
+            return output
+
+        agent = build_step_agent("step", SimpleOutput, validators=[dummy_validator])
+        # pydantic-ai stores output validators on _output_validators
+        assert hasattr(agent, "_output_validators")
+        validator_fns = [v.function for v in agent._output_validators]
+        assert dummy_validator in validator_fns
+
+    def test_multiple_validators_registered_in_order(self):
+        from pydantic_ai import RunContext
+
+        async def first_validator(ctx: RunContext, output: Any) -> Any:
+            return output
+
+        async def second_validator(ctx: RunContext, output: Any) -> Any:
+            return output
+
+        agent = build_step_agent(
+            "step", SimpleOutput, validators=[first_validator, second_validator]
+        )
+        validator_fns = [v.function for v in agent._output_validators]
+        assert first_validator in validator_fns
+        assert second_validator in validator_fns
+        assert validator_fns.index(first_validator) < validator_fns.index(second_validator)
+
+    def test_validation_context_wired(self):
+        agent = build_step_agent("step", SimpleOutput)
+        # Agent constructor accepts validation_context kwarg; verify it is set
+        # pydantic-ai stores it as _validation_context on the agent
+        assert hasattr(agent, "_validation_context")
+        assert agent._validation_context is not None
+        assert callable(agent._validation_context)
