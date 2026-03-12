@@ -1,9 +1,10 @@
 """Shared fixtures and test helpers for event emission tests.
 
-Provides common mock providers, instruction models, context classes, steps,
+Provides common instruction models, context classes, steps,
 strategies, pipelines, and pytest fixtures used across event test modules.
 """
 import pytest
+from unittest.mock import MagicMock, patch
 from sqlmodel import SQLModel, Field, Session, create_engine
 from typing import Any, Dict, List, Optional, ClassVar
 
@@ -17,45 +18,12 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
     PipelineContext,
 )
+from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
-from llm_pipeline.llm.provider import LLMProvider
-from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
 from llm_pipeline.events.handlers import InMemoryEventHandler
-
-
-# -- Mock Provider -------------------------------------------------------------
-
-
-class MockProvider(LLMProvider):
-    """Mock LLM provider that returns predefined responses."""
-
-    def __init__(self, responses: Optional[List[Dict[str, Any]]] = None, should_fail: bool = False):
-        self._responses = responses or []
-        self._call_count = 0
-        self._should_fail = should_fail
-
-    def call_structured(self, prompt, system_instruction, result_class, **kwargs):
-        if self._should_fail:
-            raise ValueError("Mock provider failure")
-        if self._call_count < len(self._responses):
-            response = self._responses[self._call_count]
-            self._call_count += 1
-            return LLMCallResult.success(
-                parsed=response,
-                raw_response="mock response",
-                model_name="mock-model",
-                attempt_count=1,
-            )
-        return LLMCallResult(
-            parsed=None,
-            raw_response="",
-            model_name="mock-model",
-            attempt_count=1,
-            validation_errors=[],
-        )
 
 
 # -- Test Domain ---------------------------------------------------------------
@@ -164,7 +132,7 @@ class TransformationContext(PipelineContext):
 class SimpleStep(LLMStep):
     """Step that succeeds."""
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return SimpleContext(total=instructions[0].count)
@@ -193,7 +161,7 @@ class SkippableStep(LLMStep):
         return True
 
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return SkippableContext(total=instructions[0].count)
@@ -209,7 +177,7 @@ class SkippableStep(LLMStep):
 class ItemDetectionStep(LLMStep):
     """Step with extractions for CacheReconstruction tests."""
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return ItemDetectionContext(category=instructions[0].category)
@@ -225,7 +193,7 @@ class ItemDetectionStep(LLMStep):
 class TransformationStep(LLMStep):
     """Step with transformation for transformation event tests."""
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return TransformationContext(operation=instructions[0].operation)
@@ -279,6 +247,24 @@ class SkipRegistry(PipelineDatabaseRegistry, models=[]):
     pass
 
 
+class SuccessAgentRegistry(AgentRegistry, agents={
+    "simple": SimpleInstructions,
+}):
+    pass
+
+
+class FailureAgentRegistry(AgentRegistry, agents={
+    "failing": FailingInstructions,
+}):
+    pass
+
+
+class SkipAgentRegistry(AgentRegistry, agents={
+    "skippable": SkippableInstructions,
+}):
+    pass
+
+
 class SuccessStrategies(PipelineStrategies, strategies=[SuccessStrategy]):
     pass
 
@@ -291,15 +277,30 @@ class SkipStrategies(PipelineStrategies, strategies=[SkipStrategy]):
     pass
 
 
-class SuccessPipeline(PipelineConfig, registry=SuccessRegistry, strategies=SuccessStrategies):
+class SuccessPipeline(
+    PipelineConfig,
+    registry=SuccessRegistry,
+    strategies=SuccessStrategies,
+    agent_registry=SuccessAgentRegistry,
+):
     pass
 
 
-class FailurePipeline(PipelineConfig, registry=FailureRegistry, strategies=FailureStrategies):
+class FailurePipeline(
+    PipelineConfig,
+    registry=FailureRegistry,
+    strategies=FailureStrategies,
+    agent_registry=FailureAgentRegistry,
+):
     pass
 
 
-class SkipPipeline(PipelineConfig, registry=SkipRegistry, strategies=SkipStrategies):
+class SkipPipeline(
+    PipelineConfig,
+    registry=SkipRegistry,
+    strategies=SkipStrategies,
+    agent_registry=SkipAgentRegistry,
+):
     pass
 
 
@@ -316,11 +317,22 @@ class ExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
     pass
 
 
+class ExtractionAgentRegistry(AgentRegistry, agents={
+    "item_detection": ItemDetectionInstructions,
+}):
+    pass
+
+
 class ExtractionStrategies(PipelineStrategies, strategies=[ExtractionStrategy]):
     pass
 
 
-class ExtractionPipeline(PipelineConfig, registry=ExtractionRegistry, strategies=ExtractionStrategies):
+class ExtractionPipeline(
+    PipelineConfig,
+    registry=ExtractionRegistry,
+    strategies=ExtractionStrategies,
+    agent_registry=ExtractionAgentRegistry,
+):
     pass
 
 
@@ -337,12 +349,67 @@ class TransformationRegistry(PipelineDatabaseRegistry, models=[]):
     pass
 
 
+class TransformationAgentRegistry(AgentRegistry, agents={
+    "transformation": TransformationInstructions,
+}):
+    pass
+
+
 class TransformationStrategies(PipelineStrategies, strategies=[TransformationStrategy]):
     pass
 
 
-class TransformationPipeline(PipelineConfig, registry=TransformationRegistry, strategies=TransformationStrategies):
+class TransformationPipeline(
+    PipelineConfig,
+    registry=TransformationRegistry,
+    strategies=TransformationStrategies,
+    agent_registry=TransformationAgentRegistry,
+):
     pass
+
+
+# -- Backward-compat stub (to be removed when all event tests are updated) ----
+# Tests in test_llm_call_events.py, test_cache_events.py, etc. still import
+# MockProvider. Keep a stub so imports don't fail at collection time.
+# These tests will fail at runtime until Step 9 updates them.
+
+class MockProvider:
+    """Stub retained for import compatibility. Do not use in new tests."""
+
+    def __init__(self, responses=None, should_fail=False):
+        self._responses = responses or []
+        self._should_fail = should_fail
+
+
+# -- Mock run_result builders --------------------------------------------------
+
+
+def make_simple_run_result(count=1):
+    """Build MagicMock mimicking AgentRunResult for SimpleInstructions."""
+    instruction = SimpleInstructions(count=count, confidence_score=1.0, notes="test")
+    mock_result = MagicMock()
+    mock_result.output = instruction
+    return mock_result
+
+
+def make_item_detection_run_result(item_count=2, category="test"):
+    """Build MagicMock mimicking AgentRunResult for ItemDetectionInstructions."""
+    instruction = ItemDetectionInstructions(
+        item_count=item_count, category=category, confidence_score=1.0, notes="ok"
+    )
+    mock_result = MagicMock()
+    mock_result.output = instruction
+    return mock_result
+
+
+def make_transformation_run_result(count=5, operation="transform"):
+    """Build MagicMock mimicking AgentRunResult for TransformationInstructions."""
+    instruction = TransformationInstructions(
+        count=count, operation=operation, confidence_score=1.0, notes="test"
+    )
+    mock_result = MagicMock()
+    mock_result.output = instruction
+    return mock_result
 
 
 # -- Fixtures ------------------------------------------------------------------
@@ -460,3 +527,20 @@ def seeded_session(engine):
 def in_memory_handler():
     """Fresh InMemoryEventHandler for each test."""
     return InMemoryEventHandler()
+
+
+@pytest.fixture
+def mock_simple_run_result():
+    """Default AgentRunResult mock for SimpleInstructions (count=1)."""
+    return make_simple_run_result(count=1)
+
+
+@pytest.fixture
+def agent_run_sync_patch():
+    """Patch Agent.run_sync to return SimpleInstructions result by default.
+
+    Tests that need custom return values can override via monkeypatch or
+    call patch() directly within the test body.
+    """
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)) as mock:
+        yield mock

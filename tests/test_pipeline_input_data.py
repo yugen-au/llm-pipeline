@@ -12,8 +12,7 @@ from llm_pipeline.context import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
 from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.llm.provider import LLMProvider
-from llm_pipeline.llm.result import LLMCallResult
+from llm_pipeline.agent_registry import AgentRegistry
 
 
 class TestPipelineInputDataBase:
@@ -201,16 +200,6 @@ class OrderInput(PipelineInputData):
     quantity: int
 
 
-class MockProvider(LLMProvider):
-    """Minimal mock provider for validation tests."""
-
-    def call_structured(self, prompt, system_instruction, result_class, **kwargs):
-        return LLMCallResult(
-            parsed=None, raw_response="", model_name="mock", attempt_count=1,
-            validation_errors=[],
-        )
-
-
 class EmptyStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
@@ -228,11 +217,20 @@ class ValidateRegistry(PipelineDatabaseRegistry, models=[_DummyModel]):
     pass
 
 
+class ValidateAgentRegistry(AgentRegistry, agents={}):
+    pass
+
+
 class ValidateStrategies(PipelineStrategies, strategies=[EmptyStrategy]):
     pass
 
 
-class ValidatePipeline(PipelineConfig, registry=ValidateRegistry, strategies=ValidateStrategies):
+class ValidatePipeline(
+    PipelineConfig,
+    registry=ValidateRegistry,
+    strategies=ValidateStrategies,
+    agent_registry=ValidateAgentRegistry,
+):
     INPUT_DATA: ClassVar[Optional[Type[PipelineInputData]]] = OrderInput
 
 
@@ -240,11 +238,20 @@ class NoInputRegistry(PipelineDatabaseRegistry, models=[_DummyModel]):
     pass
 
 
+class NoInputAgentRegistry(AgentRegistry, agents={}):
+    pass
+
+
 class NoInputStrategies(PipelineStrategies, strategies=[EmptyStrategy]):
     pass
 
 
-class NoInputPipeline(PipelineConfig, registry=NoInputRegistry, strategies=NoInputStrategies):
+class NoInputPipeline(
+    PipelineConfig,
+    registry=NoInputRegistry,
+    strategies=NoInputStrategies,
+    agent_registry=NoInputAgentRegistry,
+):
     """Pipeline without INPUT_DATA -- no validation enforced."""
     pass
 
@@ -269,19 +276,19 @@ class TestExecuteInputDataValidation:
 
     def test_raises_when_input_data_none(self, input_session):
         """ValueError when INPUT_DATA declared but input_data not provided."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         with pytest.raises(ValueError, match="requires input_data"):
             pipeline.execute(data="x")
 
     def test_raises_when_input_data_empty_dict(self, input_session):
         """ValueError when INPUT_DATA declared and input_data is empty dict."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         with pytest.raises(ValueError, match="requires input_data"):
             pipeline.execute(data="x", input_data={})
 
     def test_valid_input_succeeds(self, input_session):
         """Valid input_data passes validation and execute completes."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         result = pipeline.execute(
             data="x", input_data={"order_id": "ORD-1", "quantity": 5}
         )
@@ -289,31 +296,31 @@ class TestExecuteInputDataValidation:
 
     def test_raises_on_schema_mismatch(self, input_session):
         """ValueError on input_data that doesn't match INPUT_DATA schema."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         with pytest.raises(ValueError, match="input_data validation failed"):
             pipeline.execute(data="x", input_data={"order_id": "ORD-1", "quantity": "bad"})
 
     def test_raises_on_missing_required_field(self, input_session):
         """ValueError when required field missing from input_data."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         with pytest.raises(ValueError, match="input_data validation failed"):
             pipeline.execute(data="x", input_data={"order_id": "ORD-1"})
 
     def test_error_includes_pipeline_name(self, input_session):
         """Error message includes pipeline name for debugging."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         with pytest.raises(ValueError, match="validate"):
             pipeline.execute(data="x", input_data={})
 
     def test_no_input_data_pipeline_skips_validation(self, input_session):
         """Pipeline without INPUT_DATA executes fine without input_data."""
-        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline = NoInputPipeline(session=input_session, model="test-model")
         result = pipeline.execute(data="x")
         assert result is pipeline
 
     def test_no_input_data_pipeline_accepts_raw_dict(self, input_session):
         """Pipeline without INPUT_DATA stores raw dict as validated_input."""
-        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline = NoInputPipeline(session=input_session, model="test-model")
         pipeline.execute(data="x", input_data={"arbitrary": "data"})
         assert pipeline.validated_input == {"arbitrary": "data"}
 
@@ -323,7 +330,7 @@ class TestValidatedInputProperty:
 
     def test_returns_pydantic_model_after_execute(self, input_session):
         """validated_input returns PipelineInputData instance after valid execute."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         pipeline.execute(data="x", input_data={"order_id": "ORD-1", "quantity": 5})
         result = pipeline.validated_input
         assert isinstance(result, OrderInput)
@@ -332,17 +339,17 @@ class TestValidatedInputProperty:
 
     def test_returns_none_before_execute(self, input_session):
         """validated_input is None before execute() is called."""
-        pipeline = ValidatePipeline(session=input_session, provider=MockProvider())
+        pipeline = ValidatePipeline(session=input_session, model="test-model")
         assert pipeline.validated_input is None
 
     def test_returns_none_when_no_input_data_and_no_schema(self, input_session):
         """validated_input is None when no INPUT_DATA and no input_data provided."""
-        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline = NoInputPipeline(session=input_session, model="test-model")
         pipeline.execute(data="x")
         assert pipeline.validated_input is None
 
     def test_returns_raw_dict_when_no_schema(self, input_session):
         """validated_input returns raw dict when INPUT_DATA not declared."""
-        pipeline = NoInputPipeline(session=input_session, provider=MockProvider())
+        pipeline = NoInputPipeline(session=input_session, model="test-model")
         pipeline.execute(data="x", input_data={"key": "val"})
         assert pipeline.validated_input == {"key": "val"}
