@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-4-otel-event-system
 ## Description: Enable pydantic.ai OTel instrumentation for pipeline agents, create pipeline event system (StepPrepared/StepStarting/StepCompleted), log token usage per step for cost tracking
 
-## Phase: planning
+## Phase: implementation
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-12 17:03
+## Last Updated: 2026-03-12 17:09
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,9 +20,9 @@
 | Pipeline event system patterns | backend-development:backend-architect | research | 2 | backend-development:architecture-patterns | A | complete | 0 | aa87bdc306123785f | 02fdc53a | - |
 | Current codebase analysis | python-development:python-pro | research | 3 | python-development:async-python-patterns | A | complete | 0 | adbb7d2e49cdc3bec | 02fdc53a | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a960cdaac04338850 | b16dd7c1 | - |
-| Plan | planning | planning | 1 | - | A | complete | 0 | a7ddf70998337c775 | pending | - |
-| Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
-| Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a7ddf70998337c775 | ef432117 | - |
+| Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | in-progress | 0 | pending | pending | - |
 | instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
