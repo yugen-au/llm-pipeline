@@ -1136,10 +1136,6 @@ class PipelineConfig(ABC):
             if prompt:
                 prompt_version = prompt.version
 
-        # compute total_tokens if caller provided input/output but not total
-        if total_tokens is None and (input_tokens is not None or output_tokens is not None):
-            total_tokens = (input_tokens or 0) + (output_tokens or 0)
-
         state = PipelineStepState(
             pipeline_name=self.pipeline_name,
             run_id=self.run_id,

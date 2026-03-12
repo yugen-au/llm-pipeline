@@ -69,3 +69,31 @@ Added `.usage()` mock setup to `_make_run_result()`.
 [x] total_tokens NOT overridden when caller provides explicit value
 [x] All 588 tests pass (1 pre-existing UI test failure unrelated)
 [x] Backward compat: all params default to None
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] (LOW) Redundant total_tokens computation guard in _save_step_state -- all callers already compute and pass total_tokens explicitly, making the guard dead code
+
+### Changes Made
+#### File: `llm_pipeline/pipeline.py`
+Removed the 3-line total_tokens guard block (lines 1139-1141). Callers in execute() (line ~917-923) already compute `_step_total_tokens` and pass it explicitly; the guard was unreachable dead code.
+
+```python
+# Before
+        # compute total_tokens if caller provided input/output but not total
+        if total_tokens is None and (input_tokens is not None or output_tokens is not None):
+            total_tokens = (input_tokens or 0) + (output_tokens or 0)
+
+        state = PipelineStepState(
+
+# After
+        state = PipelineStepState(
+```
+
+### Verification
+[x] All 616 tests pass (1 pre-existing UI test failure unrelated)
+[x] Confirmed both callers (normal path ~line 918, consensus path) pass total_tokens explicitly
+[x] Method signature still accepts total_tokens param (callers still pass it)
