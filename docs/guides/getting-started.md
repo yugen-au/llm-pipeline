@@ -26,19 +26,10 @@ pip install llm-pipeline
 
 This installs core dependencies:
 - `pydantic>=2.0` - Data validation
+- `pydantic-ai>=1.0.5` - LLM agent framework
 - `sqlmodel>=0.0.14` - Database models
 - `sqlalchemy>=2.0` - Database operations
 - `pyyaml>=6.0` - Prompt file parsing
-
-### Optional: Gemini Provider
-
-To use Google's Gemini LLM provider:
-
-```bash
-pip install llm-pipeline[gemini]
-```
-
-This adds `google-generativeai>=0.3.0` for Gemini API integration.
 
 ### Development Tools
 
@@ -56,7 +47,7 @@ llm-pipeline provides automatic SQLite database initialization for rapid prototy
 
 ### Step 1: Configure API Access
 
-Set your Gemini API key as an environment variable:
+Set your LLM provider API key as an environment variable (e.g., for Google Gemini):
 
 ```bash
 export GEMINI_API_KEY="your-api-key-here"
@@ -82,8 +73,6 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
     PipelineExtraction,
 )
-from llm_pipeline.llm import LLMProvider
-from llm_pipeline.llm.gemini import GeminiProvider
 from pydantic import BaseModel, Field
 from sqlmodel import SQLModel, Field as SQLField
 from typing import List, Dict, Any, Optional
@@ -251,11 +240,8 @@ class TextClassifierPipeline(
 Run the pipeline with auto-SQLite:
 
 ```python
-# Initialize provider
-provider = GeminiProvider(model_name="gemini-2.0-flash-lite")
-
-# Create pipeline instance (auto-initializes SQLite database)
-pipeline = TextClassifierPipeline(provider=provider)
+# Create pipeline instance with pydantic-ai model string (auto-initializes SQLite database)
+pipeline = TextClassifierPipeline(model='google-gla:gemini-2.0-flash-lite')
 
 # Set input
 input_text = "Python is a versatile programming language used in web development and data science."
@@ -372,7 +358,7 @@ session = Session(engine)
 
 # Pass session to pipeline
 pipeline = TextClassifierPipeline(
-    provider=provider,
+    model='google-gla:gemini-2.0-flash-lite',
     session=session
 )
 ```
@@ -385,67 +371,22 @@ This is the **two-phase write pattern**:
 - **Phase 1 (execution)**: Flush assigns database IDs for FK resolution
 - **Phase 2 (save)**: Commit finalizes transaction + tracks run instances
 
-## Provider Configuration
+## Model Configuration
 
-### GeminiProvider
-
-Basic configuration:
+llm-pipeline uses pydantic-ai model strings to specify which LLM to use. Pass the model string when constructing a pipeline:
 
 ```python
-from llm_pipeline.llm.gemini import GeminiProvider
+# Google Gemini
+pipeline = TextClassifierPipeline(model='google-gla:gemini-2.0-flash-lite')
 
-provider = GeminiProvider(
-    api_key="your-api-key",  # Optional: uses GEMINI_API_KEY env var
-    model_name="gemini-2.0-flash-lite"
-)
+# OpenAI
+pipeline = TextClassifierPipeline(model='openai:gpt-4o')
+
+# Anthropic
+pipeline = TextClassifierPipeline(model='anthropic:claude-3-5-sonnet-latest')
 ```
 
-Advanced configuration:
-
-```python
-from llm_pipeline.llm.gemini import GeminiProvider
-from llm_pipeline.llm.rate_limiter import RateLimiter
-
-# Custom rate limiting
-rate_limiter = RateLimiter(
-    max_requests=15,
-    time_window_seconds=60
-)
-
-provider = GeminiProvider(
-    model_name="gemini-2.0-flash-exp",
-    rate_limiter=rate_limiter
-)
-```
-
-### Custom Provider
-
-Implement the `LLMProvider` abstract class:
-
-```python
-from llm_pipeline.llm.provider import LLMProvider
-from pydantic import BaseModel
-from typing import Dict, Any, Type, Optional, List
-
-class MyCustomProvider(LLMProvider):
-    """Custom LLM provider implementation."""
-
-    def call_structured(
-        self,
-        prompt: str,
-        system_instruction: str,
-        result_class: Type[BaseModel],
-        max_retries: int = 3,
-        not_found_indicators: Optional[List[str]] = None,
-        strict_types: bool = True,
-        array_validation: Optional[Any] = None,
-        validation_context: Optional[Any] = None,
-        **kwargs,
-    ) -> Optional[Dict[str, Any]]:
-        """Call your LLM API and return validated JSON."""
-        # Your implementation here
-        ...
-```
+See [pydantic-ai model configuration](https://ai.pydantic.dev/models/) for the full list of supported model strings and provider setup.
 
 ## Common Patterns
 
@@ -511,18 +452,11 @@ Now that you have a working pipeline, explore:
 
 ## Troubleshooting
 
-### "google-generativeai not installed"
-
-Install the Gemini optional dependency:
-```bash
-pip install llm-pipeline[gemini]
-```
-
 ### "GEMINI_API_KEY not set"
 
-Set the environment variable or pass directly:
-```python
-provider = GeminiProvider(api_key="your-key")
+Set the environment variable for your chosen provider:
+```bash
+export GEMINI_API_KEY="your-key"
 ```
 
 ### "ReadOnlySession cannot execute writes"
@@ -569,6 +503,6 @@ You've learned how to:
 - ✓ Define steps and strategies
 - ✓ Execute pipelines with LLM calls
 - ✓ Save and query results from database
-- ✓ Configure GeminiProvider with custom settings
+- ✓ Configure LLM models via pydantic-ai model strings
 
 The framework handles session management, caching, FK validation, and state tracking automatically. Focus on your domain logic, not infrastructure.

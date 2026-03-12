@@ -566,7 +566,6 @@ from llm_pipeline import (
     step_definition,
     LLMStep,
 )
-from llm_pipeline.llm import GeminiProvider
 from pydantic import BaseModel
 
 # Variable definitions
@@ -636,7 +635,7 @@ class RateExtractionPipeline(PipelineConfig):
 
     def __init__(self):
         super().__init__(
-            provider=GeminiProvider(),
+            model='google-gla:gemini-2.0-flash-lite',
             variable_resolver=MyVariableRegistry()
         )
 ```
