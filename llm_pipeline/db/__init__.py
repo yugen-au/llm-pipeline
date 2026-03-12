@@ -25,9 +25,13 @@ _wal_registered_engines: set = set()
 def _migrate_step_state_token_columns(engine: Engine) -> None:
     """Add token usage columns to pipeline_step_states if missing.
 
-    Uses PRAGMA table_info to check column existence before ALTER TABLE,
-    consistent with SQLiteEventHandler.__init__ migration style.
+    **SQLite-only.** Uses PRAGMA table_info to check column existence
+    before ALTER TABLE, consistent with SQLiteEventHandler.__init__
+    migration style. Non-SQLite engines are skipped silently; users
+    on other databases must add the columns manually.
     """
+    if not engine.url.drivername.startswith("sqlite"):
+        return
     _TOKEN_COLUMNS = [
         ("input_tokens", "INTEGER"),
         ("output_tokens", "INTEGER"),

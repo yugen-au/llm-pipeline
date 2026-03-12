@@ -98,3 +98,55 @@ def add_missing_indexes(engine: Engine) -> None:
 [x] Idempotent: calling init_pipeline_db twice doesn't crash
 [x] Token fields round-trip through DB (write + read)
 [x] 588 existing tests pass (1 pre-existing failure unrelated to changes)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] PRAGMA migration is SQLite-only; silent skip on non-SQLite engines
+
+### Changes Made
+#### File: `llm_pipeline/db/__init__.py`
+Added early return for non-SQLite engines and updated docstring to document SQLite-only scope.
+
+```python
+# Before
+def _migrate_step_state_token_columns(engine: Engine) -> None:
+    """Add token usage columns to pipeline_step_states if missing.
+
+    Uses PRAGMA table_info to check column existence before ALTER TABLE,
+    consistent with SQLiteEventHandler.__init__ migration style.
+    """
+
+# After
+def _migrate_step_state_token_columns(engine: Engine) -> None:
+    """Add token usage columns to pipeline_step_states if missing.
+
+    **SQLite-only.** Uses PRAGMA table_info to check column existence
+    before ALTER TABLE, consistent with SQLiteEventHandler.__init__
+    migration style. Non-SQLite engines are skipped silently; users
+    on other databases must add the columns manually.
+    """
+    if not engine.url.drivername.startswith("sqlite"):
+        return
+```
+
+#### File: `docs/observability.md`
+Added note under Database migration subsection that auto-migration is SQLite-only with manual column instructions for non-SQLite users.
+
+```markdown
+# Before
+The four token columns are added automatically via `ADD COLUMN` migration when `init_pipeline_db()` runs against an existing database. No manual migration step is needed.
+
+# After
+The four token columns are added automatically via `ADD COLUMN` migration when `init_pipeline_db()` runs against an existing SQLite database. No manual migration step is needed.
+
+> **Non-SQLite databases:** The auto-migration uses SQLite-specific `PRAGMA table_info` and is skipped for other engines. If you use PostgreSQL or another backend, add the four columns (`input_tokens`, `output_tokens`, `total_tokens`, `total_requests` -- all nullable `INTEGER`) manually.
+```
+
+### Verification
+[x] Non-SQLite engines now get explicit early return instead of silent OperationalError catch
+[x] Docstring documents SQLite-only scope
+[x] docs/observability.md notes manual migration for non-SQLite users
+[x] Existing tests still pass (588 passed, 1 pre-existing failure)

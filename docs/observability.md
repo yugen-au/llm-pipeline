@@ -108,7 +108,9 @@ GROUP BY DATE(created_at);
 
 ### Database migration
 
-The four token columns are added automatically via `ADD COLUMN` migration when `init_pipeline_db()` runs against an existing database. No manual migration step is needed.
+The four token columns are added automatically via `ADD COLUMN` migration when `init_pipeline_db()` runs against an existing SQLite database. No manual migration step is needed.
+
+> **Non-SQLite databases:** The auto-migration uses SQLite-specific `PRAGMA table_info` and is skipped for other engines. If you use PostgreSQL or another backend, add the four columns (`input_tokens`, `output_tokens`, `total_tokens`, `total_requests` -- all nullable `INTEGER`) manually.
 
 ## Event Fields
 
