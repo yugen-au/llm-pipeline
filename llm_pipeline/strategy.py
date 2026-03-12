@@ -36,6 +36,7 @@ class StepDefinition:
     transformation: Optional[Type['PipelineTransformation']] = None
     context: Optional[Type] = None  # Type is PipelineContext but avoid circular import
     agent_name: str | None = None
+    not_found_indicators: list[str] | None = None
 
     @property
     def step_name(self) -> str:
