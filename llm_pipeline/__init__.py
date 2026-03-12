@@ -33,6 +33,8 @@ from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.session import ReadOnlySession
 from llm_pipeline.introspection import PipelineIntrospector
+from llm_pipeline.agent_registry import AgentRegistry
+from llm_pipeline.agent_builders import StepDeps, build_step_agent
 
 __version__ = "0.1.0"
 
@@ -75,4 +77,8 @@ __all__ = [
     "ReadOnlySession",
     # Introspection
     "PipelineIntrospector",
+    # Agent
+    "AgentRegistry",
+    "StepDeps",
+    "build_step_agent",
 ]

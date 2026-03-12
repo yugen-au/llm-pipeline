@@ -10,7 +10,6 @@ DESIGN PHILOSOPHY:
 import hashlib
 import json
 import logging
-import re
 import uuid
 from abc import ABC
 from datetime import datetime, timezone
@@ -31,6 +30,7 @@ from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
 
 from llm_pipeline.context import PipelineInputData
+from llm_pipeline.naming import to_snake_case
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ from llm_pipeline.events.types import (
 if TYPE_CHECKING:
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
     from llm_pipeline.registry import PipelineDatabaseRegistry
+    from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.state import PipelineStepState
     from llm_pipeline.llm.provider import LLMProvider
     from llm_pipeline.prompts.variables import VariableResolver
@@ -62,10 +63,7 @@ class StepKeyDict(dict):
     @staticmethod
     def _normalize_key(key):
         if isinstance(key, type) and key.__name__.endswith("Step"):
-            class_name = key.__name__[:-4]
-            step_name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", class_name)
-            step_name = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", step_name)
-            return step_name.lower()
+            return to_snake_case(key.__name__, strip_suffix="Step")
         return key
 
     def __getitem__(self, key):
@@ -106,12 +104,13 @@ class PipelineConfig(ABC):
 
     REGISTRY: ClassVar[Type["PipelineDatabaseRegistry"]] = None
     STRATEGIES: ClassVar[Type["PipelineStrategies"]] = None
+    AGENT_REGISTRY: ClassVar[Optional[Type["AgentRegistry"]]] = None
     INPUT_DATA: ClassVar[Optional[Type["PipelineInputData"]]] = None
 
-    def __init_subclass__(cls, registry=None, strategies=None, **kwargs):
+    def __init_subclass__(cls, registry=None, strategies=None, agent_registry=None, **kwargs):
         super().__init_subclass__(**kwargs)
 
-        if registry is not None or strategies is not None:
+        if registry is not None or strategies is not None or agent_registry is not None:
             if not cls.__name__.endswith("Pipeline"):
                 raise ValueError(
                     f"Pipeline class '{cls.__name__}' must end with 'Pipeline' suffix."
@@ -134,10 +133,20 @@ class PipelineConfig(ABC):
                         f"got '{strategies.__name__}'"
                     )
 
+            if agent_registry is not None:
+                expected = f"{pipeline_name_prefix}AgentRegistry"
+                if agent_registry.__name__ != expected:
+                    raise ValueError(
+                        f"AgentRegistry for {cls.__name__} must be named '{expected}', "
+                        f"got '{agent_registry.__name__}'"
+                    )
+
         if registry is not None:
             cls.REGISTRY = registry
         if strategies is not None:
             cls.STRATEGIES = strategies
+        if agent_registry is not None:
+            cls.AGENT_REGISTRY = agent_registry
 
         if cls.INPUT_DATA is not None and not (
             isinstance(cls.INPUT_DATA, type) and issubclass(cls.INPUT_DATA, PipelineInputData)
@@ -260,9 +269,7 @@ class PipelineConfig(ABC):
             raise ValueError(
                 f"Pipeline class '{class_name}' must end with 'Pipeline' suffix."
             )
-        name = class_name[:-8]
-        snake_case = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
-        return snake_case
+        return to_snake_case(class_name, strip_suffix="Pipeline")
 
     def _build_execution_order(self) -> None:
         all_steps = []

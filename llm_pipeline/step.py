@@ -7,7 +7,7 @@ This module defines the foundation for implementing LLM-powered pipeline steps:
 - step_definition: Decorator for auto-generating step definition factories
 """
 import logging
-import re
+import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar, Tuple
@@ -20,11 +20,14 @@ from llm_pipeline.events.types import (
     ExtractionError,
     ExtractionStarting,
 )
+from llm_pipeline.naming import to_snake_case
 from llm_pipeline.types import StepCallParams
 
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
+    from pydantic_ai import Agent
+    from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.pipeline import PipelineConfig
     from llm_pipeline.types import ExecuteLLMStepParams
     from llm_pipeline.context import PipelineContext
@@ -257,9 +260,55 @@ class LLMStep(ABC):
             raise ValueError(
                 f"Step class '{class_name}' must end with 'Step' suffix."
             )
-        name = class_name[:-4]
-        snake_case = re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
-        return snake_case
+        return to_snake_case(class_name, strip_suffix='Step')
+
+    def get_agent(self, registry: 'AgentRegistry') -> type:
+        """
+        Look up this step's output type from the agent registry.
+
+        Uses agent_name override (set by StepDefinition) if available,
+        otherwise falls back to the auto-derived step_name.
+
+        Returns the output_type class reference (not an Agent instance).
+        Task 2 will provide the full Agent instance via build_step_agent().
+
+        Args:
+            registry: AgentRegistry subclass to look up from
+
+        Returns:
+            The BaseModel output type registered for this step
+        """
+        agent_name = getattr(self, '_agent_name', None) or self.step_name
+        return registry.get_output_type(agent_name)
+
+    def build_user_prompt(
+        self,
+        variables: dict[str, Any] | Any,
+        prompt_service: Any,
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """
+        Build the user prompt string for this step via the prompt service.
+
+        Extracts prompt building logic for use with pydantic-ai Agent.run().
+
+        Args:
+            variables: Template variables dict or Pydantic model instance
+            prompt_service: PromptService instance for prompt rendering
+            context: Optional additional context dict
+
+        Returns:
+            Rendered user prompt string
+        """
+        variable_instance = variables
+        if hasattr(variables, 'model_dump'):
+            variables = variables.model_dump()
+        return prompt_service.get_user_prompt(
+            self.user_prompt_key,
+            variables=variables,
+            variable_instance=variable_instance,
+            context=context,
+        )
 
     def store_extractions(self, model_class: Type[SQLModel], instances: List[SQLModel]) -> None:
         """Store extracted database models on the pipeline."""
@@ -278,7 +327,15 @@ class LLMStep(ABC):
 
         Automatically instantiates System variables if the step has a
         variable_resolver configured on the pipeline.
+
+        .. deprecated::
+            Use get_agent() + build_user_prompt() instead.
         """
+        warnings.warn(
+            "create_llm_call() is deprecated, use get_agent() + build_user_prompt() instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         system_key = system_instruction_key or self.system_instruction_key
 
         # Auto-instantiate System variables via variable_resolver if available
