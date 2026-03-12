@@ -16,6 +16,6 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Architecture Research | backend-development:backend-architect | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| Architecture Research | backend-development:backend-architect | research | 1 | - | A | needs-input | 0 | ae82a98d6fdb4e30a | pending | - |
 | Pydantic-AI Patterns | python-development:python-pro | research | 2 | - | A | in-progress | 0 | - | pending | - |
 | Codebase Analysis | backend-development:performance-engineer | research | 3 | - | A | needs-input | 0 | aafbbbff40fd527e9 | pending | - |
