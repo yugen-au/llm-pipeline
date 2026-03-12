@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-3-port-validation-logic
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-1-add-config-fields.md (if already exists, APPEND to file)
+- Output Files: implementation\step-3-update-buildstepagent.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 1 - implement ONLY this step, not others
+- Step: 3 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
@@ -20,12 +20,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-1-add-config-fields.md
+4. Document decisions in implementation\step-3-update-buildstepagent.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 1: ADD CONFIG FIELDS
+# IMPLEMENTATION - STEP 3: UPDATE BUILD_STEP_AGENT
 **Status:** [completed/failed/blocked]
 
 ## Summary
