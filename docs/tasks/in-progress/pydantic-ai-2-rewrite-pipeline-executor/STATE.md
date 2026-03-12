@@ -1,18 +1,21 @@
 ## Task: pydantic-ai-2-rewrite-pipeline-executor
-## Description: pending
+## Description: Refactor PipelineConfig.execute() to replace execute_llm_step() with agent.run_sync(), update _execute_with_consensus(), delete obsolete LLM utils (execute_llm_step, call_gemini_with_structured_output, format_schema_for_llm, validate_structured_output, validate_array_response) and RateLimiter, map UnexpectedModelBehavior to create_failure()
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/2-rewrite-pipeline-executor
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: backend-development, python-development
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Work Mode: pending
-## Last Updated: 2026-03-12 11:13
+## Work Mode: standard
+## Last Updated: 2026-03-12 11:17
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Architecture Research | backend-development:backend-architect | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| Pydantic-AI Patterns | python-development:python-pro | research | 2 | - | A | in-progress | 0 | - | pending | - |
+| Codebase Analysis | backend-development:performance-engineer | research | 3 | - | A | in-progress | 0 | - | pending | - |
