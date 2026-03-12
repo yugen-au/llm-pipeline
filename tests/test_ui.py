@@ -138,9 +138,9 @@ class TestRoutersIncluded:
         assert r.prefix == "/runs/{run_id}/steps"
 
     def test_events_router_prefix(self):
-        """events router has prefix /events."""
+        """events router has prefix /runs/{run_id}/events."""
         from llm_pipeline.ui.routes.events import router as r
-        assert r.prefix == "/events"
+        assert r.prefix == "/runs/{run_id}/events"
 
     def test_prompts_router_prefix(self):
         """prompts router has prefix /prompts."""

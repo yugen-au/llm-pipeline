@@ -9,7 +9,7 @@ This module defines the foundation for implementing LLM-powered pipeline steps:
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
-from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar, Tuple
+from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError
 from sqlmodel import SQLModel
@@ -29,52 +29,6 @@ if TYPE_CHECKING:
     from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.pipeline import PipelineConfig
     from llm_pipeline.context import PipelineContext
-
-
-def _query_prompt_keys(
-    step_name: str,
-    session: Any,
-    strategy_name: Optional[str] = None,
-) -> Tuple[Optional[str], Optional[str]]:
-    """
-    Query database for prompt keys using the provided session.
-
-    Args:
-        step_name: Name of the step (e.g., 'constraint_extraction')
-        session: Database session to query prompts
-        strategy_name: Optional strategy name (e.g., 'lane_based')
-
-    Returns:
-        Tuple of (system_key, user_key) or (None, None) if not found
-    """
-    from sqlmodel import select
-    from llm_pipeline.db.prompt import Prompt
-
-    if strategy_name:
-        search_key = f"{step_name}.{strategy_name}"
-    else:
-        search_key = step_name
-
-    system_key = None
-    user_key = None
-
-    system_prompt = session.exec(select(Prompt).where(
-        Prompt.prompt_key == search_key,
-        Prompt.prompt_type == 'system',
-        Prompt.is_active == True
-    )).first()
-    if system_prompt:
-        system_key = system_prompt.prompt_key
-
-    user_prompt = session.exec(select(Prompt).where(
-        Prompt.prompt_key == search_key,
-        Prompt.prompt_type == 'user',
-        Prompt.is_active == True
-    )).first()
-    if user_prompt:
-        user_key = user_prompt.prompt_key
-
-    return system_key, user_key
 
 
 def step_definition(
