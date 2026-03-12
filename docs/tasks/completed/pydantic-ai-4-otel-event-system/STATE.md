@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-4-otel-event-system
 ## Description: Enable pydantic.ai OTel instrumentation for pipeline agents, create pipeline event system (StepPrepared/StepStarting/StepCompleted), log token usage per step for cost tracking
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev

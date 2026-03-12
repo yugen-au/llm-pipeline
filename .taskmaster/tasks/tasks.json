@@ -869,8 +869,9 @@
         "dependencies": [
           "2"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-12T09:15:11.284Z"
       },
       {
         "id": "5",
@@ -905,9 +906,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-12T05:16:06.342Z",
+      "lastModified": "2026-03-12T09:15:11.293Z",
       "taskCount": 6,
-      "completedCount": 3,
+      "completedCount": 4,
       "tags": [
         "pydantic-ai"
       ]
