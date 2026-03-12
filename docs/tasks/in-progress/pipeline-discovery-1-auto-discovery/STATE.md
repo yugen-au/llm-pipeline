@@ -20,3 +20,5 @@
 | App Factory & Registry Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a8814d8d94989807f | cd90751e | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a9a37cdcf9ac2e1cc | 76e29dc1 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a1f5cac4c50cfa68b | pending | - |
+| Discovery Logic | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /python/importlib_metadata |
+| Model Guard | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | - |
