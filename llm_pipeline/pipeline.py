@@ -1107,7 +1107,8 @@ class PipelineConfig(ABC):
                 )
         return total
 
-    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None, **kwargs):
+    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None,
+                         input_tokens=None, output_tokens=None, total_tokens=None, total_requests=None):
         from llm_pipeline.state import PipelineStepState
         from llm_pipeline.db.prompt import Prompt
         from sqlmodel import select
@@ -1134,6 +1135,10 @@ class PipelineConfig(ABC):
             if prompt:
                 prompt_version = prompt.version
 
+        # compute total_tokens if caller provided input/output but not total
+        if total_tokens is None and (input_tokens is not None or output_tokens is not None):
+            total_tokens = (input_tokens or 0) + (output_tokens or 0)
+
         state = PipelineStepState(
             pipeline_name=self.pipeline_name,
             run_id=self.run_id,
@@ -1147,6 +1152,10 @@ class PipelineConfig(ABC):
             prompt_version=prompt_version,
             execution_time_ms=execution_time_ms,
             model=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            total_requests=total_requests,
         )
         self._real_session.add(state)
         self._real_session.flush()

@@ -203,6 +203,11 @@ def _make_failing_run_result(item_count=2, category="test"):
     )
     mock_result = MagicMock()
     mock_result.output = instruction
+    usage = MagicMock()
+    usage.input_tokens = 10
+    usage.output_tokens = 5
+    usage.requests = 1
+    mock_result.usage.return_value = usage
     return mock_result
 
 

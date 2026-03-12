@@ -102,6 +102,11 @@ def _make_empty_ctx_run_result(count=1):
     instruction = EmptyContextInstructions(count=count, confidence_score=1.0, notes="test")
     mock_result = MagicMock()
     mock_result.output = instruction
+    usage = MagicMock()
+    usage.input_tokens = 10
+    usage.output_tokens = 5
+    usage.requests = 1
+    mock_result.usage.return_value = usage
     return mock_result
 
 

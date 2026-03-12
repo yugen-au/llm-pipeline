@@ -371,11 +371,21 @@ class TransformationPipeline(
 # -- Mock run_result builders --------------------------------------------------
 
 
+def _mock_usage():
+    """Build MagicMock mimicking pydantic-ai Usage with realistic token values."""
+    usage = MagicMock()
+    usage.input_tokens = 10
+    usage.output_tokens = 5
+    usage.requests = 1
+    return usage
+
+
 def make_simple_run_result(count=1):
     """Build MagicMock mimicking AgentRunResult for SimpleInstructions."""
     instruction = SimpleInstructions(count=count, confidence_score=1.0, notes="test")
     mock_result = MagicMock()
     mock_result.output = instruction
+    mock_result.usage.return_value = _mock_usage()
     return mock_result
 
 
@@ -386,6 +396,7 @@ def make_item_detection_run_result(item_count=2, category="test"):
     )
     mock_result = MagicMock()
     mock_result.output = instruction
+    mock_result.usage.return_value = _mock_usage()
     return mock_result
 
 
@@ -396,6 +407,7 @@ def make_transformation_run_result(count=5, operation="transform"):
     )
     mock_result = MagicMock()
     mock_result.output = instruction
+    mock_result.usage.return_value = _mock_usage()
     return mock_result
 
 
