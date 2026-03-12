@@ -194,6 +194,21 @@ class TestTriggerRun:
             resp = client.post("/api/runs", json={"pipeline_name": "any_pipeline"})
         assert resp.status_code == 404
 
+    def test_returns_422_when_no_model_configured(self):
+        """Registered pipeline but no default_model -> 422 with actionable message."""
+        noop = lambda run_id, engine, **kw: None
+        app = create_app(
+            db_path=":memory:",
+            pipeline_registry={"p": noop},
+            default_model=None,
+        )
+        with TestClient(app) as client:
+            resp = client.post("/api/runs", json={"pipeline_name": "p"})
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "No model configured" in detail
+        assert "LLM_PIPELINE_MODEL" in detail
+
     def test_background_task_executes_pipeline(self):
         executed = []
 

@@ -87,3 +87,34 @@ app = create_app(db_path=":memory:", pipeline_registry=registry, default_model="
 [x] All 10 previously failing tests now pass
 [x] 2 tests that already passed (test_returns_404_for_unregistered_pipeline, test_returns_404_when_registry_empty) still pass -- 404 guard fires before model guard as intended
 [x] No production code changed, only test fixtures
+
+## Fix Iteration 1
+**Issues Source:** ARCHITECTURE_REVIEW
+**Status:** fixed
+
+### Issues Addressed
+[x] Missing test coverage: no test verifying 422 when default_model is None
+
+### Changes Made
+#### File: `tests/ui/test_runs.py`
+Added `test_returns_422_when_no_model_configured` to TestTriggerRun. Creates app with a registered pipeline but `default_model=None`, asserts HTTP 422 and that the detail message contains "No model configured" and "LLM_PIPELINE_MODEL".
+```python
+def test_returns_422_when_no_model_configured(self):
+    noop = lambda run_id, engine, **kw: None
+    app = create_app(
+        db_path=":memory:",
+        pipeline_registry={"p": noop},
+        default_model=None,
+    )
+    with TestClient(app) as client:
+        resp = client.post("/api/runs", json={"pipeline_name": "p"})
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "No model configured" in detail
+    assert "LLM_PIPELINE_MODEL" in detail
+```
+
+### Verification
+[x] New test passes
+[x] All 7 TestTriggerRun tests pass (no regressions)
+[x] No production code changed
