@@ -45,8 +45,8 @@ Added TestBuildStepAgentValidators class (5 tests):
 **Rationale:** Validators access ctx.deps directly; real RunContext ensures attribute access works correctly without patching internals.
 
 ### asyncio event loop
-**Choice:** asyncio.new_event_loop().run_until_complete() per call.
-**Rationale:** asyncio.get_event_loop() triggers DeprecationWarning on Python 3.10+; new_event_loop() is clean per test.
+**Choice:** asyncio.run() per call (updated from asyncio.new_event_loop().run_until_complete()).
+**Rationale:** asyncio.run() creates, runs, and closes the loop atomically. new_event_loop() without explicit close() leaks the loop handle.
 
 ### validator internals inspection
 **Choice:** Check agent._output_validators and v.function to find registered callables.
@@ -58,3 +58,36 @@ Added TestBuildStepAgentValidators class (5 tests):
 [x] Full suite: 837 passed, 1 pre-existing failure (test_events_router_prefix unrelated), 6 skipped
 [x] No new failures introduced
 [x] Commit: 73860020
+
+---
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Event loop leak: _run() called asyncio.new_event_loop().run_until_complete() without closing the loop
+[x] Misleading test name: test_already_correct_order_no_copy_needed implied no model_copy occurs, which is incorrect
+
+### Changes Made
+#### File: `tests/test_validators.py`
+Replaced _run() body with asyncio.run(coro) to ensure proper loop lifecycle.
+Renamed test_already_correct_order_no_copy_needed to test_already_correct_order_preserved.
+
+```
+# Before
+def _run(coro: Any) -> Any:
+    return asyncio.new_event_loop().run_until_complete(coro)
+
+def test_already_correct_order_no_copy_needed(self):
+
+# After
+def _run(coro: Any) -> Any:
+    return asyncio.run(coro)
+
+def test_already_correct_order_preserved(self):
+```
+
+### Verification
+[x] 29 tests pass, no warnings
+[x] Commit: 7ffbdfb3
