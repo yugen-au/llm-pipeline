@@ -862,9 +862,8 @@ class PipelineConfig(ABC):
                     execution_time_ms = int(
                         (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
                     )
-                    model_name = getattr(self._provider, 'model_name', None)
                     self._save_step_state(
-                        step, step_num, instructions, input_hash, execution_time_ms, model_name
+                        step, step_num, instructions, input_hash, execution_time_ms, self._model
                     )
                     step.log_instructions(instructions)
                     if self._event_emitter:
