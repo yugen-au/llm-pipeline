@@ -33,4 +33,4 @@
 | Add pydantic-ai dep | python-development:python-pro | implementation | 10 | - | E | complete | 0 | a342bc724feaf9abe | 200b56a,5972079 | - |
 | Update __init__.py exports | python-development:python-pro | implementation | 11 | - | F | complete | 0 | a309527c755b4a8fe | 4ed29a8 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | ad831e960debee7a6 | 344306d,13b82fb | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | a124071b0f3e82e53 | ae27d0f | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 1 | a124071b0f3e82e53 | ae27d0f | - |
