@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-2-rewrite-pipeline-executor
 ## Description: Refactor PipelineConfig.execute() to replace execute_llm_step() with agent.run_sync(), update _execute_with_consensus(), delete obsolete LLM utils (execute_llm_step, call_gemini_with_structured_output, format_schema_for_llm, validate_structured_output, validate_array_response) and RateLimiter, map UnexpectedModelBehavior to create_failure()
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
