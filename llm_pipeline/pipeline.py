@@ -934,6 +934,7 @@ class PipelineConfig(ABC):
                 if self._event_emitter:
                     # Timing includes cache-lookup or LLM-call depending on path;
                     # CEO-approved: step_start stays after logging block (L541).
+                    # Token fields are None on cached path (no LLM calls made).
                     self._emit(StepCompleted(
                         run_id=self.run_id,
                         pipeline_name=self.pipeline_name,

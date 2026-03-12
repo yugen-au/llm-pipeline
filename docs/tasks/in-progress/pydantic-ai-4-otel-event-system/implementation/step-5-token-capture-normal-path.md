@@ -110,3 +110,37 @@ Added `**kwargs` so new token kwargs don't cause TypeError before Step 7 adds ex
 [x] Per-call tokens populated only in non-consensus path (consensus handled in Step 6)
 [x] `_save_step_state` accepts new kwargs without error
 [x] `StepCompleted` gets None tokens on cached path
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] (MEDIUM) StepCompleted emitted with token data on cached path shows None -- correct but undocumented
+
+### Changes Made
+#### File: `llm_pipeline/pipeline.py`
+Added inline comment at StepCompleted emission explaining cached steps have None token fields.
+```python
+# Before
+                    # Timing includes cache-lookup or LLM-call depending on path;
+                    # CEO-approved: step_start stays after logging block (L541).
+                    self._emit(StepCompleted(
+
+# After
+                    # Timing includes cache-lookup or LLM-call depending on path;
+                    # CEO-approved: step_start stays after logging block (L541).
+                    # Token fields are None on cached path (no LLM calls made).
+                    self._emit(StepCompleted(
+```
+
+#### File: `docs/observability.md`
+Added blockquote note under StepCompleted section documenting that cached steps emit None token values.
+```markdown
+# After (appended after StepCompleted description)
+> **Cached steps:** When a step is served from cache, `StepCompleted` is emitted with all token fields set to `None` because no LLM calls were made. If you filter or aggregate events by token fields, account for `None` values on cached steps.
+```
+
+### Verification
+[x] Comment added to pipeline.py near StepCompleted emission
+[x] Documentation note added to docs/observability.md under StepCompleted section

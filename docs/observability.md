@@ -140,6 +140,8 @@ Emitted once per step after all calls (including consensus retries) finish. Fiel
 
 The `StepCompleted` totals match what is persisted to `PipelineStepState`, giving you the true cost of the step including all consensus attempts.
 
+> **Cached steps:** When a step is served from cache, `StepCompleted` is emitted with all token fields set to `None` because no LLM calls were made. If you filter or aggregate events by token fields, account for `None` values on cached steps.
+
 ## Example: Console Span Exporter
 
 Minimal working example that prints spans to stdout:
