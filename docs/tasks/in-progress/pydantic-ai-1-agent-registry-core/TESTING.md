@@ -88,3 +88,26 @@ None - all criteria machine-verifiable.
 1. Fix WAL test isolation (add tmp_path fixture to use unique file path per run) - separate task
 2. Fix test_events_router_prefix to match new `/runs/{run_id}/events` prefix - separate task
 3. Consider adding `agent.retries` as a public property request to pydantic-ai upstream if needed for testing
+
+---
+
+## Re-run After Review Fixes (2026-03-12)
+
+### Fixes Applied
+1. `pipeline.py` - `pipeline_name` property now uses `to_snake_case` (was single-regex bug)
+2. `agent_builders.py` - `pydantic_ai` import moved behind `TYPE_CHECKING` + lazy import in `build_step_agent()`
+3. `tests/test_agent_registry_core.py` - `test_create_step_sets_agent_name_on_instance` properly closes SQLite session/engine
+4. `step.py` - `build_user_prompt` preserves original Pydantic model as `variable_instance`
+
+### Test Execution
+**Pass Rate:** 854/855 (1 pre-existing failure)
+
+```
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
+1 failed, 854 passed, 6 skipped, 966 warnings in 123.56s (0:02:03)
+```
+
+### Result
+No regressions. The previously flaky `test_file_based_sqlite_sets_wal` passed this run (consistent with it being a pre-existing isolation issue unrelated to our changes). Only the known pre-existing `test_events_router_prefix` failure remains.
+
+**Status:** passed
