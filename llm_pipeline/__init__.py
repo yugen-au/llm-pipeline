@@ -5,12 +5,10 @@ Usage::
 
     # Core orchestration
     from llm_pipeline import PipelineConfig, LLMStep, LLMResultMixin, step_definition
-    from llm_pipeline.llm import LLMProvider
-    from llm_pipeline.llm.gemini import GeminiProvider  # optional
 
     # Event infrastructure (top-level)
     from llm_pipeline import PipelineEventEmitter, CompositeEmitter, LoggingEventHandler
-    from llm_pipeline import LLMCallResult, PipelineEvent
+    from llm_pipeline import PipelineEvent
 
     # Concrete events (submodule)
     from llm_pipeline.events import PipelineStarted, StepStarted, LLMCallStarting
@@ -28,7 +26,6 @@ from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.events.types import PipelineEvent
 from llm_pipeline.events.emitter import PipelineEventEmitter, CompositeEmitter
 from llm_pipeline.events.handlers import LoggingEventHandler, InMemoryEventHandler, SQLiteEventHandler, DEFAULT_LEVEL_MAP
-from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.session import ReadOnlySession
@@ -63,7 +60,6 @@ __all__ = [
     "PipelineEvent",
     "PipelineEventEmitter",
     "CompositeEmitter",
-    "LLMCallResult",
     "LoggingEventHandler",
     "InMemoryEventHandler",
     "SQLiteEventHandler",
