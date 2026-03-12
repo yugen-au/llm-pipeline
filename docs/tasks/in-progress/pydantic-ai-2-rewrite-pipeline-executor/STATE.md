@@ -28,6 +28,6 @@
 | Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a05033b7763c79242 | ad39b29d,0ce2acda | - |
 | Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | complete | 0 | ab0698cae3d1db25f | 0a2ee157 | - |
 | Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | complete | 0 | a0ee30f9eb7d747bf | 6d36c8b0 | - |
-| Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | in-progress | 0 | abfde85609afadd18 | b02fac1e | /pydantic/pydantic-ai |
+| Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | in-progress | 1 | abfde85609afadd18 | b02fac1e | /pydantic/pydantic-ai |
 | Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | complete | 0 | a73bba5de7cdef97c | 46297335 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | pending | 0 | aa2a6c3f597572a77 | 0e4c6c69 | - |
