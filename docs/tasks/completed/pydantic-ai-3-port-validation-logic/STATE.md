@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-3-port-validation-logic
 ## Description: Port custom validation (not_found_indicators, ArrayValidationConfig) to pydantic.ai @agent.output_validator decorators. Create validator factories, update agent builders, delete old validation.py.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
