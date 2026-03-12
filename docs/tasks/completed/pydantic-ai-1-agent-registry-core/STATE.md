@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-1-agent-registry-core
 ## Description: Implement AgentRegistry, StepDeps, agent builder utilities, update StepDefinition/LLMStep with pydantic-ai Agent integration, deprecate create_llm_call()
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
