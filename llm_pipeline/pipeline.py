@@ -458,13 +458,14 @@ class PipelineConfig(ABC):
         if initial_context is None:
             initial_context = {}
 
-        from llm_pipeline.llm.executor import execute_llm_step
+        from llm_pipeline.agent_builders import build_step_agent, StepDeps
         from llm_pipeline.prompts.service import PromptService
         from llm_pipeline.state import PipelineRun
+        from pydantic_ai import UnexpectedModelBehavior
 
-        if self._provider is None:
+        if self.AGENT_REGISTRY is None:
             raise ValueError(
-                "LLMProvider required. Pass provider= to pipeline constructor."
+                f"{self.__class__.__name__} must specify agent_registry= parameter."
             )
 
         if not self._strategies:
