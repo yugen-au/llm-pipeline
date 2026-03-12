@@ -2,7 +2,6 @@
 Tests for naming.py, agent_registry.py, agent_builders.py, step.py, strategy.py,
 and pipeline.py changes introduced in pydantic-ai-1-agent-registry-core.
 """
-import warnings
 from dataclasses import fields as dc_fields
 from typing import Any
 
@@ -145,7 +144,7 @@ class TestAgentRegistryGetOutputType:
 class TestStepDepsFields:
     def test_field_count(self):
         f = dc_fields(StepDeps)
-        assert len(f) == 8
+        assert len(f) == 10
 
     def test_required_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]
@@ -157,6 +156,8 @@ class TestStepDepsFields:
         names = [f.name for f in dc_fields(StepDeps)]
         assert "event_emitter" in names
         assert "variable_resolver" in names
+        assert "array_validation" in names
+        assert "validation_context" in names
 
     def test_optional_defaults_none(self):
         import dataclasses
@@ -167,6 +168,8 @@ class TestStepDepsFields:
         }
         assert defaults.get("event_emitter") is None
         assert defaults.get("variable_resolver") is None
+        assert defaults.get("array_validation") is None
+        assert defaults.get("validation_context") is None
 
     def test_instantiation_with_required_only(self):
         deps = StepDeps(
@@ -244,7 +247,7 @@ class TestBuildStepAgent:
 
 
 # ============================================================
-# step.py - LLMStep.get_agent(), build_user_prompt(), create_llm_call() deprecation
+# step.py - LLMStep.get_agent(), build_user_prompt() deprecation
 # ============================================================
 
 class TestLLMStepMethods:
@@ -321,34 +324,6 @@ class TestLLMStepMethods:
 
         result = step.build_user_prompt(VarModel(), MockPromptService())
         assert result == "prompt:world"
-
-    def test_create_llm_call_deprecation_warning(self):
-        step = self._make_step()
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            step.create_llm_call(variables={"data": "x"})
-        assert len(w) == 1
-        assert issubclass(w[0].category, DeprecationWarning)
-        assert "create_llm_call" in str(w[0].message)
-
-    def test_create_llm_call_stacklevel(self):
-        step = self._make_step()
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            step.create_llm_call(variables={"data": "x"})
-        # stacklevel=2 means the filename should point to this test file
-        assert w[0].filename.endswith("test_agent_registry_core.py")
-
-    def test_create_llm_call_still_works(self):
-        # deprecated but must still return correct structure
-        step = self._make_step()
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            result = step.create_llm_call(variables={"data": "x"})
-        assert result["system_instruction_key"] == "sys_key"
-        assert result["user_prompt_key"] == "user_key"
-        assert result["variables"] == {"data": "x"}
-
 
 # ============================================================
 # strategy.py - StepDefinition.agent_name, step_name property

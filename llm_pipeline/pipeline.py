@@ -38,7 +38,7 @@ from llm_pipeline.events.types import (
     PipelineStarted, PipelineCompleted, PipelineError,
     StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
     CacheLookup, CacheHit, CacheMiss, CacheReconstruction,
-    LLMCallPrepared,
+    LLMCallPrepared, LLMCallStarting, LLMCallCompleted,
     ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
     TransformationStarting, TransformationCompleted,
     InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from llm_pipeline.registry import PipelineDatabaseRegistry
     from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.state import PipelineStepState
-    from llm_pipeline.llm.provider import LLMProvider
     from llm_pipeline.prompts.variables import VariableResolver
     from llm_pipeline.events.emitter import PipelineEventEmitter
     from llm_pipeline.events.types import PipelineEvent
@@ -96,9 +95,9 @@ class PipelineConfig(ABC):
             pass
 
     Constructor accepts dependency injection for decoupling:
+        - model: pydantic-ai model string (e.g. 'google-gla:gemini-2.0-flash-lite')
         - engine: SQLAlchemy engine (auto-SQLite if omitted)
         - session: Existing session (overrides engine)
-        - provider: LLMProvider instance (required for execute())
         - variable_resolver: Optional VariableResolver for prompt variables
     """
 
@@ -158,10 +157,10 @@ class PipelineConfig(ABC):
 
     def __init__(
         self,
+        model: str,
         strategies: Optional[List["PipelineStrategy"]] = None,
         session: Optional[Session] = None,
         engine: Optional[Engine] = None,
-        provider: Optional["LLMProvider"] = None,
         variable_resolver: Optional["VariableResolver"] = None,
         event_emitter: Optional["PipelineEventEmitter"] = None,
         run_id: Optional[str] = None,
@@ -170,17 +169,17 @@ class PipelineConfig(ABC):
         Initialize pipeline.
 
         Args:
+            model: pydantic-ai model string (e.g. 'google-gla:gemini-2.0-flash-lite').
             strategies: Optional list of PipelineStrategy instances.
             session: Optional database session. Overrides engine if provided.
             engine: Optional SQLAlchemy engine. Auto-SQLite if both session and engine are None.
-            provider: LLMProvider instance for LLM calls (required for execute()).
             variable_resolver: Optional VariableResolver for prompt variable classes.
             event_emitter: Optional PipelineEventEmitter for lifecycle/LLM/extraction events. None disables events.
         """
         from llm_pipeline.db import init_pipeline_db, get_session as db_get_session
         from llm_pipeline.session import ReadOnlySession
 
-        self._provider = provider
+        self._model = model
         self._variable_resolver = variable_resolver
         self._event_emitter = event_emitter
 
@@ -459,13 +458,14 @@ class PipelineConfig(ABC):
         if initial_context is None:
             initial_context = {}
 
-        from llm_pipeline.llm.executor import execute_llm_step
+        from llm_pipeline.agent_builders import build_step_agent, StepDeps
         from llm_pipeline.prompts.service import PromptService
         from llm_pipeline.state import PipelineRun
+        from pydantic_ai import UnexpectedModelBehavior
 
-        if self._provider is None:
+        if self.AGENT_REGISTRY is None:
             raise ValueError(
-                "LLMProvider required. Pass provider= to pipeline constructor."
+                f"{self.__class__.__name__} must specify agent_registry= parameter."
             )
 
         if not self._strategies:
@@ -726,26 +726,99 @@ class PipelineConfig(ABC):
                             user_key=step.user_prompt_key,
                         ))
 
-                    for idx, params in enumerate(call_params):
-                        call_kwargs = step.create_llm_call(**params)
-                        # Inject provider and prompt_service
-                        call_kwargs["provider"] = self._provider
-                        call_kwargs["prompt_service"] = prompt_service
+                    # Build agent once per step (reused across consensus iterations)
+                    output_type = step.get_agent(self.AGENT_REGISTRY)
+                    agent = build_step_agent(
+                        step_name=step.step_name,
+                        output_type=output_type,
+                    )
+                    step_deps = StepDeps(
+                        session=self.session,
+                        pipeline_context=self._context,
+                        prompt_service=prompt_service,
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_name=step.step_name,
+                        event_emitter=self._event_emitter,
+                        variable_resolver=self._variable_resolver,
+                    )
 
+                    for idx, params in enumerate(call_params):
+                        user_prompt = step.build_user_prompt(
+                            variables=params.get("variables", {}),
+                            prompt_service=prompt_service,
+                        )
+
+                        # Resolve system prompt for LLMCallStarting event
                         if self._event_emitter:
-                            call_kwargs["event_emitter"] = self._event_emitter
-                            call_kwargs["run_id"] = self.run_id
-                            call_kwargs["pipeline_name"] = self.pipeline_name
-                            call_kwargs["step_name"] = step.step_name
-                            call_kwargs["call_index"] = idx
+                            sys_key = step.system_instruction_key
+                            if self._variable_resolver:
+                                var_class = self._variable_resolver.resolve(sys_key, 'system')
+                                if var_class:
+                                    sys_vars = var_class()
+                                    sys_vars_dict = (
+                                        sys_vars.model_dump()
+                                        if hasattr(sys_vars, 'model_dump')
+                                        else sys_vars
+                                    )
+                                    rendered_system = prompt_service.get_system_prompt(
+                                        prompt_key=sys_key,
+                                        variables=sys_vars_dict,
+                                        variable_instance=sys_vars,
+                                    )
+                                else:
+                                    rendered_system = prompt_service.get_prompt(
+                                        prompt_key=sys_key,
+                                        prompt_type='system',
+                                    )
+                            else:
+                                rendered_system = prompt_service.get_prompt(
+                                    prompt_key=sys_key,
+                                    prompt_type='system',
+                                )
+                            self._emit(LLMCallStarting(
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                step_name=step.step_name,
+                                call_index=idx,
+                                rendered_system_prompt=rendered_system,
+                                rendered_user_prompt=user_prompt,
+                            ))
 
                         if use_consensus:
                             instruction = self._execute_with_consensus(
-                                call_kwargs, consensus_threshold, maximum_step_calls,
+                                agent, user_prompt, step_deps, output_type,
+                                consensus_threshold, maximum_step_calls,
                                 current_step_name,
                             )
                         else:
-                            instruction = execute_llm_step(**call_kwargs)
+                            try:
+                                run_result = agent.run_sync(
+                                    user_prompt,
+                                    deps=step_deps,
+                                    model=self._model,
+                                )
+                                instruction = run_result.output
+                            except UnexpectedModelBehavior as exc:
+                                instruction = output_type.create_failure(str(exc))
+
+                        if self._event_emitter:
+                            self._emit(LLMCallCompleted(
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                step_name=step.step_name,
+                                call_index=idx,
+                                raw_response=None,
+                                parsed_result=(
+                                    instruction.model_dump()
+                                    if hasattr(instruction, 'model_dump')
+                                    else None
+                                ),
+                                model_name=self._model,
+                                attempt_count=1,
+                                validation_errors=[],
+                            ))
+
                         instructions.append(instruction)
 
                     self._instructions[step.step_name] = instructions
@@ -789,9 +862,8 @@ class PipelineConfig(ABC):
                     execution_time_ms = int(
                         (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
                     )
-                    model_name = getattr(self._provider, 'model_name', None)
                     self._save_step_state(
-                        step, step_num, instructions, input_hash, execution_time_ms, model_name
+                        step, step_num, instructions, input_hash, execution_time_ms, self._model
                     )
                     step.log_instructions(instructions)
                     if self._event_emitter:
@@ -1124,8 +1196,8 @@ class PipelineConfig(ABC):
         dict2 = instr2.model_dump()
         return PipelineConfig._smart_compare(dict1, dict2, mixin_fields=mixin_fields)
 
-    def _execute_with_consensus(self, call_kwargs, consensus_threshold, maximum_step_calls, current_step_name):
-        from llm_pipeline.llm.executor import execute_llm_step
+    def _execute_with_consensus(self, agent, user_prompt, step_deps, output_type, consensus_threshold, maximum_step_calls, current_step_name):
+        from pydantic_ai import UnexpectedModelBehavior
 
         results = []
         result_groups = []
@@ -1138,7 +1210,11 @@ class PipelineConfig(ABC):
                 max_calls=maximum_step_calls,
             ))
         for attempt in range(maximum_step_calls):
-            instruction = execute_llm_step(**call_kwargs)
+            try:
+                run_result = agent.run_sync(user_prompt, deps=step_deps, model=self._model)
+                instruction = run_result.output
+            except UnexpectedModelBehavior as exc:
+                instruction = output_type.create_failure(str(exc))
             results.append(instruction)
             matched_group = None
             for group in result_groups:

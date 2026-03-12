@@ -7,7 +7,6 @@ This module defines the foundation for implementing LLM-powered pipeline steps:
 - step_definition: Decorator for auto-generating step definition factories
 """
 import logging
-import warnings
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar, Tuple
@@ -29,7 +28,6 @@ if TYPE_CHECKING:
     from pydantic_ai import Agent
     from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.pipeline import PipelineConfig
-    from llm_pipeline.types import ExecuteLLMStepParams
     from llm_pipeline.context import PipelineContext
 
 
@@ -313,50 +311,6 @@ class LLMStep(ABC):
     def store_extractions(self, model_class: Type[SQLModel], instances: List[SQLModel]) -> None:
         """Store extracted database models on the pipeline."""
         self.pipeline.store_extractions(model_class, instances)
-
-    def create_llm_call(
-        self,
-        variables: Dict[str, Any],
-        system_instruction_key: Optional[str] = None,
-        user_prompt_key: Optional[str] = None,
-        instructions: Optional[Type[BaseModel]] = None,
-        **extra_params
-    ) -> 'ExecuteLLMStepParams':
-        """
-        Create an ExecuteLLMStepParams dict with defaults from step config.
-
-        Automatically instantiates System variables if the step has a
-        variable_resolver configured on the pipeline.
-
-        .. deprecated::
-            Use get_agent() + build_user_prompt() instead.
-        """
-        warnings.warn(
-            "create_llm_call() is deprecated, use get_agent() + build_user_prompt() instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        system_key = system_instruction_key or self.system_instruction_key
-
-        # Auto-instantiate System variables via variable_resolver if available
-        system_variables = None
-        if system_key and hasattr(self.pipeline, '_variable_resolver') and self.pipeline._variable_resolver:
-            try:
-                system_var_class = self.pipeline._variable_resolver.resolve(system_key, 'system')
-                if system_var_class:
-                    system_variables = system_var_class()
-            except (AttributeError, ImportError):
-                pass
-
-        params = {
-            "system_instruction_key": system_key,
-            "user_prompt_key": user_prompt_key or self.user_prompt_key,
-            "variables": variables,
-            "result_class": instructions or self.instructions,
-            "system_variables": system_variables,
-        }
-        params.update(extra_params)
-        return params
 
     @abstractmethod
     def prepare_calls(self) -> List[StepCallParams]:

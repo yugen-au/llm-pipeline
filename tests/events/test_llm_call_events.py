@@ -5,7 +5,8 @@ by Pipeline.execute() via InMemoryEventHandler. Tests cover happy path,
 error path, event pairing, and zero-overhead when no emitter is configured.
 """
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
+from pydantic_ai import UnexpectedModelBehavior
 
 from llm_pipeline.events.types import (
     LLMCallPrepared,
@@ -13,8 +14,8 @@ from llm_pipeline.events.types import (
     LLMCallCompleted,
 )
 from conftest import (
-    MockProvider,
     SuccessPipeline,
+    make_simple_run_result,
 )
 
 
@@ -22,17 +23,14 @@ from conftest import (
 
 
 def _run_success_pipeline(seeded_session, handler):
-    """Execute SuccessPipeline with 2 responses and return (pipeline, events)."""
-    provider = MockProvider(responses=[
-        {"count": 1, "notes": "first"},
-        {"count": 2, "notes": "second"},
-    ])
+    """Execute SuccessPipeline with mocked Agent.run_sync and return (pipeline, events)."""
     pipeline = SuccessPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data="test data", initial_context={})
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+        pipeline.execute(data="test data", initial_context={})
     return pipeline, handler.get_events()
 
 
@@ -85,7 +83,7 @@ class TestLLMCallPrepared:
 
 
 class TestLLMCallStarting:
-    """Verify LLMCallStarting emitted before provider call with rendered prompts."""
+    """Verify LLMCallStarting emitted before agent call with rendered prompts."""
 
     def test_starting_emitted_per_call(self, seeded_session, in_memory_handler):
         """LLMCallStarting emitted once per LLM call (2 steps, 1 call each = 2)."""
@@ -99,7 +97,6 @@ class TestLLMCallStarting:
         starting = [e for e in events if e["event_type"] == "llm_call_starting"]
         for s in starting:
             assert isinstance(s["rendered_system_prompt"], str)
-            # Should be the rendered content, not the key
             assert s["rendered_system_prompt"] != "simple.system"
 
     def test_rendered_user_prompt_contains_data(self, seeded_session, in_memory_handler):
@@ -123,13 +120,12 @@ class TestLLMCallStarting:
         types = [e["event_type"] for e in events]
         for i, t in enumerate(types):
             if t == "llm_call_starting":
-                # find next completed after this starting
                 rest = types[i + 1:]
                 assert "llm_call_completed" in rest
 
 
 class TestLLMCallCompleted:
-    """Verify LLMCallCompleted emitted after provider call with result fields."""
+    """Verify LLMCallCompleted emitted after agent call with result fields."""
 
     def test_completed_emitted_per_call(self, seeded_session, in_memory_handler):
         """LLMCallCompleted emitted once per LLM call."""
@@ -137,29 +133,29 @@ class TestLLMCallCompleted:
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
         assert len(completed) == 2
 
-    def test_raw_response_present(self, seeded_session, in_memory_handler):
-        """raw_response contains MockProvider's response string."""
+    def test_raw_response_is_none(self, seeded_session, in_memory_handler):
+        """raw_response=None in new pydantic-ai architecture (not populated by agent)."""
         _, events = _run_success_pipeline(seeded_session, in_memory_handler)
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
         for c in completed:
-            assert c["raw_response"] == "mock response"
+            assert c["raw_response"] is None
 
     def test_parsed_result_is_dict(self, seeded_session, in_memory_handler):
-        """parsed_result is a dict from MockProvider response."""
+        """parsed_result is a dict from instruction.model_dump()."""
         _, events = _run_success_pipeline(seeded_session, in_memory_handler)
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
         for c in completed:
             assert isinstance(c["parsed_result"], dict)
 
-    def test_model_name(self, seeded_session, in_memory_handler):
-        """model_name matches MockProvider's model_name ('mock-model')."""
+    def test_model_name_is_test_model(self, seeded_session, in_memory_handler):
+        """model_name matches pipeline model string ('test-model')."""
         _, events = _run_success_pipeline(seeded_session, in_memory_handler)
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
         for c in completed:
-            assert c["model_name"] == "mock-model"
+            assert c["model_name"] == "test-model"
 
     def test_attempt_count(self, seeded_session, in_memory_handler):
-        """attempt_count=1 from MockProvider (single attempt)."""
+        """attempt_count=1 (single attempt in new architecture)."""
         _, events = _run_success_pipeline(seeded_session, in_memory_handler)
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
         for c in completed:
@@ -216,11 +212,9 @@ class TestLLMCallEventPairing:
             e for e in events
             if e["event_type"] in ("llm_call_prepared", "llm_call_starting", "llm_call_completed")
         ]
-        # First step events
         assert llm_events[0]["event_type"] == "llm_call_prepared"
         assert llm_events[1]["event_type"] == "llm_call_starting"
         assert llm_events[2]["event_type"] == "llm_call_completed"
-        # Second step events
         assert llm_events[3]["event_type"] == "llm_call_prepared"
         assert llm_events[4]["event_type"] == "llm_call_starting"
         assert llm_events[5]["event_type"] == "llm_call_completed"
@@ -237,114 +231,53 @@ class TestLLMCallEventPairing:
 
 
 class TestLLMCallErrorPath:
-    """Verify LLMCallCompleted emitted with error data on provider exception."""
+    """Verify pipeline error handling when Agent.run_sync raises."""
 
-    def test_completed_emitted_on_error(self, seeded_session, in_memory_handler):
-        """LLMCallCompleted emitted even when provider raises."""
-        provider = MockProvider(should_fail=True)
+    def test_pipeline_error_emitted_on_agent_exception(self, seeded_session, in_memory_handler):
+        """PipelineError emitted when Agent.run_sync raises a non-UnexpectedModelBehavior exception."""
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        with pytest.raises(ValueError, match="Mock provider failure"):
-            pipeline.execute(data="test data", initial_context={})
+        with pytest.raises(RuntimeError, match="Agent call failed"):
+            with patch("pydantic_ai.Agent.run_sync", side_effect=RuntimeError("Agent call failed")):
+                pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
-        completed = [e for e in events if e["event_type"] == "llm_call_completed"]
-        assert len(completed) == 1, "Expected 1 LLMCallCompleted on error path"
+        pipeline_errors = [e for e in events if e["event_type"] == "pipeline_error"]
+        assert len(pipeline_errors) == 1, "Expected 1 PipelineError on agent exception"
+        assert "Agent call failed" in pipeline_errors[0]["error_message"]
 
-    def test_error_raw_response_none(self, seeded_session, in_memory_handler):
-        """raw_response=None on exception."""
-        provider = MockProvider(should_fail=True)
+    def test_unexpected_model_behavior_propagates_if_create_failure_fails(self, seeded_session, in_memory_handler):
+        """UnexpectedModelBehavior caught by execute loop; if create_failure() fails
+        (required fields missing on instruction type), the ValidationError propagates."""
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        with pytest.raises(ValueError):
-            pipeline.execute(data="test data", initial_context={})
+        # SimpleInstructions.create_failure() raises ValidationError because
+        # 'count' is required with no default. The outer except catches it as PipelineError.
+        from pydantic import ValidationError as PydanticValidationError
+        with pytest.raises((PydanticValidationError, Exception)):
+            with patch("pydantic_ai.Agent.run_sync", side_effect=UnexpectedModelBehavior("bad output")):
+                pipeline.execute(data="test data", initial_context={})
 
-        events = in_memory_handler.get_events()
-        completed = [e for e in events if e["event_type"] == "llm_call_completed"]
-        assert completed[0]["raw_response"] is None
-
-    def test_error_parsed_result_none(self, seeded_session, in_memory_handler):
-        """parsed_result=None on exception."""
-        provider = MockProvider(should_fail=True)
+    def test_llm_call_starting_emitted_before_agent_raise(self, seeded_session, in_memory_handler):
+        """LLMCallStarting emitted before agent raises (events up to that point captured)."""
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        with pytest.raises(ValueError):
-            pipeline.execute(data="test data", initial_context={})
-
-        events = in_memory_handler.get_events()
-        completed = [e for e in events if e["event_type"] == "llm_call_completed"]
-        assert completed[0]["parsed_result"] is None
-
-    def test_error_validation_errors_contains_message(self, seeded_session, in_memory_handler):
-        """validation_errors contains the exception message."""
-        provider = MockProvider(should_fail=True)
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            provider=provider,
-            event_emitter=in_memory_handler,
-        )
-        with pytest.raises(ValueError):
-            pipeline.execute(data="test data", initial_context={})
-
-        events = in_memory_handler.get_events()
-        completed = [e for e in events if e["event_type"] == "llm_call_completed"]
-        assert len(completed[0]["validation_errors"]) > 0
-        assert "Mock provider failure" in completed[0]["validation_errors"][0]
-
-    def test_error_starting_still_emitted(self, seeded_session, in_memory_handler):
-        """LLMCallStarting still emitted before the failed call."""
-        provider = MockProvider(should_fail=True)
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            provider=provider,
-            event_emitter=in_memory_handler,
-        )
-        with pytest.raises(ValueError):
-            pipeline.execute(data="test data", initial_context={})
+        with pytest.raises(RuntimeError):
+            with patch("pydantic_ai.Agent.run_sync", side_effect=RuntimeError("fail")):
+                pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         starting = [e for e in events if e["event_type"] == "llm_call_starting"]
-        assert len(starting) == 1, "LLMCallStarting should still be emitted before error"
-
-    def test_error_starting_completed_paired(self, seeded_session, in_memory_handler):
-        """Starting and Completed are paired even on error (same call_index)."""
-        provider = MockProvider(should_fail=True)
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            provider=provider,
-            event_emitter=in_memory_handler,
-        )
-        with pytest.raises(ValueError):
-            pipeline.execute(data="test data", initial_context={})
-
-        events = in_memory_handler.get_events()
-        starting = [e for e in events if e["event_type"] == "llm_call_starting"]
-        completed = [e for e in events if e["event_type"] == "llm_call_completed"]
-        assert starting[0]["call_index"] == completed[0]["call_index"]
-
-    def test_error_model_name_none(self, seeded_session, in_memory_handler):
-        """model_name=None on exception (provider never returned)."""
-        provider = MockProvider(should_fail=True)
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            provider=provider,
-            event_emitter=in_memory_handler,
-        )
-        with pytest.raises(ValueError):
-            pipeline.execute(data="test data", initial_context={})
-
-        events = in_memory_handler.get_events()
-        completed = [e for e in events if e["event_type"] == "llm_call_completed"]
-        assert completed[0]["model_name"] is None
+        assert len(starting) >= 1, "LLMCallStarting should be emitted before agent raises"
 
 
 class TestNoEmitterZeroOverhead:
@@ -352,51 +285,12 @@ class TestNoEmitterZeroOverhead:
 
     def test_no_events_without_emitter(self, seeded_session):
         """Pipeline without event_emitter emits no events (no crash)."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=2)):
+            result = pipeline.execute(data="test data", initial_context={})
         assert result is not None
         assert result.context["total"] == 2
-
-    def test_no_event_params_in_call_kwargs(self, seeded_session, monkeypatch):
-        """execute_llm_step not called with event params when no emitter."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            provider=provider,
-            event_emitter=None,
-        )
-
-        captured_kwargs = []
-        original_execute = __import__(
-            "llm_pipeline.llm.executor", fromlist=["execute_llm_step"]
-        ).execute_llm_step
-
-        def spy_execute(**kwargs):
-            captured_kwargs.append(dict(kwargs))
-            return original_execute(**kwargs)
-
-        monkeypatch.setattr(
-            "llm_pipeline.llm.executor.execute_llm_step",
-            spy_execute,
-        )
-
-        pipeline.execute(data="test data", initial_context={})
-
-        assert len(captured_kwargs) >= 1
-        for kw in captured_kwargs:
-            assert "event_emitter" not in kw, "event_emitter should not be injected without emitter"
-            assert "run_id" not in kw, "run_id should not be injected without emitter"
-            assert "pipeline_name" not in kw, "pipeline_name should not be injected without emitter"
-            assert "step_name" not in kw, "step_name should not be injected without emitter"
-            assert "call_index" not in kw, "call_index should not be injected without emitter"

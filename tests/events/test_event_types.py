@@ -11,8 +11,9 @@ All 31 concrete event types are exercised via parametrized EVENT_FIXTURES.
 import json
 import pytest
 from datetime import datetime
+from unittest.mock import patch
 
-from conftest import MockProvider, SuccessPipeline
+from conftest import SuccessPipeline, make_simple_run_result
 from llm_pipeline.events.types import (
     PipelineEvent,
     StepScopedEvent,
@@ -444,16 +445,13 @@ class TestContextSnapshotDepth:
         self, seeded_session, in_memory_handler
     ):
         """Integration: ContextUpdated snapshot contains merged keys after pipeline run."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
 
         ctx_events = [
             e for e in in_memory_handler.get_events()
@@ -467,16 +465,13 @@ class TestContextSnapshotDepth:
         self, seeded_session, in_memory_handler
     ):
         """Integration: new_keys for each step contains 'total' (SimpleStep output)."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=2)):
+            pipeline.execute(data="test data", initial_context={})
 
         ctx_events = [
             e for e in in_memory_handler.get_events()

@@ -3,14 +3,12 @@
 Verifies TransformationStarting and TransformationCompleted events emitted
 by Pipeline.execute() via InMemoryEventHandler, covering both fresh (cache miss)
 and cached (cache hit) code paths.
-
-Test strategy: Use transformation_pipeline fixture (TransformationPipeline with
-TransformationStep). Run once for fresh path, run twice for cached path.
 """
 import pytest
+from unittest.mock import patch
 
 from llm_pipeline.events.types import TransformationStarting, TransformationCompleted
-from conftest import MockProvider, TransformationPipeline
+from conftest import TransformationPipeline, make_transformation_run_result
 
 
 # -- Helpers -------------------------------------------------------------------
@@ -21,15 +19,13 @@ def _run_transformation_fresh(seeded_session, handler):
 
     Returns (pipeline, events).
     """
-    provider = MockProvider(responses=[
-        {"count": 5, "operation": "transform"}
-    ])
     pipeline = TransformationPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=False)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_transformation_run_result(count=5, operation="transform")):
+        pipeline.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=False)
     return pipeline, handler.get_events()
 
 
@@ -39,27 +35,25 @@ def _run_transformation_cached(seeded_session, handler):
     Returns (pipeline2, events2) from the second run only.
     """
     # Run 1: cache miss, saves state
-    provider1 = MockProvider(responses=[
-        {"count": 5, "operation": "transform"}
-    ])
     pipeline1 = TransformationPipeline(
         session=seeded_session,
-        provider=provider1,
-        event_emitter=handler,  # discard run-1 events (we'll clear them)
+        model="test-model",
+        event_emitter=handler,
     )
-    pipeline1.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_transformation_run_result(count=5, operation="transform")):
+        pipeline1.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
 
     # Clear events from first run
     handler.clear()
 
     # Run 2: cache hit path
-    provider2 = MockProvider(responses=[])  # no LLM calls expected on cache hit
     pipeline2 = TransformationPipeline(
         session=seeded_session,
-        provider=provider2,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline2.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_transformation_run_result(count=5, operation="transform")):
+        pipeline2.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
     return pipeline2, handler.get_events()
 
 
@@ -310,19 +304,17 @@ class TestTransformationZeroOverhead:
 
     def test_no_events_without_emitter_fresh(self, seeded_session):
         """Pipeline with transformation but no event_emitter runs without error."""
-        provider = MockProvider(responses=[
-            {"count": 5, "operation": "transform"}
-        ])
         pipeline = TransformationPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=False,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_transformation_run_result(count=5, operation="transform")):
+            result = pipeline.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=False,
+            )
         assert result is not None
         assert "operation" in result.context
         assert result.context["operation"] == "transform"
@@ -330,32 +322,30 @@ class TestTransformationZeroOverhead:
     def test_no_events_without_emitter_cached(self, seeded_session):
         """Pipeline with transformation on cached path runs without error when event_emitter=None."""
         # Run 1: populate cache
-        provider1 = MockProvider(responses=[
-            {"count": 5, "operation": "transform"}
-        ])
         pipeline1 = TransformationPipeline(
             session=seeded_session,
-            provider=provider1,
+            model="test-model",
             event_emitter=None,
         )
-        pipeline1.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=True,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_transformation_run_result(count=5, operation="transform")):
+            pipeline1.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=True,
+            )
 
         # Run 2: cache hit
-        provider2 = MockProvider(responses=[])
         pipeline2 = TransformationPipeline(
             session=seeded_session,
-            provider=provider2,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline2.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=True,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_transformation_run_result(count=5, operation="transform")):
+            result = pipeline2.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=True,
+            )
         assert result is not None
 
 

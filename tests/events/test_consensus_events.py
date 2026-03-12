@@ -2,11 +2,12 @@
 
 Verifies ConsensusStarted, ConsensusAttempt, ConsensusReached, and
 ConsensusFailed events emitted by PipelineConfig._execute_with_consensus()
-via InMemoryEventHandler. Tests use MockProvider from conftest with response
-lists to control consensus outcomes (identical dicts -> consensus reached,
-different dicts -> consensus failed).
+via InMemoryEventHandler. Tests use Agent.run_sync patching with response
+lists to control consensus outcomes (identical outputs -> consensus reached,
+different outputs -> consensus failed).
 """
 import pytest
+from unittest.mock import patch, MagicMock
 
 from llm_pipeline.events.types import (
     ConsensusStarted,
@@ -14,36 +15,56 @@ from llm_pipeline.events.types import (
     ConsensusReached,
     ConsensusFailed,
 )
-from conftest import MockProvider, SuccessPipeline
+from conftest import SuccessPipeline, SimpleInstructions, make_simple_run_result
 
 
 # -- Helpers -------------------------------------------------------------------
 
 
-def _run_consensus_pipeline(seeded_session, handler, responses, threshold=2, max_calls=5):
+def _make_responses(counts):
+    """Build a list of MagicMock run results from a list of count values."""
+    results = []
+    for count in counts:
+        results.append(make_simple_run_result(count=count))
+    return results
+
+
+def _run_consensus_pipeline(seeded_session, handler, counts, threshold=2, max_calls=5):
     """Execute SuccessPipeline with consensus_polling enabled.
 
     SuccessPipeline has 2 SimpleSteps. Each step produces 1 call_params entry,
-    so _execute_with_consensus runs once per step. We provide enough responses
-    for step 1 consensus + step 2 (non-consensus fallback or enough for both).
+    so _execute_with_consensus runs once per step.
+
+    counts: list of int values, consumed sequentially as run_sync return values.
+    Two counts with the same value will produce identical instructions (consensus).
 
     Returns (pipeline, events).
     """
-    provider = MockProvider(responses=responses)
+    responses = _make_responses(counts)
+    call_count = [0]
+
+    def _side_effect(*args, **kwargs):
+        idx = call_count[0]
+        call_count[0] += 1
+        if idx < len(responses):
+            return responses[idx]
+        return make_simple_run_result(count=counts[-1] if counts else 1)
+
     pipeline = SuccessPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(
-        data="test data",
-        initial_context={},
-        consensus_polling={
-            "enable": True,
-            "consensus_threshold": threshold,
-            "maximum_step_calls": max_calls,
-        },
-    )
+    with patch("pydantic_ai.Agent.run_sync", side_effect=_side_effect):
+        pipeline.execute(
+            data="test data",
+            initial_context={},
+            consensus_polling={
+                "enable": True,
+                "consensus_threshold": threshold,
+                "maximum_step_calls": max_calls,
+            },
+        )
     return pipeline, handler.get_events()
 
 
@@ -65,16 +86,11 @@ class TestConsensusReachedPath:
     """Verify events when consensus is reached (identical responses)."""
 
     def test_consensus_reached_fires(self, seeded_session, in_memory_handler):
-        """MockProvider returns identical responses -> ConsensusReached fires."""
+        """Identical responses -> ConsensusReached fires."""
         # 2 identical for step 1 consensus (threshold=2), then 2 identical for step 2
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
 
@@ -101,14 +117,9 @@ class TestConsensusReachedPath:
 
     def test_consensus_reached_event_type_string(self, seeded_session, in_memory_handler):
         """Verify event_type strings match expected snake_case names."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         types = {e["event_type"] for e in ce}
@@ -118,38 +129,29 @@ class TestConsensusReachedPath:
 
     def test_both_attempt_and_reached_fire_on_winning_attempt(self, seeded_session, in_memory_handler):
         """Winning attempt emits both ConsensusAttempt then ConsensusReached."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
 
-        # For step 1: find the ConsensusAttempt and ConsensusReached for attempt=2
         step1_attempts = [e for e in ce if e["event_type"] == "consensus_attempt"]
         step1_reached = [e for e in ce if e["event_type"] == "consensus_reached"]
 
-        # The winning attempt (attempt=2) should appear in both lists
         winning_attempt_events = [e for e in step1_attempts if e["attempt"] == 2]
         assert len(winning_attempt_events) >= 1, "ConsensusAttempt should fire for winning attempt"
         assert len(step1_reached) >= 1, "ConsensusReached should fire"
         assert step1_reached[0]["attempt"] == 2
 
         # Verify ordering: ConsensusAttempt(attempt=2) appears before ConsensusReached
-        all_types = [e["event_type"] for e in ce]
-        # Find first occurrence of attempt=2 ConsensusAttempt
+        attempt_idx = None
+        reached_idx = None
         for i, e in enumerate(ce):
-            if e["event_type"] == "consensus_attempt" and e["attempt"] == 2:
+            if e["event_type"] == "consensus_attempt" and e["attempt"] == 2 and attempt_idx is None:
                 attempt_idx = i
-                break
         for i, e in enumerate(ce):
-            if e["event_type"] == "consensus_reached":
+            if e["event_type"] == "consensus_reached" and reached_idx is None:
                 reached_idx = i
-                break
         assert attempt_idx < reached_idx, "ConsensusAttempt must fire before ConsensusReached"
 
 
@@ -160,19 +162,12 @@ class TestConsensusFailedPath:
     """Verify events when consensus fails (all different responses)."""
 
     def test_consensus_failed_fires(self, seeded_session, in_memory_handler):
-        """MockProvider returns different responses -> ConsensusFailed fires."""
+        """Different responses -> ConsensusFailed fires."""
         # 3 different for step 1 (threshold=3, max_calls=3 -> fails)
         # then 3 different for step 2 (also fails)
-        responses = [
-            {"count": 1, "notes": "a"},
-            {"count": 2, "notes": "b"},
-            {"count": 3, "notes": "c"},
-            {"count": 4, "notes": "d"},
-            {"count": 5, "notes": "e"},
-            {"count": 6, "notes": "f"},
-        ]
+        counts = [1, 2, 3, 4, 5, 6]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=3, max_calls=3,
+            seeded_session, in_memory_handler, counts, threshold=3, max_calls=3,
         )
         ce = _consensus_events(events)
 
@@ -199,23 +194,12 @@ class TestConsensusFailedPath:
 
     def test_consensus_failed_largest_group_size(self, seeded_session, in_memory_handler):
         """ConsensusFailed.largest_group_size reflects actual largest group."""
-        # 5 responses for step 1: 2 identical + 3 different (threshold=3, max=5)
+        # 5 responses for step 1: 2 identical (count=1) + 3 different (threshold=3, max=5)
         # largest group = 2, but threshold=3 -> fails
         # Then 5 for step 2 with same pattern
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 2, "notes": "diff1"},
-            {"count": 3, "notes": "diff2"},
-            {"count": 4, "notes": "diff3"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 2, "notes": "diff1"},
-            {"count": 3, "notes": "diff2"},
-            {"count": 4, "notes": "diff3"},
-        ]
+        counts = [1, 1, 2, 3, 4, 1, 1, 2, 3, 4]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=3, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=3, max_calls=5,
         )
         ce = _consensus_events(events)
         failed = [e for e in ce if e["event_type"] == "consensus_failed"]
@@ -231,14 +215,9 @@ class TestConsensusEventOrdering:
 
     def test_started_before_attempts(self, seeded_session, in_memory_handler):
         """ConsensusStarted appears before any ConsensusAttempt for each step."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         types = [e["event_type"] for e in ce]
@@ -249,14 +228,9 @@ class TestConsensusEventOrdering:
 
     def test_attempts_before_reached(self, seeded_session, in_memory_handler):
         """ConsensusAttempt events precede ConsensusReached."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         types = [e["event_type"] for e in ce]
@@ -267,14 +241,9 @@ class TestConsensusEventOrdering:
 
     def test_full_sequence_reached(self, seeded_session, in_memory_handler):
         """Full sequence for reached path: Started -> Attempt -> Attempt -> Reached."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
 
@@ -298,16 +267,9 @@ class TestConsensusEventOrdering:
 
     def test_full_sequence_failed(self, seeded_session, in_memory_handler):
         """Full sequence for failed path: Started -> Attempt*N -> Failed."""
-        responses = [
-            {"count": 1, "notes": "a"},
-            {"count": 2, "notes": "b"},
-            {"count": 3, "notes": "c"},
-            {"count": 4, "notes": "d"},
-            {"count": 5, "notes": "e"},
-            {"count": 6, "notes": "f"},
-        ]
+        counts = [1, 2, 3, 4, 5, 6]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=3, max_calls=3,
+            seeded_session, in_memory_handler, counts, threshold=3, max_calls=3,
         )
         ce = _consensus_events(events)
 
@@ -332,16 +294,9 @@ class TestConsensusEventOrdering:
 
     def test_attempt_numbers_sequential(self, seeded_session, in_memory_handler):
         """ConsensusAttempt.attempt values are sequential (1, 2, ...)."""
-        responses = [
-            {"count": 1, "notes": "a"},
-            {"count": 2, "notes": "b"},
-            {"count": 3, "notes": "c"},
-            {"count": 4, "notes": "d"},
-            {"count": 5, "notes": "e"},
-            {"count": 6, "notes": "f"},
-        ]
+        counts = [1, 2, 3, 4, 5, 6]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=3, max_calls=3,
+            seeded_session, in_memory_handler, counts, threshold=3, max_calls=3,
         )
         ce = _consensus_events(events)
 
@@ -359,14 +314,9 @@ class TestConsensusEventFields:
 
     def test_started_fields(self, seeded_session, in_memory_handler):
         """ConsensusStarted has all required fields."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         pipeline, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         started = [e for e in ce if e["event_type"] == "consensus_started"][0]
@@ -381,14 +331,9 @@ class TestConsensusEventFields:
 
     def test_attempt_fields(self, seeded_session, in_memory_handler):
         """ConsensusAttempt has all required fields."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         pipeline, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         attempt = [e for e in ce if e["event_type"] == "consensus_attempt"][0]
@@ -403,14 +348,9 @@ class TestConsensusEventFields:
 
     def test_reached_fields(self, seeded_session, in_memory_handler):
         """ConsensusReached has all required fields."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         pipeline, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         reached = [e for e in ce if e["event_type"] == "consensus_reached"][0]
@@ -424,16 +364,9 @@ class TestConsensusEventFields:
 
     def test_failed_fields(self, seeded_session, in_memory_handler):
         """ConsensusFailed has all required fields."""
-        responses = [
-            {"count": 1, "notes": "a"},
-            {"count": 2, "notes": "b"},
-            {"count": 3, "notes": "c"},
-            {"count": 4, "notes": "d"},
-            {"count": 5, "notes": "e"},
-            {"count": 6, "notes": "f"},
-        ]
+        counts = [1, 2, 3, 4, 5, 6]
         pipeline, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=3, max_calls=3,
+            seeded_session, in_memory_handler, counts, threshold=3, max_calls=3,
         )
         ce = _consensus_events(events)
         failed = [e for e in ce if e["event_type"] == "consensus_failed"][0]
@@ -447,14 +380,9 @@ class TestConsensusEventFields:
 
     def test_run_id_consistent_across_consensus_events(self, seeded_session, in_memory_handler):
         """All consensus events share the same run_id."""
-        responses = [
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ]
+        counts = [1, 1, 1, 1]
         pipeline, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         for e in ce:
@@ -469,28 +397,22 @@ class TestConsensusZeroOverhead:
 
     def test_no_events_without_emitter(self, seeded_session):
         """Pipeline with consensus_polling but no event_emitter runs without error."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-            {"count": 1, "notes": "same"},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(
-            data="test data",
-            initial_context={},
-            consensus_polling={
-                "enable": True,
-                "consensus_threshold": 2,
-                "maximum_step_calls": 5,
-            },
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            result = pipeline.execute(
+                data="test data",
+                initial_context={},
+                consensus_polling={
+                    "enable": True,
+                    "consensus_threshold": 2,
+                    "maximum_step_calls": 5,
+                },
+            )
         assert result is not None
-        # Pipeline should complete successfully; context comes from step 2
         assert "total" in result.context
 
 
@@ -503,22 +425,13 @@ class TestConsensusMultiGroup:
     def test_group_count_evolution(self, seeded_session, in_memory_handler):
         """ConsensusAttempt.group_count tracks number of distinct response groups.
 
-        Responses for step 1: A, B, A -> groups evolve 1 -> 2 -> 2.
+        Responses for step 1: A(1), B(2), A(1) -> groups evolve 1 -> 2 -> 2.
         Consensus reached on attempt 3 (group A has 2 members, threshold=2).
         Then identical pattern for step 2.
         """
-        responses = [
-            # step 1: A, B, A -> consensus on attempt 3
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-            # step 2: same pattern
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-        ]
+        counts = [1, 2, 1, 1, 2, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         attempts = [e for e in ce if e["event_type"] == "consensus_attempt"]
@@ -529,19 +442,10 @@ class TestConsensusMultiGroup:
         assert group_counts == [1, 2, 2], f"Expected [1, 2, 2], got {group_counts}"
 
     def test_reached_on_first_group_hitting_threshold(self, seeded_session, in_memory_handler):
-        """ConsensusReached fires when first group reaches threshold, not when all groups checked."""
-        responses = [
-            # step 1: A, B, A -> consensus on attempt 3 (group A size=2 >= threshold=2)
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-            # step 2
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-        ]
+        """ConsensusReached fires when first group reaches threshold."""
+        counts = [1, 2, 1, 1, 2, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         reached = [e for e in ce if e["event_type"] == "consensus_reached"]
@@ -551,16 +455,9 @@ class TestConsensusMultiGroup:
 
     def test_multi_group_no_failed(self, seeded_session, in_memory_handler):
         """When consensus is reached via multi-group, no ConsensusFailed fires."""
-        responses = [
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-        ]
+        counts = [1, 2, 1, 1, 2, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
         failed = [e for e in ce if e["event_type"] == "consensus_failed"]
@@ -568,16 +465,9 @@ class TestConsensusMultiGroup:
 
     def test_multi_group_step1_sequence(self, seeded_session, in_memory_handler):
         """Step 1 event sequence: Started, Attempt(1), Attempt(2), Attempt(3), Reached."""
-        responses = [
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-            {"count": 1, "notes": "groupA"},
-            {"count": 2, "notes": "groupB"},
-            {"count": 1, "notes": "groupA"},
-        ]
+        counts = [1, 2, 1, 1, 2, 1]
         _, events = _run_consensus_pipeline(
-            seeded_session, in_memory_handler, responses, threshold=2, max_calls=5,
+            seeded_session, in_memory_handler, counts, threshold=2, max_calls=5,
         )
         ce = _consensus_events(events)
 

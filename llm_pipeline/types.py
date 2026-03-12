@@ -4,8 +4,7 @@ Shared type definitions for LLM pipeline.
 Contains validation utilities and TypedDict parameter types.
 """
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Type, TypedDict
-from pydantic import BaseModel
+from typing import Any, Dict, List, Optional, TypedDict
 
 
 @dataclass
@@ -56,9 +55,6 @@ class StepCallParams(TypedDict, total=False):
     """
     Parameters provided by step's prepare_calls().
 
-    These are the minimal fields that steps need to provide. The create_llm_call()
-    method adds system_instruction_key, user_prompt_key, result_class, and context.
-
     Required fields:
         variables: PromptVariables instance (User) with template variables
 
@@ -71,27 +67,8 @@ class StepCallParams(TypedDict, total=False):
     validation_context: Optional[Any]
 
 
-class ExecuteLLMStepParams(StepCallParams):
-    """
-    Full parameters for execute_llm_step() after create_llm_call() adds context.
-
-    Inherits from StepCallParams and adds:
-        system_instruction_key: Key for system instruction prompt
-        user_prompt_key: Key for user prompt template
-        result_class: Pydantic model class for validation
-        context: Additional context for prompt resolution
-        system_variables: Optional PromptVariables.System instance
-    """
-    system_instruction_key: str
-    user_prompt_key: str
-    result_class: Type[BaseModel]
-    context: Dict[str, Any]
-    system_variables: Optional[Any]
-
-
 __all__ = [
     "ArrayValidationConfig",
     "ValidationContext",
     "StepCallParams",
-    "ExecuteLLMStepParams",
 ]

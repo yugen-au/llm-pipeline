@@ -11,11 +11,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session
 from typing import Any, Dict, List, Optional, Type
 
-from pydantic import BaseModel
-
 from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.llm.provider import LLMProvider
-from llm_pipeline.llm.result import LLMCallResult
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.registry import PipelineDatabaseRegistry
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
@@ -30,22 +26,6 @@ def pytest_configure(config):
         "markers",
         "benchmark_group(name): categorize benchmark by NFR group (e.g. NFR-001, NFR-004, NFR-005)",
     )
-
-
-# -- Mock LLM provider --------------------------------------------------------
-
-
-class _BenchmarkMockProvider(LLMProvider):
-    """Minimal LLMProvider for benchmark fixtures. Never called."""
-
-    def call_structured(
-        self,
-        prompt: str,
-        system_instruction: str,
-        result_class: Type[BaseModel],
-        **kwargs,
-    ) -> LLMCallResult:
-        raise NotImplementedError("Benchmark mock provider should not be called")
 
 
 # -- MinimalPipeline concrete subclass -----------------------------------------
@@ -109,14 +89,15 @@ def benchmark_engine():
 
 @pytest.fixture
 def minimal_pipeline(benchmark_engine):
-    """MinimalPipeline instance wired to benchmark_engine with mock provider.
+    """MinimalPipeline instance wired to benchmark_engine.
 
     Function-scoped so each test gets a fresh pipeline state.
+    MinimalPipeline uses no steps, so no AGENT_REGISTRY or LLM mocking needed.
     """
     with Session(benchmark_engine) as session:
         pipeline = MinimalPipeline(
             engine=benchmark_engine,
             session=session,
-            provider=_BenchmarkMockProvider(),
+            model="test-model",
         )
         yield pipeline

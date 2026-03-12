@@ -5,6 +5,7 @@ emitted by LLMStep.extract_data() via InMemoryEventHandler. Tests use
 ExtractionPipeline with ItemDetectionStep + ItemExtraction from conftest.
 """
 import pytest
+from unittest.mock import patch, MagicMock
 from pydantic import ValidationError
 
 from llm_pipeline.events.types import (
@@ -15,13 +16,14 @@ from llm_pipeline.events.types import (
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.step import step_definition, LLMStep, LLMResultMixin
 from llm_pipeline import PipelineConfig, PipelineStrategy, PipelineStrategies, PipelineDatabaseRegistry
+from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.types import StepCallParams
 from conftest import (
-    MockProvider,
     ExtractionPipeline,
     Item,
     ItemDetectionInstructions,
     ItemDetectionContext,
+    make_item_detection_run_result,
 )
 from typing import List, ClassVar
 
@@ -31,15 +33,13 @@ from typing import List, ClassVar
 
 def _run_extraction_pipeline(seeded_session, handler):
     """Execute ExtractionPipeline with ItemDetectionStep."""
-    provider = MockProvider(responses=[
-        {"item_count": 2, "category": "test"},
-    ])
     pipeline = ExtractionPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data="test data", initial_context={})
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_item_detection_run_result(item_count=2, category="test")):
+        pipeline.execute(data="test data", initial_context={})
     return pipeline, handler.get_events()
 
 
@@ -137,7 +137,6 @@ class FailingItemExtraction(PipelineExtraction, model=Item):
     """Extraction that raises ValidationError during extract()."""
     def extract(self, results: List[FailingItemDetectionInstructions]) -> List[Item]:
         """Raise ValidationError to trigger ExtractionError event."""
-        # Create invalid Item that fails Pydantic validation
         from pydantic import BaseModel, Field
 
         class StrictItem(BaseModel):
@@ -159,7 +158,7 @@ class FailingItemExtraction(PipelineExtraction, model=Item):
 class FailingItemDetectionStep(LLMStep):
     """Step with failing extraction for error event tests."""
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return FailingItemDetectionContext(category=instructions[0].category)
@@ -178,12 +177,33 @@ class FailingExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
     pass
 
 
+class FailingExtractionAgentRegistry(AgentRegistry, agents={
+    "failing_item_detection": FailingItemDetectionInstructions,
+}):
+    pass
+
+
 class FailingExtractionStrategies(PipelineStrategies, strategies=[FailingExtractionStrategy]):
     pass
 
 
-class FailingExtractionPipeline(PipelineConfig, registry=FailingExtractionRegistry, strategies=FailingExtractionStrategies):
+class FailingExtractionPipeline(
+    PipelineConfig,
+    registry=FailingExtractionRegistry,
+    strategies=FailingExtractionStrategies,
+    agent_registry=FailingExtractionAgentRegistry,
+):
     pass
+
+
+def _make_failing_run_result(item_count=2, category="test"):
+    """Build MagicMock for FailingItemDetectionInstructions."""
+    instruction = FailingItemDetectionInstructions(
+        item_count=item_count, category=category, confidence_score=1.0, notes="ok"
+    )
+    mock_result = MagicMock()
+    mock_result.output = instruction
+    return mock_result
 
 
 class TestExtractionError:
@@ -191,18 +211,15 @@ class TestExtractionError:
 
     def test_extraction_error_fires(self, seeded_session, in_memory_handler):
         """ExtractionError emitted when extraction raises exception."""
-        provider = MockProvider(responses=[
-            {"item_count": 2, "category": "test"},
-        ])
         pipeline = FailingExtractionPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
 
-        # Execute pipeline, expecting it to raise exception
         with pytest.raises(ValidationError):
-            pipeline.execute(data="test data", initial_context={})
+            with patch("pydantic_ai.Agent.run_sync", return_value=_make_failing_run_result()):
+                pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         errors = [e for e in events if e["event_type"] == "extraction_error"]
@@ -210,17 +227,15 @@ class TestExtractionError:
 
     def test_extraction_error_fields(self, seeded_session, in_memory_handler):
         """ExtractionError has extraction_class, error_type, error_message, validation_errors."""
-        provider = MockProvider(responses=[
-            {"item_count": 2, "category": "test"},
-        ])
         pipeline = FailingExtractionPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
 
         with pytest.raises(ValidationError):
-            pipeline.execute(data="test data", initial_context={})
+            with patch("pydantic_ai.Agent.run_sync", return_value=_make_failing_run_result()):
+                pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         error = [e for e in events if e["event_type"] == "extraction_error"][0]
@@ -229,7 +244,6 @@ class TestExtractionError:
         assert error["error_type"] == "ValidationError"
         assert error["error_message"] != "", "Error message should be populated"
         assert isinstance(error["validation_errors"], list)
-        # ValidationError from Pydantic should populate validation_errors
         assert len(error["validation_errors"]) > 0, "validation_errors should be populated for ValidationError"
         assert all(isinstance(e, str) for e in error["validation_errors"]), "validation_errors elements must be strings"
         assert "timestamp" in error
@@ -239,17 +253,15 @@ class TestExtractionError:
 
     def test_extraction_error_after_starting(self, seeded_session, in_memory_handler):
         """ExtractionError fires after ExtractionStarting, no ExtractionCompleted."""
-        provider = MockProvider(responses=[
-            {"item_count": 2, "category": "test"},
-        ])
         pipeline = FailingExtractionPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
 
         with pytest.raises(ValidationError):
-            pipeline.execute(data="test data", initial_context={})
+            with patch("pydantic_ai.Agent.run_sync", return_value=_make_failing_run_result()):
+                pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         ee = _extraction_events(events)
@@ -290,15 +302,13 @@ class TestExtractionZeroOverhead:
 
     def test_no_events_without_emitter(self, seeded_session):
         """Pipeline with extractions but no event_emitter runs without error."""
-        provider = MockProvider(responses=[
-            {"item_count": 2, "category": "test"},
-        ])
         pipeline = ExtractionPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_item_detection_run_result(item_count=2, category="test")):
+            result = pipeline.execute(data="test data", initial_context={})
         assert result is not None
         assert "category" in result.context
 

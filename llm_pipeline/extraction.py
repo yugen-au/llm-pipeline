@@ -226,7 +226,7 @@ class PipelineExtraction(ABC):
         - Multiple strategy-specific methods (lane_based, destination_based, etc.) → auto-routed by strategy name
         
         Args:
-            results: List of LLM result objects from execute_llm_step()
+            results: List of LLM result objects from pipeline execution
         
         Returns:
             List of model instances ready for database insertion

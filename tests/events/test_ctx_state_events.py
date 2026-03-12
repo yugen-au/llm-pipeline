@@ -11,6 +11,7 @@ run 2 hits cache -- events cleared between runs).
 """
 import pytest
 from typing import List, ClassVar, Optional
+from unittest.mock import patch, MagicMock
 
 from llm_pipeline.events.types import (
     InstructionsStored,
@@ -28,8 +29,9 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
     PipelineContext,
 )
+from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.types import StepCallParams
-from conftest import MockProvider, SuccessPipeline
+from conftest import SuccessPipeline, make_simple_run_result
 
 
 # -- EmptyContextStep (inline) ------------------------------------------------
@@ -53,7 +55,7 @@ class EmptyContextStep(LLMStep):
     """Step that returns None from process_instructions (no context update)."""
 
     def prepare_calls(self) -> List[StepCallParams]:
-        return [self.create_llm_call(variables={"data": "test"})]
+        return [{"variables": {"data": "test"}}]
 
     def process_instructions(self, instructions):
         return None
@@ -73,15 +75,34 @@ class EmptyContextRegistry(PipelineDatabaseRegistry, models=[]):
     pass
 
 
+class EmptyContextAgentRegistry(AgentRegistry, agents={
+    "empty_context": EmptyContextInstructions,
+}):
+    pass
+
+
 class EmptyContextStrategies(PipelineStrategies, strategies=[EmptyContextStrategy]):
     pass
 
 
-class EmptyContextPipeline(PipelineConfig, registry=EmptyContextRegistry, strategies=EmptyContextStrategies):
+class EmptyContextPipeline(
+    PipelineConfig,
+    registry=EmptyContextRegistry,
+    strategies=EmptyContextStrategies,
+    agent_registry=EmptyContextAgentRegistry,
+):
     pass
 
 
 # -- Helpers -------------------------------------------------------------------
+
+
+def _make_empty_ctx_run_result(count=1):
+    """Build MagicMock mimicking AgentRunResult for EmptyContextInstructions."""
+    instruction = EmptyContextInstructions(count=count, confidence_score=1.0, notes="test")
+    mock_result = MagicMock()
+    mock_result.output = instruction
+    return mock_result
 
 
 def _run_fresh(seeded_session, handler):
@@ -89,16 +110,13 @@ def _run_fresh(seeded_session, handler):
 
     Returns (pipeline, events).
     """
-    provider = MockProvider(responses=[
-        {"count": 5},
-        {"count": 3},
-    ])
     pipeline = SuccessPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=False)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=5)):
+        pipeline.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=False)
     return pipeline, handler.get_events()
 
 
@@ -108,28 +126,25 @@ def _run_cached(seeded_session, handler):
     Returns (pipeline2, events2) from the second run only.
     """
     # Run 1: cache miss, saves state
-    provider1 = MockProvider(responses=[
-        {"count": 5},
-        {"count": 3},
-    ])
     pipeline1 = SuccessPipeline(
         session=seeded_session,
-        provider=provider1,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline1.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=5)):
+        pipeline1.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
 
     # Clear events from first run
     handler.clear()
 
     # Run 2: cache hit path
-    provider2 = MockProvider(responses=[])  # no LLM calls expected on cache hit
     pipeline2 = SuccessPipeline(
         session=seeded_session,
-        provider=provider2,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline2.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=3)):
+        pipeline2.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=True)
     return pipeline2, handler.get_events()
 
 
@@ -138,13 +153,13 @@ def _run_empty_ctx_fresh(seeded_session, handler):
 
     Returns (pipeline, events).
     """
-    provider = MockProvider(responses=[{"count": 1}])
     pipeline = EmptyContextPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=False)
+    with patch("pydantic_ai.Agent.run_sync", return_value=_make_empty_ctx_run_result(count=1)):
+        pipeline.execute(data={"input_key": "input_value"}, initial_context={}, use_cache=False)
     return pipeline, handler.get_events()
 
 
@@ -319,7 +334,7 @@ class TestInstructionsLoggedCachedPath:
         assert len(logged) == 2, f"Expected 2 InstructionsLogged on cached run, got {len(logged)}"
 
     def test_logged_keys_equals_step_name_cached(self, seeded_session, in_memory_handler):
-        """logged_keys == [step.step_name] on cached path (CEO decision)."""
+        """logged_keys == [step.step_name] on cached path."""
         _, events = _run_cached(seeded_session, in_memory_handler)
         logged = [e for e in events if e["event_type"] == "instructions_logged"]
         for e in logged:
@@ -358,17 +373,15 @@ class TestContextUpdatedFreshPath:
         """new_keys contains keys from SimpleContext (total)."""
         _, events = _run_fresh(seeded_session, in_memory_handler)
         updated = [e for e in events if e["event_type"] == "context_updated"]
-        # SimpleContext has field 'total'; process_instructions returns SimpleContext(total=...)
         for e in updated:
             assert "total" in e["new_keys"], (
                 f"Expected 'total' in new_keys, got {e['new_keys']!r}"
             )
 
     def test_ctx_updated_context_snapshot_contains_merged_keys(self, seeded_session, in_memory_handler):
-        """context_snapshot reflects post-merge state (contains keys from all prior steps)."""
+        """context_snapshot reflects post-merge state."""
         _, events = _run_fresh(seeded_session, in_memory_handler)
         updated = [e for e in events if e["event_type"] == "context_updated"]
-        # After second step, context_snapshot must contain 'total' (merged from both steps)
         last_update = updated[-1]
         assert "total" in last_update["context_snapshot"], (
             f"Expected 'total' in context_snapshot, got {last_update['context_snapshot']!r}"
@@ -418,11 +431,7 @@ class TestContextUpdatedFreshPath:
 
 
 class TestContextUpdatedEmptyContext:
-    """Verify ContextUpdated always emits even when step returns no new context.
-
-    CEO decision: emit with new_keys=[] when process_instructions returns None.
-    Useful for tracing that _validate_and_merge_context ran.
-    """
+    """Verify ContextUpdated always emits even when step returns no new context."""
 
     def test_ctx_updated_emitted_on_empty_context(self, seeded_session, in_memory_handler):
         """ContextUpdated emitted even when step returns None (no context)."""
@@ -493,7 +502,7 @@ class TestStateSavedFreshPath:
             )
 
     def test_state_saved_execution_time_is_float(self, seeded_session, in_memory_handler):
-        """execution_time_ms is float (int cast in _save_step_state)."""
+        """execution_time_ms is numeric."""
         _, events = _run_fresh(seeded_session, in_memory_handler)
         saved = [e for e in events if e["event_type"] == "state_saved"]
         for e in saved:
@@ -536,11 +545,7 @@ class TestStateSavedFreshPath:
 
 
 class TestStateSavedNotOnCachedPath:
-    """Verify StateSaved is NOT emitted on cached (cache hit) path.
-
-    _save_step_state is only called from the fresh branch; cache-hit path
-    reconstructs from DB without calling _save_step_state again.
-    """
+    """Verify StateSaved is NOT emitted on cached (cache hit) path."""
 
     def test_state_saved_absent_cached(self, seeded_session, in_memory_handler):
         """StateSaved not emitted on second run (cache hit)."""
@@ -567,64 +572,58 @@ class TestCtxStateZeroOverhead:
 
     def test_no_events_without_emitter_fresh(self, seeded_session):
         """Pipeline with no event_emitter runs without error on fresh path."""
-        provider = MockProvider(responses=[
-            {"count": 5},
-            {"count": 3},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=False,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=5)):
+            result = pipeline.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=False,
+            )
         assert result is not None
         assert "total" in result.context
 
     def test_no_events_without_emitter_cached(self, seeded_session):
         """Pipeline with no event_emitter runs without error on cached path."""
-        provider1 = MockProvider(responses=[
-            {"count": 5},
-            {"count": 3},
-        ])
         pipeline1 = SuccessPipeline(
             session=seeded_session,
-            provider=provider1,
+            model="test-model",
             event_emitter=None,
         )
-        pipeline1.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=True,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=5)):
+            pipeline1.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=True,
+            )
 
-        provider2 = MockProvider(responses=[])
         pipeline2 = SuccessPipeline(
             session=seeded_session,
-            provider=provider2,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline2.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=True,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=3)):
+            result = pipeline2.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=True,
+            )
         assert result is not None
 
     def test_no_events_without_emitter_empty_ctx(self, seeded_session):
         """EmptyContextPipeline with no event_emitter runs without error."""
-        provider = MockProvider(responses=[{"count": 1}])
         pipeline = EmptyContextPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(
-            data={"input_key": "input_value"},
-            initial_context={},
-            use_cache=False,
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=_make_empty_ctx_run_result(count=1)):
+            result = pipeline.execute(
+                data={"input_key": "input_value"},
+                initial_context={},
+                use_cache=False,
+            )
         assert result is not None

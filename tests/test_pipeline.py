@@ -1,11 +1,9 @@
 """
-Tests for llm-pipeline using MockProvider and in-memory SQLite.
+Tests for llm-pipeline.
 """
-import json
-
 import pytest
-from typing import Any, Dict, List, Optional, Type, ClassVar
-from pydantic import BaseModel
+from typing import List, Optional, ClassVar
+from unittest.mock import MagicMock, patch
 from sqlmodel import SQLModel, Field, Session, create_engine
 
 from llm_pipeline import (
@@ -25,40 +23,11 @@ from llm_pipeline import (
     ValidationContext,
     init_pipeline_db,
 )
-from llm_pipeline.llm.provider import LLMProvider
-from llm_pipeline.llm.result import LLMCallResult
+from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
 from llm_pipeline.events import PipelineEventEmitter, PipelineEvent, PipelineStarted
-
-
-# ---------- Mock Provider ----------
-
-class MockProvider(LLMProvider):
-    """Mock LLM provider that returns predefined responses."""
-
-    def __init__(self, responses: Optional[List[Dict[str, Any]]] = None):
-        self._responses = responses or []
-        self._call_count = 0
-
-    def call_structured(self, prompt, system_instruction, result_class, **kwargs):
-        if self._call_count < len(self._responses):
-            response = self._responses[self._call_count]
-            self._call_count += 1
-            return LLMCallResult.success(
-                parsed=response,
-                raw_response=json.dumps(response),
-                model_name="mock-model",
-                attempt_count=1,
-            )
-        return LLMCallResult(
-            parsed=None,
-            raw_response="",
-            model_name="mock-model",
-            attempt_count=1,
-            validation_errors=[],
-        )
 
 
 # ---------- Test Domain Models ----------
@@ -109,11 +78,7 @@ class WidgetExtraction(PipelineExtraction, model=Widget):
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
-        return [
-            self.create_llm_call(
-                variables={"data": self.pipeline.get_sanitized_data()}
-            )
-        ]
+        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
 
     def process_instructions(self, instructions):
         instruction = instructions[0]
@@ -136,12 +101,38 @@ class TestRegistry(PipelineDatabaseRegistry, models=[Widget]):
     pass
 
 
+class TestAgentRegistry(AgentRegistry, agents={
+    "widget_detection": WidgetDetectionInstructions,
+}):
+    pass
+
+
 class TestStrategies(PipelineStrategies, strategies=[DefaultStrategy]):
     pass
 
 
-class TestPipeline(PipelineConfig, registry=TestRegistry, strategies=TestStrategies):
+class TestPipeline(
+    PipelineConfig,
+    registry=TestRegistry,
+    strategies=TestStrategies,
+    agent_registry=TestAgentRegistry,
+):
     pass
+
+
+# ---------- Helpers ----------
+
+def _make_widget_run_result(widget_count=3, category="gadgets"):
+    """Build a MagicMock mimicking AgentRunResult for WidgetDetectionInstructions."""
+    instruction = WidgetDetectionInstructions(
+        widget_count=widget_count,
+        category=category,
+        confidence_score=0.95,
+        notes=f"Found {widget_count} {category}",
+    )
+    mock_result = MagicMock()
+    mock_result.output = instruction
+    return mock_result
 
 
 # ---------- Fixtures ----------
@@ -195,11 +186,6 @@ class TestImports:
         assert PipelineConfig is not None
         assert LLMStep is not None
 
-    def test_llm_imports(self):
-        from llm_pipeline.llm import LLMProvider, RateLimiter
-        from llm_pipeline.llm.schema import flatten_schema, format_schema_for_llm
-        assert LLMProvider is not None
-
     def test_db_imports(self):
         from llm_pipeline.db import init_pipeline_db, Prompt
         assert Prompt is not None
@@ -246,71 +232,12 @@ class TestValidationContext:
         assert ctx.to_dict() == {"num_rows": 10, "num_cols": 5}
 
 
-class TestSchemaUtils:
-    def test_flatten_schema(self):
-        from llm_pipeline.llm.schema import flatten_schema
-        schema = {
-            "type": "object",
-            "properties": {"field": {"$ref": "#/$defs/MyType"}},
-            "$defs": {"MyType": {"type": "string"}},
-        }
-        result = flatten_schema(schema)
-        assert "$defs" not in result
-        assert result["properties"]["field"] == {"type": "string"}
-
-    def test_format_schema_for_llm(self):
-        from llm_pipeline.llm.schema import format_schema_for_llm
-        result = format_schema_for_llm(WidgetDetectionInstructions)
-        assert "EXPECTED JSON SCHEMA" in result
-        assert "RESPONSE FORMAT EXAMPLE" in result
-
-
-class TestValidation:
-    def test_validate_structured_output_valid(self):
-        from llm_pipeline.llm.validation import validate_structured_output
-        schema = WidgetDetectionInstructions.model_json_schema()
-        data = {"widget_count": 5, "category": "test", "confidence_score": 0.9}
-        is_valid, errors = validate_structured_output(data, schema)
-        assert is_valid
-        assert len(errors) == 0
-
-    def test_validate_structured_output_missing_field(self):
-        from llm_pipeline.llm.validation import validate_structured_output
-        schema = WidgetDetectionInstructions.model_json_schema()
-        data = {"category": "test"}  # missing widget_count
-        is_valid, errors = validate_structured_output(data, schema)
-        assert not is_valid
-
-    def test_strip_number_prefix(self):
-        from llm_pipeline.llm.validation import strip_number_prefix
-        assert strip_number_prefix("1. Sydney") == "Sydney"
-        assert strip_number_prefix("2) Melbourne") == "Melbourne"
-        assert strip_number_prefix("Sydney") == "Sydney"
-
-
-class TestRateLimiter:
-    def test_basic_usage(self):
-        from llm_pipeline.llm.rate_limiter import RateLimiter
-        rl = RateLimiter(max_requests=100, time_window_seconds=60)
-        rl.wait_if_needed()  # should not block
-        assert rl.get_wait_time() == 0
-
-    def test_reset(self):
-        from llm_pipeline.llm.rate_limiter import RateLimiter
-        rl = RateLimiter(max_requests=2, time_window_seconds=60)
-        rl.wait_if_needed()
-        rl.wait_if_needed()
-        rl.reset()
-        assert rl.get_wait_time() == 0
-
-
 class TestPipelineNaming:
     def test_valid_pipeline_naming(self):
         """Pipeline, Registry, and Strategies must follow naming conventions."""
-        # TestPipeline already validates this at class definition time
         pipeline = TestPipeline(
             session=Session(create_engine("sqlite:///:memory:")),
-            provider=MockProvider(),
+            model="test-model",
         )
         assert pipeline.pipeline_name == "test"
 
@@ -324,46 +251,44 @@ class TestPipelineInit:
     def test_auto_sqlite(self, tmp_path, monkeypatch):
         """Pipeline auto-creates SQLite when no engine/session provided."""
         monkeypatch.setenv("LLM_PIPELINE_DB", str(tmp_path / "test.db"))
-        pipeline = TestPipeline(provider=MockProvider())
+        pipeline = TestPipeline(model="test-model")
         assert pipeline._real_session is not None
         assert pipeline._owns_session is True
         pipeline.close()
 
     def test_explicit_session(self, session):
-        pipeline = TestPipeline(session=session, provider=MockProvider())
+        pipeline = TestPipeline(session=session, model="test-model")
         assert pipeline._owns_session is False
         assert pipeline._real_session is session
 
     def test_explicit_engine(self, engine):
-        pipeline = TestPipeline(engine=engine, provider=MockProvider())
+        pipeline = TestPipeline(engine=engine, model="test-model")
         assert pipeline._owns_session is True
         pipeline.close()
 
-    def test_requires_provider_for_execute(self, session):
-        pipeline = TestPipeline(session=session, provider=None)
-        with pytest.raises(ValueError, match="LLMProvider required"):
+    def test_requires_agent_registry_for_execute(self, session):
+        """Pipeline without AGENT_REGISTRY raises on execute."""
+        class NoAgentRegistry(PipelineDatabaseRegistry, models=[Widget]):
+            pass
+
+        class NoAgentStrategies(PipelineStrategies, strategies=[DefaultStrategy]):
+            pass
+
+        class NoAgentPipeline(PipelineConfig, registry=NoAgentRegistry, strategies=NoAgentStrategies):
+            pass
+
+        pipeline = NoAgentPipeline(session=session, model="test-model")
+        with pytest.raises(ValueError, match="agent_registry"):
             pipeline.execute(data="test", initial_context={})
 
 
 class TestPipelineExecution:
     def test_full_execution(self, engine, seeded_session):
-        """Full pipeline: execute with MockProvider, verify extractions and state."""
-        mock_response = {
-            "widget_count": 3,
-            "category": "gadgets",
-            "confidence_score": 0.95,
-            "notes": "Found 3 gadgets",
-        }
-        provider = MockProvider(responses=[mock_response])
-        pipeline = TestPipeline(
-            session=seeded_session,
-            provider=provider,
-        )
+        """Full pipeline: execute with mocked agent, verify extractions and state."""
+        pipeline = TestPipeline(session=seeded_session, model="test-model")
 
-        result = pipeline.execute(
-            data="some raw data",
-            initial_context={},
-        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=3, category="gadgets")):
+            result = pipeline.execute(data="some raw data", initial_context={})
 
         # Verify chaining
         assert result is pipeline
@@ -381,14 +306,11 @@ class TestPipelineExecution:
         assert "widget_detection" in pipeline._instructions
 
     def test_save_persists_to_db(self, engine, seeded_session):
-        mock_response = {
-            "widget_count": 2,
-            "category": "tools",
-            "confidence_score": 0.9,
-        }
-        provider = MockProvider(responses=[mock_response])
-        pipeline = TestPipeline(session=seeded_session, provider=provider)
-        pipeline.execute(data="data", initial_context={})
+        pipeline = TestPipeline(session=seeded_session, model="test-model")
+
+        with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=2, category="tools")):
+            pipeline.execute(data="data", initial_context={})
+
         results = pipeline.save()
 
         assert results["widgets_saved"] == 2
@@ -400,14 +322,10 @@ class TestPipelineExecution:
 
     def test_step_state_saved(self, engine, seeded_session):
         """Verify PipelineStepState is created after execution."""
-        mock_response = {
-            "widget_count": 1,
-            "category": "test",
-            "confidence_score": 0.8,
-        }
-        provider = MockProvider(responses=[mock_response])
-        pipeline = TestPipeline(session=seeded_session, provider=provider)
-        pipeline.execute(data="data", initial_context={})
+        pipeline = TestPipeline(session=seeded_session, model="test-model")
+
+        with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=1, category="test")):
+            pipeline.execute(data="data", initial_context={})
 
         from sqlmodel import select
         states = seeded_session.exec(select(PipelineStepState)).all()
@@ -488,7 +406,7 @@ class TestEventEmitter:
         """PipelineConfig without event_emitter -> _event_emitter is None."""
         pipeline = TestPipeline(
             session=Session(create_engine("sqlite:///:memory:")),
-            provider=MockProvider(),
+            model="test-model",
         )
         assert pipeline._event_emitter is None
 
@@ -497,7 +415,7 @@ class TestEventEmitter:
         emitter = MockEmitter()
         pipeline = TestPipeline(
             session=Session(create_engine("sqlite:///:memory:")),
-            provider=MockProvider(),
+            model="test-model",
             event_emitter=emitter,
         )
         assert pipeline._event_emitter is emitter
@@ -506,7 +424,7 @@ class TestEventEmitter:
         """_emit() with no emitter configured does not raise."""
         pipeline = TestPipeline(
             session=Session(create_engine("sqlite:///:memory:")),
-            provider=MockProvider(),
+            model="test-model",
         )
         event = PipelineStarted(run_id="test-run", pipeline_name="test")
         pipeline._emit(event)  # should not raise
@@ -516,7 +434,7 @@ class TestEventEmitter:
         emitter = MockEmitter()
         pipeline = TestPipeline(
             session=Session(create_engine("sqlite:///:memory:")),
-            provider=MockProvider(),
+            model="test-model",
             event_emitter=emitter,
         )
         event = PipelineStarted(run_id="test-run", pipeline_name="test")
