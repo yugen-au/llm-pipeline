@@ -726,26 +726,99 @@ class PipelineConfig(ABC):
                             user_key=step.user_prompt_key,
                         ))
 
-                    for idx, params in enumerate(call_params):
-                        call_kwargs = step.create_llm_call(**params)
-                        # Inject provider and prompt_service
-                        call_kwargs["provider"] = self._provider
-                        call_kwargs["prompt_service"] = prompt_service
+                    # Build agent once per step (reused across consensus iterations)
+                    output_type = step.get_agent(self.AGENT_REGISTRY)
+                    agent = build_step_agent(
+                        step_name=step.step_name,
+                        output_type=output_type,
+                    )
+                    step_deps = StepDeps(
+                        session=self.session,
+                        pipeline_context=self._context,
+                        prompt_service=prompt_service,
+                        run_id=self.run_id,
+                        pipeline_name=self.pipeline_name,
+                        step_name=step.step_name,
+                        event_emitter=self._event_emitter,
+                        variable_resolver=self._variable_resolver,
+                    )
 
+                    for idx, params in enumerate(call_params):
+                        user_prompt = step.build_user_prompt(
+                            variables=params.get("variables", {}),
+                            prompt_service=prompt_service,
+                        )
+
+                        # Resolve system prompt for LLMCallStarting event
                         if self._event_emitter:
-                            call_kwargs["event_emitter"] = self._event_emitter
-                            call_kwargs["run_id"] = self.run_id
-                            call_kwargs["pipeline_name"] = self.pipeline_name
-                            call_kwargs["step_name"] = step.step_name
-                            call_kwargs["call_index"] = idx
+                            sys_key = step.system_instruction_key
+                            if self._variable_resolver:
+                                var_class = self._variable_resolver.resolve(sys_key, 'system')
+                                if var_class:
+                                    sys_vars = var_class()
+                                    sys_vars_dict = (
+                                        sys_vars.model_dump()
+                                        if hasattr(sys_vars, 'model_dump')
+                                        else sys_vars
+                                    )
+                                    rendered_system = prompt_service.get_system_prompt(
+                                        prompt_key=sys_key,
+                                        variables=sys_vars_dict,
+                                        variable_instance=sys_vars,
+                                    )
+                                else:
+                                    rendered_system = prompt_service.get_prompt(
+                                        prompt_key=sys_key,
+                                        prompt_type='system',
+                                    )
+                            else:
+                                rendered_system = prompt_service.get_prompt(
+                                    prompt_key=sys_key,
+                                    prompt_type='system',
+                                )
+                            self._emit(LLMCallStarting(
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                step_name=step.step_name,
+                                call_index=idx,
+                                rendered_system_prompt=rendered_system,
+                                rendered_user_prompt=user_prompt,
+                            ))
 
                         if use_consensus:
                             instruction = self._execute_with_consensus(
-                                call_kwargs, consensus_threshold, maximum_step_calls,
+                                agent, user_prompt, step_deps, output_type,
+                                consensus_threshold, maximum_step_calls,
                                 current_step_name,
                             )
                         else:
-                            instruction = execute_llm_step(**call_kwargs)
+                            try:
+                                run_result = agent.run_sync(
+                                    user_prompt,
+                                    deps=step_deps,
+                                    model=self._model,
+                                )
+                                instruction = run_result.output
+                            except UnexpectedModelBehavior as exc:
+                                instruction = output_type.create_failure(str(exc))
+
+                        if self._event_emitter:
+                            self._emit(LLMCallCompleted(
+                                run_id=self.run_id,
+                                pipeline_name=self.pipeline_name,
+                                step_name=step.step_name,
+                                call_index=idx,
+                                raw_response=None,
+                                parsed_result=(
+                                    instruction.model_dump()
+                                    if hasattr(instruction, 'model_dump')
+                                    else None
+                                ),
+                                model_name=self._model,
+                                attempt_count=1,
+                                validation_errors=[],
+                            ))
+
                         instructions.append(instruction)
 
                     self._instructions[step.step_name] = instructions
