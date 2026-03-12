@@ -27,6 +27,9 @@ class StepDeps:
 
     Uses Any for runtime types to avoid circular imports; real types
     are declared under TYPE_CHECKING for IDE support.
+
+    Note: array_validation and validation_context are reserved for
+    Task 3 output_validators. Unused in Task 2, default to None.
     """
 
     # Core pipeline deps
@@ -42,6 +45,10 @@ class StepDeps:
     # Optional deps
     event_emitter: Any | None = None  # PipelineEventEmitter
     variable_resolver: Any | None = None  # VariableResolver
+
+    # Forward-compat: Task 3 output_validators (unused in Task 2)
+    array_validation: Any | None = None
+    validation_context: Any | None = None
 
 
 def build_step_agent(
