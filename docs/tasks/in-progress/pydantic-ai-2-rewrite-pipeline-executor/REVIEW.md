@@ -89,3 +89,90 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Fix the HIGH issue (test_event_overhead.py provider= kwarg) before merging. The 3 MEDIUM docstring issues and MockProvider stub cleanup can be addressed in the same fix pass or deferred to a follow-up. Orphaned event types should be tracked as a separate cleanup task (breaking public API change). Core implementation is architecturally sound with correct error handling, proper agent reuse, and sustainable test mocking patterns.
+
+---
+
+# Architecture Re-Review (Post-Fix Pass)
+
+## Overall Assessment
+**Status:** complete
+All 5 issues from the initial review have been correctly fixed. No new issues introduced. The 2 accepted LOW issues and the orphaned event types MEDIUM (deferred to separate task) remain unchanged per CEO decision.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Python 3.11+ | pass | No change |
+| Pydantic v2 | pass | No change |
+| Pipeline + Strategy + Step pattern | pass | No change |
+| Tests pass | pass | 803/810 (1 pre-existing test_ui.py failure, 6 skipped) |
+| No hardcoded values | pass | No change |
+| Error handling present | pass | No change |
+
+## Fix Verification
+
+### Fix 1: HIGH - test_event_overhead.py provider= kwarg
+**Status:** VERIFIED
+**Evidence:** All 3 fixtures (lines 69-76, 89-97, 107-115) now use `model="test-model"`. Grep for `provider=` returns zero matches. No `MagicMock` import remains (was only used for `provider=MagicMock()`).
+
+### Fix 2: MEDIUM - extraction.py stale docstring
+**Status:** VERIFIED
+**Evidence:** Line 229 now reads `results: List of LLM result objects from pipeline execution`. Grep for `execute_llm_step` returns zero matches in file.
+
+### Fix 3: MEDIUM - agent_builders.py stale docstring
+**Status:** VERIFIED
+**Evidence:** Line 67 now reads `mirroring the former prompt resolution pattern`. Grep for `create_llm_call` returns zero matches in file.
+
+### Fix 4: MEDIUM - test_agent_registry_core.py stale comment
+**Status:** VERIFIED
+**Evidence:** Line 250 now reads `step.py - LLMStep.get_agent(), build_user_prompt() deprecation`. `create_llm_call()` reference removed. Grep confirms zero matches in file.
+
+### Fix 5: MEDIUM - dead MockProvider stub in events/conftest.py
+**Status:** VERIFIED
+**Evidence:** No `MockProvider` class exists in file. Grep confirms zero matches. File ends cleanly at line 534 with the `agent_run_sync_patch` fixture.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+#### Orphaned event types: LLMCallRetry, LLMCallFailed, LLMCallRateLimited (UNCHANGED)
+**Step:** 1
+**Details:** Accepted per CEO decision. Deferred to separate cleanup task (breaking API change).
+
+### Low
+#### LLMCallCompleted.attempt_count always 1 (UNCHANGED)
+**Step:** 3
+**Details:** Accepted limitation per VALIDATED_RESEARCH.md.
+
+#### LLMCallCompleted.raw_response always None (UNCHANGED)
+**Step:** 3
+**Details:** Accepted limitation per VALIDATED_RESEARCH.md.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/extraction.py | pass | Docstring fix verified. References "pipeline execution" instead of deleted symbol. |
+| llm_pipeline/agent_builders.py | pass | Docstring fix verified. References "former prompt resolution pattern". |
+| tests/benchmarks/test_event_overhead.py | pass | All 3 fixtures use model="test-model". No provider= references remain. |
+| tests/events/conftest.py | pass | MockProvider stub deleted. No dead code remains. |
+| tests/test_agent_registry_core.py | pass | Comment updated. create_llm_call() reference removed. |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All 5 flagged issues from the initial review are correctly resolved. No regressions or new issues introduced. The 3 remaining accepted items (orphaned event types, attempt_count=1, raw_response=None) are tracked and explicitly accepted. Implementation is ready to merge.
