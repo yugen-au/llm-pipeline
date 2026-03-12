@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/4-otel-event-system
 ## Plugins: backend-development, observability-monitoring, python-development
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-12 17:27
+## Last Updated: 2026-03-12 17:28
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -27,7 +27,7 @@
 | instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | af51af70cd4e64799 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | complete | 0 | a25382aa438259569 | 1358a620 | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture consensus path | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | a37d02e632da83375 | 1358a620 | - |
-| Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | pending | 0 | pending | pending | - |
+| Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | in-progress | 0 | pending | pending | - |
 | OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | pending | 0 | pending | pending | - |
 | docs/observability.md | backend-development:backend-architect | implementation | 9 | - | E | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | pending | 0 | pending | pending | - |

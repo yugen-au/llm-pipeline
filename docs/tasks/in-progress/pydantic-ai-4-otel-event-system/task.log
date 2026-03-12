@@ -86,3 +86,10 @@
 [2026-03-12 17:27:14] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 17:27:23] [DEBUG] STATE.md atomic write complete
 [2026-03-12 17:27:44] [DEBUG] STATE.md atomic write complete
+[2026-03-12 17:28:04] [INFO] Already committed implementation-C: ['step-5-token-capture-normal-path.md', 'step-6-token-capture-consensus-path.md']
+[2026-03-12 17:28:08] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-03-12 17:28:08] [INFO] Updated Commits for 'Token capture normal path': 1358a620
+[2026-03-12 17:28:08] [INFO] Updated Commits for 'Token capture consensus path': 1358a620
+[2026-03-12 17:28:08] [INFO] Auto-updated agent statuses: Persist tokens in _save_step_state: pending -> in-progress
+[2026-03-12 17:28:08] [INFO] Deleted 2 old contract file(s)
+[2026-03-12 17:28:08] [DEBUG] STATE.md atomic write complete
