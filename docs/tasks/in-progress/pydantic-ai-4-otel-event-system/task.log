@@ -148,3 +148,7 @@
 [2026-03-12 19:33:05] [INFO] Auto-updated agent statuses: Token fields on PipelineStepState: complete -> in-progress, Token capture normal path: complete -> pending, Persist tokens in _save_step_state: complete -> pending, docs/observability.md: complete -> pending, Unit tests token capture: complete -> pending, Architecture review: complete -> pending
 [2026-03-12 19:33:05] [INFO] Deleted 1 old contract file(s)
 [2026-03-12 19:33:05] [DEBUG] STATE.md atomic write complete
+[2026-03-12 19:33:30] [ERROR] BLOCKED: Invalid Task description format
+[2026-03-12 19:33:40] [INFO] Task call: backend-development:backend-architect (phase: fixing-review)
+[2026-03-12 19:33:40] [INFO] Incremented Revisions: 0 -> 1
+[2026-03-12 19:33:40] [DEBUG] STATE.md atomic write complete

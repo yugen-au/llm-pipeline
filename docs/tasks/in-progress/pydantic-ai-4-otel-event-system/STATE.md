@@ -21,7 +21,7 @@
 | Current codebase analysis | python-development:python-pro | research | 3 | python-development:async-python-patterns | A | complete | 0 | adbb7d2e49cdc3bec | 02fdc53a | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a960cdaac04338850 | b16dd7c1 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7ddf70998337c775 | ef432117 | - |
-| Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 0 | a4f150e3d1f795a1b | 080e13d1 | /pydantic/pydantic-ai/v1_0_5 |
+| Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 1 | a4f150e3d1f795a1b | 080e13d1 | /pydantic/pydantic-ai/v1_0_5 |
 | Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | a1246e0ff41c38f10 | 188cc5a6,080e13d1 | - |
 | instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a4b8f05ba7e3f72e9 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
 | instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | af51af70cd4e64799 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
