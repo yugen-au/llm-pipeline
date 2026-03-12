@@ -371,11 +371,15 @@ class TransformationPipeline(
 # -- Mock run_result builders --------------------------------------------------
 
 
+from tests.conftest import _mock_usage  # shared helper from root tests/conftest.py
+
+
 def make_simple_run_result(count=1):
     """Build MagicMock mimicking AgentRunResult for SimpleInstructions."""
     instruction = SimpleInstructions(count=count, confidence_score=1.0, notes="test")
     mock_result = MagicMock()
     mock_result.output = instruction
+    mock_result.usage.return_value = _mock_usage()
     return mock_result
 
 
@@ -386,6 +390,7 @@ def make_item_detection_run_result(item_count=2, category="test"):
     )
     mock_result = MagicMock()
     mock_result.output = instruction
+    mock_result.usage.return_value = _mock_usage()
     return mock_result
 
 
@@ -396,6 +401,7 @@ def make_transformation_run_result(count=5, operation="transform"):
     )
     mock_result = MagicMock()
     mock_result.output = instruction
+    mock_result.usage.return_value = _mock_usage()
     return mock_result
 
 

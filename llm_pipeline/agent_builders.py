@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pydantic_ai import Agent, RunContext
+    from pydantic_ai import Agent, InstrumentationSettings, RunContext
     from llm_pipeline.prompts.service import PromptService
     from llm_pipeline.prompts.variables import VariableResolver
     from llm_pipeline.events.emitter import PipelineEventEmitter
@@ -60,6 +60,7 @@ def build_step_agent(
     retries: int = 3,
     model_settings: Any | None = None,
     validators: list[Any] | None = None,
+    instrument: Any | None = None,
 ) -> Agent[StepDeps, Any]:
     """Build a pydantic-ai Agent configured for a pipeline step.
 
@@ -88,6 +89,10 @@ def build_step_agent(
             factories like not_found_validator, array_length_validator).
             Each is registered via agent.output_validator(). None = no
             validators.
+        instrument: Optional InstrumentationSettings for OTel tracing.
+            When provided, enables per-agent OpenTelemetry instrumentation
+            (spans for model requests, token usage). Passed directly to
+            the Agent constructor. None = no instrumentation.
 
     Returns:
         Configured Agent[StepDeps, Any] with dynamic instructions and
@@ -95,7 +100,7 @@ def build_step_agent(
     """
     from pydantic_ai import Agent, RunContext
 
-    agent: Agent[StepDeps, Any] = Agent(
+    agent_kwargs: dict[str, Any] = dict(
         model=model,
         output_type=output_type,
         deps_type=StepDeps,
@@ -105,6 +110,10 @@ def build_step_agent(
         defer_model_check=True,
         validation_context=lambda ctx: ctx.deps.validation_context,
     )
+    if instrument is not None:
+        agent_kwargs["instrument"] = instrument
+
+    agent: Agent[StepDeps, Any] = Agent(**agent_kwargs)
 
     sys_key = system_instruction_key or step_name
 

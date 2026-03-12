@@ -45,6 +45,7 @@ from llm_pipeline.events.types import (
 )
 
 if TYPE_CHECKING:
+    from pydantic_ai import InstrumentationSettings
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
     from llm_pipeline.registry import PipelineDatabaseRegistry
     from llm_pipeline.agent_registry import AgentRegistry
@@ -164,6 +165,7 @@ class PipelineConfig(ABC):
         variable_resolver: Optional["VariableResolver"] = None,
         event_emitter: Optional["PipelineEventEmitter"] = None,
         run_id: Optional[str] = None,
+        instrumentation_settings: Any | None = None,
     ):
         """
         Initialize pipeline.
@@ -175,6 +177,7 @@ class PipelineConfig(ABC):
             engine: Optional SQLAlchemy engine. Auto-SQLite if both session and engine are None.
             variable_resolver: Optional VariableResolver for prompt variable classes.
             event_emitter: Optional PipelineEventEmitter for lifecycle/LLM/extraction events. None disables events.
+            instrumentation_settings: Optional pydantic-ai InstrumentationSettings for per-agent OTel instrumentation.
         """
         from llm_pipeline.db import init_pipeline_db, get_session as db_get_session
         from llm_pipeline.session import ReadOnlySession
@@ -182,6 +185,7 @@ class PipelineConfig(ABC):
         self._model = model
         self._variable_resolver = variable_resolver
         self._event_emitter = event_emitter
+        self._instrumentation_settings = instrumentation_settings
 
         # Validate REGISTRY and STRATEGIES
         if self.REGISTRY is None:
@@ -625,6 +629,12 @@ class PipelineConfig(ABC):
                         ))
                     cached_state = self._find_cached_state(step, input_hash)
 
+                # Step-level token accumulators (sum across all calls)
+                _step_input_tokens = 0
+                _step_output_tokens = 0
+                _step_total_requests = 0
+                _step_total_tokens: int | None = None
+
                 if cached_state:
                     if self._event_emitter:
                         self._emit(CacheHit(
@@ -740,9 +750,15 @@ class PipelineConfig(ABC):
                         step_name=step.step_name,
                         output_type=output_type,
                         validators=step_validators,
+                        instrument=self._instrumentation_settings,
                     )
 
                     for idx, params in enumerate(call_params):
+                        # Per-call token vars (populated in non-consensus path)
+                        _call_input_tokens: int | None = None
+                        _call_output_tokens: int | None = None
+                        _call_total_tokens: int | None = None
+
                         # Rebuild StepDeps per-call so per-call params flow correctly
                         step_deps = StepDeps(
                             session=self.session,
@@ -799,11 +815,19 @@ class PipelineConfig(ABC):
                             ))
 
                         if use_consensus:
-                            instruction = self._execute_with_consensus(
-                                agent, user_prompt, step_deps, output_type,
-                                consensus_threshold, maximum_step_calls,
-                                current_step_name,
+                            # Consensus path: per-attempt LLMCallCompleted events
+                            # are emitted inside _execute_with_consensus
+                            instruction, _c_input, _c_output, _c_requests = (
+                                self._execute_with_consensus(
+                                    agent, user_prompt, step_deps, output_type,
+                                    consensus_threshold, maximum_step_calls,
+                                    current_step_name,
+                                )
                             )
+                            # Merge consensus token totals into step-level accumulators
+                            _step_input_tokens += _c_input or 0
+                            _step_output_tokens += _c_output or 0
+                            _step_total_requests += _c_requests
                         else:
                             try:
                                 run_result = agent.run_sync(
@@ -812,25 +836,40 @@ class PipelineConfig(ABC):
                                     model=self._model,
                                 )
                                 instruction = run_result.output
+                                # Capture per-call token usage
+                                _usage = run_result.usage()
+                                if _usage:
+                                    _call_input_tokens = _usage.input_tokens
+                                    _call_output_tokens = _usage.output_tokens
+                                    _call_total_tokens = (
+                                        (_call_input_tokens or 0) + (_call_output_tokens or 0)
+                                    )
+                                    _step_input_tokens += _call_input_tokens or 0
+                                    _step_output_tokens += _call_output_tokens or 0
+                                _step_total_requests += 1
                             except UnexpectedModelBehavior as exc:
                                 instruction = output_type.create_failure(str(exc))
 
-                        if self._event_emitter:
-                            self._emit(LLMCallCompleted(
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                step_name=step.step_name,
-                                call_index=idx,
-                                raw_response=None,
-                                parsed_result=(
-                                    instruction.model_dump()
-                                    if hasattr(instruction, 'model_dump')
-                                    else None
-                                ),
-                                model_name=self._model,
-                                attempt_count=1,
-                                validation_errors=[],
-                            ))
+                            # Non-consensus: emit single LLMCallCompleted per call
+                            if self._event_emitter:
+                                self._emit(LLMCallCompleted(
+                                    run_id=self.run_id,
+                                    pipeline_name=self.pipeline_name,
+                                    step_name=step.step_name,
+                                    call_index=idx,
+                                    raw_response=None,
+                                    parsed_result=(
+                                        instruction.model_dump()
+                                        if hasattr(instruction, 'model_dump')
+                                        else None
+                                    ),
+                                    model_name=self._model,
+                                    attempt_count=1,
+                                    validation_errors=[],
+                                    input_tokens=_call_input_tokens,
+                                    output_tokens=_call_output_tokens,
+                                    total_tokens=_call_total_tokens,
+                                ))
 
                         instructions.append(instruction)
 
@@ -875,8 +914,13 @@ class PipelineConfig(ABC):
                     execution_time_ms = int(
                         (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
                     )
+                    _step_total_tokens = _step_input_tokens + _step_output_tokens if _step_total_requests > 0 else None
                     self._save_step_state(
-                        step, step_num, instructions, input_hash, execution_time_ms, self._model
+                        step, step_num, instructions, input_hash, execution_time_ms, self._model,
+                        input_tokens=_step_input_tokens if _step_total_requests > 0 else None,
+                        output_tokens=_step_output_tokens if _step_total_requests > 0 else None,
+                        total_tokens=_step_total_tokens,
+                        total_requests=_step_total_requests if _step_total_requests > 0 else None,
                     )
                     step.log_instructions(instructions)
                     if self._event_emitter:
@@ -890,12 +934,16 @@ class PipelineConfig(ABC):
                 if self._event_emitter:
                     # Timing includes cache-lookup or LLM-call depending on path;
                     # CEO-approved: step_start stays after logging block (L541).
+                    # Token fields are None on cached path (no LLM calls made).
                     self._emit(StepCompleted(
                         run_id=self.run_id,
                         pipeline_name=self.pipeline_name,
                         step_name=step.step_name,
                         step_number=step_num,
                         execution_time_ms=(datetime.now(timezone.utc) - step_start).total_seconds() * 1000,
+                        input_tokens=_step_input_tokens if _step_total_requests > 0 else None,
+                        output_tokens=_step_output_tokens if _step_total_requests > 0 else None,
+                        total_tokens=_step_total_tokens if _step_total_requests > 0 else None,
                     ))
 
                 self._executed_steps.add(step_class)
@@ -1060,7 +1108,8 @@ class PipelineConfig(ABC):
                 )
         return total
 
-    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None):
+    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None,
+                         input_tokens=None, output_tokens=None, total_tokens=None, total_requests=None):
         from llm_pipeline.state import PipelineStepState
         from llm_pipeline.db.prompt import Prompt
         from sqlmodel import select
@@ -1100,6 +1149,10 @@ class PipelineConfig(ABC):
             prompt_version=prompt_version,
             execution_time_ms=execution_time_ms,
             model=model_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
+            total_requests=total_requests,
         )
         self._real_session.add(state)
         self._real_session.flush()
@@ -1210,10 +1263,22 @@ class PipelineConfig(ABC):
         return PipelineConfig._smart_compare(dict1, dict2, mixin_fields=mixin_fields)
 
     def _execute_with_consensus(self, agent, user_prompt, step_deps, output_type, consensus_threshold, maximum_step_calls, current_step_name):
+        """Execute LLM calls with consensus polling, accumulating token usage.
+
+        Returns:
+            tuple of (result, total_input_tokens, total_output_tokens, total_requests)
+            where token values are int | None (None when no usage data available).
+        """
         from pydantic_ai import UnexpectedModelBehavior
 
         results = []
         result_groups = []
+        # Token accumulators across all consensus attempts
+        _consensus_input_tokens = 0
+        _consensus_output_tokens = 0
+        _consensus_requests = 0
+        _has_any_usage = False
+
         if self._event_emitter:
             self._emit(ConsensusStarted(
                 run_id=self.run_id,
@@ -1223,11 +1288,48 @@ class PipelineConfig(ABC):
                 max_calls=maximum_step_calls,
             ))
         for attempt in range(maximum_step_calls):
+            _call_input_tokens = None
+            _call_output_tokens = None
+            _call_total_tokens = None
             try:
                 run_result = agent.run_sync(user_prompt, deps=step_deps, model=self._model)
                 instruction = run_result.output
+                # Capture per-call token usage defensively
+                _usage = run_result.usage()
+                if _usage:
+                    _has_any_usage = True
+                    _call_input_tokens = _usage.input_tokens if _usage.input_tokens is not None else None
+                    _call_output_tokens = _usage.output_tokens if _usage.output_tokens is not None else None
+                    _call_total_tokens = (
+                        (_call_input_tokens or 0) + (_call_output_tokens or 0)
+                    )
+                    _consensus_input_tokens += _call_input_tokens or 0
+                    _consensus_output_tokens += _call_output_tokens or 0
             except UnexpectedModelBehavior as exc:
                 instruction = output_type.create_failure(str(exc))
+            _consensus_requests += 1
+
+            # Emit per-attempt LLMCallCompleted with per-call token values
+            if self._event_emitter:
+                self._emit(LLMCallCompleted(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    step_name=current_step_name,
+                    call_index=attempt,
+                    raw_response=None,
+                    parsed_result=(
+                        instruction.model_dump()
+                        if hasattr(instruction, 'model_dump')
+                        else None
+                    ),
+                    model_name=self._model,
+                    attempt_count=attempt + 1,
+                    validation_errors=[],
+                    input_tokens=_call_input_tokens,
+                    output_tokens=_call_output_tokens,
+                    total_tokens=_call_total_tokens,
+                ))
+
             results.append(instruction)
             matched_group = None
             for group in result_groups:
@@ -1258,7 +1360,12 @@ class PipelineConfig(ABC):
                         attempt=attempt + 1,
                         threshold=consensus_threshold,
                     ))
-                return matched_group[0]
+                return (
+                    matched_group[0],
+                    _consensus_input_tokens if _has_any_usage else None,
+                    _consensus_output_tokens if _has_any_usage else None,
+                    _consensus_requests,
+                )
 
         logger.info(f"  [NO CONSENSUS] After {maximum_step_calls} attempts")
         largest_group = max(result_groups, key=len)
@@ -1271,7 +1378,12 @@ class PipelineConfig(ABC):
                 max_calls=maximum_step_calls,
                 largest_group_size=len(largest_group),
             ))
-        return largest_group[0]
+        return (
+            largest_group[0],
+            _consensus_input_tokens if _has_any_usage else None,
+            _consensus_output_tokens if _has_any_usage else None,
+            _consensus_requests,
+        )
 
     def close(self) -> None:
         """Close the database session if the pipeline owns it."""

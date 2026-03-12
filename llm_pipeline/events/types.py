@@ -258,6 +258,9 @@ class StepCompleted(StepScopedEvent):
 
     step_number: int
     execution_time_ms: float
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 # -- Cache Events --------------------------------------------------------------
@@ -342,6 +345,9 @@ class LLMCallCompleted(StepScopedEvent):
     model_name: str | None
     attempt_count: int
     validation_errors: list[str] = field(default_factory=list)
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
