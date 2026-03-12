@@ -346,7 +346,7 @@ class MyVariableRegistry:
 class MyPipeline(PipelineConfig):
     def __init__(self):
         super().__init__(
-            provider=GeminiProvider(),
+            model='google-gla:gemini-2.0-flash-lite',
             variable_resolver=MyVariableRegistry()
         )
 ```
@@ -973,7 +973,7 @@ Now that you understand prompt management:
 
 1. **Read [Step API Reference](../api/step.md)** - Learn how steps integrate with prompts
 2. **Explore [Multi-Strategy Guide](multi-strategy.md)** - See strategy-specific prompts in action
-3. **Review [LLM Provider API](../api/llm.md)** - Understand prompt execution flow
+3. **Review [Pipeline API](../api/pipeline.md)** - Understand prompt execution flow
 4. **Check [Best Practices](../architecture/patterns.md)** - Design patterns for prompt organization
 
 ---
