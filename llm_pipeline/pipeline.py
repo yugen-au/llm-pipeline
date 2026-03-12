@@ -461,6 +461,7 @@ class PipelineConfig(ABC):
         from llm_pipeline.agent_builders import build_step_agent, StepDeps
         from llm_pipeline.prompts.service import PromptService
         from llm_pipeline.state import PipelineRun
+        from llm_pipeline.validators import not_found_validator, array_length_validator
         from pydantic_ai import UnexpectedModelBehavior
 
         if self.AGENT_REGISTRY is None:
@@ -728,22 +729,34 @@ class PipelineConfig(ABC):
 
                     # Build agent once per step (reused across consensus iterations)
                     output_type = step.get_agent(self.AGENT_REGISTRY)
+
+                    # Build validators: always register both, they adapt per-call via ctx.deps
+                    step_validators = [
+                        not_found_validator(step_def.not_found_indicators),
+                        array_length_validator(),
+                    ]
+
                     agent = build_step_agent(
                         step_name=step.step_name,
                         output_type=output_type,
-                    )
-                    step_deps = StepDeps(
-                        session=self.session,
-                        pipeline_context=self._context,
-                        prompt_service=prompt_service,
-                        run_id=self.run_id,
-                        pipeline_name=self.pipeline_name,
-                        step_name=step.step_name,
-                        event_emitter=self._event_emitter,
-                        variable_resolver=self._variable_resolver,
+                        validators=step_validators,
                     )
 
                     for idx, params in enumerate(call_params):
+                        # Rebuild StepDeps per-call so per-call params flow correctly
+                        step_deps = StepDeps(
+                            session=self.session,
+                            pipeline_context=self._context,
+                            prompt_service=prompt_service,
+                            run_id=self.run_id,
+                            pipeline_name=self.pipeline_name,
+                            step_name=step.step_name,
+                            event_emitter=self._event_emitter,
+                            variable_resolver=self._variable_resolver,
+                            array_validation=params.get("array_validation"),
+                            validation_context=params.get("validation_context"),
+                        )
+
                         user_prompt = step.build_user_prompt(
                             variables=params.get("variables", {}),
                             prompt_service=prompt_service,

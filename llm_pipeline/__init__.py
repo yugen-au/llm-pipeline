@@ -32,6 +32,7 @@ from llm_pipeline.session import ReadOnlySession
 from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
+from llm_pipeline.validators import not_found_validator, array_length_validator, DEFAULT_NOT_FOUND_INDICATORS
 
 __version__ = "0.1.0"
 
@@ -77,4 +78,8 @@ __all__ = [
     "AgentRegistry",
     "StepDeps",
     "build_step_agent",
+    # Validators
+    "not_found_validator",
+    "array_length_validator",
+    "DEFAULT_NOT_FOUND_INDICATORS",
 ]

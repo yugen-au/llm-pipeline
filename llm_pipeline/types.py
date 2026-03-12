@@ -20,6 +20,7 @@ class ArrayValidationConfig:
     filter_empty_inputs: bool = False
     allow_reordering: bool = True
     strip_number_prefix: bool = True
+    array_field_name: str = ""
 
 
 @dataclass

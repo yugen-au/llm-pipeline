@@ -28,8 +28,9 @@ class StepDeps:
     Uses Any for runtime types to avoid circular imports; real types
     are declared under TYPE_CHECKING for IDE support.
 
-    Note: array_validation and validation_context are reserved for
-    Task 3 output_validators. Unused in Task 2, default to None.
+    Validation fields (array_validation, validation_context) are per-call
+    config passed to output validators via ctx.deps. Default to None
+    when the step has no validation requirements.
     """
 
     # Core pipeline deps
@@ -46,9 +47,9 @@ class StepDeps:
     event_emitter: Any | None = None  # PipelineEventEmitter
     variable_resolver: Any | None = None  # VariableResolver
 
-    # Forward-compat: Task 3 output_validators (unused in Task 2)
-    array_validation: Any | None = None
-    validation_context: Any | None = None
+    # Per-call validation config, read by output validators via ctx.deps
+    array_validation: Any | None = None  # ArrayValidationConfig
+    validation_context: Any | None = None  # ValidationContext for Pydantic field_validators
 
 
 def build_step_agent(
@@ -58,6 +59,7 @@ def build_step_agent(
     system_instruction_key: str | None = None,
     retries: int = 3,
     model_settings: Any | None = None,
+    validators: list[Any] | None = None,
 ) -> Agent[StepDeps, Any]:
     """Build a pydantic-ai Agent configured for a pipeline step.
 
@@ -65,6 +67,13 @@ def build_step_agent(
     @agent.instructions. The system prompt is resolved at runtime
     through deps.prompt_service, mirroring the former
     prompt resolution pattern.
+
+    Validators (from validators.py factories) are registered via
+    agent.output_validator() after the instructions block. The
+    validation_context lambda wires per-call StepDeps.validation_context
+    into Pydantic model validator context at run_sync() time, enabling
+    output type field_validators to access ValidationContext via
+    info.context.
 
     Args:
         step_name: Unique step identifier (e.g. 'constraint_extraction').
@@ -75,9 +84,14 @@ def build_step_agent(
             Defaults to step_name if not provided.
         retries: Max retries for output validation failures.
         model_settings: ModelSettings for temperature, max_tokens, etc.
+        validators: List of output validator callables (from validator
+            factories like not_found_validator, array_length_validator).
+            Each is registered via agent.output_validator(). None = no
+            validators.
 
     Returns:
-        Configured Agent[StepDeps, Any] with dynamic instructions registered.
+        Configured Agent[StepDeps, Any] with dynamic instructions and
+        output validators registered.
     """
     from pydantic_ai import Agent, RunContext
 
@@ -89,6 +103,7 @@ def build_step_agent(
         retries=retries,
         model_settings=model_settings,
         defer_model_check=True,
+        validation_context=lambda ctx: ctx.deps.validation_context,
     )
 
     sys_key = system_instruction_key or step_name
@@ -120,6 +135,10 @@ def build_step_agent(
             prompt_key=sys_key,
             prompt_type='system',
         )
+
+    # Register output validators (from validator factories)
+    for v in (validators or []):
+        agent.output_validator(v)
 
     return agent
 
