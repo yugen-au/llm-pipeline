@@ -63,8 +63,8 @@ def build_step_agent(
 
     Constructs an Agent with dynamic system prompt injection via
     @agent.instructions. The system prompt is resolved at runtime
-    through deps.prompt_service, mirroring the existing
-    create_llm_call() prompt resolution pattern.
+    through deps.prompt_service, mirroring the former
+    prompt resolution pattern.
 
     Args:
         step_name: Unique step identifier (e.g. 'constraint_extraction').

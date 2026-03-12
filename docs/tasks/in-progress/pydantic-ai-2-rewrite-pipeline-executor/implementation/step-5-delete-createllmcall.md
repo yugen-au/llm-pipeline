@@ -58,3 +58,38 @@ __all__ = ["ArrayValidationConfig", "ValidationContext", "StepCallParams"]
 [x] No unused imports remain in modified files
 [x] pipeline.py call site (line 730) is outside Step 5 scope, handled by Steps 3-4
 [x] Test file references (14 files) outside Step 5 scope, handled by Steps 7-9
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] extraction.py docstring references deleted execute_llm_step()
+[x] agent_builders.py docstring references deleted create_llm_call()
+
+### Changes Made
+#### File: `llm_pipeline/extraction.py`
+Updated docstring in extract() method to remove reference to deleted execute_llm_step().
+```
+# Before
+results: List of LLM result objects from execute_llm_step()
+
+# After
+results: List of LLM result objects from pipeline execution
+```
+
+#### File: `llm_pipeline/agent_builders.py`
+Updated docstring in build_step_agent() to remove reference to deleted create_llm_call().
+```
+# Before
+through deps.prompt_service, mirroring the existing
+create_llm_call() prompt resolution pattern.
+
+# After
+through deps.prompt_service, mirroring the former
+prompt resolution pattern.
+```
+
+### Verification
+[x] No remaining references to execute_llm_step in docstrings
+[x] No remaining references to create_llm_call in docstrings
