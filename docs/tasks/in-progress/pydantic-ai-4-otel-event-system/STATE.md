@@ -9,7 +9,7 @@
 ## Plugins: backend-development, observability-monitoring, python-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [1,5,7,9,10]
 ## Work Mode: standard
 ## Last Updated: 2026-03-12 18:03
 
