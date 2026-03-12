@@ -53,3 +53,9 @@
 [2026-03-12 17:09:32] [INFO] Auto-updated agent statuses: Token fields on PipelineStepState: pending -> in-progress, Token fields on events: pending -> in-progress
 [2026-03-12 17:09:32] [INFO] Deleted 1 old contract file(s)
 [2026-03-12 17:09:32] [DEBUG] STATE.md atomic write complete
+[2026-03-12 17:09:51] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-03-12 17:10:02] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-03-12 17:12:25] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-03-12 17:12:53] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-03-12 17:13:12] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-12 17:13:27] [DEBUG] STATE.md atomic write complete
