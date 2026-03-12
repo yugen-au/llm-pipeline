@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Cross-referenced step-1 (existing validation analysis) and step-2 (pydantic-ai output validators) research against the actual codebase. Both research documents are accurate. All code references verified. Key finding: **5 architectural decisions require CEO input** before planning can proceed. The research correctly identifies the per-call StepDeps wiring gap and the validation_context Agent constructor pattern. One gap unaddressed by research: array field discovery on Pydantic models (old code scanned raw dicts, new code operates on typed models).
+Cross-referenced step-1 (existing validation analysis) and step-2 (pydantic-ai output validators) research against the actual codebase. Both research documents are accurate. All code references verified. **All 5 architectural decisions resolved by CEO.** The research correctly identifies the per-call StepDeps wiring gap and the validation_context Agent constructor pattern. One gap unaddressed by research (array field discovery on Pydantic models) resolved via CEO decision to use explicit `array_field_name` on ArrayValidationConfig.
 
 ## Domain Findings
 
@@ -61,7 +61,11 @@ Cross-referenced step-1 (existing validation analysis) and step-2 (pydantic-ai o
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Pending - see Questions below | - | - |
+| not_found_indicators source: StepDefinition field vs LLMStep attribute vs build_step_agent param? | StepDefinition field. `not_found_indicators: list[str] \| None = None`. None = framework defaults (common LLM evasion phrases). Set = override. Flow: StepDefinition -> pipeline.execute() -> build_step_agent() -> not_found_validator factory. | Adds field to StepDefinition dataclass (strategy.py). Pipeline.execute() reads from step_def. Framework provides sensible defaults when None. |
+| Array reordering: silent model_copy vs ModelRetry vs hybrid? | Silent reorder via model_copy matching old behavior. No ModelRetry for ordering issues. | Validator returns reordered model via model_copy(update={...}). Only ModelRetry for length mismatch (unrecoverable by reorder). Matches old behavior exactly. |
+| Array field discovery: scan model_fields or explicit array_field_name? | Explicit `array_field_name: str` on ArrayValidationConfig. Caller specifies which field. No auto-scanning. | Add `array_field_name: str` field to ArrayValidationConfig in types.py. Validator uses `getattr(output, config.array_field_name)` directly. |
+| Type location: keep in types.py or move to validators.py? | Keep ArrayValidationConfig and ValidationContext in types.py. Backward compatible. | No import changes for downstream. validators.py imports from types.py. |
+| StepDeps construction: rebuild per-call or mutate? | Rebuild per-call inside execute loop. Clean, no shared mutable state. | Move StepDeps construction inside `for idx, params` loop. Each call gets fresh StepDeps with per-call array_validation and validation_context from StepCallParams. |
 
 ## Assumptions Validated
 - [x] StepDeps has array_validation and validation_context fields defaulting to None (agent_builders.py:49-51)
@@ -76,15 +80,16 @@ Cross-referenced step-1 (existing validation analysis) and step-2 (pydantic-ai o
 - [x] ArrayValidationConfig and ValidationContext are public API exports (__init__.py:29)
 
 ## Open Items
-- Array field discovery on Pydantic models not addressed in research (see Gap above)
 - Task 3 description references wrong file path (schemas/validation.py vs llm/validation.py) -- cosmetic, no action needed
-- Research step-2 section 8 claims about validation_context callable form are now verified but were originally unsubstantiated
+- Framework-level default not_found_indicators list needs defining during implementation (common LLM evasion phrases like "not found", "no data available", etc.)
 
 ## Recommendations for Planning
-1. Keep `ArrayValidationConfig` and `ValidationContext` in `types.py` (backward compatible, no import breakage for downstream)
+1. Keep `ArrayValidationConfig` and `ValidationContext` in `types.py` (backward compatible) -- **CEO confirmed**
 2. Create `llm_pipeline/validators.py` with `not_found_validator()`, `array_length_validator()`, and `strip_number_prefix()`
-3. Rebuild `StepDeps` per-call inside the `for idx, params` loop (cleaner than mutation, avoids side effects)
-4. Register validators via `build_step_agent(validators=[...])` parameter
-5. Wire `Agent(validation_context=lambda ctx: ...)` in `build_step_agent()` for Pydantic field validator context
-6. Array reordering should use `model_copy(update={...})` to match old silent-reorder behavior (not ModelRetry)
-7. Output validator registration order: not_found first (cheap), array_length second (heavier)
+3. Add `not_found_indicators: list[str] | None = None` to `StepDefinition` (strategy.py). None = framework defaults. Flow: StepDefinition -> pipeline.execute() -> build_step_agent() -> not_found_validator factory -- **CEO confirmed**
+4. Add `array_field_name: str` to `ArrayValidationConfig` (types.py). Caller specifies target field explicitly -- **CEO confirmed**
+5. Rebuild `StepDeps` per-call inside the `for idx, params` loop. Each call gets fresh instance with per-call array_validation/validation_context from StepCallParams -- **CEO confirmed**
+6. Register validators via `build_step_agent(validators=[...])` parameter
+7. Wire `Agent(validation_context=lambda ctx: ...)` in `build_step_agent()` for Pydantic field validator context
+8. Array reordering: silent `model_copy(update={...})` matching old behavior. ModelRetry only for length mismatch -- **CEO confirmed**
+9. Output validator registration order: not_found first (cheap), array_length second (heavier)
