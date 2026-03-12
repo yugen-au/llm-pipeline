@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-All 3 research agents' findings validated against codebase. Migration tasks 1-5 are structurally complete -- zero old LLM patterns remain in source code. 951/952 tests pass (1 failure unrelated). Key cleanup items confirmed: pydantic-ai must become core dep (import fails without it), google-generativeai is unused, llm/ subpackage is dead, 1 dead function, 2 stale docstrings, ~20 stale docs files. Two research corrections found: __pycache__ is gitignored (not a commit concern), and _query_prompt_keys dead code was missed by step-1 and step-3.
+All 3 research agents' findings validated against codebase. Migration tasks 1-5 are structurally complete -- zero old LLM patterns remain in source code. 951/952 tests pass (1 failure unrelated). All 6 CEO decisions received. Task 6 scope finalized: 6 workstreams covering dep cleanup, dead code removal, docstring fixes, CLAUDE.md update, ~20-file docs sweep, and test fix. Two research corrections found: __pycache__ is gitignored (not a commit concern), and _query_prompt_keys dead code was missed by step-1 and step-3. No blockers remain -- ready for planning phase.
 
 ## Domain Findings
 
@@ -64,14 +64,19 @@ All 3 research agents' findings validated against codebase. Migration tasks 1-5 
 ### Pre-existing Test Failure
 **Source:** step-1, step-2
 
-- `test_events_router_prefix`: expects `/events`, actual `/runs/{run_id}/events`
-- Unrelated to pydantic-ai migration
-- Not in scope for task 6
+- `test_events_router_prefix` (`tests/test_ui.py:140-143`): expects `/events`, actual `/runs/{run_id}/events`
+- Unrelated to pydantic-ai migration -- router is correct, test assertion is wrong
+- CEO decision: fix in task 6 scope (Workstream F)
 
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| [pending -- see Questions below] | [awaiting CEO input] | [TBD] |
+| Q1: Move pydantic-ai from optional to core deps? | YES -- required, not optional | Move `pydantic-ai>=1.0.5` from `[project.optional-dependencies]` to `[project.dependencies]`. Remove `pydantic-ai` optional group entirely. Keep in dev deps. |
+| Q2: Remove google-generativeai from optional AND dev deps? | REMOVE entirely from both | Delete `gemini` optional group (pyproject.toml:23). Remove from dev deps (pyproject.toml:34). No downstream usage to protect. |
+| Q3: Delete llm/ directory entirely or add ImportError shim? | DELETE entirely, no shim | Delete `llm_pipeline/llm/` directory including `__init__.py`. No backward compat concern -- transition happened in tasks 1-5. |
+| Q4: Include _query_prompt_keys() removal in task 6? | YES, remove in task 6 | Delete `_query_prompt_keys()` function from `step.py:34-77`. Dead code, never called. |
+| Q5: Docs update scope -- all ~20 files or subset? | ALL ~20 stale files updated in task 6 | Full docs sweep. Includes docs/api/llm.md (delete or rewrite), docs/index.md, docs/README.md, docs/api/, docs/architecture/, docs/guides/. Excludes docs/tasks/completed/ (historical). |
+| Q6: Fix test_events_router_prefix in task 6 or track separately? | FIX in task 6 | Fix test assertion: change expected prefix from `/events` to `/runs/{run_id}/events` (test_ui.py:143). Router is correct, test is wrong. |
 
 ## Assumptions Validated
 - [x] Tasks 1-5 migration is structurally complete (zero old patterns in source)
@@ -87,19 +92,35 @@ All 3 research agents' findings validated against codebase. Migration tasks 1-5 
 - [x] pipeline.py uses lazy imports for pydantic_ai (inside function bodies)
 
 ## Open Items
-- pydantic-ai dependency classification decision (Q1)
-- google-generativeai removal scope (Q2)
-- llm/ directory deletion approach (Q3)
-- _query_prompt_keys removal scope (Q4)
-- Documentation update scope (Q5)
-- Pre-existing test failure ownership (Q6)
+- None -- all 6 questions resolved by CEO
 
 ## Recommendations for Planning
-1. Move `pydantic-ai>=1.0.5` from optional to core dependencies -- library already broken without it
-2. Delete `llm_pipeline/llm/` directory entirely (clean delete, no shim) -- transition already happened in tasks 1-5
-3. Remove `_query_prompt_keys()` from step.py -- dead code, never called
-4. Update both stale docstrings (variables.py, introspection.py)
-5. Update `.claude/CLAUDE.md` architecture section -- affects every future AI session
-6. Scope docs update based on CEO decision -- recommend at minimum: delete docs/api/llm.md, update docs/index.md and docs/README.md
-7. google-generativeai removal from pyproject.toml (both optional and dev) pending CEO confirmation of no downstream use
-8. Pre-existing test failure should be tracked separately (not task 6 scope)
+
+### Workstream A: Dependency cleanup (pyproject.toml)
+1. Move `pydantic-ai>=1.0.5` from optional to core `[project.dependencies]`
+2. Delete `pydantic-ai` optional group from `[project.optional-dependencies]`
+3. Delete `gemini` optional group (`google-generativeai`) from `[project.optional-dependencies]`
+4. Remove `google-generativeai>=0.3.0` from dev deps
+
+### Workstream B: Dead code removal
+5. Delete `llm_pipeline/llm/` directory entirely (only contains stub `__init__.py` + gitignored `__pycache__/`)
+6. Remove `_query_prompt_keys()` from `step.py:34-77`
+
+### Workstream C: Stale source docstrings
+7. Update `llm_pipeline/prompts/variables.py:26` -- replace `provider=GeminiProvider()` with pydantic-ai model string
+8. Update `llm_pipeline/introspection.py:4-6` -- replace "LLM provider" wording
+
+### Workstream D: CLAUDE.md update
+9. Update `.claude/CLAUDE.md:12` -- remove google-generativeai from tech stack
+10. Update `.claude/CLAUDE.md:23` -- replace LLMProvider/GeminiProvider with pydantic-ai agent architecture
+
+### Workstream E: Documentation sweep (~20 files)
+11. Delete or rewrite `docs/api/llm.md` (entire file documents removed code)
+12. Update all stale docs files: docs/index.md, docs/README.md, docs/api/step.md, docs/api/pipeline.md, docs/api/index.md, docs/api/extraction.md, docs/api/prompts.md, docs/architecture/overview.md, docs/architecture/concepts.md, docs/architecture/limitations.md, docs/architecture/patterns.md, docs/architecture/diagrams/c4-container.mmd, docs/architecture/diagrams/c4-component.mmd, docs/guides/getting-started.md, docs/guides/basic-pipeline.md, docs/guides/prompts.md
+13. Exclude docs/tasks/completed/ (historical records)
+
+### Workstream F: Test fix
+14. Fix `tests/test_ui.py:143` -- change expected prefix from `/events` to `/runs/{run_id}/events`
+
+### Implementation Order
+Recommended: A -> B -> F -> C -> D -> E (deps and dead code first, then cosmetic, docs last as largest effort)
