@@ -21,3 +21,13 @@
 | Current codebase analysis | python-development:python-pro | research | 3 | python-development:async-python-patterns | A | complete | 0 | adbb7d2e49cdc3bec | 02fdc53a | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a960cdaac04338850 | b16dd7c1 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7ddf70998337c775 | pending | - |
+| Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Token capture consensus path | backend-development:backend-architect | implementation | 6 | - | C | pending | 0 | pending | pending | - |
+| Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | pending | 0 | pending | pending | - |
+| OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | pending | 0 | pending | pending | - |
+| docs/observability.md | backend-development:backend-architect | implementation | 9 | - | E | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | pending | 0 | pending | pending | - |
