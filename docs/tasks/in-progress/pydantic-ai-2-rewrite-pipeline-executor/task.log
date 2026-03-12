@@ -153,3 +153,10 @@
 [2026-03-12 13:16:57] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 13:17:04] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 13:17:21] [DEBUG] STATE.md atomic write complete
+[2026-03-12 13:17:41] [ERROR] BLOCKED: Invalid group transition
+[2026-03-12 13:17:50] [INFO] Already committed fixing-tests-F: ['step-8-replace-mockprovider.md']
+[2026-03-12 13:17:52] [INFO] STATE.md updated: phase=testing, status=in-progress
+[2026-03-12 13:17:52] [INFO] Auto-set Current Group -> A (entering testing)
+[2026-03-12 13:17:52] [INFO] Auto-updated agent statuses: Verify build: pending -> in-progress
+[2026-03-12 13:17:52] [INFO] Deleted 1 old contract file(s)
+[2026-03-12 13:17:52] [DEBUG] STATE.md atomic write complete
