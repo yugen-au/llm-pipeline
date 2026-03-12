@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Consolidated findings from two domain research agents (codebase architecture + app factory/registry). Both agents accurately mapped the current create_app() signature, registry types, PipelineConfig constructor, trigger_run() call site, and importlib.metadata API. One contradiction found between the two docs regarding default model fallback chain. One pre-existing naming bug identified in PipelineIntrospector. All core assumptions about factory closure shape, merge order, backward compatibility, and Python 3.11+ API compatibility verified against source code.
+Consolidated findings from two domain research agents (codebase architecture + app factory/registry). Both agents accurately mapped the current create_app() signature, registry types, PipelineConfig constructor, trigger_run() call site, and importlib.metadata API. One contradiction found between the two docs regarding default model fallback chain -- resolved by CEO decision: Option C (param > env > None, warn at startup, 400 at execution). One pre-existing naming bug identified in PipelineIntrospector. All core assumptions about factory closure shape, merge order, backward compatibility, and Python 3.11+ API compatibility verified against source code.
 
 ## Domain Findings
 
@@ -60,7 +60,7 @@ Consolidated findings from two domain research agents (codebase architecture + a
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Should create_app() hardcode a default model fallback ("google-gla:gemini-2.0-flash-lite") when neither default_model param nor LLM_PIPELINE_MODEL env var is set? Step-1 says yes (param > env > hardcoded), step-2 says no (param > env > None, fail at runtime). | PENDING | Determines whether `llm-pipeline ui` works out of the box or requires explicit model config. Affects factory closure, task 3 demo UX, and error messaging. |
+| Should create_app() hardcode a default model fallback ("google-gla:gemini-2.0-flash-lite") when neither default_model param nor LLM_PIPELINE_MODEL env var is set? Step-1 says yes (param > env > hardcoded), step-2 says no (param > env > None, fail at runtime). | **Option C**: param > env > None. At discovery time: log warning "No default model configured. Set --model or LLM_PIPELINE_MODEL. Pipeline execution will fail without a model." At trigger_run time: return 400/422 if model still None. No hardcoded fallback -- "google-gla:gemini-2.0-flash-lite" belongs to demo pipeline only (task 3). Rationale: discovery and execution are separate concerns; missing model shouldn't block UI startup, browsing, or introspection. | Factory closure receives `model: Optional[str]` instead of `model: str`. Discovery + introspection work without model. Execution-time validation needed in trigger_run (or factory). Demo pipeline (task 3) sets its own default model independently. |
 
 ## Assumptions Validated
 - [x] `pipeline_registry` type is `dict[str, Callable]` with factory signature matching trigger_run() call at runs.py L223
@@ -73,15 +73,16 @@ Consolidated findings from two domain research agents (codebase architecture + a
 - [x] Discovery runs correctly in uvicorn reload mode via _create_dev_app() with auto_discover=True default
 - [x] Prompt model has UniqueConstraint on (prompt_key, prompt_type) enabling idempotent seed_prompts
 - [x] PipelineConfig.__init_subclass__ validates Pipeline suffix, Registry/Strategies naming conventions
+- [x] Model resolution: param > env > None (CEO decision). No hardcoded fallback. Warn at startup, 400 at execution time. Demo pipeline owns its own default (task 3)
 
 ## Open Items
-- **Default model fallback chain** -- contradiction between research docs, needs CEO decision (see Q&A)
 - **PipelineIntrospector._pipeline_name single-regex bug** -- uses `([a-z0-9])([A-Z])` single regex (introspection.py L48) while `PipelineConfig.pipeline_name` uses `to_snake_case()` double-regex (naming.py L35-36). Diverges on consecutive-caps names (e.g. "HTTPProxyPipeline" -> "httpproxy" vs "http_proxy"). Pre-existing, not caused by task 1, but discovery will expose it if entry point names don't match. Track separately.
 - **ep.name vs class-derived pipeline_name convention** -- if entry point name differs from class-derived name, list endpoint returns ep.name but detail metadata returns class-derived pipeline_name. Not blocking but should document convention: ep.name SHOULD match `to_snake_case(ClassName, strip_suffix="Pipeline")`.
 - **seed_prompts error isolation** -- step-1 ambiguous about whether seed_prompts failure rolls back pipeline registration. Step-2 implies it doesn't (seed called after register). Recommend: separate try/except for seed_prompts with warning log, pipeline stays registered regardless.
+- **Factory closure model type change** -- CEO decision means factory closure captures `model: Optional[str]` not `model: str`. PipelineConfig.__init__ requires `model: str` (no default). Need execution-time guard: either in factory (raise before calling __init__) or in trigger_run (return 400 before calling factory). Recommend: guard in trigger_run for clean HTTP error response.
 
 ## Recommendations for Planning
-1. Resolve default_model fallback question before implementation -- it affects factory closure logic and whether create_app() needs an `os.environ.get()` call
+1. Model resolution chain: `default_model` param > `LLM_PIPELINE_MODEL` env var > None. create_app() calls `os.environ.get("LLM_PIPELINE_MODEL")` as fallback. If None, log warning at startup. Guard execution in trigger_run with 400 response if model is None at call time
 2. Implement seed_prompts call in its own try/except, separate from the entry point load/validate/register block -- ensures pipeline is usable even if prompt seeding fails
 3. Use ep.name as registry key (not class-derived name) for both registries -- this matches how task 2's --pipelines will work (module PIPELINE_REGISTRY dict keys)
 4. Add logger to app.py (`logger = logging.getLogger(__name__)`) following codebase convention
