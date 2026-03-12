@@ -1,7 +1,7 @@
 ## Task: pipeline-discovery-1-auto-discovery
 ## Description: Implement entry point auto-discovery in create_app() - scan llm_pipeline.pipelines group, register in pipeline_registry and introspection_registry, handle seed_prompts, log warnings on errors
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -23,4 +23,5 @@
 | Discovery Logic | python-development:python-pro | implementation | 1 | - | A | complete | 0 | acdbbd294e8ae60c3 | abdc09dd | /python/importlib_metadata |
 | Model Guard | backend-development:backend-architect | implementation | 2 | - | B | complete | 2 | a3a9e051b480749b9 | 8efb8af8,89bea6af,f7727652 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 2 | a92630829498e276a | 76885716,de93b815 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | a0faf0fbadc75eae0 | 5538ad36 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | a0faf0fbadc75eae0 | 5538ad36,1e3af56c | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
