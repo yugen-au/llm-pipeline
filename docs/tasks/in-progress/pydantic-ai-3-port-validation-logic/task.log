@@ -135,3 +135,9 @@
 [2026-03-12 16:03:53] [DEBUG] STATE.md atomic write complete
 [2026-03-12 16:05:04] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 16:06:21] [DEBUG] STATE.md atomic write complete
+[2026-03-12 16:06:40] [INFO] Already committed fixing-review-D: ['step-7-tests.md']
+[2026-03-12 16:06:43] [INFO] STATE.md updated: phase=testing, status=in-progress
+[2026-03-12 16:06:43] [INFO] Auto-set Current Group -> A (entering testing)
+[2026-03-12 16:06:43] [INFO] Auto-updated agent statuses: Verify build: complete -> in-progress
+[2026-03-12 16:06:43] [INFO] Deleted 1 old contract file(s)
+[2026-03-12 16:06:43] [DEBUG] STATE.md atomic write complete
