@@ -141,3 +141,36 @@ collected 810 items
 **Status:** passed
 
 Step 8 fix resolved all 196 event test failures. Only the 1 pre-existing `test_ui.py` router prefix mismatch remains, confirmed acceptable. All success criteria from PLAN.md now met.
+
+---
+
+## Post-Review Fix Pass Run
+
+### Changes Applied Before This Run
+- 2 stale docstrings updated (no logic change)
+- `test_event_overhead.py` `provider=` kwarg fixed in benchmark test
+- Dead `MockProvider` stub deleted
+- Stale comment updated
+
+### Test Execution
+**Pass Rate:** 803/810 tests pass (1 failed, 6 skipped)
+
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2, pluggy-1.6.0
+rootdir: C:\Users\SamSG\Documents\claude_projects\llm-pipeline
+configfile: pyproject.toml
+testpaths: tests
+collected 810 items
+
+1 failed, 803 passed, 6 skipped, 1 warning in 117.90s (0:01:57)
+```
+
+### Failed Tests
+
+#### TestRoutersIncluded::test_events_router_prefix (pre-existing)
+**Step:** Pre-existing — not introduced by this task
+**Error:** `AssertionError: assert '/runs/{run_id}/events' == '/events'`
+
+### Outcome
+No regression. Identical to previous run: 803 passed, 1 pre-existing failure, 6 skipped. Review fixes were safe.
