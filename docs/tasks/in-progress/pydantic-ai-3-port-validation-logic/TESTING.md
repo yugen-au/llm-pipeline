@@ -65,3 +65,31 @@ No human validation required. All success criteria verified automatically.
 ## Recommendations
 1. Fix pre-existing test failure in `tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix` - update assertion to match current router prefix `/runs/{run_id}/events`.
 2. Consider adding `array_field_name` validation to `ArrayValidationConfig.__post_init__` to fail early when `array_length_validator` would be used but `array_field_name` is empty (currently validated at validator call time).
+
+---
+
+## Re-run: Review Fixes Verification
+
+**Date:** 2026-03-12
+**Trigger:** Review fixes applied - cosmetic comment updates in `agent_builders.py`, `asyncio.run()` fix and test rename in `test_validators.py`
+
+### Test Execution
+**Pass Rate:** 837/838 tests (1 pre-existing failure, unchanged)
+```
+1 failed, 837 passed, 6 skipped, 1 warning in 130.17s (0:02:10)
+
+FAILED tests/test_ui.py::TestRoutersIncluded::test_events_router_prefix
+```
+
+### Changes Verified
+- `agent_builders.py`: Stale comment updates (cosmetic) - no test impact, confirmed
+- `test_validators.py`: `asyncio.run()` replaces `asyncio.new_event_loop().run_until_complete()` - event loop leak fixed, all 29 validator tests pass
+- `test_validators.py`: `test_already_correct_order_no_copy_needed` renamed to `test_already_correct_order_preserved` - confirmed passing under new name
+
+### Failed Tests
+#### TestRoutersIncluded::test_events_router_prefix
+**Step:** pre-existing (unrelated to this task)
+**Error:** `assert '/runs/{run_id}/events' == '/events'` - unchanged from prior run, no regression
+
+### Status
+**passed** - no regressions from review fixes. Same baseline as prior run.
