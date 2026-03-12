@@ -138,3 +138,13 @@
 [2026-03-12 17:55:32] [DEBUG] STATE.md atomic write complete
 [2026-03-12 17:55:52] [INFO] Task call: comprehensive-review:architect-review (phase: review)
 [2026-03-12 18:03:26] [DEBUG] STATE.md atomic write complete
+[2026-03-12 19:31:58] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-12 19:32:30] [ERROR] BLOCKED: Cannot enter fix loop 'fixing-review': steps_to_fix not set
+[2026-03-12 19:32:38] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '1,5,7,9,10'
+[2026-03-12 19:32:49] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-12 19:33:02] [INFO] Committed review-A: ['REVIEW.md'] -> 38718f02
+[2026-03-12 19:33:04] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-12 19:33:05] [INFO] Updated Commits for 'Architecture review': 5b8e8da3
+[2026-03-12 19:33:05] [INFO] Auto-updated agent statuses: Token fields on PipelineStepState: complete -> in-progress, Token capture normal path: complete -> pending, Persist tokens in _save_step_state: complete -> pending, docs/observability.md: complete -> pending, Unit tests token capture: complete -> pending, Architecture review: complete -> pending
+[2026-03-12 19:33:05] [INFO] Deleted 1 old contract file(s)
+[2026-03-12 19:33:05] [DEBUG] STATE.md atomic write complete
