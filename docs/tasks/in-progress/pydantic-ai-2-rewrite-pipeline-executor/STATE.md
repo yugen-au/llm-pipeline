@@ -1,17 +1,17 @@
 ## Task: pydantic-ai-2-rewrite-pipeline-executor
 ## Description: Refactor PipelineConfig.execute() to replace execute_llm_step() with agent.run_sync(), update _execute_with_consensus(), delete obsolete LLM utils (execute_llm_step, call_gemini_with_structured_output, format_schema_for_llm, validate_structured_output, validate_array_response) and RateLimiter, map UnexpectedModelBehavior to create_failure()
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
-## Current Group: A
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/2-rewrite-pipeline-executor
 ## Plugins: backend-development, python-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [5,8,9]
 ## Work Mode: standard
-## Last Updated: 2026-03-12 13:30
+## Last Updated: 2026-03-12 13:59
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -25,10 +25,10 @@
 | Add StepDeps Fields | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a14e7ab027f6f8153 | 2c6a8f33 | /pydantic/pydantic-ai |
 | Rewrite Execute Loop | backend-development:backend-architect | implementation | 3 | - | C | complete | 0 | ab74643827630c871 | 0ce2acda | /pydantic/pydantic-ai,/pydantic/pydantic |
 | Rewrite Consensus | backend-development:backend-architect | implementation | 4 | - | C | complete | 0 | a5cb488d0ac69e694 | 46197244,0ce2acda | /pydantic/pydantic-ai |
-| Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a05033b7763c79242 | ad39b29d,0ce2acda | - |
+| Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | in-progress | 0 | a05033b7763c79242 | ad39b29d,0ce2acda | - |
 | Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | complete | 0 | ab0698cae3d1db25f | 0a2ee157 | - |
 | Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | complete | 0 | a0ee30f9eb7d747bf | 6d36c8b0 | - |
-| Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | complete | 2 | ab11f3089f8e250a5 | b02fac1e,900d4c9f | /pydantic/pydantic-ai |
-| Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | complete | 0 | a73bba5de7cdef97c | 46297335 | - |
+| Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | pending | 2 | ab11f3089f8e250a5 | b02fac1e,900d4c9f | /pydantic/pydantic-ai |
+| Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | pending | 0 | a73bba5de7cdef97c | 46297335 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a5dd378a5eaeab706 | 0e4c6c69,f8ad5d50 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | a8b6e6fcac98d8139 | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a8b6e6fcac98d8139 | d9d855c6 | - |
