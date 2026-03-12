@@ -92,3 +92,94 @@ return prompt_service.get_user_prompt(
 **Decision:** CONDITIONAL
 
 Fix the HIGH issue (pydantic-ai runtime import) before merge. The MEDIUM issues are recommended fixes but not blocking -- build_user_prompt variable_instance loss is a diagnostic degradation not a functional break, and pipeline_name single-regex is a pre-existing bug outside the stated scope.
+
+---
+
+# Re-Review: Fix Verification
+
+## Overall Assessment
+**Status:** complete
+
+All 4 previously identified issues are correctly resolved. No new issues introduced by the fixes. 51 new tests pass, 854 existing tests pass (up from 853; the pre-existing WAL test now passes). Only 1 pre-existing failure remains (test_events_router_prefix, unrelated UI test).
+
+## Fix Verification
+
+### Fix 1: pydantic-ai runtime import (was HIGH) -- RESOLVED
+**File:** `llm_pipeline/agent_builders.py`
+**Verification:**
+- `from __future__ import annotations` added at line 8, enabling string-form annotations
+- `from pydantic_ai import Agent, RunContext` moved inside `TYPE_CHECKING` block at line 14
+- Lazy import `from pydantic_ai import Agent, RunContext` added inside `build_step_agent()` function body at line 75
+- `StepDeps` dataclass has no pydantic_ai references, safe to import unconditionally
+- `__init__.py` import of `StepDeps, build_step_agent` will not trigger pydantic_ai load at import time
+
+### Fix 2: build_user_prompt variable_instance loss (was MEDIUM) -- RESOLVED
+**File:** `llm_pipeline/step.py`
+**Verification:**
+- Line 303: `variable_instance = variables` preserves original reference before mutation
+- Line 305: `variables = variables.model_dump()` only mutates the local binding
+- Line 309: `variable_instance=variable_instance` passes original Pydantic model to PromptService
+- PromptService diagnostic path (`hasattr(variable_instance, 'model_fields')`) will now work correctly
+
+### Fix 3: pipeline_name single-regex bug (was MEDIUM) -- RESOLVED
+**File:** `llm_pipeline/pipeline.py`
+**Verification:**
+- Line 272: `return to_snake_case(class_name, strip_suffix="Pipeline")` replaces old single-regex
+- `import re` removed from pipeline.py (no remaining `re.` usage confirmed)
+- Consecutive capitals like `HTMLPipeline` will now correctly produce `html` instead of `htmlpipeline`
+
+### Fix 4: Unclosed SQLite connection in test (was LOW) -- RESOLVED
+**File:** `tests/test_agent_registry_core.py`
+**Verification:**
+- Lines 453-454: `session.close()` and `engine.dispose()` added after assertion
+- ResourceWarning no longer appears in test output
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\CLAUDE.md`
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Tests pass | pass | 51 new + 854 existing pass; 1 pre-existing failure (UI test) unrelated |
+| No hardcoded values | pass | Unchanged from initial review |
+| Error handling present | pass | Unchanged from initial review |
+| Python 3.11+ | pass | `from __future__ import annotations` added correctly for forward refs |
+| Pydantic v2 | pass | Unchanged from initial review |
+| Hatchling build | pass | Unchanged from initial review |
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/agent_builders.py | pass | TYPE_CHECKING guard + lazy import correctly implemented |
+| llm_pipeline/step.py | pass | variable_instance preserved before model_dump() |
+| llm_pipeline/pipeline.py | pass | to_snake_case replaces single-regex, `import re` removed |
+| tests/test_agent_registry_core.py | pass | session.close() + engine.dispose() added, no ResourceWarning |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+All 4 issues from initial review are correctly fixed. Fixes are minimal and targeted. No regressions (854 pass, up from 853). Implementation is ready to merge.
