@@ -247,7 +247,7 @@ class TestBuildStepAgent:
 
 
 # ============================================================
-# step.py - LLMStep.get_agent(), build_user_prompt(), create_llm_call() deprecation
+# step.py - LLMStep.get_agent(), build_user_prompt() deprecation
 # ============================================================
 
 class TestLLMStepMethods:
