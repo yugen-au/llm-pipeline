@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/4-otel-event-system
 ## Plugins: backend-development, observability-monitoring, python-development
@@ -22,9 +22,9 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a960cdaac04338850 | b16dd7c1 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7ddf70998337c775 | ef432117 | - |
 | Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a4f150e3d1f795a1b | 080e13d1 | /pydantic/pydantic-ai/v1_0_5 |
-| Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | a1246e0ff41c38f10 | 188cc5a6 | - |
-| instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
-| instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | a1246e0ff41c38f10 | 188cc5a6,080e13d1 | - |
+| instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture consensus path | backend-development:backend-architect | implementation | 6 | - | C | pending | 0 | pending | pending | - |
 | Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | pending | 0 | pending | pending | - |
