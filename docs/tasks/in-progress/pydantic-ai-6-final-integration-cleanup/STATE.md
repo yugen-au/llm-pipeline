@@ -25,6 +25,6 @@
 | Delete llm/ dir and dead code | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a8325af6e72c2f431 | 5592dea0 | - |
 | Fix test assertion | python-development:python-pro | implementation | 3 | - | A | complete | 0 | a9ecd779c11c6f026 | 5592dea0 | - |
 | Update source docstrings | python-development:python-pro | implementation | 4 | - | B | complete | 0 | abd038b2400c9413a | a04ecc5c | - |
-| Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | in-progress | 0 | pending | pending | - |
+| Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | complete | 0 | a0d39f2531c916d9b | a04ecc5c | - |
 | Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | pending | 0 | pending | pending | - |
 | Update docs/api/index and delete llm.md | python-development:python-pro | implementation | 7 | - | C | pending | 0 | pending | pending | - |
