@@ -112,3 +112,9 @@
 [2026-03-12 12:26:02] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 12:26:09] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 12:26:24] [DEBUG] STATE.md atomic write complete
+[2026-03-12 12:26:40] [INFO] Already committed implementation-F: ['step-8-replace-mockprovider.md']
+[2026-03-12 12:26:42] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-03-12 12:26:42] [INFO] Updated Commits for 'Replace MockProvider': b02fac1e
+[2026-03-12 12:26:42] [INFO] Auto-updated agent statuses: Rewrite prepare_calls: pending -> in-progress
+[2026-03-12 12:26:42] [INFO] Deleted 1 old contract file(s)
+[2026-03-12 12:26:42] [DEBUG] STATE.md atomic write complete
