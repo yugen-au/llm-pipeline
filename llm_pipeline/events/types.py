@@ -392,8 +392,9 @@ class ConsensusStarted(StepScopedEvent):
 
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
 
-    threshold: int
+    threshold: float
     max_calls: int
+    strategy_name: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -413,7 +414,7 @@ class ConsensusReached(StepScopedEvent):
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
 
     attempt: int
-    threshold: int
+    threshold: float
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

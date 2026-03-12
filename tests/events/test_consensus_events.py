@@ -9,13 +9,17 @@ different outputs -> consensus failed).
 import pytest
 from unittest.mock import patch, MagicMock
 
+from llm_pipeline import MajorityVoteStrategy, PipelineStrategy
 from llm_pipeline.events.types import (
     ConsensusStarted,
     ConsensusAttempt,
     ConsensusReached,
     ConsensusFailed,
 )
-from conftest import SuccessPipeline, SimpleInstructions, make_simple_run_result
+from conftest import (
+    SuccessPipeline, SimpleStep,
+    make_simple_run_result,
+)
 
 
 # -- Helpers -------------------------------------------------------------------
@@ -29,8 +33,23 @@ def _make_responses(counts):
     return results
 
 
+def _consensus_strategies(threshold, max_calls):
+    """Build strategy instances with MajorityVoteStrategy on both steps."""
+    mv = MajorityVoteStrategy(threshold=threshold, max_attempts=max_calls)
+
+    class ConsensusTestStrategy(PipelineStrategy):
+        def can_handle(self, context):
+            return True
+        def get_steps(self):
+            return [
+                SimpleStep.create_definition(consensus_strategy=mv),
+                SimpleStep.create_definition(consensus_strategy=mv),
+            ]
+    return [ConsensusTestStrategy()]
+
+
 def _run_consensus_pipeline(seeded_session, handler, counts, threshold=2, max_calls=5):
-    """Execute SuccessPipeline with consensus_polling enabled.
+    """Execute SuccessPipeline with per-step MajorityVoteStrategy.
 
     SuccessPipeline has 2 SimpleSteps. Each step produces 1 call_params entry,
     so _execute_with_consensus runs once per step.
@@ -54,16 +73,12 @@ def _run_consensus_pipeline(seeded_session, handler, counts, threshold=2, max_ca
         session=seeded_session,
         model="test-model",
         event_emitter=handler,
+        strategies=_consensus_strategies(threshold, max_calls),
     )
     with patch("pydantic_ai.Agent.run_sync", side_effect=_side_effect):
         pipeline.execute(
             data="test data",
             initial_context={},
-            consensus_polling={
-                "enable": True,
-                "consensus_threshold": threshold,
-                "maximum_step_calls": max_calls,
-            },
         )
     return pipeline, handler.get_events()
 
@@ -396,21 +411,17 @@ class TestConsensusZeroOverhead:
     """Verify no crash when event_emitter=None."""
 
     def test_no_events_without_emitter(self, seeded_session):
-        """Pipeline with consensus_polling but no event_emitter runs without error."""
+        """Pipeline with consensus_strategy but no event_emitter runs without error."""
         pipeline = SuccessPipeline(
             session=seeded_session,
             model="test-model",
             event_emitter=None,
+            strategies=_consensus_strategies(threshold=2, max_calls=5),
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
             result = pipeline.execute(
                 data="test data",
                 initial_context={},
-                consensus_polling={
-                    "enable": True,
-                    "consensus_threshold": 2,
-                    "maximum_step_calls": 5,
-                },
             )
         assert result is not None
         assert "total" in result.context

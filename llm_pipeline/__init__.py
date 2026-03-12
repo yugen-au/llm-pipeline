@@ -17,6 +17,14 @@ Usage::
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.step import LLMStep, LLMResultMixin, step_definition
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies, StepDefinition
+from llm_pipeline.consensus import (
+    ConsensusStrategy,
+    ConsensusResult,
+    MajorityVoteStrategy,
+    ConfidenceWeightedStrategy,
+    AdaptiveStrategy,
+    SoftVoteStrategy,
+)
 from llm_pipeline.context import PipelineContext, PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
@@ -82,4 +90,11 @@ __all__ = [
     "not_found_validator",
     "array_length_validator",
     "DEFAULT_NOT_FOUND_INDICATORS",
+    # Consensus
+    "ConsensusStrategy",
+    "ConsensusResult",
+    "MajorityVoteStrategy",
+    "ConfidenceWeightedStrategy",
+    "AdaptiveStrategy",
+    "SoftVoteStrategy",
 ]
