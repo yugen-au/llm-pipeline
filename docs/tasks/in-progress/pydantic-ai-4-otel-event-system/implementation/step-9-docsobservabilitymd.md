@@ -38,3 +38,37 @@ New file with sections: Overview, Installation, Configuration, Content Capture (
 [x] Environment variables section covers OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS, OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES
 [x] No pydantic-ai global Agent.instrument_all() mentioned (per-agent only)
 [x] Consensus token aggregation behavior documented in Event Fields section
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] docs/observability.md does not mention total_requests on StepCompleted vs PipelineStepState distinction
+
+### Changes Made
+#### File: `docs/observability.md`
+Clarified that `total_requests` is DB-only (not on events) in two places:
+
+```
+# Before (Token Tracking table)
+| `total_requests` | `int \| None` | Number of LLM requests made (includes consensus attempts) |
+
+# After
+| `total_requests` | `int \| None` | Number of LLM requests made (includes consensus attempts). **DB-only** -- not available on event objects. |
+```
+
+```
+# Before (StepCompleted section, after table)
+The `StepCompleted` totals match what is persisted to `PipelineStepState`, giving you the true cost of the step including all consensus attempts.
+
+# After
+The `StepCompleted` token totals match what is persisted to `PipelineStepState`, giving you the true cost of the step including all consensus attempts.
+
+> **Note:** `total_requests` is only available on the `PipelineStepState` database record, not on `StepCompleted` events. To count requests per step, query the database rather than accumulating from events.
+```
+
+### Verification
+[x] PipelineStepState table marks total_requests as DB-only
+[x] StepCompleted section has explicit note that total_requests is absent from events
+[x] Guidance on where to get request counts (query DB, not events)
