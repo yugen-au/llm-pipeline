@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-12 17:14
+## Last Updated: 2026-03-12 17:18
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -23,7 +23,7 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a7ddf70998337c775 | ef432117 | - |
 | Token fields on PipelineStepState | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a4f150e3d1f795a1b | 080e13d1 | /pydantic/pydantic-ai/v1_0_5 |
 | Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | a1246e0ff41c38f10 | 188cc5a6,080e13d1 | - |
-| instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a4b8f05ba7e3f72e9 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
 | instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture consensus path | backend-development:backend-architect | implementation | 6 | - | C | pending | 0 | pending | pending | - |
