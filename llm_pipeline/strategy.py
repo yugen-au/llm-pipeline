@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from llm_pipeline.naming import to_snake_case
 
 if TYPE_CHECKING:
+    from llm_pipeline.consensus import ConsensusStrategy
     from llm_pipeline.extraction import PipelineExtraction
     from llm_pipeline.transformation import PipelineTransformation
 
@@ -37,6 +38,7 @@ class StepDefinition:
     context: Optional[Type] = None  # Type is PipelineContext but avoid circular import
     agent_name: str | None = None
     not_found_indicators: list[str] | None = None
+    consensus_strategy: 'ConsensusStrategy | None' = None
 
     @property
     def step_name(self) -> str:
