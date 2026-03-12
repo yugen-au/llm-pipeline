@@ -119,6 +119,11 @@ class ConsensusStrategy(ABC):
     def max_attempts(self) -> int:
         """Maximum number of LLM calls the orchestrator should make."""
 
+    @property
+    @abstractmethod
+    def threshold(self) -> float:
+        """Strategy-specific threshold used for event reporting."""
+
     @abstractmethod
     def should_continue(
         self,
@@ -161,6 +166,10 @@ class MajorityVoteStrategy(ConsensusStrategy):
     @property
     def max_attempts(self) -> int:
         return self._max_attempts
+
+    @property
+    def threshold(self) -> float:
+        return float(self._threshold)
 
     def should_continue(
         self,
@@ -219,6 +228,10 @@ class ConfidenceWeightedStrategy(ConsensusStrategy):
     @property
     def max_attempts(self) -> int:
         return self._max_attempts
+
+    @property
+    def threshold(self) -> float:
+        return self._threshold
 
     # ------------------------------------------------------------------
     # helpers
@@ -308,6 +321,10 @@ class AdaptiveStrategy(ConsensusStrategy):
     def max_attempts(self) -> int:
         return self._max_attempts
 
+    @property
+    def threshold(self) -> float:
+        return float(self._initial_threshold)
+
     def _effective_threshold(self, attempt: int, max_attempts: int) -> int:
         progress = attempt / max(max_attempts, 1)
         if progress > 0.7:
@@ -369,6 +386,10 @@ class SoftVoteStrategy(ConsensusStrategy):
     @property
     def max_attempts(self) -> int:
         return self._max_attempts
+
+    @property
+    def threshold(self) -> float:
+        return self._confidence_floor
 
     @staticmethod
     def _avg_confidence(group: list[Any]) -> float:

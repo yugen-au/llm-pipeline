@@ -95,7 +95,7 @@ EVENT_FIXTURES = [
     ("llm_call_failed", {**_STEP, "max_retries": 3, "last_error": "failed"}),
     ("llm_call_rate_limited", {**_STEP, "attempt": 1, "wait_seconds": 1.0, "backoff_type": "exponential"}),
     # Consensus (4)
-    ("consensus_started", {**_STEP, "threshold": 2, "max_calls": 6}),
+    ("consensus_started", {**_STEP, "threshold": 2.0, "max_calls": 6, "strategy_name": "majority_vote"}),
     ("consensus_attempt", {**_STEP, "attempt": 1, "group_count": 3}),
     ("consensus_reached", {**_STEP, "attempt": 2, "threshold": 2}),
     ("consensus_failed", {**_STEP, "max_calls": 6, "largest_group_size": 1}),

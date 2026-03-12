@@ -25,6 +25,7 @@ from llm_pipeline import (
     PipelineContext,
     PipelineDatabaseRegistry,
     PipelineStepState,
+    MajorityVoteStrategy,
 )
 from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.db import init_pipeline_db
@@ -93,6 +94,18 @@ class TokenPipeline(
     agent_registry=TokenAgentRegistry,
 ):
     pass
+
+
+def _consensus_token_strategies(threshold, max_calls):
+    """Build strategy instances with MajorityVoteStrategy on the token step."""
+    mv = MajorityVoteStrategy(threshold=threshold, max_attempts=max_calls)
+
+    class ConsensusTokenTestStrategy(PipelineStrategy):
+        def can_handle(self, context):
+            return True
+        def get_steps(self):
+            return [TokenStep.create_definition(consensus_strategy=mv)]
+    return [ConsensusTokenTestStrategy()]
 
 
 # ---------------------------------------------------------------------------
@@ -369,16 +382,10 @@ class TestConsensusTokenAggregation:
         pipeline = TokenPipeline(
             session=token_session, model="test-model",
             event_emitter=handler,
+            strategies=_consensus_token_strategies(threshold, max_calls),
         )
         with patch("pydantic_ai.Agent.run_sync", side_effect=_side_effect):
-            pipeline.execute(
-                data="d", initial_context={},
-                consensus_polling={
-                    "enable": True,
-                    "consensus_threshold": threshold,
-                    "maximum_step_calls": max_calls,
-                },
-            )
+            pipeline.execute(data="d", initial_context={})
         return pipeline
 
     def test_consensus_sums_input_tokens(self, token_engine, token_session, handler):
@@ -511,16 +518,12 @@ class TestNullAndZeroUsage:
     def test_none_usage_consensus_no_crash(self, token_engine, token_session):
         """Consensus path completes when usage() returns None."""
         result_none = _make_run_result_no_usage(count=1)
-        pipeline = TokenPipeline(session=token_session, model="test-model")
+        pipeline = TokenPipeline(
+            session=token_session, model="test-model",
+            strategies=_consensus_token_strategies(threshold=2, max_calls=5),
+        )
         with patch("pydantic_ai.Agent.run_sync", return_value=result_none):
-            result = pipeline.execute(
-                data="d", initial_context={},
-                consensus_polling={
-                    "enable": True,
-                    "consensus_threshold": 2,
-                    "maximum_step_calls": 5,
-                },
-            )
+            result = pipeline.execute(data="d", initial_context={})
         assert result is pipeline
 
 

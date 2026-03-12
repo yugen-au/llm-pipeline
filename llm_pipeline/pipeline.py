@@ -30,6 +30,7 @@ from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
 
 from llm_pipeline.context import PipelineInputData
+from llm_pipeline.consensus import instructions_match, ConsensusResult
 from llm_pipeline.naming import to_snake_case
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
     from llm_pipeline.registry import PipelineDatabaseRegistry
     from llm_pipeline.agent_registry import AgentRegistry
+    from llm_pipeline.consensus import ConsensusStrategy
     from llm_pipeline.state import PipelineStepState
     from llm_pipeline.prompts.variables import VariableResolver
     from llm_pipeline.events.emitter import PipelineEventEmitter
@@ -456,9 +458,8 @@ class PipelineConfig(ABC):
         initial_context: Optional[Dict[str, Any]] = None,
         input_data: Optional[Dict[str, Any]] = None,
         use_cache: bool = False,
-        consensus_polling: Optional[Dict[str, Any]] = None,
     ) -> "PipelineConfig":
-        """Execute pipeline steps with optional caching and consensus polling."""
+        """Execute pipeline steps with optional caching and per-step consensus."""
         if initial_context is None:
             initial_context = {}
 
@@ -478,20 +479,6 @@ class PipelineConfig(ABC):
 
         # Create prompt service from pipeline session
         prompt_service = PromptService(self._real_session)
-
-        # Parse consensus config
-        use_consensus = False
-        consensus_threshold = 3
-        maximum_step_calls = 5
-        if consensus_polling:
-            use_consensus = consensus_polling.get("enable", False)
-            consensus_threshold = consensus_polling.get("consensus_threshold", 3)
-            maximum_step_calls = consensus_polling.get("maximum_step_calls", 5)
-            if use_consensus:
-                if consensus_threshold < 2:
-                    raise ValueError("consensus_threshold must be >= 2")
-                if maximum_step_calls < consensus_threshold:
-                    raise ValueError("maximum_step_calls must be >= consensus_threshold")
 
         # Validate input_data against INPUT_DATA schema if declared
         cls = self.__class__
@@ -718,10 +705,10 @@ class PipelineConfig(ABC):
                                 input_hash=input_hash,
                             ))
                         logger.info("  [FRESH] No cache found, running fresh")
-                    if use_consensus:
+                    if step_def.consensus_strategy is not None:
                         logger.info(
-                            f"  [CONSENSUS POLLING] threshold={consensus_threshold}, "
-                            f"max_calls={maximum_step_calls}"
+                            f"  [CONSENSUS] strategy={step_def.consensus_strategy.name}, "
+                            f"max_attempts={step_def.consensus_strategy.max_attempts}"
                         )
 
                     call_params = step.prepare_calls()
@@ -814,14 +801,14 @@ class PipelineConfig(ABC):
                                 rendered_user_prompt=user_prompt,
                             ))
 
-                        if use_consensus:
+                        if step_def.consensus_strategy is not None:
                             # Consensus path: per-attempt LLMCallCompleted events
                             # are emitted inside _execute_with_consensus
                             instruction, _c_input, _c_output, _c_requests = (
                                 self._execute_with_consensus(
                                     agent, user_prompt, step_deps, output_type,
-                                    consensus_threshold, maximum_step_calls,
-                                    current_step_name,
+                                    strategy=step_def.consensus_strategy,
+                                    current_step_name=current_step_name,
                                 )
                             )
                             # Merge consensus token totals into step-level accumulators
@@ -1222,48 +1209,11 @@ class PipelineConfig(ABC):
         engine = session.get_bind()
         SM.metadata.create_all(engine, tables=[model_class.__table__])
 
-    @staticmethod
-    def _get_mixin_fields(model_class: Type[BaseModel]) -> set:
-        from llm_pipeline.step import LLMResultMixin
-        if not issubclass(model_class, LLMResultMixin):
-            return set()
-        return set(LLMResultMixin.model_fields.keys())
-
-    @staticmethod
-    def _smart_compare(value1, value2, field_name="", mixin_fields=None) -> bool:
-        if mixin_fields and field_name in mixin_fields:
-            return True
-        if isinstance(value1, str) or isinstance(value2, str):
-            return True
-        if value1 is None or value2 is None:
-            return True
-        if isinstance(value1, (int, float, bool)) and isinstance(value2, (int, float, bool)):
-            return value1 == value2
-        if isinstance(value1, list) and isinstance(value2, list):
-            if len(value1) != len(value2):
-                return False
-            return all(
-                PipelineConfig._smart_compare(v1, v2, "", mixin_fields)
-                for v1, v2 in zip(value1, value2)
-            )
-        if isinstance(value1, dict) and isinstance(value2, dict):
-            if set(value1.keys()) != set(value2.keys()):
-                return False
-            return all(
-                PipelineConfig._smart_compare(value1[k], value2[k], k, mixin_fields)
-                for k in value1
-            )
-        return True
-
-    @staticmethod
-    def _instructions_match(instr1: BaseModel, instr2: BaseModel) -> bool:
-        mixin_fields = PipelineConfig._get_mixin_fields(type(instr1))
-        dict1 = instr1.model_dump()
-        dict2 = instr2.model_dump()
-        return PipelineConfig._smart_compare(dict1, dict2, mixin_fields=mixin_fields)
-
-    def _execute_with_consensus(self, agent, user_prompt, step_deps, output_type, consensus_threshold, maximum_step_calls, current_step_name):
-        """Execute LLM calls with consensus polling, accumulating token usage.
+    def _execute_with_consensus(
+        self, agent, user_prompt, step_deps, output_type,
+        strategy: 'ConsensusStrategy', current_step_name: str,
+    ):
+        """Execute LLM calls with consensus strategy, accumulating token usage.
 
         Returns:
             tuple of (result, total_input_tokens, total_output_tokens, total_requests)
@@ -1284,10 +1234,12 @@ class PipelineConfig(ABC):
                 run_id=self.run_id,
                 pipeline_name=self.pipeline_name,
                 step_name=current_step_name,
-                threshold=consensus_threshold,
-                max_calls=maximum_step_calls,
+                threshold=strategy.threshold,
+                max_calls=strategy.max_attempts,
+                strategy_name=strategy.name,
             ))
-        for attempt in range(maximum_step_calls):
+
+        for attempt in range(strategy.max_attempts):
             _call_input_tokens = None
             _call_output_tokens = None
             _call_total_tokens = None
@@ -1333,13 +1285,14 @@ class PipelineConfig(ABC):
             results.append(instruction)
             matched_group = None
             for group in result_groups:
-                if self._instructions_match(instruction, group[0]):
+                if instructions_match(instruction, group[0]):
                     group.append(instruction)
                     matched_group = group
                     break
             if matched_group is None:
                 result_groups.append([instruction])
                 matched_group = result_groups[-1]
+
             if self._event_emitter:
                 self._emit(ConsensusAttempt(
                     run_id=self.run_id,
@@ -1348,38 +1301,40 @@ class PipelineConfig(ABC):
                     attempt=attempt + 1,
                     group_count=len(result_groups),
                 ))
-            if len(matched_group) >= consensus_threshold:
-                logger.info(
-                    f"  [CONSENSUS] Reached on attempt {attempt + 1}/{maximum_step_calls}"
-                )
-                if self._event_emitter:
-                    self._emit(ConsensusReached(
-                        run_id=self.run_id,
-                        pipeline_name=self.pipeline_name,
-                        step_name=current_step_name,
-                        attempt=attempt + 1,
-                        threshold=consensus_threshold,
-                    ))
-                return (
-                    matched_group[0],
-                    _consensus_input_tokens if _has_any_usage else None,
-                    _consensus_output_tokens if _has_any_usage else None,
-                    _consensus_requests,
-                )
 
-        logger.info(f"  [NO CONSENSUS] After {maximum_step_calls} attempts")
-        largest_group = max(result_groups, key=len)
-        logger.info(f"  -> Using most common response ({len(largest_group)} occurrences)")
-        if self._event_emitter:
-            self._emit(ConsensusFailed(
-                run_id=self.run_id,
-                pipeline_name=self.pipeline_name,
-                step_name=current_step_name,
-                max_calls=maximum_step_calls,
-                largest_group_size=len(largest_group),
-            ))
+            if not strategy.should_continue(results, result_groups, attempt + 1, strategy.max_attempts):
+                break
+
+        consensus_result = strategy.select(results, result_groups)
+
+        if consensus_result.consensus_reached:
+            logger.info(
+                f"  [CONSENSUS] {strategy.name}: reached after {consensus_result.total_attempts} attempts"
+            )
+            if self._event_emitter:
+                self._emit(ConsensusReached(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    step_name=current_step_name,
+                    attempt=consensus_result.total_attempts,
+                    threshold=strategy.threshold,
+                ))
+        else:
+            logger.info(
+                f"  [NO CONSENSUS] {strategy.name}: after {consensus_result.total_attempts} attempts"
+            )
+            largest_group = max(result_groups, key=len)
+            if self._event_emitter:
+                self._emit(ConsensusFailed(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    step_name=current_step_name,
+                    max_calls=strategy.max_attempts,
+                    largest_group_size=len(largest_group),
+                ))
+
         return (
-            largest_group[0],
+            consensus_result.result,
             _consensus_input_tokens if _has_any_usage else None,
             _consensus_output_tokens if _has_any_usage else None,
             _consensus_requests,
