@@ -47,6 +47,7 @@ def _make_app():
     )
     app.state.engine = engine
     app.state.pipeline_registry = {}
+    app.state.default_model = "test-model"
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
