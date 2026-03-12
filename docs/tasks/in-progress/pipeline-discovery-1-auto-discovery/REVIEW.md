@@ -81,3 +81,28 @@ Required before merge:
 Recommended (not blocking):
 1. Add `app.state.introspection_registry = {}` to conftest `_make_app()` for fixture consistency
 2. Pass `default_model="test-model"` to the two 404 test `create_app()` calls to suppress warning noise
+
+---
+
+# Re-Review (post-fix)
+
+## Fix Verified
+The previously required change -- "Add test: `trigger_run` returns 422 when pipeline exists but `default_model` is None" -- has been addressed by `test_returns_422_when_no_model_configured` in `tests/ui/test_runs.py`.
+
+**Test correctness:** The new test (1) creates an app with a registered pipeline but `default_model=None`, (2) POSTs to trigger that pipeline, (3) asserts HTTP 422, and (4) verifies the detail message contains both "No model configured" and "LLM_PIPELINE_MODEL". This covers the exact gap identified: the 422 guard path is now exercised and regression-protected. All 25 tests in `test_runs.py` pass.
+
+## Remaining Issues Assessment
+
+### conftest _make_app missing introspection_registry (previously MEDIUM)
+**Disposition:** Out of scope. This is pre-existing behavior not introduced by this task. The route safely defaults via `getattr(request.app.state, "introspection_registry", {})`. No runtime risk. Can be tracked as a separate cleanup item.
+
+### Factory closure model=None bypass (previously LOW)
+**Disposition:** Accepted. The 422 guard now has test coverage confirming it blocks the path. Risk is mitigated.
+
+### Startup warning noise in 404 tests (previously LOW)
+**Disposition:** Accepted. Cosmetic only, no functional impact. The new 422 test intentionally relies on `default_model=None` so the warning is expected there.
+
+## Updated Recommendation
+**Decision:** APPROVE
+
+All required changes addressed. The 422 model guard has test coverage. Implementation is architecturally sound, backward-compatible, and aligned with PLAN.md. Remaining issues are pre-existing (conftest) or cosmetic (warning noise) -- neither blocks merge. No new issues introduced by the fix.
