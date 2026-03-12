@@ -154,3 +154,8 @@
 [2026-03-12 19:33:40] [DEBUG] STATE.md atomic write complete
 [2026-03-12 19:37:42] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 19:38:01] [DEBUG] STATE.md atomic write complete
+[2026-03-12 19:38:21] [INFO] Already committed fixing-review-A: ['step-1-token-fields-on-pipelinestepstate.md', 'step-2-token-fields-on-events.md']
+[2026-03-12 19:38:24] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-12 19:38:24] [INFO] Auto-updated agent statuses: Token capture normal path: pending -> in-progress
+[2026-03-12 19:38:24] [INFO] Deleted 1 old contract file(s)
+[2026-03-12 19:38:24] [DEBUG] STATE.md atomic write complete

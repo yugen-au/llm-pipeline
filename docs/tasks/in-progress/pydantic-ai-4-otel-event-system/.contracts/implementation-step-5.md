@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-4-otel-event-system
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-1-token-fields-on-pipelinestepstate.md (if already exists, APPEND to file)
+- Output Files: implementation\step-5-token-capture-normal-path.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 1
+- Step to fix: 5
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. Context7 library IDs to query: /pydantic/pydantic-ai/v1_0_5
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 1
+1. Read REVIEW.md for issues assigned to Step 5
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-1-token-fields-on-pipelinestepstate.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-5-token-capture-normal-path.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
