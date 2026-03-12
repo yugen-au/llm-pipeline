@@ -5,3 +5,8 @@
 [2026-03-12 21:01:25] [INFO] Created: STATE.md
 [2026-03-12 21:01:25] [INFO] ============================================================
 [2026-03-12 21:01:25] [DEBUG] STATE.md atomic write complete
+[2026-03-12 21:02:17] [ERROR] BLOCKED: Invalid AgentRow 'Codebase Architecture': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-03-12 21:02:28] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-03-12 21:02:39] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-03-12 21:02:39] [INFO] Auto-updated agent statuses: Codebase Architecture: pending -> in-progress, Python Patterns: pending -> in-progress
+[2026-03-12 21:02:39] [DEBUG] STATE.md atomic write complete
