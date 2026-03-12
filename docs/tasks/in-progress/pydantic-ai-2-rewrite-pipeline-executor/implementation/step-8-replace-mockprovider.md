@@ -147,3 +147,45 @@ Files inspected (all already correct):
 
 ### Verification
 - [x] `uv run pytest tests/events/ -x --tb=short` — 384 passed in 5.23s
+
+---
+
+## Review Fix Iteration 2
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+- [x] `tests/benchmarks/test_event_overhead.py`: 3 fixtures using `provider=MagicMock()` — constructor no longer accepts `provider=`
+- [x] `tests/events/conftest.py`: dead `MockProvider` stub class no longer imported by any test file
+
+### Changes Made
+#### File: `tests/benchmarks/test_event_overhead.py`
+Removed `MagicMock` import. Replaced `provider=MagicMock()` with `model="test-model"` in all 3 fixtures (`minimal_pipeline`, `pipeline_with_logging`, `pipeline_with_inmemory`). No Agent.run_sync patch needed — `BenchmarkStrategies` has no steps so no LLM calls occur.
+```
+# Before
+from unittest.mock import MagicMock
+pipeline = BenchmarkPipeline(strategies=[], session=session, provider=MagicMock())
+
+# After
+pipeline = BenchmarkPipeline(strategies=[], session=session, model="test-model")
+```
+
+#### File: `tests/events/conftest.py`
+Deleted the backward-compat `MockProvider` stub block (lines 371-381). Confirmed via grep that no test file imports `MockProvider` — the stub was truly dead.
+```
+# Before
+# -- Backward-compat stub ...
+class MockProvider:
+    """Stub retained for import compatibility. Do not use in new tests."""
+    def __init__(self, responses=None, should_fail=False):
+        self._responses = responses or []
+        self._should_fail = should_fail
+
+# After
+# (block removed)
+```
+
+### Verification
+- [x] `pytest tests/benchmarks/test_event_overhead.py --benchmark-skip` — 3 skipped (collected without error)
+- [x] `pytest tests/events/ --collect-only` — 384 tests collected, 0 errors
+- [x] `grep -r MockProvider tests/` — only match is conftest.py itself (now gone)

@@ -9,7 +9,6 @@ Uses benchmark.pedantic() for sub-millisecond precision.
 """
 
 import logging
-from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine
@@ -70,7 +69,7 @@ def minimal_pipeline(benchmark_engine):
         pipeline = BenchmarkPipeline(
             strategies=[],
             session=session,
-            provider=MagicMock(),
+            model="test-model",
         )
         yield pipeline
     finally:
@@ -90,7 +89,7 @@ def pipeline_with_logging(benchmark_engine):
         pipeline = BenchmarkPipeline(
             strategies=[],
             session=session,
-            provider=MagicMock(),
+            model="test-model",
             event_emitter=emitter,
         )
         yield pipeline
@@ -108,7 +107,7 @@ def pipeline_with_inmemory(benchmark_engine):
         pipeline = BenchmarkPipeline(
             strategies=[],
             session=session,
-            provider=MagicMock(),
+            model="test-model",
             event_emitter=emitter,
         )
         yield pipeline

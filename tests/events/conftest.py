@@ -368,19 +368,6 @@ class TransformationPipeline(
     pass
 
 
-# -- Backward-compat stub (to be removed when all event tests are updated) ----
-# Tests in test_llm_call_events.py, test_cache_events.py, etc. still import
-# MockProvider. Keep a stub so imports don't fail at collection time.
-# These tests will fail at runtime until Step 9 updates them.
-
-class MockProvider:
-    """Stub retained for import compatibility. Do not use in new tests."""
-
-    def __init__(self, responses=None, should_fail=False):
-        self._responses = responses or []
-        self._should_fail = should_fail
-
-
 # -- Mock run_result builders --------------------------------------------------
 
 
