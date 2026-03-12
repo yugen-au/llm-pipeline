@@ -1,7 +1,11 @@
 """FastAPI application factory for llm-pipeline UI."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Optional, Type
+import importlib.metadata
+import inspect
+import logging
+import os
+from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +15,91 @@ from sqlmodel import create_engine
 from llm_pipeline.db import init_pipeline_db
 
 if TYPE_CHECKING:
+    from sqlalchemy import Engine
     from llm_pipeline.pipeline import PipelineConfig
+
+logger = logging.getLogger(__name__)
+
+
+def _make_pipeline_factory(
+    cls: Type[PipelineConfig], model: Optional[str]
+) -> Callable:
+    """Return a factory closure that instantiates *cls* with captured *model*.
+
+    The returned callable matches the signature expected by trigger_run:
+    ``(run_id, engine, event_emitter, **kwargs) -> PipelineConfig``.
+    """
+
+    def factory(
+        run_id: str,
+        engine: Engine,
+        event_emitter: object = None,
+        **kwargs: object,
+    ) -> PipelineConfig:
+        return cls(
+            model=model,
+            run_id=run_id,
+            engine=engine,
+            event_emitter=event_emitter,
+        )
+
+    return factory
+
+
+def _discover_pipelines(
+    engine: Engine, default_model: Optional[str]
+) -> Tuple[Dict[str, Callable], Dict[str, Type[PipelineConfig]]]:
+    """Scan ``llm_pipeline.pipelines`` entry-point group and build registries.
+
+    Returns:
+        Tuple of (pipeline_registry, introspection_registry) dicts keyed by
+        ``ep.name``.
+    """
+    from llm_pipeline.pipeline import PipelineConfig
+
+    pipeline_reg: Dict[str, Callable] = {}
+    introspection_reg: Dict[str, Type[PipelineConfig]] = {}
+
+    eps = importlib.metadata.entry_points(group="llm_pipeline.pipelines")
+    for ep in eps:
+        try:
+            cls = ep.load()
+            if not inspect.isclass(cls) or not issubclass(cls, PipelineConfig):
+                logger.warning(
+                    "Entry point '%s' does not reference a PipelineConfig "
+                    "subclass, skipping",
+                    ep.name,
+                )
+                continue
+            pipeline_reg[ep.name] = _make_pipeline_factory(cls, default_model)
+            introspection_reg[ep.name] = cls
+        except Exception:
+            logger.warning(
+                "Failed to load entry point '%s', skipping",
+                ep.name,
+                exc_info=True,
+            )
+            continue
+
+        # seed_prompts is optional; failure must not unregister the pipeline
+        try:
+            if hasattr(cls, "seed_prompts") and callable(cls.seed_prompts):
+                cls.seed_prompts(engine)
+        except Exception:
+            logger.warning(
+                "seed_prompts failed for '%s', pipeline still registered",
+                ep.name,
+                exc_info=True,
+            )
+
+    if pipeline_reg:
+        logger.info(
+            "Discovered %d pipeline(s): %s",
+            len(pipeline_reg),
+            ", ".join(sorted(pipeline_reg)),
+        )
+
+    return pipeline_reg, introspection_reg
 
 
 def create_app(
@@ -19,6 +107,8 @@ def create_app(
     cors_origins: Optional[list] = None,
     pipeline_registry: Optional[dict] = None,
     introspection_registry: Optional[Dict[str, Type[PipelineConfig]]] = None,
+    auto_discover: bool = True,
+    default_model: Optional[str] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -35,7 +125,15 @@ def create_app(
         introspection_registry: Optional mapping of pipeline names to
             PipelineConfig subclass types for class-level introspection.
             Separate from pipeline_registry which stores factory callables.
-            Consumed by introspection endpoints (task 24).
+            Consumed by introspection endpoints.
+        auto_discover: If True (default), scan the ``llm_pipeline.pipelines``
+            entry-point group and register discovered PipelineConfig
+            subclasses. Explicit *pipeline_registry* / *introspection_registry*
+            entries override any discovered entries with the same key.
+        default_model: pydantic-ai model string (e.g.
+            ``'google-gla:gemini-2.0-flash-lite'``). Falls back to
+            ``LLM_PIPELINE_MODEL`` env var. If neither is set, pipeline
+            execution will fail at call time (introspection still works).
 
     Returns:
         Configured FastAPI application instance.
@@ -65,8 +163,31 @@ def create_app(
     else:
         app.state.engine = init_pipeline_db()
 
-    app.state.pipeline_registry = pipeline_registry or {}
-    app.state.introspection_registry = introspection_registry or {}
+    # Model resolution: param > env > None
+    resolved_model = default_model or os.environ.get("LLM_PIPELINE_MODEL")
+    if resolved_model is None:
+        logger.warning(
+            "No default model configured. Set LLM_PIPELINE_MODEL or pass "
+            "default_model. Pipeline execution will fail without a model."
+        )
+    app.state.default_model = resolved_model
+
+    # Registry setup: discover then merge with explicit overrides winning
+    if auto_discover:
+        discovered_pipeline, discovered_introspection = _discover_pipelines(
+            app.state.engine, resolved_model
+        )
+        app.state.pipeline_registry = {
+            **discovered_pipeline,
+            **(pipeline_registry or {}),
+        }
+        app.state.introspection_registry = {
+            **discovered_introspection,
+            **(introspection_registry or {}),
+        }
+    else:
+        app.state.pipeline_registry = pipeline_registry or {}
+        app.state.introspection_registry = introspection_registry or {}
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router
