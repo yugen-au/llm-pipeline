@@ -17,8 +17,6 @@ The step module provides base classes and decorators for implementing LLM-powere
 
 ### Functions
 
-- [`_query_prompt_keys()`](#_query_prompt_keys) - Internal helper for database-driven prompt discovery
-
 ---
 
 ## LLMStep
@@ -578,53 +576,6 @@ class MyStrategy(PipelineStrategy):
 
 ---
 
-## _query_prompt_keys()
-
-Internal helper function for database-driven prompt key discovery.
-
-```python
-def _query_prompt_keys(
-    step_name: str,
-    session: Any,
-    strategy_name: Optional[str] = None,
-) -> Tuple[Optional[str], Optional[str]]
-```
-
-**Parameters:**
-
-- `step_name` (str) - Step name in snake_case (e.g., `'constraint_extraction'`)
-- `session` - Database session for querying prompts
-- `strategy_name` (str, optional) - Strategy name for strategy-specific prompts
-
-**Returns:** Tuple of `(system_key, user_key)` or `(None, None)` if not found
-
-**Search Pattern:**
-
-If `strategy_name` provided: searches for `{step_name}.{strategy_name}`
-Otherwise: searches for `{step_name}`
-
-**Example:**
-
-```python
-system_key, user_key = _query_prompt_keys(
-    step_name='constraint_extraction',
-    session=session,
-    strategy_name='lane_based'
-)
-# Searches for prompts with key 'constraint_extraction.lane_based'
-```
-
-**Database Query:**
-
-Searches `Prompt` table for:
-- `prompt_key == search_key`
-- `prompt_type IN ('system', 'user')`
-- `is_active == True`
-
-**Usage:** This function is called internally by pipeline execution logic to auto-discover prompts from the database when step definitions don't specify explicit keys.
-
----
-
 ## Module Exports
 
 ```python
@@ -719,5 +670,5 @@ class ClassificationStep(LLMStep):
 - [Pipeline API Reference](pipeline.md) - `PipelineConfig` class and data management
 - [Strategy API Reference](strategy.md) - `PipelineStrategy` and step definition registration
 - [Extraction API Reference](extraction.md) - `PipelineExtraction` for database model extraction
-- [LLM Provider API Reference](llm.md) - `execute_llm_step()` function and validation layers
+- [Pipeline API Reference](pipeline.md) - Pipeline execution and validation layers
 - [Getting Started Guide](../guides/getting-started.md) - Complete working examples

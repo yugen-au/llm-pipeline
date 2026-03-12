@@ -9,7 +9,6 @@ Declarative LLM pipeline orchestration framework. Extracted from logistics-intel
 - SQLModel / SQLAlchemy 2.0
 - PyYAML
 - Hatchling (build)
-- Optional: google-generativeai (Gemini provider)
 
 ## Architecture
 Pipeline + Strategy + Step pattern:
@@ -20,7 +19,7 @@ Pipeline + Strategy + Step pattern:
 - `PipelineExtraction` / `PipelineTransformation` - data extraction and transformation
 - `PipelineDatabaseRegistry` - DB-backed registry for pipeline state
 - `PipelineStepState` / `PipelineRunInstance` - execution state tracking
-- `LLMProvider` (abstract) with `GeminiProvider` implementation
+- pydantic-ai Agent system via AgentRegistry and agent_builders.py
 - `ReadOnlySession` - safe DB session wrapper
 
 ## MCP Servers
@@ -35,7 +34,7 @@ Pipeline + Strategy + Step pattern:
 
 ## Development Notes
 - Build with `hatchling`
-- Test deps in `[project.optional-dependencies].dev`
+- Test deps and pydantic-ai in `[project.optional-dependencies].dev`; pydantic-ai also in core deps
 - Pytest configured in `[tool.pytest.ini_options]` in pyproject.toml
 
 ## Graphiti Group ID

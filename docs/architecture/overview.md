@@ -366,7 +366,7 @@ lane_id = rate_card.lanes[0].id  # ID available via flush
 1. **Initialization**
    ```python
    pipeline = RateCardParserPipeline(
-       provider=GeminiProvider(api_key="..."),
+       model='google-gla:gemini-2.0-flash-lite',
        engine=engine,  # Optional, auto-SQLite if omitted
    )
    ```
@@ -681,20 +681,22 @@ pipeline.execute(
 
 ### Extension Points
 
-#### 1. Custom LLM Provider
+#### 1. LLM Model Selection
 
-Implement `LLMProvider` abstract class:
+llm-pipeline uses pydantic-ai model strings to configure which LLM to use:
 
 ```python
-from llm_pipeline.llm.provider import LLMProvider
+# Google Gemini
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 
-class CustomProvider(LLMProvider):
-    def call_structured(self, prompt, system_instruction, result_class, **kwargs):
-        # Your LLM integration here
-        return result_dict
+# OpenAI
+pipeline = MyPipeline(model='openai:gpt-4o')
+
+# Anthropic
+pipeline = MyPipeline(model='anthropic:claude-3-5-sonnet-latest')
 ```
 
-**Current Implementation**: `GeminiProvider` (Google Gemini)
+See [pydantic-ai model configuration](https://ai.pydantic.dev/models/) for supported providers.
 
 #### 2. Custom Sanitization
 
@@ -852,9 +854,10 @@ class CustomExtraction(PipelineExtraction, model=MyModel):
 - **SQLAlchemy 2.0**: Database ORM and session management
 - **PyYAML**: Prompt template storage
 
+- **pydantic-ai**: LLM agent framework for structured output
+
 ### Optional Dependencies
 
-- **google-generativeai**: Gemini provider implementation (`[gemini]` extra)
 - **pytest**: Test runner (`[dev]` extra)
 - **pytest-cov**: Coverage reporting (`[dev]` extra)
 
@@ -865,8 +868,7 @@ class CustomExtraction(PipelineExtraction, model=MyModel):
 
 ### LLM Providers
 
-- **Gemini**: Built-in via `GeminiProvider`
-- **Custom**: Implement `LLMProvider` abstract class
+LLM providers are configured via pydantic-ai model strings (e.g., `'google-gla:gemini-2.0-flash-lite'`, `'openai:gpt-4o'`). See [pydantic-ai docs](https://ai.pydantic.dev/models/) for supported providers.
 
 ## Deployment Considerations
 
@@ -874,7 +876,7 @@ class CustomExtraction(PipelineExtraction, model=MyModel):
 
 **Development** (auto-SQLite):
 ```python
-pipeline = MyPipeline(provider=provider)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 # SQLite database auto-created in memory or current directory
 ```
 
@@ -1123,9 +1125,9 @@ LLM provider API keys should be passed via environment variables, not hardcoded:
 
 ```python
 import os
-from llm_pipeline.llm.gemini import GeminiProvider
+os.environ["GEMINI_API_KEY"] = "..."  # Set before pipeline execution
 
-provider = GeminiProvider(api_key=os.getenv('GEMINI_API_KEY'))
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 ```
 
 ### Data Privacy
@@ -1174,15 +1176,7 @@ class LaneExtraction(_BaseExtraction):  # Validation skipped
 
 **By Design**: All consumer project concrete classes directly subclass their base. No multi-level inheritance in practice.
 
-### 4. Gemini-Only Provider
-
-**Issue**: Framework ships with only `GeminiProvider` implementation. No built-in support for OpenAI, Anthropic, etc.
-
-**Workaround**: Implement custom provider via `LLMProvider` abstract class.
-
-**Extension Point**: Designed for pluggability, just no other implementations included.
-
-### 5. save() Signature Inconsistency
+### 4. save() Signature Inconsistency
 
 **Documented Signature**: `save(session, tables)` where `tables` is `List[Type[SQLModel]]`
 
@@ -1232,7 +1226,7 @@ class LaneExtraction(PipelineExtraction, model=Lane):
         return [Lane(origin=c.origin, destination=c.destination)
                 for c in results[0].constraints]
 
-pipeline = MyPipeline(provider=GeminiProvider())
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 pipeline.execute(data=df, initial_context={})
 pipeline.save()  # All extractions committed
 ```
@@ -1288,8 +1282,7 @@ pipeline.save()  # All extractions committed
 - `llm_pipeline/registry.py` - PipelineDatabaseRegistry base class
 - `llm_pipeline/state.py` - PipelineStepState and PipelineRunInstance models
 - `llm_pipeline/session/readonly.py` - ReadOnlySession wrapper
-- `llm_pipeline/llm/executor.py` - execute_llm_step function
-- `llm_pipeline/llm/gemini.py` - GeminiProvider implementation
+- `llm_pipeline/agents/` - pydantic-ai Agent system via AgentRegistry and agent_builders.py
 - `llm_pipeline/prompts/service.py` - PromptService for template management
 
 ### Consumer Project

@@ -40,7 +40,7 @@ graph TB
     end
 
     subgraph "LLM & Database"
-        LP["<b>LLMProvider</b> ⟵ ABC<br/>execute_llm_step()"]
+        LP["<b>AgentRegistry</b><br/>pydantic-ai agents"]
         ROS["<b>ReadOnlySession</b><br/>Blocks write ops"]
     end
 

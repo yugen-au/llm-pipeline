@@ -189,63 +189,6 @@ For projects that need multi-level inheritance:
 
 **Impact**: Low - standard usage patterns do not involve multi-level inheritance
 
-## Provider Limitations
-
-### Gemini-Only LLM Provider
-
-**Issue**: The framework currently ships with only one `LLMProvider` implementation: `GeminiProvider`.
-
-**Details**:
-- The `LLMProvider` abstract base class is designed to support multiple providers (OpenAI, Anthropic, etc.)
-- Currently, only Google's Gemini models are implemented
-- Users requiring other LLM providers must implement custom providers
-
-**Creating Custom Providers**:
-Extend the `LLMProvider` abstract class and implement the `call_structured()` method:
-
-```python
-from llm_pipeline.llm.provider import LLMProvider
-from typing import Optional, Dict, Any, Type
-from pydantic import BaseModel
-
-class OpenAIProvider(LLMProvider):
-    """Custom OpenAI provider implementation."""
-
-    def __init__(self, api_key: str, model: str = "gpt-4"):
-        self.api_key = api_key
-        self.model = model
-
-    def call_structured(
-        self,
-        prompt: str,
-        system_instructions: str,
-        result_class: Type[BaseModel],
-        retries: int = 3,
-        rate_limiter: Optional[Any] = None
-    ) -> Optional[Dict[str, Any]]:
-        """Call OpenAI API with structured output."""
-        # Implementation details:
-        # 1. Format schema from result_class using Pydantic
-        # 2. Make API call to OpenAI
-        # 3. Parse and validate response
-        # 4. Return dict matching result_class schema
-        pass
-```
-
-Then use the custom provider in your pipeline:
-
-```python
-from your_module import OpenAIProvider
-
-provider = OpenAIProvider(api_key="sk-...", model="gpt-4")
-pipeline = YourPipeline(provider=provider)
-```
-
-**Impact**:
-- Low for Gemini users
-- Medium for users requiring alternative LLM providers
-- Requires custom implementation work for non-Gemini deployments
-
 ## Deprecated Features
 
 ### save_step_yaml() Function
@@ -268,7 +211,6 @@ This function is a remnant from the pre-Strategy architecture. It was used by th
 | `clear_cache()` ReadOnlySession bug | Medium | Avoid calling during execution |
 | `get_prompt()` context filtering broken | Medium | Don't use context parameter |
 | Single-level inheritance requirement | Low | Use underscore prefix for intermediate classes |
-| Gemini-only provider | Medium | Implement custom provider |
 | `save_step_yaml()` deprecated | None | Don't use |
 
 ## Future Improvements
@@ -278,8 +220,7 @@ Potential fixes for these limitations (not currently planned):
 1. **Fix clear_cache()**: Use `_real_session` instead of `session` for write operations
 2. **Fix context filtering**: Either remove `context` parameter or add `context` field to `Prompt` model
 3. **Enhance inheritance validation**: Check full inheritance chain, not just immediate parent
-4. **Add more providers**: Implement OpenAI, Anthropic, Mistral, etc. providers
-5. **Remove deprecated code**: Clean up `save_step_yaml()` and other legacy functions
+4. **Remove deprecated code**: Clean up `save_step_yaml()` and other legacy functions
 
 ## Reporting Issues
 

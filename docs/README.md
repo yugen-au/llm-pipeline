@@ -10,7 +10,7 @@ llm-pipeline is a Python framework for building declarative, production-ready LL
 - **Strategy Pattern**: Context-dependent execution paths for flexible logic
 - **State Tracking & Caching**: Built-in caching with audit trail for reproducibility
 - **Database Persistence**: Automatic foreign key ordering and transaction management
-- **LLM Integration**: Abstract provider system with Gemini implementation included
+- **LLM Integration**: Multi-provider support via pydantic-ai model strings
 - **Three-Tier Data Model**: Clear separation between context, data, and database extractions
 
 Transform unstructured or semi-structured data into validated database records through LLM-powered steps—with zero boilerplate.
@@ -31,8 +31,6 @@ Here's the essential flow:
 
 ```python
 from llm_pipeline import PipelineConfig
-from llm_pipeline.llm.gemini import GeminiProvider
-import os
 
 # 1. Define domain models, registry, strategies (see guides/basic-pipeline.md)
 # ...
@@ -46,11 +44,8 @@ class MyPipeline(
     def sanitize(self, data: str) -> str:
         return data.strip()[:10000]
 
-# 3. Create provider
-provider = GeminiProvider(api_key=os.getenv('GEMINI_API_KEY'))
-
-# 4. Execute
-pipeline = MyPipeline(provider=provider)
+# 3. Execute with pydantic-ai model string
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 pipeline.execute(
     data="your input data",
     initial_context={'key': 'value'}
@@ -118,7 +113,7 @@ Comprehensive API documentation:
 | [Strategy](api/strategy.md) | `PipelineStrategy`, `PipelineStrategies`, strategy selection |
 | [Extraction](api/extraction.md) | `PipelineExtraction`, database extraction patterns |
 | [Transformation](api/transformation.md) | `PipelineTransformation`, data transformation |
-| [LLM Provider](api/llm.md) | `LLMProvider`, `GeminiProvider`, LLM integration |
+| [Pipeline](api/pipeline.md) | `PipelineConfig`, pipeline orchestration and LLM integration |
 | [Prompts](api/prompts.md) | `PromptService`, prompt management, versioning |
 | [State](api/state.md) | `PipelineStepState`, `PipelineRunInstance`, caching |
 | [Registry](api/registry.md) | `PipelineDatabaseRegistry`, FK ordering, read-only sessions |
@@ -165,18 +160,11 @@ Prevent accidental writes during step execution using `ReadOnlySession` wrapper.
 
 ## Common Tasks
 
-### Install with Gemini Support
-
-```bash
-pip install llm-pipeline[gemini]
-```
-
-### Configure Gemini Provider
+### Configure LLM Model
 
 ```python
-from llm_pipeline.llm.gemini import GeminiProvider
-
-provider = GeminiProvider(api_key='your-api-key')
+# Use any pydantic-ai supported model string
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 ```
 
 ### Set Up Development Database
@@ -219,7 +207,7 @@ with Session(engine) as session:
 - **State Tracking**: `PipelineStepState` caches results
 - **Database Access**: `PipelineDatabaseRegistry` manages FK ordering
 - **Prompt Management**: `PromptService` loads versioned prompts
-- **LLM Integration**: `LLMProvider` abstract class with `GeminiProvider` implementation
+- **LLM Integration**: pydantic-ai Agent system via AgentRegistry and agent_builders.py
 
 ### Data Flow
 
@@ -285,7 +273,7 @@ Persisted Results
 - **Database**: SQLModel / SQLAlchemy 2.0
 - **Configuration**: PyYAML
 - **Build**: Hatchling
-- **Optional**: google-generativeai (Gemini provider)
+- **LLM Framework**: pydantic-ai (multi-provider support)
 
 ## Requirements
 
@@ -299,7 +287,6 @@ Persisted Results
 
 ### Optional
 
-- google-generativeai >= 0.3.0 (for Gemini support)
 - pytest >= 7.0 (for development)
 
 See [API Reference](api/index.md) for complete dependency information.
@@ -311,7 +298,7 @@ See [API Reference](api/index.md) for complete dependency information.
 ✓ **Caching & State Tracking** - Built-in efficiency and reproducibility
 ✓ **Database Persistence** - Automatic FK validation and transaction management
 ✓ **Three-Tier Data Model** - Clear separation of concerns
-✓ **LLM Integration** - Abstract provider with Gemini implementation
+✓ **LLM Integration** - Multi-provider support via pydantic-ai
 ✓ **Prompt Management** - Versioned YAML-based prompts
 ✓ **Read-Only Sessions** - Prevent accidental writes
 ✓ **Consensus Polling** - Support for multi-model decisions
@@ -323,7 +310,6 @@ See [Known Limitations](architecture/limitations.md) for current constraints and
 
 Common ones:
 - Single-level inheritance required for naming validation
-- Gemini-only provider (others require custom implementation)
 - Some vestigial code (marked in API docs)
 
 ## Version & Updates

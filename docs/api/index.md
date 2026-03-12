@@ -14,28 +14,12 @@ pip install llm-pipeline
 
 ### Optional Dependencies
 
-#### Gemini Provider Support
-
-Add Google Gemini LLM provider integration:
-
-```bash
-pip install llm-pipeline[gemini]
-```
-
 #### Development Tools
 
 Install testing and development dependencies:
 
 ```bash
 pip install llm-pipeline[dev]
-```
-
-#### All Features
-
-Install all optional dependencies:
-
-```bash
-pip install llm-pipeline[gemini,dev]
 ```
 
 ## Requirements
@@ -52,10 +36,10 @@ The framework requires these core libraries:
 - **sqlmodel >= 0.0.14** - SQL database integration with Pydantic models
 - **sqlalchemy >= 2.0** - SQL toolkit and ORM
 - **pyyaml >= 6.0** - YAML parsing for prompt management
+- **pydantic-ai >= 1.0.5** - LLM agent framework for structured output
 
 ### Optional Dependencies
 
-- **google-generativeai >= 0.3.0** - Gemini LLM provider (with `[gemini]` extra)
 - **pytest >= 7.0** - Testing framework (with `[dev]` extra)
 - **pytest-cov >= 4.0** - Code coverage (with `[dev]` extra)
 
@@ -122,20 +106,6 @@ from llm_pipeline import (
 )
 ```
 
-### LLM Provider System
-
-```python
-from llm_pipeline.llm import (
-    LLMProvider,            # Abstract LLM provider base
-    RateLimiter,            # API rate limiting utility
-    flatten_schema,         # Schema flattening helper
-    format_schema_for_llm,  # Schema formatting for LLM consumption
-)
-
-# Optional: Gemini provider (requires [gemini] extra)
-from llm_pipeline.llm.gemini import GeminiProvider
-```
-
 ### Prompt Management
 
 ```python
@@ -169,7 +139,6 @@ Detailed API documentation organized by module:
 - **[Strategy](strategy.md)** - `PipelineStrategy`, `PipelineStrategies`, and strategy selection
 - **[Extraction](extraction.md)** - `PipelineExtraction` and database extraction patterns
 - **[Transformation](transformation.md)** - `PipelineTransformation` and data transformation
-- **[LLM Provider](llm.md)** - `LLMProvider`, `GeminiProvider`, and LLM integration
 - **[Prompts](prompts.md)** - `PromptService`, prompt loading, and variable resolution
 - **[State](state.md)** - `PipelineStepState`, `PipelineRunInstance`, and execution tracking
 - **[Registry](registry.md)** - `PipelineDatabaseRegistry` and FK ordering
@@ -191,13 +160,6 @@ llm_pipeline/
 ├── db/                   # Database initialization
 │   ├── __init__.py       # DB utilities
 │   └── prompt.py         # Prompt model
-├── llm/                  # LLM provider system
-│   ├── __init__.py       # Provider exports
-│   ├── provider.py       # Abstract LLMProvider
-│   ├── gemini.py         # GeminiProvider implementation
-│   ├── rate_limiter.py   # Rate limiting
-│   ├── schema.py         # Schema utilities
-│   └── executor.py       # LLM execution logic
 ├── prompts/              # Prompt management
 │   ├── __init__.py       # Prompt exports
 │   ├── service.py        # PromptService

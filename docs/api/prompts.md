@@ -554,12 +554,11 @@ class MyVariableRegistry:
 
 # Usage with pipeline
 from llm_pipeline import PipelineConfig
-from llm_pipeline.llm import GeminiProvider
 
 class MyPipeline(PipelineConfig):
     def __init__(self):
         super().__init__(
-            provider=GeminiProvider(),
+            model='google-gla:gemini-2.0-flash-lite',
             variable_resolver=MyVariableRegistry()
         )
 ```
@@ -802,7 +801,7 @@ variables = PromptVariables(
 
 ## See Also
 
-- [LLM Provider API](llm.md) - Integration with LLM execution
+- [Pipeline API](pipeline.md) - Integration with pipeline execution
 - [Pipeline API](pipeline.md) - Using prompts in pipeline context
 - [Step API](step.md) - Step-level prompt integration
 - [Database Schema](state.md) - Related database models

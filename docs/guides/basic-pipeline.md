@@ -16,7 +16,7 @@ By the end of this guide, you'll be able to:
 - Basic understanding of Pydantic models
 - Familiarity with SQLAlchemy/SQLModel
 - llm-pipeline installed: `pip install llm-pipeline`
-- For Gemini provider: `pip install llm-pipeline[gemini]`
+- pydantic-ai is included as a core dependency
 
 ## Time Estimate
 
@@ -305,7 +305,7 @@ class DocumentTypeStep(LLMStep):
 
 **Step Lifecycle:**
 1. Framework calls `prepare_calls()` to get LLM call parameters
-2. Framework executes LLM calls using configured provider
+2. Framework executes LLM calls via pydantic-ai agents
 3. Framework validates responses against instruction schema
 4. Framework calls `process_instructions()` to create context
 5. Framework stores context in `pipeline.context[step_name]`
@@ -497,16 +497,8 @@ class DocumentClassifierPipeline(
 ### Basic Execution
 
 ```python
-from llm_pipeline.llm import GeminiProvider
-
-# Initialize provider
-provider = GeminiProvider(
-    api_key="your-api-key-here",
-    model_name="gemini-2.0-flash-exp"
-)
-
-# Create pipeline
-pipeline = DocumentClassifierPipeline(provider=provider)
+# Create pipeline with pydantic-ai model string
+pipeline = DocumentClassifierPipeline(model='google-gla:gemini-2.0-flash-lite')
 
 # Sample document
 document_text = """
@@ -562,7 +554,7 @@ The framework automatically caches LLM responses based on:
 pipeline.execute(data=document_text, context={'document_id': 1})
 
 # Second execution - uses cached responses
-pipeline2 = DocumentClassifierPipeline(provider=provider)
+pipeline2 = DocumentClassifierPipeline(model='google-gla:gemini-2.0-flash-lite')
 pipeline2.execute(data=document_text, context={'document_id': 1})
 ```
 
@@ -573,8 +565,6 @@ cache_key = hash(sanitized_data) + prompt_version + step_name
 
 To disable caching:
 ```python
-from llm_pipeline.llm import execute_llm_step
-
 # In step's prepare_calls():
 return [{"variables": variables, "use_cache": False}]
 ```
@@ -596,7 +586,7 @@ init_pipeline_db(engine)
 
 # Execute pipeline
 pipeline = DocumentClassifierPipeline(
-    provider=provider,
+    model='google-gla:gemini-2.0-flash-lite',
     session=session
 )
 pipeline.execute(data=document_text, context={'document_id': 1})
@@ -730,7 +720,7 @@ class CustomVariableResolver(VariableResolver):
 
 # Use in pipeline
 pipeline = DocumentClassifierPipeline(
-    provider=provider,
+    model='google-gla:gemini-2.0-flash-lite',
     variable_resolver=CustomVariableResolver()
 )
 ```
@@ -838,7 +828,7 @@ Full source code: [examples/document_classifier/](../../examples/document_classi
 
 ```bash
 # Install dependencies
-pip install llm-pipeline[gemini]
+pip install llm-pipeline
 
 # Run example
 cd examples/document_classifier

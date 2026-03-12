@@ -1,9 +1,9 @@
 """
 Pipeline introspection via pure class-level attribute access.
 
-No FastAPI, SQLAlchemy, or LLM provider dependencies. Operates entirely on
+No FastAPI, SQLAlchemy, or pydantic-ai dependencies. Operates entirely on
 class types -- never instantiates PipelineConfig, PipelineExtraction, or
-PipelineTransformation. Safe to call without DB connections or LLM providers.
+PipelineTransformation. Safe to call without DB connections or external LLM dependencies.
 
 Results are cached per pipeline class (immutable after class definition).
 """
