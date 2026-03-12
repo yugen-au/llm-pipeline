@@ -21,3 +21,12 @@
 | Codebase Analysis | backend-development:performance-engineer | research | 3 | - | A | complete | 0 | aafbbbff40fd527e9 | e37d708 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a58ff7baee6ce244d | ac59b0d | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | abdedeb1675e18475 | pending | - |
+| Delete Legacy LLM Files | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Add StepDeps Fields | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Rewrite Execute Loop | backend-development:backend-architect | implementation | 3 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai,/pydantic/pydantic |
+| Rewrite Consensus | backend-development:backend-architect | implementation | 4 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | pending | 0 | pending | pending | - |
+| Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | pending | 0 | pending | pending | - |
+| Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | pending | 0 | pending | pending | - |
+| Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | pending | 0 | pending | pending | - |
