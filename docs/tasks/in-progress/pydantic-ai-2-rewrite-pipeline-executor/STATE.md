@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/2-rewrite-pipeline-executor
 ## Plugins: backend-development, python-development
@@ -22,7 +22,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a58ff7baee6ce244d | ac59b0d | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | abdedeb1675e18475 | 4b0a8d5 | - |
 | Delete Legacy LLM Files | python-development:python-pro | implementation | 1 | - | A | complete | 0 | abb50479b983744b4 | 4aae017f | /pydantic/pydantic-ai |
-| Add StepDeps Fields | python-development:python-pro | implementation | 2 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Add StepDeps Fields | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic-ai |
 | Rewrite Execute Loop | backend-development:backend-architect | implementation | 3 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai,/pydantic/pydantic |
 | Rewrite Consensus | backend-development:backend-architect | implementation | 4 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Delete create_llm_call | python-development:python-pro | implementation | 5 | - | C | pending | 0 | pending | pending | - |
