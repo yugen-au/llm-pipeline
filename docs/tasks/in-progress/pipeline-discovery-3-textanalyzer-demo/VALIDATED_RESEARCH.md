@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Cross-referenced all 3 domain research files against actual source code in llm_pipeline/. Found 3 critical contradictions that would cause runtime errors, 2 naming inconsistencies across research files, and 5 unresolved architectural decisions requiring CEO input before planning can proceed. The core framework patterns (PipelineConfig subclassing, entry point discovery, context merging, WebSocket streaming, prompt seeding) are accurately documented and verified against source.
+Cross-referenced all 3 domain research files against actual source code in llm_pipeline/. Found 3 critical contradictions that would cause runtime errors, 2 naming inconsistencies across research files, and 5 architectural decisions resolved via CEO Q&A. All open items now resolved. The core framework patterns (PipelineConfig subclassing, entry point discovery, context merging, WebSocket streaming, prompt seeding) are accurately documented and verified against source. Implementation can proceed with the consolidated decisions below.
 
 ## Domain Findings
 
@@ -23,37 +23,32 @@ Step 3's AgentRegistry mapping (L61-65) uses the wrong value types. Must use the
 
 Step 3 shows `process_instructions` returning a plain dict when `context=SentimentAnalysisContext` is declared in `step_definition`. Source code at pipeline.py L386-392 enforces: if `step._context` is set, `process_instructions` MUST return that exact PipelineContext subclass instance, not a dict. Returning a dict causes TypeError.
 
-Correct pattern: `return SentimentAnalysisContext(sentiment=..., sentiment_confidence=...)`.
+Correct pattern: `return SentimentAnalysisContext(sentiment=..., confidence_score=...)`.
 
 ### Extraction Method Name (MODERATE)
 **Source:** step-3 L511, step-1 L243-248, extraction.py L213-280
 
 Step 3 shows `TopicExtraction.extract()` as a direct override. The base class `extract()` is the auto-dispatch method that calls `default()` (or strategy-named method) and then runs `_validate_instances()`. Overriding `extract()` directly bypasses instance validation (NaN, NULL checks). Should use `def default(self, results)` instead, as Step 1 and Step 2 correctly document.
 
-### Context Field Name Inconsistency
+### Context Field Name Inconsistency (RESOLVED)
 **Source:** step-1 L361, step-3 L477-478, L497
 
-Step 1 uses `sentiment_score` for the context field from sentiment analysis. Step 3 uses `sentiment_confidence`. These are different fields. The LLMResultMixin already provides `confidence_score` as a built-in field. Need to decide which field to expose in context.
+Step 1 uses `sentiment_score` for the context field from sentiment analysis. Step 3 uses `sentiment_confidence`. CEO decision: reuse LLMResultMixin's built-in `confidence_score` field -- no custom confidence field needed. SentimentAnalysisContext exposes `sentiment: str` and `confidence_score: float` (inherited from LLMResultMixin on the instruction output).
 
-### Topic SQLModel Schema Undefined
+### Topic SQLModel Schema (RESOLVED)
 **Source:** step-1 L218-223, step-2 L444, step-3 L537-542
 
-No consensus on Topic model fields:
-- Step 1: name, confidence, run_id
-- Step 2: name, relevance (from TopicItem nested model)
-- Step 3: name only (incomplete)
+CEO decision on Topic SQLModel fields: `name: str`, `relevance: float`, `run_id: str` (for traceability). TopicItem nested Pydantic model (LLM output shape): `name: str`, `relevance: float`. TopicExtraction.default() bridges TopicItem -> Topic by copying name/relevance and attaching run_id from pipeline context.
 
-Related: Step 3 introduces `TopicItem` (L289, L630) as a nested Pydantic model in TopicExtractionInstructions but never defines its fields. TopicItem is the LLM output shape; Topic is the SQLModel for DB persistence. The extraction bridges them.
-
-### Strategy Naming Disagreement
+### Strategy Naming (RESOLVED)
 **Source:** step-1 L92-111, step-2 L83-108, tests/test_pipeline.py
 
-Step 1 uses `DefaultStrategy` (NAME = "default"). Step 2 uses `TextAnalyzerStrategy` (NAME = "text_analyzer"). The test suite uses `DefaultStrategy`. Both are valid for a single-strategy pipeline.
+CEO decision: `DefaultStrategy` (NAME = "default"). Follows test conventions, generic for single-strategy pipelines. Prompt auto-discovery will try `{step_name}.default` first (not found), then fall back to `{step_name}` (found). Using explicit prompt keys avoids this lookup entirely.
 
-### Pipeline-Specific Table Creation
+### Pipeline-Specific Table Creation (RESOLVED)
 **Source:** step-1 L232-237
 
-Framework's `init_pipeline_db()` creates only framework tables (prompts, pipeline_step_states, etc). Pipeline-specific tables like `demo_topics` must be created separately. Research identifies two options (in seed_prompts or in __init__) but none of the 3 files declares a definitive approach.
+CEO decision: create `demo_topics` table in `seed_prompts(engine)` alongside prompt seeding. Single setup entry point -- seed_prompts already has the engine reference and runs at discovery time via `_discover_pipelines`. Use `SQLModel.metadata.create_all(engine, tables=[Topic.__table__])` to create only the pipeline-specific table.
 
 ### Validated Patterns (Correct Across All Research)
 **Source:** all three research files, verified against source
@@ -74,7 +69,11 @@ Framework's `init_pipeline_db()` creates only framework tables (prompts, pipelin
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Pending -- see Questions below | | |
+| Strategy naming: DefaultStrategy vs TextAnalyzerStrategy? | DefaultStrategy (NAME="default"), follows test conventions | Prompt auto-discovery falls back to {step_name}; explicit keys recommended |
+| Topic SQLModel fields beyond name? | name + relevance (float) + run_id (str) | Defines DB schema and extraction bridge logic |
+| Context field from sentiment step: sentiment_score vs sentiment_confidence? | Reuse LLMResultMixin's built-in confidence_score | No custom confidence field needed; SentimentAnalysisContext has sentiment + confidence_score |
+| TopicItem nested model fields? | name (str) + relevance (float) | Matches Topic SQLModel minus run_id; extraction adds run_id |
+| Table creation: seed_prompts or pipeline __init__? | seed_prompts(engine) alongside prompt seeding | Single setup entry point; already has engine and runs at discovery |
 
 ## Assumptions Validated
 - [x] PipelineConfig subclass requires Pipeline suffix, matching Registry/Strategies/AgentRegistry prefixes
@@ -87,22 +86,23 @@ Framework's `init_pipeline_db()` creates only framework tables (prompts, pipelin
 - [x] LLMResultMixin.example is optional (not enforced if not present)
 - [x] WebSocket streaming requires zero demo-specific code
 - [x] Model string flows from factory closure -> constructor -> agent.run_sync()
+- [x] Strategy naming: DefaultStrategy (NAME="default") per CEO decision
+- [x] Topic SQLModel: name (str) + relevance (float) + run_id (str) per CEO decision
+- [x] TopicItem nested model: name (str) + relevance (float) per CEO decision
+- [x] Sentiment context field: reuse LLMResultMixin.confidence_score, no custom field per CEO decision
+- [x] Table creation: in seed_prompts(engine) alongside prompt seeding per CEO decision
 
 ## Open Items
-- Instruction class naming in Step 3 research is incorrect; must use {StepPrefix}Instructions pattern
-- process_instructions must return PipelineContext subclass instance when context= param is set
-- TopicExtraction should use def default() not def extract()
-- TopicItem nested model fields undefined
-- Topic SQLModel fields undefined (need CEO decision)
-- Table creation strategy for demo_topics undefined
-- Strategy naming convention (DefaultStrategy vs TextAnalyzerStrategy) undecided
-- Context field name (sentiment_score vs sentiment_confidence) undecided
-- Prompt content for 6 prompts (3 system + 3 user) not drafted
+- Prompt content for 6 prompts (3 system + 3 user) not drafted -- implementation detail, not architectural blocker
 
 ## Recommendations for Planning
-1. Standardize ALL instruction class names to {StepPrefix}Instructions per framework enforcement
-2. Use PipelineContext subclass returns from process_instructions (not dicts) since context= will be declared
-3. Use def default() in TopicExtraction to get framework validation for free
-4. Create demo_topics table in seed_prompts(engine) alongside prompt seeding -- it already has the engine and runs at discovery time
-5. Use explicit prompt keys in step_definition (simpler, no DB lookup during step creation)
-6. Define create_failure safe_defaults by giving instruction custom fields string defaults (e.g. sentiment="" for SentimentAnalysisInstructions)
+1. Standardize ALL instruction class names to {StepPrefix}Instructions per framework enforcement -- Step 3 research names are wrong, use Step 1/2 names
+2. process_instructions must return PipelineContext subclass instance (not dict) when context= is declared on step_definition
+3. TopicExtraction must use `def default(self, results)` not `def extract()` -- preserves framework validation
+4. Create demo_topics table in seed_prompts(engine) via `SQLModel.metadata.create_all(engine, tables=[Topic.__table__])`
+5. Use explicit prompt keys in step_definition (simpler than auto-discovery, no DB lookup at step creation)
+6. Give instruction custom fields safe defaults for create_failure support (e.g. `sentiment: str = ""`)
+7. SentimentAnalysisContext: `sentiment: str` + `confidence_score: float` (reuse from LLMResultMixin output)
+8. TopicItem (Pydantic BaseModel, not SQLModel): `name: str` + `relevance: float` -- used as nested list in TopicExtractionInstructions
+9. Topic (SQLModel, table="demo_topics"): `name: str` + `relevance: float` + `run_id: str` -- TopicExtraction.default() bridges TopicItem -> Topic by attaching run_id
+10. DefaultStrategy with NAME="default" for single-strategy pipeline
