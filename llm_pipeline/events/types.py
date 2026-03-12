@@ -414,7 +414,7 @@ class ConsensusReached(StepScopedEvent):
     EVENT_CATEGORY: ClassVar[str] = CATEGORY_CONSENSUS
 
     attempt: int
-    threshold: int
+    threshold: float
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

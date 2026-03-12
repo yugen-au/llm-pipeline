@@ -39,3 +39,30 @@ strategy_name: str
 [x] `python -c "from llm_pipeline.events.types import ConsensusStarted"` succeeds
 [x] 39/40 event tests pass; 1 failure is in `pipeline.py` call site (Step 5 scope)
 [x] No other event types changed (ConsensusAttempt, ConsensusReached, ConsensusFailed untouched)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] ConsensusReached.threshold type is int but receives float -- changed to float to match ConsensusStarted.threshold
+[x] ConsensusFailed checked -- max_calls: int and largest_group_size: int are counts, correctly remain int
+
+### Changes Made
+#### File: `llm_pipeline/events/types.py`
+Changed ConsensusReached.threshold from int to float (line 417):
+```python
+# Before
+    attempt: int
+    threshold: int
+
+# After
+    attempt: int
+    threshold: float
+```
+
+### Verification
+[x] ConsensusReached.threshold is now float
+[x] ConsensusFailed fields unchanged (counts, not thresholds)
+[x] All 384 event tests pass
+[x] Consistent threshold typing across ConsensusStarted and ConsensusReached
