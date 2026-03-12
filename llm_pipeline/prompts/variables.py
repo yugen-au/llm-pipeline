@@ -23,7 +23,7 @@ class VariableResolver(Protocol):
                 return my_variable_registry.get(prompt_key, prompt_type)
 
         pipeline = MyPipeline(
-            provider=GeminiProvider(),
+            model='google-gla:gemini-2.0-flash-lite',
             variable_resolver=MyVariableResolver()
         )
     """
