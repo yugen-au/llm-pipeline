@@ -141,7 +141,7 @@ class TestGetRun:
 class TestTriggerRun:
     def _make_client_with_registry(self, factory):
         registry = {"test_pipeline": factory}
-        app = create_app(db_path=":memory:", pipeline_registry=registry)
+        app = create_app(db_path=":memory:", pipeline_registry=registry, default_model="test-model")
         return TestClient(app)
 
     def test_returns_202_with_run_id_and_accepted(self):
@@ -171,6 +171,7 @@ class TestTriggerRun:
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"p": lambda run_id, engine, **kw: type("P", (), {"execute": lambda s, **kw: None, "save": lambda s: None})()},
+            default_model="test-model",
         )
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "p"})
@@ -209,6 +210,7 @@ class TestTriggerRun:
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"tracked": lambda run_id, engine, **kw: _TrackedPipeline(run_id, engine)},
+            default_model="test-model",
         )
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "tracked"})
@@ -238,6 +240,7 @@ class TestTriggerRun:
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"spy": _spy_factory},
+            default_model="test-model",
         )
         payload = {"foo": "bar", "count": 42}
         with TestClient(app) as client:

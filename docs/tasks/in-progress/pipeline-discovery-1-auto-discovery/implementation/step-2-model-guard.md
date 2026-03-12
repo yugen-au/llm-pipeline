@@ -46,3 +46,44 @@ Added model None guard after factory lookup, before pipeline execution. Uses `ge
 [x] HTTP 422 status code matches PLAN.md specification
 [x] Error message matches PLAN.md: actionable, references env var and --model flag
 [x] app.state.default_model set by step 1 in create_app() (line 173 of app.py)
+
+## Fix Iteration 0
+**Issues Source:** TESTING.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Test fixture regression: conftest _make_app() missing default_model (6 tests)
+[x] Test fixture regression: TestTriggerRun._make_client_with_registry and inline create_app() missing default_model (4 tests)
+
+### Changes Made
+#### File: `tests/ui/conftest.py`
+Added `app.state.default_model = "test-model"` after `app.state.pipeline_registry` in `_make_app()`.
+```
+# Before
+    app.state.engine = engine
+    app.state.pipeline_registry = {}
+
+# After
+    app.state.engine = engine
+    app.state.pipeline_registry = {}
+    app.state.default_model = "test-model"
+```
+
+#### File: `tests/ui/test_runs.py`
+Added `default_model="test-model"` to all 4 `create_app()` calls in TestTriggerRun:
+- `_make_client_with_registry()` (affects test_returns_202_with_run_id_and_accepted)
+- `test_run_id_is_valid_uuid` inline call
+- `test_background_task_executes_pipeline` inline call
+- `test_input_data_threaded_to_factory_and_execute` inline call
+```
+# Before
+app = create_app(db_path=":memory:", pipeline_registry=registry)
+
+# After
+app = create_app(db_path=":memory:", pipeline_registry=registry, default_model="test-model")
+```
+
+### Verification
+[x] All 10 previously failing tests now pass
+[x] 2 tests that already passed (test_returns_404_for_unregistered_pipeline, test_returns_404_when_registry_empty) still pass -- 404 guard fires before model guard as intended
+[x] No production code changed, only test fixtures
