@@ -16,5 +16,5 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Existing Validation Analysis | python-development:python-pro | research | 1 | - | A | needs-input | 0 | aaf83d6383b2522c7 | pending | - |
-| pydantic.ai Output Validators | backend-development:backend-architect | research | 2 | - | A | needs-input | 0 | af893cb92ec3d2185 | pending | - |
+| Existing Validation Analysis | python-development:python-pro | research | 1 | - | A | complete | 0 | aaf83d6383b2522c7 | pending | - |
+| pydantic.ai Output Validators | backend-development:backend-architect | research | 2 | - | A | complete | 0 | af893cb92ec3d2185 | pending | - |
