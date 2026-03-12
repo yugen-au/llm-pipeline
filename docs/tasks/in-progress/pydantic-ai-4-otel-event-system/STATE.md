@@ -1,9 +1,9 @@
 ## Task: pydantic-ai-4-otel-event-system
 ## Description: Enable pydantic.ai OTel instrumentation for pipeline agents, create pipeline event system (StepPrepared/StepStarting/StepCompleted), log token usage per step for cost tracking
 
-## Phase: fixing-review
+## Phase: testing
 ## Status: in-progress
-## Current Group: F
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/4-otel-event-system
 ## Plugins: backend-development, observability-monitoring, python-development
@@ -31,5 +31,5 @@
 | OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | complete | 0 | a83eee2b0b4f40da7 | 5e5ce8d1,5d7197e5 | - |
 | docs/observability.md | backend-development:backend-architect | implementation | 9 | - | E | complete | 1 | add36b13e23e02bba | 5d7197e5,a79e956d | /pydantic/pydantic-ai/v1_0_5 |
 | Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | complete | 1 | afb329ff0b69571d9 | 300ab1e7,c566e975 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a8178e374c6d82449 | 330f46d6 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | a8178e374c6d82449 | 330f46d6 | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | ae3d687e7b61fec62 | 5b8e8da3 | - |
