@@ -75,3 +75,75 @@ None
 **Decision:** CONDITIONAL
 
 Approve pending fix of the ConsensusReached.threshold type inconsistency (int -> float). This is a one-line change in events/types.py line 417 and a minor test fixture update in test_event_types.py line 100. The medium and low issues are documentation/style concerns that can be addressed later. The architecture is sound, the Strategy Pattern is well-implemented, and test coverage is comprehensive.
+
+---
+
+# Architecture Review (Re-run)
+
+## Overall Assessment
+**Status:** complete
+
+Re-review after fix of HIGH issue (ConsensusReached.threshold int->float). Verified `ConsensusReached.threshold` is now `float` (types.py line 417), matching `ConsensusStarted.threshold: float` (line 395). Pipeline emission site (pipeline.py line 1320) passes `strategy.threshold` (float) into a `float`-annotated field -- type-correct. All previously identified issues re-checked; no new issues found.
+
+## Fix Verification
+| Issue | Status | Evidence |
+| --- | --- | --- |
+| ConsensusReached.threshold int->float | FIXED | types.py line 417: `threshold: float` |
+| ConsensusStarted.threshold consistency | VERIFIED | types.py line 395: `threshold: float` (unchanged, consistent) |
+| Pipeline emission site | VERIFIED | pipeline.py line 1320: `threshold=strategy.threshold` passes float to float field |
+| Test fixture test_event_types.py | NOTE | Line 100 still uses `threshold: 2` (int literal); acceptable since int is subtype of float in Python, but `2.0` would be more explicit |
+
+## Issues Found
+### Critical
+None
+
+### High
+None (previous HIGH fixed)
+
+### Medium
+
+#### AdaptiveStrategy.select uses len(results) as attempt proxy for _effective_threshold
+**Step:** 1
+**Details:** Unchanged from prior review. `AdaptiveStrategy.select()` uses `len(results)` where `should_continue()` uses orchestrator-provided `attempt`. Semantically consistent today but coupling is implicit. Low risk, documentation improvement only.
+
+#### SoftVoteStrategy and ConfidenceWeightedStrategy member selection differs
+**Step:** 1
+**Details:** Unchanged from prior review. SoftVote returns `best_group[0]`, ConfidenceWeighted returns `max(best_group, key=self._score)`. By design but undocumented in docstrings.
+
+### Low
+
+#### _smart_compare default fallthrough
+**Step:** 1
+**Details:** Unchanged from prior review. Returns True for unhandled types. Safe under current usage (model_dump() produces dicts only).
+
+#### test_event_types.py consensus_reached fixture uses int literal for float field
+**Step:** 6
+**Details:** Line 100: `"threshold": 2` (int) where field is now `float`. Works due to Python int-float coercion but inconsistent with `consensus_started` fixture which uses `2.0`. Cosmetic only.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/events/types.py | pass | ConsensusReached.threshold now float, consistent with ConsensusStarted |
+| llm_pipeline/consensus.py | pass | No changes since prior review, all strategies correct |
+| llm_pipeline/pipeline.py | pass | Emission sites type-correct with float threshold |
+| llm_pipeline/strategy.py | pass | consensus_strategy field unchanged, correct |
+| llm_pipeline/__init__.py | pass | All 6 consensus symbols exported correctly |
+| tests/test_consensus.py | pass | 86 tests, comprehensive coverage |
+| tests/events/test_consensus_events.py | pass | 20 tests, event sequences verified |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+Previous HIGH issue fixed. All remaining issues are medium/low (documentation and cosmetic). Architecture is sound, Strategy Pattern well-implemented, test coverage comprehensive. Ready to merge.
