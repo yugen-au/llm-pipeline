@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Research findings are accurate and well-sourced. The core discovery -- that the event system already exists (28 event types, emitter protocol, 3 handlers, full pipeline integration) -- is confirmed by codebase inspection. Task 4's actual scope reduces to: (a) enable pydantic-ai OTel instrumentation, (b) capture token usage from RunResult.usage(), (c) enrich existing events + PipelineStepState with token fields, (d) create docs/observability.md. Six architectural decisions require CEO input before planning can proceed.
+Research findings are accurate and well-sourced. The core discovery -- that the event system already exists (28 event types, emitter protocol, 3 handlers, full pipeline integration) -- is confirmed by codebase inspection. Task 4's actual scope reduces to: (a) enable pydantic-ai OTel instrumentation via per-agent `instrument=` parameter, (b) capture token usage from RunResult.usage() and store in PipelineStepState, (c) enrich existing LLMCallCompleted and StepCompleted events with token fields, (d) create docs/observability.md. All six architectural decisions resolved by CEO -- validation complete.
 
 ## Domain Findings
 
@@ -50,7 +50,12 @@ Task 6 is "Final Integration, Comprehensive Testing, and Cleanup" -- depends on 
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Pending -- see Questions below | - | - |
+| Q1: Global Agent.instrument_all() vs per-agent instrument= in build_step_agent()? | Per-agent via instrument= in build_step_agent(). Pipeline agents only, don't touch consumer's non-pipeline agents. | InstrumentationSettings threaded through PipelineConfig -> build_step_agent(). No public helper needed. No process-wide side effects. |
+| Q2: include_content default True (task desc) or False (security-first)? | False by default. Security-first, consumer opts in. | Default InstrumentationSettings(include_content=False). Prompts/completions NOT sent to OTel backend unless consumer explicitly enables. |
+| Q3: Consensus token aggregation -- sum all attempts or only winner? | Sum all attempts on PipelineStepState (true cost). Per-call tokens on individual LLMCallCompleted events. | Two granularity levels: LLMCallCompleted has per-call tokens, PipelineStepState/StepCompleted have step-aggregate sums. |
+| Q4: Field naming -- input_tokens/output_tokens (pydantic-ai) vs request_tokens/response_tokens (task desc)? | Match pydantic-ai convention: input_tokens, output_tokens, total_tokens. | Task description field names overridden. Consistent with pydantic-ai RunUsage API and OTel gen_ai semantic conventions. |
+| Q5: OTel deps -- new [otel] group vs bundle with [pydantic-ai]? | New [otel] optional group in pyproject.toml. Keeps base light. | opentelemetry-sdk and opentelemetry-exporter-otlp-proto-http in [otel] group. OTel is fully opt-in. |
+| Q6: total_tokens -- store as derived field or compute on read? | Store as field on PipelineStepState for SQL aggregation convenience. | input_tokens + output_tokens computed at write time, stored as total_tokens column. Enables efficient cost queries. |
 
 ## Assumptions Validated
 - [x] Event system exists with 28 types, protocol emitter, 3 handlers (confirmed via events/types.py, emitter.py, handlers.py)
@@ -64,14 +69,17 @@ Task 6 is "Final Integration, Comprehensive Testing, and Cleanup" -- depends on 
 - [x] LLMCallCompleted has no token fields but supports adding optional fields via dataclass defaults (confirmed events/types.py L329-344)
 
 ## Open Items
-- Q1-Q6 below must be answered before planning phase
+- None -- all 6 architectural decisions resolved
 
 ## Recommendations for Planning
-1. **Scope reduction**: Task description should be updated -- "create pipeline event system" is complete, actual work is OTel enablement + token capture + event enrichment + docs
-2. **Token field naming**: Use pydantic-ai convention (input_tokens/output_tokens) not task description's request_tokens/response_tokens
-3. **Enrich existing events**: Add token fields to LLMCallCompleted (per-call) and StepCompleted (per-step aggregate), don't create new event types
-4. **PipelineStepState fields**: Add input_tokens, output_tokens, total_requests as nullable int columns with ADD COLUMN migration
-5. **total_tokens**: Consider whether to store as derived field (input + output) or compute on read. Storing enables efficient SQL aggregation but is redundant
-6. **Test scope**: Unit tests for token capture in Task 4; end-to-end OTel integration tests deferred to Task 6
-7. **Instrumentation helper**: If using public helper pattern, create llm_pipeline/instrumentation.py with thin wrapper around Agent.instrument_all(). Export from __init__.py. Document in docs/observability.md
-8. **DB migration**: Use ADD COLUMN IF NOT EXISTS pattern (SQLite-compatible, consistent with existing SQLiteEventHandler.__init__ pattern in handlers.py)
+1. **Scope reduction**: Update task description -- "create pipeline event system" is done, actual work is OTel enablement + token capture + event enrichment + docs
+2. **Per-agent instrumentation flow**: Accept optional `InstrumentationSettings` in PipelineConfig (or build_step_agent), pass `instrument=settings` to Agent constructor. When None/not provided, no instrumentation. No process-wide side effects.
+3. **include_content=False default**: When constructing InstrumentationSettings internally, default include_content=False. Consumer can override by passing their own InstrumentationSettings.
+4. **Token field naming**: input_tokens, output_tokens, total_tokens everywhere (pydantic-ai convention). Update task description to match.
+5. **Enrich existing events**: Add input_tokens, output_tokens to LLMCallCompleted (per-call granularity) and StepCompleted (step-aggregate). No new event types.
+6. **PipelineStepState fields**: Add input_tokens (nullable int), output_tokens (nullable int), total_tokens (nullable int, computed input+output at write time), total_requests (nullable int) with ADD COLUMN migration.
+7. **Consensus aggregation**: In _execute_with_consensus(), accumulate tokens across all agent.run_sync() calls. Each call emits LLMCallCompleted with per-call tokens. Final StepCompleted and PipelineStepState get summed totals.
+8. **OTel deps**: New `[otel]` group in pyproject.toml with opentelemetry-sdk>=1.20.0 and opentelemetry-exporter-otlp-proto-http>=1.20.0. Add to [dev] as well.
+9. **Test scope**: Unit tests for token capture, event enrichment, PipelineStepState persistence in Task 4. End-to-end OTel integration tests deferred to Task 6.
+10. **DB migration**: Use ADD COLUMN IF NOT EXISTS pattern (SQLite-compatible, consistent with existing SQLiteEventHandler.__init__ pattern in handlers.py)
+11. **docs/observability.md**: Document per-agent instrumentation setup, OTel dependency installation, include_content opt-in, token tracking fields, example OTLP exporter configuration
