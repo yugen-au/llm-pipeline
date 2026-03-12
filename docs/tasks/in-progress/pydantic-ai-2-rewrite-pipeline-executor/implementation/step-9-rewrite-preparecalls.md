@@ -81,3 +81,25 @@ return [{"variables": {}}]
 - [x] `import warnings` removed from test_agent_registry_core.py
 - [x] 124 tests pass across test_agent_registry_core.py, test_introspection.py, test_pipeline.py, test_pipeline_run_tracking.py
 - [x] Remaining failures are pre-existing Step 8 provider= issues, not introduced by Step 9
+
+## Review Fix Iteration 1
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] Stale section header comment references deleted method `create_llm_call()` in `tests/test_agent_registry_core.py` around line 250
+
+### Changes Made
+#### File: `tests/test_agent_registry_core.py`
+Removed `create_llm_call() deprecation` from section header comment since the method was deleted, not merely deprecated.
+```
+# Before
+# step.py - LLMStep.get_agent(), build_user_prompt(), create_llm_call() deprecation
+
+# After
+# step.py - LLMStep.get_agent(), build_user_prompt() deprecation
+```
+
+### Verification
+- [x] Comment updated to reflect deletion (not deprecation) of create_llm_call()
+- [x] No other references to update in this scope
