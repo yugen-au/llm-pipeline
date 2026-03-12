@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: F
+## Current Group: G
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/2-rewrite-pipeline-executor
 ## Plugins: backend-development, python-development
@@ -29,6 +29,6 @@
 | Clean Up Exports | python-development:python-pro | implementation | 6 | - | D | complete | 0 | ab0698cae3d1db25f | 0a2ee157 | - |
 | Delete Obsolete Tests | backend-development:test-automator | implementation | 7 | - | E | complete | 0 | a0ee30f9eb7d747bf | 6d36c8b0 | - |
 | Replace MockProvider | backend-development:test-automator | implementation | 8 | - | F | complete | 3 | ac2c6df9cdb2a8689 | b02fac1e,900d4c9f,4941f584 | /pydantic/pydantic-ai |
-| Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | pending | 0 | a73bba5de7cdef97c | 46297335 | - |
+| Rewrite prepare_calls | backend-development:test-automator | implementation | 9 | - | G | in-progress | 0 | a73bba5de7cdef97c | 46297335 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a5dd378a5eaeab706 | 0e4c6c69,f8ad5d50 | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a8b6e6fcac98d8139 | d9d855c6 | - |

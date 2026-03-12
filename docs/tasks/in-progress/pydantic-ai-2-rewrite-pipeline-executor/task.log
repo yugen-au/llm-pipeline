@@ -194,3 +194,8 @@
 [2026-03-12 14:02:06] [DEBUG] STATE.md atomic write complete
 [2026-03-12 14:05:00] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-12 14:05:13] [DEBUG] STATE.md atomic write complete
+[2026-03-12 14:05:30] [INFO] Already committed fixing-review-F: ['step-8-replace-mockprovider.md']
+[2026-03-12 14:05:32] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-12 14:05:32] [INFO] Auto-updated agent statuses: Rewrite prepare_calls: pending -> in-progress
+[2026-03-12 14:05:32] [INFO] Deleted 1 old contract file(s)
+[2026-03-12 14:05:32] [DEBUG] STATE.md atomic write complete
