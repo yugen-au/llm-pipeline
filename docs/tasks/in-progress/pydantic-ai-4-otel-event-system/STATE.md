@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [1,5,7,9,10]
 ## Work Mode: standard
-## Last Updated: 2026-03-12 19:41
+## Last Updated: 2026-03-12 19:43
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -27,7 +27,7 @@
 | instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | af51af70cd4e64799 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | complete | 1 | a25382aa438259569 | 1358a620,f1744ea0 | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture consensus path | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | a37d02e632da83375 | 1358a620 | - |
-| Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | in-progress | 1 | a9a18f5b853e3dea7 | f7345a30 | - |
+| Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | complete | 1 | a9a18f5b853e3dea7 | f7345a30,5d0001a9 | - |
 | OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | complete | 0 | a83eee2b0b4f40da7 | 5e5ce8d1,5d7197e5 | - |
 | docs/observability.md | backend-development:backend-architect | implementation | 9 | - | E | pending | 0 | add36b13e23e02bba | 5d7197e5 | /pydantic/pydantic-ai/v1_0_5 |
 | Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | pending | 0 | afb329ff0b69571d9 | 300ab1e7 | - |
