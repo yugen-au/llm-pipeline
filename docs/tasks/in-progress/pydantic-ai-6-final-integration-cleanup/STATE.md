@@ -1,9 +1,9 @@
 ## Task: pydantic-ai-6-final-integration-cleanup
 ## Description: Final integration testing of pydantic-ai migration, remove deprecated code (create_llm_call), cleanup temp flags, verify all pipeline subclasses work with new agent system
 
-## Phase: implementation
+## Phase: review
 ## Status: in-progress
-## Current Group: C
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/pydantic-ai/6-final-integration-cleanup
 ## Plugins: python-development, comprehensive-review
@@ -27,4 +27,5 @@
 | Update source docstrings | python-development:python-pro | implementation | 4 | - | B | complete | 0 | abd038b2400c9413a | a04ecc5c | - |
 | Update CLAUDE.md tech stack | python-development:python-pro | implementation | 5 | - | B | complete | 0 | a0d39f2531c916d9b | a04ecc5c | - |
 | Rewrite stale docs files | python-development:python-pro | implementation | 6 | - | C | complete | 0 | af06374efa5a949d3 | af9b5bdc | - |
-| Update docs/api/index and delete llm.md | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a016e471155198867 | dacc68d0 | - |
+| Update docs/api/index and delete llm.md | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a016e471155198867 | dacc68d0,af9b5bdc | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
