@@ -62,3 +62,33 @@ None
 
 ## Recommendations
 1. The pre-existing `test_ui.py::TestRoutersIncluded::test_events_router_prefix` failure should be tracked separately - events router prefix was changed to `/runs/{run_id}/events` but the test still expects `/events`.
+
+---
+
+## Re-run: Review Fix Verification (2026-03-12)
+
+### Fix Applied
+`ConsensusReached.threshold` and `ConsensusFailed.threshold` changed from `int` to `float` in `llm_pipeline/events/types.py` (Step 2 review fix).
+
+### Test Execution
+**Pass Rate:** 269/269 (key files) | 951/952 full suite (same pre-existing failure)
+```
+============================= test session starts =============================
+platform win32 -- Python 3.13.3, pytest-9.0.2
+collected 269 items
+
+tests/test_consensus.py           86 passed
+tests/events/test_consensus_events.py  20 passed
+tests/events/test_event_types.py  163 passed
+
+============================== 269 passed in 1.19s =============================
+
+Full suite: 1 failed, 951 passed, 6 skipped in 122.03s
+```
+
+### Build Verification
+- [x] `python -c "import llm_pipeline"` succeeds (no output, no circular imports)
+- [x] No new failures introduced by the `threshold: int -> float` change on ConsensusReached/ConsensusFailed
+
+### Result
+Fix verified. All consensus tests pass. Full suite unchanged (same 1 pre-existing test_ui.py failure).
