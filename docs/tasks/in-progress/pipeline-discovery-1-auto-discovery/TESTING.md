@@ -94,3 +94,40 @@ Fix: add `default_model="test-model"` to the `create_app()` call in `_make_clien
 1. Fix both test fixtures (conftest.py and test_runs.py) to supply a non-None `default_model` (any sentinel string like `"test-model"` suffices since tests use fake pipelines that never call pydantic-ai).
 2. After fixing fixtures, re-run `pytest` to confirm 952/952 pass.
 3. Consider whether `test_returns_404_when_registry_empty` (currently passing, expects 404) could race with the 422 guard -- it does not set a model either, but the 404 guard fires first (pipeline not found before model check), so it still passes. Verify this ordering is intentional and document in `trigger_run` docstring.
+
+---
+
+## Re-run After Fixture Fixes
+
+## Summary
+**Status:** passed
+All 10 regressions resolved. 952 passed, 6 skipped, 1 warning. Fixes confirmed working.
+
+## Automated Testing
+### Test Execution
+**Pass Rate:** 952/952 tests (6 skipped)
+```
+ssssss.................................................................................
+(all tests pass -- full output truncated)
+============================== warnings summary ===============================
+tests\test_pipeline.py:114
+  PytestCollectionWarning: cannot collect test class 'TestPipeline' because it has a __init__ constructor
+
+952 passed, 6 skipped, 1 warning in 119.74s (0:01:59)
+```
+
+### Failed Tests
+None
+
+## Success Criteria (from PLAN.md)
+- [x] `create_app()` accepts `auto_discover=True` and `default_model=None` without breaking existing call sites
+- [ ] Entry points in group `llm_pipeline.pipelines` are loaded and registered -- no entry points in this repo; logic verified by code review only
+- [x] Explicit `pipeline_registry` / `introspection_registry` params override auto-discovered entries
+- [x] `seed_prompts(engine)` failure logs warning but does not unregister
+- [x] Load errors logged as `logger.warning`, not raised
+- [x] Startup warning logged when `default_model` is None and `LLM_PIPELINE_MODEL` not set
+- [x] `trigger_run` returns HTTP 422 with actionable message when `default_model` is None -- test_returns_404_when_registry_empty passes (404 guard fires first as expected)
+- [x] `auto_discover=False` disables discovery; registries fall back to explicit params only
+
+## Issues Found
+None
