@@ -38,7 +38,7 @@ from llm_pipeline.events.types import (
     PipelineStarted, PipelineCompleted, PipelineError,
     StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
     CacheLookup, CacheHit, CacheMiss, CacheReconstruction,
-    LLMCallPrepared,
+    LLMCallPrepared, LLMCallStarting, LLMCallCompleted,
     ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
     TransformationStarting, TransformationCompleted,
     InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
@@ -157,10 +157,10 @@ class PipelineConfig(ABC):
 
     def __init__(
         self,
+        model: str,
         strategies: Optional[List["PipelineStrategy"]] = None,
         session: Optional[Session] = None,
         engine: Optional[Engine] = None,
-        provider: Optional["LLMProvider"] = None,
         variable_resolver: Optional["VariableResolver"] = None,
         event_emitter: Optional["PipelineEventEmitter"] = None,
         run_id: Optional[str] = None,
@@ -169,17 +169,17 @@ class PipelineConfig(ABC):
         Initialize pipeline.
 
         Args:
+            model: pydantic-ai model string (e.g. 'google-gla:gemini-2.0-flash-lite').
             strategies: Optional list of PipelineStrategy instances.
             session: Optional database session. Overrides engine if provided.
             engine: Optional SQLAlchemy engine. Auto-SQLite if both session and engine are None.
-            provider: LLMProvider instance for LLM calls (required for execute()).
             variable_resolver: Optional VariableResolver for prompt variable classes.
             event_emitter: Optional PipelineEventEmitter for lifecycle/LLM/extraction events. None disables events.
         """
         from llm_pipeline.db import init_pipeline_db, get_session as db_get_session
         from llm_pipeline.session import ReadOnlySession
 
-        self._provider = provider
+        self._model = model
         self._variable_resolver = variable_resolver
         self._event_emitter = event_emitter
 
