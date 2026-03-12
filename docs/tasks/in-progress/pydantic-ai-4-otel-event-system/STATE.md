@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-12 17:39
+## Last Updated: 2026-03-12 17:48
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -30,4 +30,4 @@
 | Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | complete | 0 | a9a18f5b853e3dea7 | f7345a30 | - |
 | OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | complete | 0 | a83eee2b0b4f40da7 | 5e5ce8d1,5d7197e5 | - |
 | docs/observability.md | backend-development:backend-architect | implementation | 9 | - | E | complete | 0 | add36b13e23e02bba | 5d7197e5 | /pydantic/pydantic-ai/v1_0_5 |
-| Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | in-progress | 0 | pending | pending | - |
+| Unit tests token capture | backend-development:backend-architect | implementation | 10 | - | F | complete | 0 | afb329ff0b69571d9 | 300ab1e7 | - |
