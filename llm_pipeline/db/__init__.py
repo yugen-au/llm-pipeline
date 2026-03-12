@@ -22,6 +22,37 @@ _engine: Optional[Engine] = None
 _wal_registered_engines: set = set()
 
 
+def _migrate_step_state_token_columns(engine: Engine) -> None:
+    """Add token usage columns to pipeline_step_states if missing.
+
+    Uses PRAGMA table_info to check column existence before ALTER TABLE,
+    consistent with SQLiteEventHandler.__init__ migration style.
+    """
+    _TOKEN_COLUMNS = [
+        ("input_tokens", "INTEGER"),
+        ("output_tokens", "INTEGER"),
+        ("total_tokens", "INTEGER"),
+        ("total_requests", "INTEGER"),
+    ]
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("PRAGMA table_info(pipeline_step_states)")
+            )
+            existing = {row[1] for row in result}
+            for col_name, col_type in _TOKEN_COLUMNS:
+                if col_name not in existing:
+                    conn.execute(
+                        text(
+                            f"ALTER TABLE pipeline_step_states "
+                            f"ADD COLUMN {col_name} {col_type}"
+                        )
+                    )
+            conn.commit()
+    except OperationalError:
+        pass  # table doesn't exist yet; create_all will handle it
+
+
 def add_missing_indexes(engine: Engine) -> None:
     """Add performance indexes that create_all skips on existing tables.
 
@@ -107,6 +138,9 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineEventRecord.__table__,
         ],
     )
+
+    # Migrate existing DBs: add token columns to pipeline_step_states
+    _migrate_step_state_token_columns(engine)
 
     # Add performance indexes that create_all skips on existing tables
     add_missing_indexes(engine)
