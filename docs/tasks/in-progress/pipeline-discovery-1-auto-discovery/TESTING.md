@@ -131,3 +131,30 @@ None
 
 ## Issues Found
 None
+
+---
+
+## Re-run After Review Fix (new test added)
+
+## Summary
+**Status:** passed
+New test `test_returns_422_when_no_model_configured` passes. 953 passed, 6 skipped, 1 warning. Full suite clean.
+
+## Automated Testing
+### Test Execution
+**Pass Rate:** 953/953 tests (6 skipped)
+```
+ssssss.................................................................................
+(all tests pass)
+============================== warnings summary ===============================
+tests\test_pipeline.py:114
+  PytestCollectionWarning: cannot collect test class 'TestPipeline' because it has a __init__ constructor
+
+953 passed, 6 skipped, 1 warning in 121.09s (0:02:01)
+```
+
+### Failed Tests
+None
+
+## Issues Found
+None
