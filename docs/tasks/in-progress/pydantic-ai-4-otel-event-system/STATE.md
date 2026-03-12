@@ -25,7 +25,7 @@
 | Token fields on events | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | a1246e0ff41c38f10 | 188cc5a6,080e13d1 | - |
 | instrument= in build_step_agent | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a4b8f05ba7e3f72e9 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
 | instrumentation_settings on PipelineConfig | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | af51af70cd4e64799 | 6d830755 | /pydantic/pydantic-ai/v1_0_5 |
-| Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | in-progress | 0 | pending | pending | /pydantic/pydantic-ai/v1_0_5 |
+| Token capture normal path | backend-development:backend-architect | implementation | 5 | - | C | complete | 0 | a25382aa438259569 | 1358a620 | /pydantic/pydantic-ai/v1_0_5 |
 | Token capture consensus path | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | a37d02e632da83375 | 1358a620 | - |
 | Persist tokens in _save_step_state | backend-development:backend-architect | implementation | 7 | - | D | pending | 0 | pending | pending | - |
 | OTel optional deps | backend-development:backend-architect | implementation | 8 | - | E | pending | 0 | pending | pending | - |
