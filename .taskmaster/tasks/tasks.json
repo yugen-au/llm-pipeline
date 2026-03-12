@@ -919,47 +919,52 @@
   "pipeline-discovery": {
     "tasks": [
       {
-        "id": 1,
+        "id": "1",
         "title": "Implement Core Pipeline Auto-Discovery and Registration",
         "description": "Develop the core logic within `create_app()` to automatically discover pipelines via Python entry points (`llm_pipeline.pipelines` group) and register them in `pipeline_registry` and `introspection_registry`. This includes handling the `PipelineConfig` contract, creating factory closures, and invoking the `seed_prompts` classmethod.",
         "details": "Modify `llm_pipeline/ui/app.py`:\n- Add `auto_discover: bool = True` parameter to `create_app()`.\n- Inside `create_app()`, if `auto_discover` is true, use `importlib.metadata.entry_points(group=\"llm_pipeline.pipelines\")` to scan for entry points.\n- For each entry point:\n  - Load the class using `entry_point.load()`.\n  - Verify it's a `PipelineConfig` subclass.\n  - Register the class in `introspection_registry` under the entry point name.\n  - Create a factory closure for `pipeline_registry` that instantiates the class with `(run_id, engine, event_emitter, model)` kwargs.\n  - If the class has an optional `seed_prompts(engine)` classmethod, call it.\n  - Log any loading errors as warnings.\n- Log all discovered pipelines at startup.",
         "testStrategy": "Create a dummy `pyproject.toml` in a test environment with a mock pipeline entry point. Write unit tests for `create_app()` to ensure:\n- Pipelines are correctly discovered and registered when `auto_discover` is true.\n- `introspection_registry` contains the class, and `pipeline_registry` contains the factory.\n- `seed_prompts` is called if present.\n- Errors during entry point loading are logged as warnings and do not halt the application.\n- No pipelines are discovered when `auto_discover` is false.",
         "priority": "high",
         "dependencies": [],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-12T17:06:11.906Z"
       },
       {
-        "id": 2,
+        "id": "2",
         "title": "Implement CLI Flags for Manual Pipeline Modules and Default Model",
         "description": "Extend the CLI (`llm-pipeline ui`) to support manual specification of pipeline modules via `--pipelines` flag and a default LLM model via `--model` flag.",
         "details": "Modify `llm_pipeline/ui/cli.py`:\n- Add `--pipelines` flag (multiple allowed) that accepts a dotted Python module path. The CLI handler should import each specified module and look for a `PIPELINE_REGISTRY: dict[str, Type[PipelineConfig]]`. Each class found in `PIPELINE_REGISTRY` should be registered using the same mechanism as entry points (i.e., passed to `create_app()` for registration).\n- Add `--model` flag to specify the default LLM model (e.g., `google-gla:gemini-2.0-flash-lite`). This value should be passed to `create_app()` and subsequently used when instantiating pipelines.\n- Ensure `LLM_PIPELINE_MODEL` environment variable is also respected for model configuration.\nModify `llm_pipeline/ui/app.py`:\n- Update `create_app()` to accept a list of manually specified pipeline modules and the default model string.\n- Integrate the manual module registration *after* entry point discovery.",
         "testStrategy": "Write integration tests for the `llm-pipeline ui` CLI:\n- Verify that `llm-pipeline ui --pipelines myapp.pipelines` correctly loads and registers pipelines from `myapp.pipelines`.\n- Test with multiple `--pipelines` flags.\n- Verify that `llm-pipeline ui --model \"test-model\"` sets the default model correctly for instantiated pipelines.\n- Test the precedence of `--model` over `LLM_PIPELINE_MODEL` env var.\n- Ensure manual overrides are applied after auto-discovery.",
         "priority": "medium",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "pending",
         "subtasks": []
       },
       {
-        "id": 3,
+        "id": "3",
         "title": "Develop and Integrate Built-in TextAnalyzer Demo Pipeline",
         "description": "Create the `TextAnalyzerPipeline` demo, including its steps, models, prompts, and register it via an entry point in `llm-pipeline`'s `pyproject.toml` to provide out-of-the-box functionality for the UI.",
         "details": "Create `llm_pipeline/demo/` directory.\nCreate `llm_pipeline/demo/__init__.py` to export `TextAnalyzerPipeline`.\nCreate `llm_pipeline/demo/pipeline.py`:\n- Define `TextAnalyzerPipeline` as a `PipelineConfig` subclass.\n- Implement `SentimentAnalysisStep`, `TopicExtractionStep`, and `SummaryStep`.\n- Define `PipelineInputData` schema for structured input.\n- Define `Topic` model with `__tablename__ = \"demo_topics\"`.\n- Ensure multi-step context passing (sentiment -> topics -> summary).\n- Utilize live event streaming via WebSocket and agent-based LLM calls via pydantic-ai.\nCreate `llm_pipeline/demo/prompts.py`:\n- Implement the `seed_prompts(engine)` classmethod for `TextAnalyzerPipeline`.\n- Define prompt content constants using `{text}`, `{sentiment}`, `{primary_topic}` template variables.\n- Ensure idempotent prompt insertion based on `prompt_key` and `prompt_type` unique constraint.\nModify `pyproject.toml`:\n- Add `[project.entry-points.\"llm_pipeline.pipelines\"]` section.\n- Add `text_analyzer = \"llm_pipeline.demo:TextAnalyzerPipeline\"` entry point.\nSet default model for the demo pipeline to `google-gla:gemini-2.0-flash-lite` (this will be overridden by CLI/env if specified).",
         "testStrategy": "Run the `llm-pipeline ui` with the demo pipeline enabled.\n- Use the UI to submit text to the `TextAnalyzerPipeline`.\n- Verify that the pipeline executes all three steps (Sentiment, Topic, Summary).\n- Check that sentiment, topics, and summary are correctly generated and passed between steps.\n- Verify that `Topic` records are persisted to the database with `demo_topics` table name.\n- Confirm that prompts are seeded correctly on first startup and not duplicated on subsequent startups.\n- Verify live event streaming in the UI.\n- Test that the `--model` CLI flag overrides the demo's default model.",
         "priority": "high",
         "dependencies": [
-          1
+          "1"
         ],
         "status": "pending",
         "subtasks": []
       }
     ],
     "metadata": {
-      "created": "2026-03-12T15:25:22.228Z",
-      "updated": "2026-03-12T15:25:22.228Z",
-      "description": "Tasks for pipeline-discovery context"
+      "version": "1.0.0",
+      "lastModified": "2026-03-12T17:06:11.907Z",
+      "taskCount": 3,
+      "completedCount": 1,
+      "tags": [
+        "pipeline-discovery"
+      ]
     }
   }
 }

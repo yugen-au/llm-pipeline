@@ -1,7 +1,7 @@
 ## Task: pipeline-discovery-1-auto-discovery
 ## Description: Implement entry point auto-discovery in create_app() - scan llm_pipeline.pipelines group, register in pipeline_registry and introspection_registry, handle seed_prompts, log warnings on errors
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev

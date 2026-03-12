@@ -148,3 +148,4 @@
 [2026-03-13 04:08:05] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
 [2026-03-13 04:08:05] [INFO] Deleted 1 old contract file(s)
 [2026-03-13 04:08:05] [DEBUG] STATE.md atomic write complete
+[2026-03-13 04:09:16] [INFO] Moved task folder from in-progress/ to completed/
