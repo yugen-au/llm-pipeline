@@ -100,13 +100,7 @@ class TokenPipeline(
 # ---------------------------------------------------------------------------
 
 
-def _mock_usage(input_tokens=10, output_tokens=5):
-    """Build mock pydantic-ai Usage."""
-    usage = MagicMock()
-    usage.input_tokens = input_tokens
-    usage.output_tokens = output_tokens
-    usage.requests = 1
-    return usage
+from tests.conftest import _mock_usage  # shared helper from root tests/conftest.py
 
 
 def _make_run_result(count=1, input_tokens=10, output_tokens=5):
@@ -132,11 +126,7 @@ def _make_run_result_zero_usage(count=1):
     instruction = TokenInstructions(count=count, confidence_score=1.0, notes="ok")
     mock_result = MagicMock()
     mock_result.output = instruction
-    usage = MagicMock()
-    usage.input_tokens = 0
-    usage.output_tokens = 0
-    usage.requests = 1
-    mock_result.usage.return_value = usage
+    mock_result.usage.return_value = _mock_usage(input_tokens=0, output_tokens=0)
     return mock_result
 
 

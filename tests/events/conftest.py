@@ -371,13 +371,7 @@ class TransformationPipeline(
 # -- Mock run_result builders --------------------------------------------------
 
 
-def _mock_usage():
-    """Build MagicMock mimicking pydantic-ai Usage with realistic token values."""
-    usage = MagicMock()
-    usage.input_tokens = 10
-    usage.output_tokens = 5
-    usage.requests = 1
-    return usage
+from tests.conftest import _mock_usage  # shared helper from root tests/conftest.py
 
 
 def make_simple_run_result(count=1):

@@ -39,3 +39,57 @@ New test file with 7 test classes covering all plan requirements:
 [x] All 628 existing tests pass (excluding pre-existing test_ui.py failure)
 [x] No hardcoded values
 [x] Error handling present (null/zero usage edge cases covered)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] (LOW) _mock_usage helper duplicated across test files -- consolidated into tests/conftest.py
+
+### Changes Made
+#### File: `tests/conftest.py`
+Created root-level conftest with shared `_mock_usage(input_tokens=10, output_tokens=5)` helper.
+```
+# Before
+(file did not exist)
+
+# After
+def _mock_usage(input_tokens=10, output_tokens=5):
+    usage = MagicMock()
+    usage.input_tokens = input_tokens
+    usage.output_tokens = output_tokens
+    usage.requests = 1
+    return usage
+```
+
+#### File: `tests/events/conftest.py`
+Replaced inline `_mock_usage()` definition with import from root conftest.
+```
+# Before
+def _mock_usage():
+    usage = MagicMock()
+    usage.input_tokens = 10
+    usage.output_tokens = 5
+    usage.requests = 1
+    return usage
+
+# After
+from tests.conftest import _mock_usage
+```
+
+#### File: `tests/test_token_tracking.py`
+Replaced inline `_mock_usage()` definition with import; updated `_make_run_result_zero_usage` to use shared helper.
+```
+# Before
+def _mock_usage(input_tokens=10, output_tokens=5):
+    ...
+
+# After
+from tests.conftest import _mock_usage
+```
+
+### Verification
+[x] All 28 token tracking tests pass
+[x] All 412 events + token tracking tests pass
+[x] All 628 tests pass (excluding pre-existing test_ui.py failure)
