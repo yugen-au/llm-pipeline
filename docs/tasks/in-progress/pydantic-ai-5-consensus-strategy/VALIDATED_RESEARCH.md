@@ -4,7 +4,7 @@
 
 Both research documents are highly accurate. Step 1 (Codebase Architecture) was verified line-by-line against actual source -- all signatures, line references, algorithm descriptions, and behavioral semantics match the current code. Step 2 (Python Patterns) proposes design patterns that align with existing codebase conventions (ABC pattern from PipelineStrategy, Pydantic BaseModel for data containers, module-level pure functions).
 
-The strategy pattern approach is sound. MajorityVoteStrategy can exactly reproduce current behavior. Four questions require CEO input before planning: per-step vs pipeline-level interaction model, backward compatibility of consensus_polling dict API, ConsensusResult.confidence semantics, and grouping logic ownership.
+The strategy pattern approach is sound. MajorityVoteStrategy can exactly reproduce current behavior. Four design questions were escalated to CEO; all resolved (see Q&A History).
 
 ## Domain Findings
 
@@ -46,10 +46,10 @@ Task 2 rewrote `_execute_with_consensus` from `execute_llm_step()` to `agent.run
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Per-step vs pipeline-level config interaction? | PENDING | Determines whether step-level strategy activates independently or only when pipeline consensus is enabled |
-| Keep consensus_polling dict API? | PENDING | Determines backward compatibility approach and whether internal conversion to MajorityVoteStrategy is needed |
-| ConsensusResult.confidence semantics? | PENDING | Determines whether confidence is strategy-specific or standardized across all strategies |
-| Grouping logic ownership? | PENDING | Determines whether strategies can customize grouping or all share instructions_match |
+| Per-step vs pipeline-level config interaction? | **STEP OVERRIDES ALL.** Step strategy activates regardless of pipeline enable flag. If no step strategy, fall back to pipeline-level. | StepDefinition.consensus_strategy is the primary config point. Pipeline-level is fallback only. Orchestrator checks step first, pipeline second. |
+| Keep consensus_polling dict API? | **REMOVE ENTIRELY.** Breaking change accepted. | No backward compat conversion needed. Delete consensus_polling parameter from execute(). All consensus config via strategy objects only. |
+| ConsensusResult.confidence semantics? | **NORMALIZED 0-1 SCALE.** Each strategy computes its natural trust metric, normalized to 0-1. strategy_name metadata enables strategy-specific interpretation by advanced callers. MajorityVote=agreement_ratio, ConfidenceWeighted=normalized weighted score, Adaptive=normalized combined metric, SoftVote=probability margin. | confidence field is always float 0-1 with ge=0.0 le=1.0 validation. No strategy-specific subfields needed. |
+| Grouping logic ownership? | **SHARED ORCHESTRATOR.** All strategies share instructions_match() at orchestrator level. No ABC group() hook. | Grouping stays in pipeline.py (or consensus.py module-level function called by pipeline.py). Strategies receive pre-grouped result_groups. Simpler ABC interface. |
 
 ## Assumptions Validated
 
@@ -66,21 +66,19 @@ Task 2 rewrote `_execute_with_consensus` from `execute_llm_step()` to `agent.run
 
 ## Open Items
 
-- Per-step vs pipeline-level config interaction model (options a/b/c) -- needs CEO decision
-- Backward compatibility of `consensus_polling` dict API -- needs CEO decision
-- `ConsensusResult.confidence` field semantics (strategy-specific vs standardized) -- needs CEO decision
-- Grouping logic ownership: fixed at orchestrator (all strategies share `instructions_match`) vs pluggable via optional `group()` hook on ABC -- needs CEO decision
 - `create_failure()` with required fields in consensus: if `output_type.create_failure(str(exc))` is called without `**safe_defaults` for required fields (like `count` on `SimpleInstructions`), Pydantic validation fails. Pre-existing gap, not introduced by refactor, but strategies should handle failure results the same way as current code.
 - Orphaned event types (`LLMCallRetry`, `LLMCallFailed`, `LLMCallRateLimited`) remain defined but never emitted. Not Task 5 scope but noted for awareness.
 - ConsensusStarted event has `threshold: int` field -- ConfidenceWeighted uses `threshold: float`. May need event field type change or new event variant.
+- Removing `consensus_polling` dict API from `execute()` is a breaking change to the public API. Callers must migrate to `StepDefinition.consensus_strategy`.
 
 ## Recommendations for Planning
 
 1. Accept research findings as accurate basis for planning -- no codebase discrepancies found
 2. Use explicit `name` property on ConsensusStrategy ABC (not __init_subclass__ auto-naming) to avoid PipelineStrategy collision
-3. Keep grouping logic at orchestrator level with `instructions_match()` as module-level function in consensus.py; defer pluggable grouping to future task if needed
-4. ConsensusResult as Pydantic BaseModel (frozen=True) -- matches codebase conventions and provides validation
-5. Maintain backward compatibility of `consensus_polling` dict API by internally converting to `MajorityVoteStrategy(threshold=threshold)` when no step-level strategy is set
-6. Add `consensus_strategy` field to StepDefinition dataclass before any other changes (implementation ordering dependency)
-7. ConsensusStarted event may need a `strategy_name: str` field addition -- plan for this in event type modifications
-8. Test strategy: unit test each strategy with known inputs, integration test via existing `_run_consensus_pipeline` pattern, verify MajorityVoteStrategy produces identical event sequences to current code
+3. Grouping logic stays at orchestrator level (CEO decision). Extract `instructions_match()`, `_smart_compare()`, `_get_mixin_fields()` as module-level functions in `consensus.py`. Orchestrator calls them and passes pre-grouped `result_groups` to strategies.
+4. ConsensusResult as Pydantic BaseModel (frozen=True) with `confidence: float = Field(ge=0.0, le=1.0)` -- normalized 0-1 scale per CEO decision
+5. Remove `consensus_polling` dict API entirely (CEO decision: breaking change accepted). All consensus config via `StepDefinition.consensus_strategy` only.
+6. Step-level strategy overrides all (CEO decision). If `StepDefinition.consensus_strategy` is set, consensus activates for that step regardless of any pipeline-level flag. If not set, no consensus for that step.
+7. Add `consensus_strategy` field to StepDefinition dataclass before any other changes (implementation ordering dependency)
+8. ConsensusStarted event may need a `strategy_name: str` field addition -- plan for this in event type modifications
+9. Test strategy: unit test each strategy with known inputs, integration test via existing `_run_consensus_pipeline` pattern, verify MajorityVoteStrategy produces identical event sequences to current code
