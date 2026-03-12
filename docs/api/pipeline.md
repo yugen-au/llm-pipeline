@@ -77,7 +77,7 @@ def __init__(
     strategies: Optional[List[PipelineStrategy]] = None,
     session: Optional[Session] = None,
     engine: Optional[Engine] = None,
-    provider: Optional[LLMProvider] = None,
+    model: Optional[str] = None,
     variable_resolver: Optional[VariableResolver] = None,
 )
 ```
@@ -87,7 +87,7 @@ def __init__(
 - `strategies` (List[PipelineStrategy], optional) - Strategy instances. If `None`, instantiates from `STRATEGIES.create_instances()`
 - `session` (Session, optional) - Existing database session. Overrides `engine` if provided
 - `engine` (Engine, optional) - SQLAlchemy engine. Auto-SQLite if both `session` and `engine` are `None`
-- `provider` (LLMProvider, optional) - LLM provider instance (required for `execute()`)
+- `model` (str, optional) - pydantic-ai model string (e.g., `'google-gla:gemini-2.0-flash-lite'`), required for `execute()`
 - `variable_resolver` (VariableResolver, optional) - Variable resolver for prompt template variables
 
 **Database Session Hierarchy:**
@@ -111,16 +111,16 @@ The constructor automatically:
 
 ```python
 # Auto-SQLite for development
-pipeline = MyPipeline(provider=gemini_provider)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 
 # Production with explicit database
 from sqlalchemy import create_engine
 engine = create_engine("postgresql://user:pass@localhost/db")
-pipeline = MyPipeline(engine=engine, provider=gemini_provider)
+pipeline = MyPipeline(engine=engine, model='google-gla:gemini-2.0-flash-lite')
 
 # With variable resolver for prompt variables
 resolver = VariableResolver(variable_classes=[DateVariables, ConfigVariables])
-pipeline = MyPipeline(provider=gemini_provider, variable_resolver=resolver)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite', variable_resolver=resolver)
 ```
 
 ### Properties
@@ -489,7 +489,7 @@ During extraction (within `execute()`):
 **Example:**
 
 ```python
-pipeline = MyPipeline(provider=gemini_provider)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 
 # Basic execution
 pipeline.execute(
@@ -521,7 +521,7 @@ results = pipeline.execute(data, context).save()
 
 **Validation:**
 
-- Raises `ValueError` if `provider` not set
+- Raises `ValueError` if `model` not set
 - Raises `ValueError` if no strategies registered
 - Validates consensus config if enabled (threshold >= 2, max >= threshold)
 
@@ -775,14 +775,14 @@ def close(self) -> None
 **Example:**
 
 ```python
-pipeline = MyPipeline(provider=gemini_provider)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 try:
     pipeline.execute(data, context).save()
 finally:
     pipeline.close()
 
 # Or use context manager pattern
-with MyPipeline(provider=gemini_provider) as pipeline:
+with MyPipeline(model='google-gla:gemini-2.0-flash-lite') as pipeline:
     pipeline.execute(data, context).save()
 ```
 
@@ -963,16 +963,14 @@ Note: `StepKeyDict` is internal (not exported), used by `PipelineConfig.data` an
 
 ```python
 from llm_pipeline import PipelineConfig
-from llm_pipeline.llm.gemini import GeminiProvider
 
 class RateCardPipeline(PipelineConfig,
                        registry=RateCardRegistry,
                        strategies=RateCardStrategies):
     pass
 
-# Initialize with provider
-provider = GeminiProvider(api_key="...")
-pipeline = RateCardPipeline(provider=provider)
+# Initialize with pydantic-ai model string
+pipeline = RateCardPipeline(model='google-gla:gemini-2.0-flash-lite')
 
 # Execute
 pipeline.execute(
@@ -1006,11 +1004,11 @@ class MyPipeline(PipelineConfig, ...):
 
 ```python
 # First run (fresh execution)
-pipeline1 = MyPipeline(provider=provider)
+pipeline1 = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 pipeline1.execute(data, context, use_cache=True).save()
 
 # Second run (uses cache if inputs unchanged)
-pipeline2 = MyPipeline(provider=provider)
+pipeline2 = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 pipeline2.execute(data, context, use_cache=True).save()
 ```
 
@@ -1024,7 +1022,7 @@ Cache is invalidated if:
 ### With Consensus Polling
 
 ```python
-pipeline = MyPipeline(provider=provider)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite')
 
 # Require 3 matching results, max 5 attempts per call
 pipeline.execute(
@@ -1052,7 +1050,7 @@ class DateVariables(BaseModel):
     current_year: str
 
 resolver = VariableResolver(variable_classes=[DateVariables])
-pipeline = MyPipeline(provider=provider, variable_resolver=resolver)
+pipeline = MyPipeline(model='google-gla:gemini-2.0-flash-lite', variable_resolver=resolver)
 
 # Steps can now use {current_date} and {current_year} in prompts
 ```
@@ -1088,7 +1086,7 @@ engine = create_engine("postgresql://localhost/mydb")
 
 # Pipeline does NOT own this session
 with Session(engine) as session:
-    pipeline = MyPipeline(session=session, provider=provider)
+    pipeline = MyPipeline(session=session, model='google-gla:gemini-2.0-flash-lite')
     pipeline.execute(data, context)
     results = pipeline.save(session=session)
     session.commit()

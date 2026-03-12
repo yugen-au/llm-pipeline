@@ -987,70 +987,24 @@ class LaneExtraction(PipelineExtraction, model=Lane):
 
 The framework provides several extension points for customizing behavior without modifying core code.
 
-### Custom LLM Provider
+### LLM Model Selection
 
-Implement the `LLMProvider` abstract class to add support for new LLM APIs:
+llm-pipeline uses pydantic-ai model strings to configure the LLM provider. Any model supported by pydantic-ai can be used:
 
 ```python
-from llm_pipeline.llm.provider import LLMProvider
-from pydantic import BaseModel
-from typing import Any, Dict, List, Optional, Type
+# Google Gemini
+pipeline = RateCardPipeline(model='google-gla:gemini-2.0-flash-lite')
 
-class CustomProvider(LLMProvider):
-    def __init__(self, api_key: str, model: str = "custom-model-v1"):
-        self.api_key = api_key
-        self.model = model
-        # Initialize your API client here
+# OpenAI
+pipeline = RateCardPipeline(model='openai:gpt-4o')
 
-    def call_structured(
-        self,
-        prompt: str,
-        system_instruction: str,
-        result_class: Type[BaseModel],
-        max_retries: int = 3,
-        not_found_indicators: Optional[List[str]] = None,
-        strict_types: bool = True,
-        array_validation: Optional[Any] = None,
-        validation_context: Optional[Any] = None,
-        **kwargs,
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Call your LLM API with structured output validation.
+# Anthropic
+pipeline = RateCardPipeline(model='anthropic:claude-3-5-sonnet-latest')
 
-        Steps:
-        1. Format prompt and system instruction for your API
-        2. Call your API with retries
-        3. Parse response JSON
-        4. Validate against result_class schema
-        5. Return validated dict or None if validation fails
-        """
-        for attempt in range(max_retries):
-            try:
-                # Your API call logic here
-                response_json = self._call_api(prompt, system_instruction)
-
-                # Validate with Pydantic
-                validated = result_class(**response_json)
-
-                # Return as dict
-                return validated.model_dump()
-
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    return None
-                continue
-
-        return None
-
-    def _call_api(self, prompt: str, system_instruction: str) -> dict:
-        # Implement your API call here
-        pass
-
-# Usage
-provider = CustomProvider(api_key="your-key")
-pipeline = RateCardPipeline(provider=provider)
 pipeline.execute(data=df, initial_context={})
 ```
+
+See [pydantic-ai model configuration](https://ai.pydantic.dev/models/) for the full list of supported model strings.
 
 ### Custom Sanitization
 

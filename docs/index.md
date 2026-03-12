@@ -37,7 +37,7 @@ Comprehensive API documentation organized by module:
 | **[Strategy](api/strategy.md)** | Strategy pattern and selection | `PipelineStrategy`, `PipelineStrategies`, `StepDefinition` |
 | **[Extraction](api/extraction.md)** | Database extraction from LLM results | `PipelineExtraction` |
 | **[Transformation](api/transformation.md)** | Data transformation between steps | `PipelineTransformation` |
-| **[LLM Provider](api/llm.md)** | LLM provider system | `LLMProvider`, `GeminiProvider`, `RateLimiter` |
+| **[Pipeline](api/pipeline.md)** | Pipeline orchestration and LLM integration | `PipelineConfig`, `StepKeyDict` |
 | **[Prompts](api/prompts.md)** | Prompt management system | `PromptService`, `Prompt`, `VariableResolver` |
 | **[State](api/state.md)** | Execution state tracking | `PipelineStepState`, `PipelineRunInstance` |
 | **Events** | Event system for pipeline observability | `InMemoryEventHandler`, `CompositeEmitter`, `LoggingEventHandler` |
@@ -111,8 +111,8 @@ Comprehensive API documentation organized by module:
 - **Setup**: [Getting Started](guides/getting-started.md)
 
 #### LLM Provider
-- **API Details**: [LLM Provider API Reference](api/llm.md)
-- **Implementation**: Gemini provider included, abstract LLMProvider for custom implementations
+- **API Details**: [Pipeline API Reference](api/pipeline.md)
+- **Implementation**: Multi-provider support via pydantic-ai model strings
 
 ### By Concept
 
@@ -147,7 +147,7 @@ Comprehensive API documentation organized by module:
 - [Basic Pipeline Example](guides/basic-pipeline.md)
 
 #### LLM Integration
-- [LLM Provider API Reference](api/llm.md)
+- [Pipeline API Reference](api/pipeline.md)
 - [Getting Started](guides/getting-started.md)
 - [API Reference Index](api/index.md) - event system: `InMemoryEventHandler`, `CompositeEmitter` for observability
 
@@ -177,7 +177,7 @@ docs/api/
 ├── strategy.md           # Strategy pattern classes
 ├── extraction.md         # Data extraction system
 ├── transformation.md     # Data transformation system
-├── llm.md                # LLM provider system
+├── pipeline.md           # Pipeline orchestration and LLM integration
 ├── prompts.md            # Prompt management
 ├── state.md              # State tracking and caching
 └── registry.md           # Database registry
@@ -268,9 +268,8 @@ from llm_pipeline.events import PipelineStarted, LLMCallStarting  # concrete eve
 # Prompts
 from llm_pipeline.prompts import PromptService, sync_prompts
 
-# LLM Provider (optional)
-from llm_pipeline.llm import LLMProvider
-from llm_pipeline.llm.gemini import GeminiProvider
+# LLM model configuration (via pydantic-ai model strings)
+# e.g., model='google-gla:gemini-2.0-flash-lite'
 ```
 
 **Complete import reference**: [API Reference Index](api/index.md)

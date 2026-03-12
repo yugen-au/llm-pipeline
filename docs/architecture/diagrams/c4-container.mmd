@@ -9,10 +9,8 @@ graph TB
         end
 
         subgraph "LLM Integration Container"
-            LLMProvider["<b>LLMProvider</b><br/>Abstract LLM interface<br/>[Python/ABC]"]
-            GeminiProvider["<b>GeminiProvider</b><br/>Google Gemini implementation<br/>[Python/google-generativeai]"]
-            SchemaFormatter["<b>Schema Formatter</b><br/>LLM schema preprocessing<br/>[Python]"]
-            RateLimiter["<b>Rate Limiter</b><br/>API throttling<br/>[Python]"]
+            AgentRegistry["<b>AgentRegistry</b><br/>pydantic-ai agent management<br/>[Python/pydantic-ai]"]
+            AgentBuilders["<b>Agent Builders</b><br/>Agent construction helpers<br/>[Python/pydantic-ai]"]
         end
 
         subgraph "Prompt Management Container"
@@ -36,23 +34,21 @@ graph TB
 
     subgraph "External Systems"
         User["<b>User/Application</b><br/>Pipeline consumer"]
-        LLMService["<b>LLM Service</b><br/>Google Gemini API"]
+        LLMService["<b>LLM Service</b><br/>LLM API (via pydantic-ai)"]
         Database[(fa:fa-database Database<br/>SQLite/PostgreSQL)]
         PromptFiles["<b>Prompt Files</b><br/>YAML configuration"]
     end
 
     %% Pipeline Orchestrator -> LLM Integration
-    StepExecution -->|Execute LLM call| LLMProvider
-    StepExecution -->|Execute LLM call| GeminiProvider
+    StepExecution -->|Execute LLM call| AgentRegistry
+    AgentRegistry -->|Build agents| AgentBuilders
     StrategySystem -->|Route to strategy| ExtractionEngine
     StrategySystem -->|Route to strategy| TransformationEngine
     PipelineConfig -->|Configure| StrategySystem
     PipelineConfig -->|Configure| StepExecution
 
     %% LLM Integration flows
-    GeminiProvider -->|Format schema| SchemaFormatter
-    GeminiProvider -->|Throttle requests| RateLimiter
-    RateLimiter -->|Call API| LLMService
+    AgentBuilders -->|Call API| LLMService
 
     %% Prompt Management flows
     StepExecution -->|Query prompts| PromptService
@@ -77,7 +73,7 @@ graph TB
 
     %% External interactions
     User -->|Execute pipeline| PipelineConfig
-    User -->|Configure provider| GeminiProvider
+    User -->|Configure model| AgentRegistry
     Database -->|Store state & prompts| PromptService
     PromptFiles -->|Provide prompts| PromptLoader
 
@@ -85,6 +81,6 @@ graph TB
     classDef external fill:#D2ECFF,stroke:#003DA5,stroke-width:1px,color:#000
     classDef database fill:#F5F5F5,stroke:#666,stroke-width:2px,color:#000
 
-    class PipelineConfig,StrategySystem,StepExecution,ExtractionEngine,TransformationEngine,LLMProvider,GeminiProvider,SchemaFormatter,RateLimiter,PromptService,PromptLoader,VariableResolver,PipelineRunInstance,PipelineStepState,CacheKeyGen,PipelineRegistry,ReadOnlySession,DBAccess container
+    class PipelineConfig,StrategySystem,StepExecution,ExtractionEngine,TransformationEngine,AgentRegistry,AgentBuilders,PromptService,PromptLoader,VariableResolver,PipelineRunInstance,PipelineStepState,CacheKeyGen,PipelineRegistry,ReadOnlySession,DBAccess container
     class User,LLMService,PromptFiles external
     class Database database
