@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from llm_pipeline.registry import PipelineDatabaseRegistry
     from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.state import PipelineStepState
-    from llm_pipeline.llm.provider import LLMProvider
     from llm_pipeline.prompts.variables import VariableResolver
     from llm_pipeline.events.emitter import PipelineEventEmitter
     from llm_pipeline.events.types import PipelineEvent
@@ -96,9 +95,9 @@ class PipelineConfig(ABC):
             pass
 
     Constructor accepts dependency injection for decoupling:
+        - model: pydantic-ai model string (e.g. 'google-gla:gemini-2.0-flash-lite')
         - engine: SQLAlchemy engine (auto-SQLite if omitted)
         - session: Existing session (overrides engine)
-        - provider: LLMProvider instance (required for execute())
         - variable_resolver: Optional VariableResolver for prompt variables
     """
 
@@ -1124,8 +1123,8 @@ class PipelineConfig(ABC):
         dict2 = instr2.model_dump()
         return PipelineConfig._smart_compare(dict1, dict2, mixin_fields=mixin_fields)
 
-    def _execute_with_consensus(self, call_kwargs, consensus_threshold, maximum_step_calls, current_step_name):
-        from llm_pipeline.llm.executor import execute_llm_step
+    def _execute_with_consensus(self, agent, user_prompt, step_deps, output_type, consensus_threshold, maximum_step_calls, current_step_name):
+        from pydantic_ai import UnexpectedModelBehavior
 
         results = []
         result_groups = []
@@ -1138,7 +1137,11 @@ class PipelineConfig(ABC):
                 max_calls=maximum_step_calls,
             ))
         for attempt in range(maximum_step_calls):
-            instruction = execute_llm_step(**call_kwargs)
+            try:
+                run_result = agent.run_sync(user_prompt, deps=step_deps, model=self._model)
+                instruction = run_result.output
+            except UnexpectedModelBehavior as exc:
+                instruction = output_type.create_failure(str(exc))
             results.append(instruction)
             matched_group = None
             for group in result_groups:
