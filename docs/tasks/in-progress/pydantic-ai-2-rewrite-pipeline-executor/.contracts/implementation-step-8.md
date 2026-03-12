@@ -4,23 +4,23 @@
 - Task folder: docs\tasks\in-progress\pydantic-ai-2-rewrite-pipeline-executor
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-5-delete-createllmcall.md (if already exists, APPEND to file)
+- Output Files: implementation\step-8-replace-mockprovider.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 5
+- Step to fix: 8
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /pydantic/pydantic-ai
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 5
+1. Read REVIEW.md for issues assigned to Step 8
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-5-delete-createllmcall.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-8-replace-mockprovider.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
-## Review Fix Iteration 0
+## Review Fix Iteration 2
 **Issues Source:** [REVIEW.md]
 **Status:** [fixed/partial/blocked]
 
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-8-replace-mockprovider.md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
