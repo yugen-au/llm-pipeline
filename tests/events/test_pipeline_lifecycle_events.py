@@ -4,12 +4,13 @@ Verifies PipelineStarted, PipelineCompleted, and PipelineError events emitted by
 Pipeline.execute() via InMemoryEventHandler.
 """
 import pytest
+from unittest.mock import patch
 
 from llm_pipeline.events.types import PipelineStarted, PipelineCompleted, PipelineError
 from conftest import (
-    MockProvider,
     SuccessPipeline,
     FailurePipeline,
+    make_simple_run_result,
 )
 
 
@@ -21,17 +22,13 @@ class TestPipelineLifecycleSuccess:
 
     def test_pipeline_lifecycle_success(self, seeded_session, in_memory_handler):
         """Execute successful pipeline, verify PipelineStarted + PipelineCompleted emitted."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
 
         # Verify event sequence
         events = in_memory_handler.get_events()
@@ -55,7 +52,7 @@ class TestPipelineLifecycleSuccess:
         assert isinstance(completed["execution_time_ms"], (int, float))
         assert completed["execution_time_ms"] > 0
         assert "steps_executed" in completed
-        # _executed_steps is a set of step CLASSES, not instances - 2 SimpleStep instances = 1 unique class
+        # _executed_steps is a set of step CLASSES - 2 SimpleStep instances = 1 unique class
         assert completed["steps_executed"] == 1, "Expected 1 unique step class executed"
 
         # No PipelineError emitted
@@ -68,11 +65,9 @@ class TestPipelineLifecycleError:
 
     def test_pipeline_lifecycle_error(self, seeded_session, in_memory_handler):
         """Execute failing pipeline, verify PipelineStarted + PipelineError emitted."""
-        mock_provider = MockProvider()
-
         pipeline = FailurePipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
 
@@ -114,23 +109,16 @@ class TestPipelineLifecycleNoEmitter:
 
     def test_pipeline_lifecycle_no_emitter(self, seeded_session):
         """Execute pipeline without event_emitter, verify no events and successful run."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
-        # Create pipeline WITHOUT event_emitter
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=2)):
+            result = pipeline.execute(data="test data", initial_context={})
 
         # Verify execution succeeded
         assert result is not None
-        assert result.context["total"] == 2  # from second step
+        assert result.context["total"] == 2  # from mocked count=2
         # _executed_steps is a set of step CLASSES - 2 SimpleStep instances = 1 unique class
         assert len(result._executed_steps) == 1
-
-        # No way to verify zero events without handler, but execution proves zero-overhead path works

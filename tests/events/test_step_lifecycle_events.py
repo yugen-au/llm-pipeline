@@ -4,6 +4,7 @@ Verifies StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted
 events emitted by Pipeline.execute() via InMemoryEventHandler.
 """
 import pytest
+from unittest.mock import patch
 
 from llm_pipeline.events.types import (
     StepSelecting,
@@ -13,9 +14,9 @@ from llm_pipeline.events.types import (
     StepCompleted,
 )
 from conftest import (
-    MockProvider,
     SuccessPipeline,
     SkipPipeline,
+    make_simple_run_result,
 )
 
 
@@ -27,17 +28,13 @@ class TestStepSelecting:
 
     def test_step_selecting_emitted(self, seeded_session, in_memory_handler):
         """Execute pipeline, verify StepSelecting emitted for each step index."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         selecting_events = [e for e in events if e["event_type"] == "step_selecting"]
@@ -64,17 +61,13 @@ class TestStepSelected:
 
     def test_step_selected_emitted(self, seeded_session, in_memory_handler):
         """Execute pipeline, verify StepSelected emitted with correct fields."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         selected_events = [e for e in events if e["event_type"] == "step_selected"]
@@ -100,11 +93,9 @@ class TestStepSkipped:
 
     def test_step_skipped_emitted(self, seeded_session, in_memory_handler):
         """Execute pipeline with skippable step, verify StepSkipped emitted."""
-        mock_provider = MockProvider(responses=[])
-
         pipeline = SkipPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
         pipeline.execute(data="test data", initial_context={})
@@ -132,17 +123,13 @@ class TestStepStarted:
 
     def test_step_started_emitted(self, seeded_session, in_memory_handler):
         """Execute pipeline, verify StepStarted emitted with system_key and user_key."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         started_events = [e for e in events if e["event_type"] == "step_started"]
@@ -170,17 +157,13 @@ class TestStepCompleted:
 
     def test_step_completed_emitted(self, seeded_session, in_memory_handler):
         """Execute pipeline, verify StepCompleted emitted with execution_time_ms."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=2)):
+            pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
         completed_events = [e for e in events if e["event_type"] == "step_completed"]
@@ -209,26 +192,19 @@ class TestStepLifecycleNoEmitter:
 
     def test_step_lifecycle_no_emitter(self, seeded_session):
         """Execute pipeline without event_emitter, verify successful run."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
-        # Create pipeline WITHOUT event_emitter
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=2)):
+            result = pipeline.execute(data="test data", initial_context={})
 
         # Verify execution succeeded
         assert result is not None
-        assert result.context["total"] == 2  # from second step
+        assert result.context["total"] == 2  # from mocked count=2
         # _executed_steps is a set of step CLASSES - 2 SimpleStep instances = 1 unique class
         assert len(result._executed_steps) == 1
-
-        # No way to verify zero events without handler, but execution proves zero-overhead path works
 
 
 class TestStepLifecycleOrdering:
@@ -236,17 +212,13 @@ class TestStepLifecycleOrdering:
 
     def test_non_skipped_step_ordering(self, seeded_session, in_memory_handler):
         """Verify event order: StepSelecting -> StepSelected -> StepStarted -> StepCompleted."""
-        mock_provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
-
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
 
         events = in_memory_handler.get_events()
 
@@ -266,11 +238,9 @@ class TestStepLifecycleOrdering:
 
     def test_skipped_step_ordering(self, seeded_session, in_memory_handler):
         """Verify event order for skipped step: StepSelecting -> StepSelected -> StepSkipped."""
-        mock_provider = MockProvider(responses=[])
-
         pipeline = SkipPipeline(
             session=seeded_session,
-            provider=mock_provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
         pipeline.execute(data="test data", initial_context={})

@@ -9,10 +9,11 @@ and saves state; step 2 then finds that cached state (cache hit). This
 means we get 2 CacheLookup, 1 CacheMiss, 1 CacheHit per run.
 """
 import pytest
+from unittest.mock import patch
 
 from llm_pipeline.events.types import CacheLookup, CacheMiss, CacheHit, CacheReconstruction
 from llm_pipeline.events.handlers import InMemoryEventHandler
-from conftest import MockProvider, SuccessPipeline, ExtractionPipeline
+from conftest import SuccessPipeline, ExtractionPipeline, make_simple_run_result, make_item_detection_run_result
 
 
 # -- Helpers -------------------------------------------------------------------
@@ -20,16 +21,13 @@ from conftest import MockProvider, SuccessPipeline, ExtractionPipeline
 
 def _run_pipeline_with_cache(seeded_session, handler):
     """Execute SuccessPipeline with use_cache=True on fresh DB."""
-    provider = MockProvider(responses=[
-        {"count": 1, "notes": "first"},
-        {"count": 2, "notes": "second"},
-    ])
     pipeline = SuccessPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data="test data", initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+        pipeline.execute(data="test data", initial_context={}, use_cache=True)
     return pipeline, handler.get_events()
 
 
@@ -203,16 +201,13 @@ class TestCacheEventsNoEmitter:
 
     def test_no_events_without_emitter(self, seeded_session):
         """Pipeline with use_cache=True but no event_emitter runs without error."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=None,
         )
-        result = pipeline.execute(data="test data", initial_context={}, use_cache=True)
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            result = pipeline.execute(data="test data", initial_context={}, use_cache=True)
         assert result is not None
         # Step 2 hits cache from step 1's saved state (count=1), so total=1
         assert result.context["total"] == 1
@@ -226,16 +221,13 @@ class TestNoCacheEventsWithoutCacheFlag:
 
     def test_no_cache_events_default(self, seeded_session, in_memory_handler):
         """No CacheLookup/CacheMiss when use_cache=False (default)."""
-        provider = MockProvider(responses=[
-            {"count": 1, "notes": "first"},
-            {"count": 2, "notes": "second"},
-        ])
         pipeline = SuccessPipeline(
             session=seeded_session,
-            provider=provider,
+            model="test-model",
             event_emitter=in_memory_handler,
         )
-        pipeline.execute(data="test data", initial_context={})
+        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+            pipeline.execute(data="test data", initial_context={})
         events = in_memory_handler.get_events()
         cache_events = [
             e for e in events
@@ -252,28 +244,24 @@ def _two_run_success(seeded_session, handler):
 
     Returns (pipeline2, events2) from the second run only.
     """
-    responses = [
-        {"count": 1, "notes": "first"},
-        {"count": 2, "notes": "second"},
-    ]
-
     # Run 1: populates cache (discard events)
-    provider1 = MockProvider(responses=list(responses))
     pipeline1 = SuccessPipeline(
         session=seeded_session,
-        provider=provider1,
+        model="test-model",
         event_emitter=InMemoryEventHandler(),  # discard run-1 events
     )
-    pipeline1.execute(data="test data", initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+        pipeline1.execute(data="test data", initial_context={}, use_cache=True)
 
     # Run 2: cache hit path (capture events)
-    provider2 = MockProvider(responses=[])  # no LLM calls expected
     pipeline2 = SuccessPipeline(
         session=seeded_session,
-        provider=provider2,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline2.execute(data="test data", initial_context={}, use_cache=True)
+    # No LLM calls expected on cache hit, but patch anyway to be safe
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=1)):
+        pipeline2.execute(data="test data", initial_context={}, use_cache=True)
     return pipeline2, handler.get_events()
 
 
@@ -418,15 +406,13 @@ def _run_extraction_pipeline(seeded_session, handler):
 
     Returns (pipeline, events).
     """
-    provider = MockProvider(responses=[
-        {"item_count": 3, "category": "widgets", "notes": "ok"},
-    ])
     pipeline = ExtractionPipeline(
         session=seeded_session,
-        provider=provider,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline.execute(data="test data", initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_item_detection_run_result(item_count=3, category="widgets")):
+        pipeline.execute(data="test data", initial_context={}, use_cache=True)
     return pipeline, handler.get_events()
 
 
@@ -436,25 +422,23 @@ def _two_run_extraction(seeded_session, handler):
     Returns (pipeline2, events2) from the second run only.
     """
     # Run 1: cache miss, saves state + extractions
-    provider1 = MockProvider(responses=[
-        {"item_count": 3, "category": "widgets", "notes": "ok"},
-    ])
     pipeline1 = ExtractionPipeline(
         session=seeded_session,
-        provider=provider1,
+        model="test-model",
         event_emitter=InMemoryEventHandler(),  # discard run-1 events
     )
-    pipeline1.execute(data="test data", initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_item_detection_run_result(item_count=3, category="widgets")):
+        pipeline1.execute(data="test data", initial_context={}, use_cache=True)
     pipeline1.save()  # persist instances + PipelineRunInstance records for reconstruction
 
     # Run 2: cache hit, reconstructs extractions
-    provider2 = MockProvider(responses=[])  # no LLM calls expected
     pipeline2 = ExtractionPipeline(
         session=seeded_session,
-        provider=provider2,
+        model="test-model",
         event_emitter=handler,
     )
-    pipeline2.execute(data="test data", initial_context={}, use_cache=True)
+    with patch("pydantic_ai.Agent.run_sync", return_value=make_item_detection_run_result(item_count=3, category="widgets")):
+        pipeline2.execute(data="test data", initial_context={}, use_cache=True)
     return pipeline2, handler.get_events()
 
 
