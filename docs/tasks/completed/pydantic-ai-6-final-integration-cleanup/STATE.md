@@ -1,7 +1,7 @@
 ## Task: pydantic-ai-6-final-integration-cleanup
 ## Description: Final integration testing of pydantic-ai migration, remove deprecated code (create_llm_call), cleanup temp flags, verify all pipeline subclasses work with new agent system
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev

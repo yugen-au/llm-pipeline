@@ -901,15 +901,16 @@
           "4",
           "5"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-12T13:54:25.319Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-12T11:54:28.049Z",
+      "lastModified": "2026-03-12T13:54:25.319Z",
       "taskCount": 6,
-      "completedCount": 5,
+      "completedCount": 6,
       "tags": [
         "pydantic-ai"
       ]
