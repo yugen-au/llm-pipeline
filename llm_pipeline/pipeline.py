@@ -45,6 +45,7 @@ from llm_pipeline.events.types import (
 )
 
 if TYPE_CHECKING:
+    from pydantic_ai import InstrumentationSettings
     from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
     from llm_pipeline.registry import PipelineDatabaseRegistry
     from llm_pipeline.agent_registry import AgentRegistry
@@ -164,6 +165,7 @@ class PipelineConfig(ABC):
         variable_resolver: Optional["VariableResolver"] = None,
         event_emitter: Optional["PipelineEventEmitter"] = None,
         run_id: Optional[str] = None,
+        instrumentation_settings: Any | None = None,
     ):
         """
         Initialize pipeline.
@@ -175,6 +177,7 @@ class PipelineConfig(ABC):
             engine: Optional SQLAlchemy engine. Auto-SQLite if both session and engine are None.
             variable_resolver: Optional VariableResolver for prompt variable classes.
             event_emitter: Optional PipelineEventEmitter for lifecycle/LLM/extraction events. None disables events.
+            instrumentation_settings: Optional pydantic-ai InstrumentationSettings for per-agent OTel instrumentation.
         """
         from llm_pipeline.db import init_pipeline_db, get_session as db_get_session
         from llm_pipeline.session import ReadOnlySession
@@ -182,6 +185,7 @@ class PipelineConfig(ABC):
         self._model = model
         self._variable_resolver = variable_resolver
         self._event_emitter = event_emitter
+        self._instrumentation_settings = instrumentation_settings
 
         # Validate REGISTRY and STRATEGIES
         if self.REGISTRY is None:
@@ -740,6 +744,7 @@ class PipelineConfig(ABC):
                         step_name=step.step_name,
                         output_type=output_type,
                         validators=step_validators,
+                        instrument=self._instrumentation_settings,
                     )
 
                     for idx, params in enumerate(call_params):
