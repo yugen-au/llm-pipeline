@@ -1,5 +1,5 @@
 # IMPLEMENTATION - STEP 8: REPLACE MOCKPROVIDER
-**Status:** completed
+**Status:** completed (verified)
 
 ## Summary
 Removed `MockProvider(LLMProvider)` pattern from all 5 specified test files. Replaced `provider=MockProvider(...)` with `model="test-model"`. Added `AgentRegistry` subclasses to pipelines that execute LLM steps. Used `unittest.mock.patch("pydantic_ai.Agent.run_sync")` returning `MagicMock(output=instruction_instance)` for tests that actually call `execute()` with steps. Added backward-compat `MockProvider` stub in `events/conftest.py` so other event test files continue to import-collect (they will fail at runtime until Step 9 updates them).
@@ -121,3 +121,29 @@ class SuccessPipeline(PipelineConfig, registry=SuccessRegistry, strategies=Succe
 - [x] All pipeline constructors use `model="test-model"` instead of `provider=MockProvider()`
 - [x] Tests calling `execute()` with LLM steps use `patch("pydantic_ai.Agent.run_sync")`
 - [x] Each pipeline with LLM steps has a matching `{Prefix}AgentRegistry`
+
+---
+
+## Fix Iteration 1
+**Issues Source:** [TESTING.md]
+**Status:** fixed
+
+### Issues Addressed
+- [x] 196 test failures in 9 event test files due to `provider=MockProvider(...)` in local helper functions
+
+### Changes Made
+All 9 event test files were inspected. A previous agent pass had already completed the fix — all local helper functions in all 9 files already use `model="test-model"` and `patch("pydantic_ai.Agent.run_sync")`. No code changes were required in this iteration.
+
+Files inspected (all already correct):
+- `tests/events/test_cache_events.py` — `_run_pipeline_with_cache`, `_two_run_success`, `_run_extraction_pipeline`, `_two_run_extraction` all use `model="test-model"` + patch
+- `tests/events/test_consensus_events.py` — `_run_consensus_pipeline` uses `model="test-model"` + patch
+- `tests/events/test_ctx_state_events.py` — `_run_fresh`, `_run_cached`, `_run_empty_ctx_fresh` all use `model="test-model"` + patch
+- `tests/events/test_event_types.py` — integration tests use `model="test-model"` + patch
+- `tests/events/test_extraction_events.py` — `_run_extraction_pipeline`, `TestExtractionError` tests use `model="test-model"` + patch
+- `tests/events/test_llm_call_events.py` — `_run_success_pipeline` uses `model="test-model"` + patch
+- `tests/events/test_pipeline_lifecycle_events.py` — inline tests use `model="test-model"` + patch
+- `tests/events/test_step_lifecycle_events.py` — inline tests use `model="test-model"` + patch
+- `tests/events/test_transformation_events.py` — `_run_transformation_fresh`, `_run_transformation_cached` use `model="test-model"` + patch
+
+### Verification
+- [x] `uv run pytest tests/events/ -x --tb=short` — 384 passed in 5.23s
