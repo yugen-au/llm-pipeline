@@ -23,7 +23,7 @@ Step 3's AgentRegistry mapping (L61-65) uses the wrong value types. Must use the
 
 Step 3 shows `process_instructions` returning a plain dict when `context=SentimentAnalysisContext` is declared in `step_definition`. Source code at pipeline.py L386-392 enforces: if `step._context` is set, `process_instructions` MUST return that exact PipelineContext subclass instance, not a dict. Returning a dict causes TypeError.
 
-Correct pattern: `return SentimentAnalysisContext(sentiment=..., confidence_score=...)`.
+Correct pattern: `return SentimentAnalysisContext(sentiment=...)`.
 
 ### Extraction Method Name (MODERATE)
 **Source:** step-3 L511, step-1 L243-248, extraction.py L213-280
@@ -71,7 +71,7 @@ CEO decision: create `demo_topics` table in `seed_prompts(engine)` alongside pro
 | --- | --- | --- |
 | Strategy naming: DefaultStrategy vs TextAnalyzerStrategy? | DefaultStrategy (NAME="default"), follows test conventions | Prompt auto-discovery falls back to {step_name}; explicit keys recommended |
 | Topic SQLModel fields beyond name? | name + relevance (float) + run_id (str) | Defines DB schema and extraction bridge logic |
-| Context field from sentiment step: sentiment_score vs sentiment_confidence? | Reuse LLMResultMixin's built-in confidence_score | No custom confidence field needed; SentimentAnalysisContext has sentiment + confidence_score |
+| Context field from sentiment step: sentiment_score vs sentiment_confidence? | Reuse LLMResultMixin's built-in confidence_score | No custom confidence field needed; SentimentAnalysisContext has sentiment only, confidence accessed on Instructions output |
 | TopicItem nested model fields? | name (str) + relevance (float) | Matches Topic SQLModel minus run_id; extraction adds run_id |
 | Table creation: seed_prompts or pipeline __init__? | seed_prompts(engine) alongside prompt seeding | Single setup entry point; already has engine and runs at discovery |
 
@@ -89,7 +89,7 @@ CEO decision: create `demo_topics` table in `seed_prompts(engine)` alongside pro
 - [x] Strategy naming: DefaultStrategy (NAME="default") per CEO decision
 - [x] Topic SQLModel: name (str) + relevance (float) + run_id (str) per CEO decision
 - [x] TopicItem nested model: name (str) + relevance (float) per CEO decision
-- [x] Sentiment context field: reuse LLMResultMixin.confidence_score, no custom field per CEO decision
+- [x] Sentiment context field: SentimentAnalysisContext has sentiment only; confidence accessed via LLMResultMixin.confidence_score on Instructions output per CEO decision
 - [x] Table creation: in seed_prompts(engine) alongside prompt seeding per CEO decision
 
 ## Open Items
@@ -102,7 +102,7 @@ CEO decision: create `demo_topics` table in `seed_prompts(engine)` alongside pro
 4. Create demo_topics table in seed_prompts(engine) via `SQLModel.metadata.create_all(engine, tables=[Topic.__table__])`
 5. Use explicit prompt keys in step_definition (simpler than auto-discovery, no DB lookup at step creation)
 6. Give instruction custom fields safe defaults for create_failure support (e.g. `sentiment: str = ""`)
-7. SentimentAnalysisContext: `sentiment: str` + `confidence_score: float` (reuse from LLMResultMixin output)
+7. SentimentAnalysisContext: `sentiment: str` only -- confidence is accessible via LLMResultMixin.confidence_score on the Instructions output, not passed through context
 8. TopicItem (Pydantic BaseModel, not SQLModel): `name: str` + `relevance: float` -- used as nested list in TopicExtractionInstructions
 9. Topic (SQLModel, table="demo_topics"): `name: str` + `relevance: float` + `run_id: str` -- TopicExtraction.default() bridges TopicItem -> Topic by attaching run_id
 10. DefaultStrategy with NAME="default" for single-strategy pipeline

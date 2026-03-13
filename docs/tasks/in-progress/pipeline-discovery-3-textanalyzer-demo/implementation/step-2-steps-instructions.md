@@ -47,3 +47,51 @@ Added 10 classes after the existing skeleton (TextAnalyzerInputData, TopicItem, 
 [x] TopicExtraction uses default() not extract()
 [x] All process_instructions return PipelineContext subclass
 [x] All instruction fields have safe defaults for create_failure support
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] VALIDATED_RESEARCH.md recommendation #7 incorrectly listed `confidence_score: float` as a SentimentAnalysisContext field -- should be `sentiment: str` only
+
+### Changes Made
+#### File: `docs/tasks/in-progress/pipeline-discovery-3-textanalyzer-demo/VALIDATED_RESEARCH.md`
+Updated 4 locations where SentimentAnalysisContext was described as having confidence_score. Confidence is accessed via LLMResultMixin.confidence_score on the Instructions output, not passed through context.
+
+```
+# Before (recommendation #7)
+7. SentimentAnalysisContext: `sentiment: str` + `confidence_score: float` (reuse from LLMResultMixin output)
+
+# After
+7. SentimentAnalysisContext: `sentiment: str` only -- confidence is accessible via LLMResultMixin.confidence_score on the Instructions output, not passed through context
+```
+
+```
+# Before (process_instructions example)
+Correct pattern: `return SentimentAnalysisContext(sentiment=..., confidence_score=...)`.
+
+# After
+Correct pattern: `return SentimentAnalysisContext(sentiment=...)`.
+```
+
+```
+# Before (Q&A table)
+No custom confidence field needed; SentimentAnalysisContext has sentiment + confidence_score
+
+# After
+No custom confidence field needed; SentimentAnalysisContext has sentiment only, confidence accessed on Instructions output
+```
+
+```
+# Before (assumptions)
+Sentiment context field: reuse LLMResultMixin.confidence_score, no custom field per CEO decision
+
+# After
+Sentiment context field: SentimentAnalysisContext has sentiment only; confidence accessed via LLMResultMixin.confidence_score on Instructions output per CEO decision
+```
+
+### Verification
+[x] All 4 references to confidence_score in SentimentAnalysisContext updated
+[x] Doc now consistent with implementation (SentimentAnalysisContext has only `sentiment: str`)
+[x] No code changes needed -- documentation-only fix
