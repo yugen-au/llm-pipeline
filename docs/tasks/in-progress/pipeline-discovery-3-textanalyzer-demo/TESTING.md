@@ -120,3 +120,24 @@ None
 ## Recommendations
 1. Entry point is only discoverable after `pip install -e .` re-run; document this in deployment/onboarding notes.
 2. `prepare_calls()` and `process_instructions()` correctness for live pipeline runs requires integration test with a mocked `pydantic_ai.Agent.run_sync`; out of scope for this unit test pass but can follow test_pipeline.py pattern if needed.
+
+---
+
+## Re-run After Review Fixes (2026-03-13)
+
+### Changes Under Test
+- `llm_pipeline/demo/pipeline.py`: Replaced uppercase `List` imports with lowercase `list[]`; added comment on `DefaultStrategy.NAME` explaining redundancy
+- `docs/tasks/in-progress/pipeline-discovery-3-textanalyzer-demo/VALIDATED_RESEARCH.md`: Fixed `SentimentAnalysisContext` doc to match implementation (`sentiment: str` only, no `confidence_score`)
+
+### Test Execution
+**Pass Rate:** 1009/1009 (6 skipped, unchanged)
+```
+1009 passed, 6 skipped, 1 warning in 119.86s
+```
+1 pre-existing warning (PytestCollectionWarning on TestPipeline class with `__init__`, unrelated to demo).
+
+### Failed Tests
+None
+
+### Verdict
+All 56 demo tests and 953 existing tests pass. Review fixes introduced no regressions.
