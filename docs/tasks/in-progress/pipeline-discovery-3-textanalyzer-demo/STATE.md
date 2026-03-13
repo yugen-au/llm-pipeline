@@ -1,9 +1,9 @@
 ## Task: pipeline-discovery-3-textanalyzer-demo
 ## Description: Build TextAnalyzerPipeline demo with 3 steps (sentiment, topic extraction, summary), entry point registration, prompt seeding, multi-step context passing, WebSocket streaming
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/pipeline-discovery/3-textanalyzer-demo
 ## Plugins: python-development, backend-development, llm-application-dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [2,3]
 ## Work Mode: standard
-## Last Updated: 2026-03-13 11:11
+## Last Updated: 2026-03-13 11:31
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -22,7 +22,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a75c7666436e430ee | 13d4341c,3a1e1c0c | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | adbd79d0eb7868a18 | 622517ff | - |
 | Demo Package Skeleton | python-development:python-pro | implementation | 1 | - | A | complete | 0 | aa5fce9491ad9e83f | e03424ab | /pydantic/pydantic,/websites/sqlmodel_tiangolo |
-| Steps & Instructions | python-development:python-pro | implementation | 2 | - | B | complete | 0 | a3ed66fb529e87e4d | 2cd05f7d | /pydantic/pydantic |
-| Pipeline Wiring & Entry Point | python-development:python-pro | implementation | 3 | - | C | complete | 0 | a1b87b75e5adbf4b6 | 068a2812 | - |
+| Steps & Instructions | python-development:python-pro | implementation | 2 | - | B | in-progress | 0 | a3ed66fb529e87e4d | 2cd05f7d | /pydantic/pydantic |
+| Pipeline Wiring & Entry Point | python-development:python-pro | implementation | 3 | - | C | pending | 0 | a1b87b75e5adbf4b6 | 068a2812 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | aec6d18ca17e9c302 | 8534c2cf | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | a247d3a64724a3b33 | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a247d3a64724a3b33 | d757404f | - |
