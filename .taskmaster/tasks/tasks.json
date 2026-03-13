@@ -953,15 +953,16 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-13T00:49:45.292Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-12T17:06:11.907Z",
+      "lastModified": "2026-03-13T00:49:45.298Z",
       "taskCount": 3,
-      "completedCount": 1,
+      "completedCount": 2,
       "tags": [
         "pipeline-discovery"
       ]
