@@ -1,5 +1,11 @@
 const DEFAULT_LOCALE = 'en'
 
+/** Ensure ISO string is treated as UTC if no timezone indicator present. */
+function ensureUtc(iso: string): string {
+  if (/[Zz]$/.test(iso) || /[+-]\d{2}:\d{2}$/.test(iso)) return iso
+  return iso + 'Z'
+}
+
 const rtf = new Intl.RelativeTimeFormat(DEFAULT_LOCALE, { numeric: 'auto' })
 const dtf = new Intl.DateTimeFormat(DEFAULT_LOCALE, {
   dateStyle: 'medium',
@@ -38,7 +44,7 @@ export function formatRelative(
   locale: string = DEFAULT_LOCALE,
 ): string {
   const now = Date.now()
-  const then = new Date(isoString).getTime()
+  const then = new Date(ensureUtc(isoString)).getTime()
   const diffSeconds = Math.floor((then - now) / 1_000)
 
   const abs = Math.abs(diffSeconds)
@@ -66,7 +72,7 @@ export function formatAbsolute(
   isoString: string,
   locale: string = DEFAULT_LOCALE,
 ): string {
-  return getDtf(locale).format(new Date(isoString))
+  return getDtf(locale).format(new Date(ensureUtc(isoString)))
 }
 
 /**
