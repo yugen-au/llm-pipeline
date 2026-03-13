@@ -217,6 +217,16 @@ def trigger_run(
     run_id = str(uuid.uuid4())
     engine = request.app.state.engine
 
+    # Create PipelineRun record before background task so frontend
+    # can poll /steps and /events without 404 race condition.
+    with Session(engine) as pre_session:
+        pre_session.add(PipelineRun(
+            run_id=run_id,
+            pipeline_name=body.pipeline_name,
+            status="running",
+        ))
+        pre_session.commit()
+
     # Notify global WS subscribers before background task starts
     ws_manager.broadcast_global({
         "type": "run_created",

@@ -158,7 +158,15 @@ def create_app(
     # llm_pipeline.db as a side-effect. Multiple create_app() calls will
     # overwrite that global with the last-created engine.
     if db_path is not None:
-        engine = create_engine(f"sqlite:///{db_path}")
+        if db_path == ":memory:":
+            from sqlalchemy.pool import StaticPool
+            engine = create_engine(
+                "sqlite://",
+                connect_args={"check_same_thread": False},
+                poolclass=StaticPool,
+            )
+        else:
+            engine = create_engine(f"sqlite:///{db_path}")
         app.state.engine = init_pipeline_db(engine)
     else:
         app.state.engine = init_pipeline_db()

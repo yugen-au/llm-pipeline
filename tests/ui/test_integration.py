@@ -76,14 +76,17 @@ def _make_failing_pipeline_factory():
 
         def execute(self, **kwargs):
             with Session(self._engine) as session:
-                run = PipelineRun(
-                    run_id=self._run_id,
-                    pipeline_name="failing_test_pipeline",
-                    status="running",
-                    started_at=datetime.now(timezone.utc),
-                )
-                session.add(run)
-                session.commit()
+                existing = session.exec(
+                    select(PipelineRun).where(PipelineRun.run_id == self._run_id)
+                ).first()
+                if not existing:
+                    session.add(PipelineRun(
+                        run_id=self._run_id,
+                        pipeline_name="failing_test_pipeline",
+                        status="running",
+                        started_at=datetime.now(timezone.utc),
+                    ))
+                    session.commit()
             raise RuntimeError("forced failure")
 
         def save(self):
@@ -118,13 +121,17 @@ def _make_no_op_factory(gate: threading.Event):
 
         def execute(self, **kwargs):
             with Session(self._engine) as session:
-                session.add(PipelineRun(
-                    run_id=self._run_id,
-                    pipeline_name="integration_test_pipeline",
-                    status="running",
-                    started_at=datetime.now(timezone.utc),
-                ))
-                session.commit()
+                existing = session.exec(
+                    select(PipelineRun).where(PipelineRun.run_id == self._run_id)
+                ).first()
+                if not existing:
+                    session.add(PipelineRun(
+                        run_id=self._run_id,
+                        pipeline_name="integration_test_pipeline",
+                        status="running",
+                        started_at=datetime.now(timezone.utc),
+                    ))
+                    session.commit()
             gate.wait(timeout=5.0)
 
         def save(self):

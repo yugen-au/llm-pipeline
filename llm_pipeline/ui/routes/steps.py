@@ -1,6 +1,6 @@
 """Pipeline run steps route module -- list and detail."""
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -34,7 +34,7 @@ class StepDetail(BaseModel):
     pipeline_name: str
     run_id: str
     input_hash: str
-    result_data: dict
+    result_data: Any
     context_snapshot: dict
     prompt_system_key: Optional[str] = None
     prompt_user_key: Optional[str] = None

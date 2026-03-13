@@ -505,13 +505,22 @@ class PipelineConfig(ABC):
         start_time = datetime.now(timezone.utc)
         current_step_name: str | None = None
 
-        pipeline_run = PipelineRun(
-            run_id=self.run_id,
-            pipeline_name=self.pipeline_name,
-            status="running",
-            started_at=start_time,
-        )
-        self._real_session.add(pipeline_run)
+        from sqlmodel import select as _sel
+        existing_run = self._real_session.exec(
+            _sel(PipelineRun).where(PipelineRun.run_id == self.run_id)
+        ).first()
+        if existing_run:
+            existing_run.status = "running"
+            existing_run.started_at = start_time
+            pipeline_run = existing_run
+        else:
+            pipeline_run = PipelineRun(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+                status="running",
+                started_at=start_time,
+            )
+            self._real_session.add(pipeline_run)
         self._real_session.flush()
 
         if self._event_emitter:

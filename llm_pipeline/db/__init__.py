@@ -22,39 +22,46 @@ _engine: Optional[Engine] = None
 _wal_registered_engines: set = set()
 
 
-def _migrate_step_state_token_columns(engine: Engine) -> None:
-    """Add token usage columns to pipeline_step_states if missing.
+def _migrate_add_columns(engine: Engine) -> None:
+    """Add columns introduced after initial schema to existing tables.
 
     **SQLite-only.** Uses PRAGMA table_info to check column existence
-    before ALTER TABLE, consistent with SQLiteEventHandler.__init__
-    migration style. Non-SQLite engines are skipped silently; users
+    before ALTER TABLE. Non-SQLite engines are skipped silently; users
     on other databases must add the columns manually.
     """
     if not engine.url.drivername.startswith("sqlite"):
         return
-    _TOKEN_COLUMNS = [
-        ("input_tokens", "INTEGER"),
-        ("output_tokens", "INTEGER"),
-        ("total_tokens", "INTEGER"),
-        ("total_requests", "INTEGER"),
+
+    # (table_name, column_name, column_type)
+    _MIGRATIONS = [
+        ("pipeline_step_states", "input_tokens", "INTEGER"),
+        ("pipeline_step_states", "output_tokens", "INTEGER"),
+        ("pipeline_step_states", "total_tokens", "INTEGER"),
+        ("pipeline_step_states", "total_requests", "INTEGER"),
+        ("pipeline_events", "step_name", "VARCHAR(100)"),
     ]
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(
-                text("PRAGMA table_info(pipeline_step_states)")
-            )
-            existing = {row[1] for row in result}
-            for col_name, col_type in _TOKEN_COLUMNS:
-                if col_name not in existing:
-                    conn.execute(
-                        text(
-                            f"ALTER TABLE pipeline_step_states "
-                            f"ADD COLUMN {col_name} {col_type}"
+
+    # Group by table to minimise PRAGMA calls
+    tables: dict[str, list[tuple[str, str]]] = {}
+    for tbl, col, typ in _MIGRATIONS:
+        tables.setdefault(tbl, []).append((col, typ))
+
+    for tbl, columns in tables.items():
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(f"PRAGMA table_info({tbl})"))
+                existing = {row[1] for row in result}
+                for col_name, col_type in columns:
+                    if col_name not in existing:
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE {tbl} "
+                                f"ADD COLUMN {col_name} {col_type}"
+                            )
                         )
-                    )
-            conn.commit()
-    except OperationalError:
-        pass  # table doesn't exist yet; create_all will handle it
+                conn.commit()
+        except OperationalError:
+            pass  # table doesn't exist yet; create_all will handle it
 
 
 def add_missing_indexes(engine: Engine) -> None:
@@ -74,6 +81,10 @@ def add_missing_indexes(engine: Engine) -> None:
         (
             "CREATE INDEX IF NOT EXISTS ix_pipeline_runs_status_started "
             "ON pipeline_runs (status, started_at)"
+        ),
+        (
+            "CREATE INDEX IF NOT EXISTS ix_pipeline_events_run_step "
+            "ON pipeline_events (run_id, step_name)"
         ),
     ]
     for stmt in _INDEX_STATEMENTS:
@@ -143,8 +154,8 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
         ],
     )
 
-    # Migrate existing DBs: add token columns to pipeline_step_states
-    _migrate_step_state_token_columns(engine)
+    # Migrate existing DBs: add columns introduced after initial schema
+    _migrate_add_columns(engine)
 
     # Add performance indexes that create_all skips on existing tables
     add_missing_indexes(engine)
