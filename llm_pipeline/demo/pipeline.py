@@ -11,7 +11,7 @@ Contains the core data structures for the TextAnalyzer demo:
 - TextAnalyzerAgentRegistry, DefaultStrategy, TextAnalyzerStrategies
 - TextAnalyzerPipeline: fully wired PipelineConfig subclass
 """
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Optional
 
 from pydantic import BaseModel
 from sqlalchemy import Engine
@@ -142,7 +142,7 @@ class SummaryContext(PipelineContext):
 class TopicExtraction(PipelineExtraction, model=Topic):
     """Bridges TopicItem LLM output to Topic DB records."""
 
-    def default(self, results: List[TopicExtractionInstructions]) -> List[Topic]:
+    def default(self, results: list[TopicExtractionInstructions]) -> list[Topic]:
         """Convert TopicExtractionInstructions into Topic instances."""
         return [
             Topic(
@@ -246,9 +246,11 @@ class TextAnalyzerAgentRegistry(AgentRegistry, agents={
 class DefaultStrategy(PipelineStrategy):
     """Single strategy that always applies; runs all 3 steps sequentially."""
 
+    # Redundant: auto-generated from class name "Default" -> "default".
+    # Kept explicit for demo clarity.
     NAME = "default"
 
-    def can_handle(self, context: Dict[str, Any]) -> bool:
+    def can_handle(self, context: dict[str, Any]) -> bool:
         return True
 
     def get_steps(self):

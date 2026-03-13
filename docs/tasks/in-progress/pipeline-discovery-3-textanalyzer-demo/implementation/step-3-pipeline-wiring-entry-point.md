@@ -93,3 +93,35 @@ text_analyzer = "llm_pipeline.demo:TextAnalyzerPipeline"
 [x] seed_prompts is idempotent (second call doesn't duplicate)
 [x] Entry point configured in pyproject.toml
 [x] pytest: 953 passed, 6 skipped, 0 failures
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] (MEDIUM) Redundant NAME override on DefaultStrategy -- added comment explaining auto-generation, kept explicit for demo clarity
+[x] (LOW) Uppercase List/Dict imports used inconsistently -- replaced `List[...]` with `list[...]`, `Dict[str, Any]` with `dict[str, Any]`, removed `List` and `Dict` from typing import
+
+### Changes Made
+#### File: `llm_pipeline/demo/pipeline.py`
+Removed `List` and `Dict` from typing import, replaced uppercase generic usage with Python 3.11+ lowercase builtins, added explanatory comment above `NAME = "default"`.
+
+```python
+# Before
+from typing import Any, ClassVar, Dict, List, Optional
+    def default(self, results: List[TopicExtractionInstructions]) -> List[Topic]:
+    def can_handle(self, context: Dict[str, Any]) -> bool:
+    NAME = "default"
+
+# After
+from typing import Any, ClassVar, Optional
+    def default(self, results: list[TopicExtractionInstructions]) -> list[Topic]:
+    def can_handle(self, context: dict[str, Any]) -> bool:
+    # Redundant: auto-generated from class name "Default" -> "default".
+    # Kept explicit for demo clarity.
+    NAME = "default"
+```
+
+### Verification
+[x] `from llm_pipeline.demo import TextAnalyzerPipeline` succeeds
+[x] pytest: 1008 passed, 6 skipped, 0 failures (1 deselected: pre-existing WAL test-ordering issue unrelated to changes)
