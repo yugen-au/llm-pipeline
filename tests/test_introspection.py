@@ -601,9 +601,15 @@ class TestToolsMetadata:
         }):
             pass
 
+        class BareRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
+            pass
+
+        class BareStrategies(PipelineStrategies, strategies=[PrimaryStrategy]):
+            pass
+
         class BarePipeline(PipelineConfig,
-                           registry=TooledRegistry,
-                           strategies=TooledStrategies,
+                           registry=BareRegistry,
+                           strategies=BareStrategies,
                            agent_registry=BareAgentRegistry):
             pass
 
@@ -614,18 +620,24 @@ class TestToolsMetadata:
     def test_tools_graceful_when_step_not_in_registry(self):
         """If step_name not in AGENT_REGISTRY.AGENTS, tools stays []."""
 
-        class MismatchRegistry(AgentRegistry, agents={
+        class MismatchAgentRegistry(AgentRegistry, agents={
             "nonexistent_step": WidgetDetectionInstructions,
         }):
             pass
 
+        class MismatchRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
+            pass
+
+        class MismatchStrategies(PipelineStrategies, strategies=[PrimaryStrategy]):
+            pass
+
         class MismatchPipeline(PipelineConfig,
-                               registry=TooledRegistry,
-                               strategies=TooledStrategies,
-                               agent_registry=MismatchRegistry):
+                               registry=MismatchRegistry,
+                               strategies=MismatchStrategies,
+                               agent_registry=MismatchAgentRegistry):
             pass
 
         meta = PipelineIntrospector(MismatchPipeline).get_metadata()
         step = meta["strategies"][0]["steps"][0]
-        # get_tools raises KeyError for missing step; should be caught
+        # get_tools raises KeyError for missing step; caught by try/except
         assert step["tools"] == []
