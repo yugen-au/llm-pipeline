@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260316-step-input-output-tabs
 ## Plugins: backend-development, frontend-mobile-development
@@ -21,5 +21,5 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a20a1bd748b0b43e2 | e646cb51 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a4638f8c252f5aaf6 | 54948556 | - |
 | Backend raw_response | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a5ce76c974be20dd3 | 322a1536 | /pydantic/pydantic-ai |
-| Frontend Tab Rewire | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a8410cc2272f7b6bf | c9d9cf4e | /reactjs/react.dev |
-| Test Updates | backend-development:tdd-orchestrator | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Frontend Tab Rewire | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a8410cc2272f7b6bf | c9d9cf4e,322a1536 | /reactjs/react.dev |
+| Test Updates | backend-development:tdd-orchestrator | implementation | 3 | - | B | in-progress | 0 | pending | pending | - |
