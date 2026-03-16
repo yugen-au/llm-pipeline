@@ -26,6 +26,7 @@ from llm_pipeline.events.types import (
     CATEGORY_PIPELINE_LIFECYCLE,
     CATEGORY_STATE,
     CATEGORY_STEP_LIFECYCLE,
+    CATEGORY_TOOL_CALL,
     CATEGORY_TRANSFORMATION,
     # Helpers
     _EVENT_REGISTRY,
@@ -70,6 +71,9 @@ from llm_pipeline.events.types import (
     ExtractionStarting,
     # State
     StateSaved,
+    # Tool Call
+    ToolCallCompleted,
+    ToolCallStarting,
 )
 from llm_pipeline.events.emitter import CompositeEmitter, PipelineEventEmitter
 from llm_pipeline.events.handlers import (
@@ -107,6 +111,7 @@ __all__ = [
     "CATEGORY_TRANSFORMATION",
     "CATEGORY_EXTRACTION",
     "CATEGORY_STATE",
+    "CATEGORY_TOOL_CALL",
     # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
     "resolve_event",
     # Pipeline Lifecycle
@@ -149,4 +154,7 @@ __all__ = [
     "ExtractionError",
     # State
     "StateSaved",
+    # Tool Call
+    "ToolCallStarting",
+    "ToolCallCompleted",
 ]

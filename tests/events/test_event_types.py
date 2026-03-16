@@ -5,7 +5,7 @@ Covers: _EVENT_REGISTRY, _derive_event_type, serialization round-trip
 convention boundary, PipelineStarted positional-arg asymmetry, and context
 snapshot depth.
 
-All 31 concrete event types are exercised via parametrized EVENT_FIXTURES.
+All 33 concrete event types are exercised via parametrized EVENT_FIXTURES.
 """
 
 import json
@@ -69,7 +69,7 @@ from llm_pipeline.events.types import (
 _BASE = dict(run_id="test-run-id", pipeline_name="test_pipeline")
 _STEP = dict(**_BASE, step_name="test_step")
 
-# -- EVENT_FIXTURES: (event_type_str, kwargs_dict) for all 31 events -----------
+# -- EVENT_FIXTURES: (event_type_str, kwargs_dict) for all 33 events -----------
 
 EVENT_FIXTURES = [
     # Pipeline Lifecycle (3)
@@ -112,6 +112,9 @@ EVENT_FIXTURES = [
     ("extraction_error", {**_STEP, "extraction_class": "TestExtraction", "error_type": "ValueError", "error_message": "extraction failed"}),
     # State (1)
     ("state_saved", {**_STEP, "step_number": 1, "input_hash": "abc123", "execution_time_ms": 20.0}),
+    # Tool Call (2)
+    ("tool_call_starting", {**_STEP, "tool_name": "get_weather", "tool_args": {"city": "London"}, "call_index": 0}),
+    ("tool_call_completed", {**_STEP, "tool_name": "get_weather", "result_preview": "sunny", "execution_time_ms": 15.0, "call_index": 0}),
 ]
 
 
@@ -144,8 +147,8 @@ class TestDeriveEventType:
 class TestEventRegistry:
     """Verify _EVENT_REGISTRY contents and lookup behavior."""
 
-    def test_registry_has_31_event_types(self):
-        assert len(_EVENT_REGISTRY) == 31
+    def test_registry_has_33_event_types(self):
+        assert len(_EVENT_REGISTRY) == 33
 
     def test_step_scoped_event_not_in_registry(self):
         assert "step_scoped_event" not in _EVENT_REGISTRY
