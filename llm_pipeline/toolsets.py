@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from pydantic_ai.toolsets import AbstractToolset, ToolsetTool
 
 
+_RESULT_PREVIEW_MAX_LEN: int = 200
+"""Max chars for result_preview in ToolCallCompleted events."""
+
+
 class EventEmittingToolset(WrapperToolset):
     """Toolset wrapper that emits pipeline events around each tool call.
 
@@ -88,7 +92,7 @@ class EventEmittingToolset(WrapperToolset):
             raise
         else:
             elapsed_ms = (time.perf_counter() - start) * 1000
-            preview = str(result)[:200] if result is not None else None
+            preview = str(result)[:_RESULT_PREVIEW_MAX_LEN] if result is not None else None
             if emitter is not None:
                 emitter.emit(
                     ToolCallCompleted(
@@ -103,4 +107,4 @@ class EventEmittingToolset(WrapperToolset):
             return result
 
 
-__all__ = ["EventEmittingToolset"]
+__all__ = ["EventEmittingToolset", "_RESULT_PREVIEW_MAX_LEN"]
