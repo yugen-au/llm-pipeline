@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
+from llm_pipeline.events.emitter import CompositeEmitter
+from llm_pipeline.events.handlers import SQLiteEventHandler
 from llm_pipeline.state import PipelineRun, PipelineStepState
 from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
@@ -237,8 +239,10 @@ def trigger_run(
 
     def run_pipeline() -> None:
         bridge = UIBridge(run_id=run_id)
+        db_handler = SQLiteEventHandler(engine)
+        emitter = CompositeEmitter([bridge, db_handler])
         try:
-            pipeline = factory(run_id=run_id, engine=engine, event_emitter=bridge, input_data=body.input_data or {})
+            pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter, input_data=body.input_data or {})
             pipeline.execute(data=None, input_data=body.input_data)
             pipeline.save()
         except Exception:
