@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-step-input-output-tabs
 ## Description: Populate step input/output tabs with raw LLM prompts (system+user with variables injected) and raw LLM response
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -23,4 +23,5 @@
 | Backend raw_response | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a5ce76c974be20dd3 | 322a1536 | /pydantic/pydantic-ai |
 | Frontend Tab Rewire | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a8410cc2272f7b6bf | c9d9cf4e,322a1536 | /reactjs/react.dev |
 | Test Updates | backend-development:tdd-orchestrator | implementation | 3 | - | B | complete | 0 | a0ceec233120e7aea | 5103dea5 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | afa374ac35bbbdbb8 | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | afa374ac35bbbdbb8 | 94f15db9 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
