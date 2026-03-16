@@ -52,3 +52,5 @@
 [2026-03-16 14:44:10] [INFO] Auto-updated agent statuses: AgentSpec + Registry: pending -> in-progress, step.py get_agent tuple: pending -> in-progress, Tool Call Event Types: pending -> in-progress
 [2026-03-16 14:44:10] [INFO] Deleted 1 old contract file(s)
 [2026-03-16 14:44:10] [DEBUG] STATE.md atomic write complete
+[2026-03-16 14:50:20] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-16 14:50:45] [DEBUG] STATE.md atomic write complete
