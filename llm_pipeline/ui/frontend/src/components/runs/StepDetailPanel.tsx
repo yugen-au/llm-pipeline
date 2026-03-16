@@ -1,6 +1,6 @@
 import { useStep } from '@/api/steps'
 import { useStepEvents } from '@/api/events'
-import { useStepInstructions } from '@/api/pipelines'
+import { useStepInstructions, usePipeline } from '@/api/pipelines'
 import { useRunContext } from '@/api/runs'
 import { formatDuration, formatAbsolute } from '@/lib/time'
 import { JsonDiff } from '@/components/JsonDiff'
@@ -20,7 +20,6 @@ import type {
   StepPromptItem,
   ContextSnapshot,
   RunStatus,
-  LLMCallStartingData,
   LLMCallCompletedData,
   ContextUpdatedData,
   ExtractionCompletedData,
@@ -104,36 +103,45 @@ function InputTab({
   )
 }
 
-function PromptsTab({ events }: { events: EventItem[] }) {
-  const calls = filterEvents<LLMCallStartingData>(events, 'llm_call_starting')
-  const total = calls.length
+function PromptsTab({
+  prompts,
+  isLoading,
+  isError,
+}: {
+  prompts: StepPromptItem[] | undefined
+  isLoading: boolean
+  isError: boolean
+}) {
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <div className="h-5 w-40 animate-pulse rounded bg-muted" />
+        <div className="h-20 animate-pulse rounded bg-muted" />
+        <div className="h-20 animate-pulse rounded bg-muted" />
+      </div>
+    )
+  }
 
-  if (total === 0) {
-    return <p className="text-sm text-muted-foreground">No LLM calls recorded</p>
+  if (isError) {
+    return <p className="text-sm text-destructive">Failed to load prompts</p>
+  }
+
+  if (!prompts || prompts.length === 0) {
+    return <p className="text-sm text-muted-foreground">No prompt templates registered</p>
   }
 
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="space-y-4">
-        {calls.map(({ data }, i) => (
-          <div key={i} className="space-y-2">
-            {total > 1 && (
-              <h4 className="text-sm font-semibold">
-                Call {data.call_index + 1} of {total}
-              </h4>
-            )}
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">System Prompt</p>
-              <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                {data.rendered_system_prompt || '(empty)'}
-              </pre>
+        {prompts.map((item) => (
+          <div key={item.prompt_key} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{item.prompt_type}</Badge>
+              <span className="text-sm font-medium">{item.prompt_key}</span>
             </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">User Prompt</p>
-              <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                {data.rendered_user_prompt || '(empty)'}
-              </pre>
-            </div>
+            <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
+              {item.content}
+            </pre>
           </div>
         ))}
       </div>
@@ -181,46 +189,25 @@ function ResponseTab({ events }: { events: EventItem[] }) {
 }
 
 function InstructionsTab({
-  prompts,
-  isLoading,
-  isError,
+  instructionsSchema,
+  instructionsClass,
 }: {
-  prompts: StepPromptItem[] | undefined
-  isLoading: boolean
-  isError: boolean
+  instructionsSchema: Record<string, unknown> | null
+  instructionsClass: string | null
 }) {
-  if (isLoading) {
-    return (
-      <div className="space-y-3">
-        <div className="h-5 w-40 animate-pulse rounded bg-muted" />
-        <div className="h-20 animate-pulse rounded bg-muted" />
-        <div className="h-20 animate-pulse rounded bg-muted" />
-      </div>
-    )
-  }
-
-  if (isError) {
-    return <p className="text-sm text-destructive">Failed to load instructions</p>
-  }
-
-  if (!prompts || prompts.length === 0) {
-    return <p className="text-sm text-muted-foreground">No instructions registered</p>
+  if (!instructionsSchema) {
+    return <p className="text-sm text-muted-foreground">No schema available</p>
   }
 
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
-      <div className="space-y-4">
-        {prompts.map((item) => (
-          <div key={item.prompt_key} className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{item.prompt_type}</Badge>
-              <span className="text-sm font-medium">{item.prompt_key}</span>
-            </div>
-            <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-              {item.content}
-            </pre>
-          </div>
-        ))}
+      <div className="space-y-3">
+        {instructionsClass && (
+          <Badge variant="secondary">{instructionsClass}</Badge>
+        )}
+        <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
+          {formatJson(instructionsSchema)}
+        </pre>
       </div>
     </ScrollArea>
   )
@@ -421,12 +408,21 @@ function StepContent({
   } = useStepInstructions(step?.pipeline_name ?? '', step?.step_name ?? '')
 
   const {
+    data: pipelineResponse,
+  } = usePipeline(step?.pipeline_name)
+
+  const {
     data: contextResponse,
     isLoading: contextLoading,
   } = useRunContext(
     runId,
     runStatus === 'completed' || runStatus === 'failed' ? (runStatus as RunStatus) : undefined,
   )
+
+  // Derive step metadata from pipeline introspection
+  const stepMeta = pipelineResponse?.strategies
+    ?.flatMap((s) => s.steps)
+    .find((s) => s.step_name === step?.step_name) ?? null
 
   if (isLoading) {
     return (
@@ -484,16 +480,19 @@ function StepContent({
                 <InputTab step={step} snapshots={snapshots} snapshotsLoading={contextLoading} />
               </TabsContent>
               <TabsContent value="prompts">
-                <PromptsTab events={events} />
+                <PromptsTab
+                  prompts={instructionsResponse?.prompts}
+                  isLoading={instructionsLoading}
+                  isError={instructionsError}
+                />
               </TabsContent>
               <TabsContent value="response">
                 <ResponseTab events={events} />
               </TabsContent>
               <TabsContent value="instructions">
                 <InstructionsTab
-                  prompts={instructionsResponse?.prompts}
-                  isLoading={instructionsLoading}
-                  isError={instructionsError}
+                  instructionsSchema={stepMeta?.instructions_schema ?? null}
+                  instructionsClass={stepMeta?.instructions_class ?? null}
                 />
               </TabsContent>
               <TabsContent value="context">

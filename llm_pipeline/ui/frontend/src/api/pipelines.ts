@@ -39,9 +39,9 @@ export function usePipelines() {
  * @param name - Pipeline name to look up
  * @provisional - will 404 until backend task 24 is complete.
  */
-export function usePipeline(name: string) {
+export function usePipeline(name: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.pipelines.detail(name),
+    queryKey: queryKeys.pipelines.detail(name ?? ''),
     queryFn: () =>
       apiClient<PipelineMetadata>('/pipelines/' + name),
     enabled: Boolean(name),
