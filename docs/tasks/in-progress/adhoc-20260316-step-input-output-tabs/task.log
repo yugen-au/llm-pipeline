@@ -5,3 +5,8 @@
 [2026-03-16 16:55:57] [INFO] Created: STATE.md
 [2026-03-16 16:55:57] [INFO] ============================================================
 [2026-03-16 16:56:00] [DEBUG] STATE.md atomic write complete
+[2026-03-16 16:57:38] [ERROR] BLOCKED: Invalid AgentRow 'Backend Pipeline Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-03-16 16:57:53] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-03-16 16:58:05] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-03-16 16:58:05] [INFO] Auto-updated agent statuses: Backend Pipeline Research: pending -> in-progress, Frontend Step UI Research: pending -> in-progress
+[2026-03-16 16:58:05] [DEBUG] STATE.md atomic write complete

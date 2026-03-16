@@ -1,0 +1,41 @@
+<!-- YOUR CONTRACT - DO NOT IGNORE - FOLLOW RULES EXACTLY AS SHOWN -->
+
+## Context
+- Task folder: docs\tasks\in-progress\adhoc-20260316-step-input-output-tabs
+- Graphiti group_id: llm-pipeline
+- Phase: research
+- Output Files: research\step-1-backend-pipeline-research.md (if already exists, APPEND to file)
+- Work: Populate step input/output tabs with raw LLM prompts (system+user with variables injected) and raw LLM response
+- Project: llm-pipeline
+- Plugins: backend-development, frontend-mobile-development
+
+## BEFORE Reading Codebase
+1. Query Graphiti memory MCP (group_id above) for existing codebase context
+2. Check Context7 MCP for latest library/framework docs based on tech stack
+3. [custom.context7_docs]
+
+## Instructions
+1. Read .claude/CLAUDE.md for project context
+2. Research codebase using Read, Grep, Glob, Serena tools
+3. ALWAYS use sequential thinking MCP before returning to identify ANY questions or ambiguities that need CEO input
+4. If questions exist: return Status: needs-input with numbered questions
+5. If no questions: create step-1-backend-pipeline-research.md with all findings and return Status: complete
+
+## Escalation Rules
+- NEVER make architectural assumptions - if unclear, return Status: needs-input
+- For any ambiguity, ASK THE CEO FIRST via needs-input
+
+## AFTER Completing Work
+- Do NOT commit step-1-backend-pipeline-research.md (auto-committed on phase transition)
+
+## Response Format After Completing Work (CRITICAL)
+~~~
+Status: [in-progress/complete/fixing/needs-input]
+Issues: [one-line description or 'none']
+Questions: [numbered list or 'none']
+Research: [one-line summary]
+~~~
+Do NOT return: lengthy code blocks, explanations, reasoning, file contents.
+Detailed work goes in FILES, not response.
+
+<!-- END CONTRACT -->
