@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-tool-calling-agents
 ## Description: Add tool-calling agent support to build_step_agent() - add tools param and extend StepDeps with extra dict for domain-specific deps
 
-## Phase: summary
+## Phase: pending-merge
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [3,5,6]
 ## Work Mode: standard
-## Last Updated: 2026-03-16 16:19
+## Last Updated: 2026-03-16 16:22
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -32,4 +32,4 @@
 | Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | ab483a410599572e7 | a17e88b6 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a1f487950615b73ac | fdfe75b6,84ce0230 | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | a87f1495f24a3f11a | 5897f3df,3409a912 | - |
-| Create summary | code-documentation:docs-architect | summary | 1 | - | A | complete | 0 | a43c7079973319121 | pending | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | complete | 0 | a43c7079973319121 | 4741b8bb | - |
