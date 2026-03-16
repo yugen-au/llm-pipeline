@@ -76,3 +76,38 @@ vi.mock('@/api/pipelines', () => ({
 [x] No regressions -- same test count, same pass count
 [x] `LLMCallStartingData` import removed (no longer used)
 [x] `usePipeline` hook correctly guarded with `?? null` for loading states
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] usePipeline fires with empty string before step loads (LOW) -- `usePipeline(step?.pipeline_name ?? '')` passes empty string initially, creating unused cache entry
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/pipelines.ts`
+Widened `usePipeline` param type from `string` to `string | undefined`. The `queryKey` still uses `?? ''` internally (required by TanStack Query's key serialization) but `enabled: Boolean(name)` prevents the query from firing when `name` is `undefined`.
+
+```
+# Before
+export function usePipeline(name: string) {
+
+# After
+export function usePipeline(name: string | undefined) {
+```
+
+#### File: `llm_pipeline/ui/frontend/src/components/runs/StepDetailPanel.tsx`
+Removed `?? ''` fallback -- now passes `undefined` when `step` is not yet loaded, avoiding a phantom `['pipelines', '']` cache entry.
+
+```
+# Before
+} = usePipeline(step?.pipeline_name ?? '')
+
+# After
+} = usePipeline(step?.pipeline_name)
+```
+
+### Verification
+[x] TypeScript type check passes (`npx tsc --noEmit`)
+[x] All 16 StepDetailPanel tests pass
+[x] No regressions

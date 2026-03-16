@@ -53,3 +53,26 @@ Both emission sites: initialized `run_result = None` before the try block to han
 [x] Smoke test: Multiple parts joined with \n
 [x] No new imports at module level (consistent with existing patterns)
 [x] json already imported at line 11
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Missing type annotation on `run_result` parameter (MEDIUM) - added `run_result: Any` annotation
+
+### Changes Made
+#### File: `llm_pipeline/pipeline.py`
+Added `Any` type annotation to `run_result` parameter. Used `Any` (already imported from `typing`) rather than `RunResult[Any]` to stay consistent with the lazy-import pattern used throughout `pipeline.py` for pydantic-ai types.
+
+```python
+# Before
+def _extract_raw_response(run_result) -> str | None:
+
+# After
+def _extract_raw_response(run_result: Any) -> str | None:
+```
+
+### Verification
+[x] All 1055 tests pass (0 failures, 6 skipped)
+[x] `Any` already imported at line 18 -- no new imports needed

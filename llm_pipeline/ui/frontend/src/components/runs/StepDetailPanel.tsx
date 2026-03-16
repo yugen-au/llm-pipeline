@@ -409,7 +409,7 @@ function StepContent({
 
   const {
     data: pipelineResponse,
-  } = usePipeline(step?.pipeline_name ?? '')
+  } = usePipeline(step?.pipeline_name)
 
   const {
     data: contextResponse,
