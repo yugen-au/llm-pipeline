@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [3,5,6]
 ## Work Mode: standard
-## Last Updated: 2026-03-16 15:43
+## Last Updated: 2026-03-16 15:45
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -23,7 +23,7 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a044d2048f8cc83f9 | c4cc41ee | - |
 | AgentSpec + Registry | python-development:python-pro | implementation | 1 | - | A | complete | 0 | afab2d489be2e56a0 | e0c933c3 | /pydantic/pydantic-ai |
 | step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a09c425826571b8a2 | de0390a2,e0c933c3 | - |
-| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | in-progress | 1 | a7e33819cc697e76a | f304b1c4,e0c933c3 | - |
+| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | complete | 1 | a7e33819cc697e76a | f304b1c4,e0c933c3,36df7d45 | - |
 | build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | pending | 0 | af873fb05d84b475c | 14247ed4 | /pydantic/pydantic-ai |
 | pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | complete | 0 | aa46d0b317774f351 | eacb3e5f,14247ed4 | - |
 | EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | a31e6bb7fe3d0823c | 97cdf208 | /pydantic/pydantic-ai |
