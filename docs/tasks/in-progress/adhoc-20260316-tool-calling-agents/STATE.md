@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-tool-calling-agents
 ## Description: Add tool-calling agent support to build_step_agent() - add tools param and extend StepDeps with extra dict for domain-specific deps
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [3,5,6]
 ## Work Mode: standard
-## Last Updated: 2026-03-16 15:31
+## Last Updated: 2026-03-16 15:42
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -23,12 +23,12 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a044d2048f8cc83f9 | c4cc41ee | - |
 | AgentSpec + Registry | python-development:python-pro | implementation | 1 | - | A | complete | 0 | afab2d489be2e56a0 | e0c933c3 | /pydantic/pydantic-ai |
 | step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a09c425826571b8a2 | de0390a2,e0c933c3 | - |
-| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | complete | 0 | a7e33819cc697e76a | f304b1c4,e0c933c3 | - |
-| build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | complete | 0 | af873fb05d84b475c | 14247ed4 | /pydantic/pydantic-ai |
+| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | in-progress | 0 | a7e33819cc697e76a | f304b1c4,e0c933c3 | - |
+| build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | pending | 0 | af873fb05d84b475c | 14247ed4 | /pydantic/pydantic-ai |
 | pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | complete | 0 | aa46d0b317774f351 | eacb3e5f,14247ed4 | - |
-| EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | complete | 0 | a31e6bb7fe3d0823c | 97cdf208 | /pydantic/pydantic-ai |
+| EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | a31e6bb7fe3d0823c | 97cdf208 | /pydantic/pydantic-ai |
 | Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a6c2c3a88c44fcc95 | 7af07319,97cdf208 | - |
 | Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a7cc922276b879df5 | e9058b51,97cdf208 | - |
 | Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | ab483a410599572e7 | a17e88b6 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a1f487950615b73ac | fdfe75b6 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | a87f1495f24a3f11a | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a87f1495f24a3f11a | 5897f3df | - |
