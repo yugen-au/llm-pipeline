@@ -153,3 +153,5 @@
 [2026-03-16 15:50:47] [INFO] Task call: llm-application-dev:ai-engineer (phase: fixing-review)
 [2026-03-16 15:50:47] [INFO] Incremented Revisions: 0 -> 1
 [2026-03-16 15:50:47] [DEBUG] STATE.md atomic write complete
+[2026-03-16 16:04:45] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-16 16:05:32] [DEBUG] STATE.md atomic write complete
