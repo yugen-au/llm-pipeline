@@ -84,7 +84,7 @@ class StepKeyDict(dict):
         return super().pop(self._normalize_key(key), *args)
 
 
-def _extract_raw_response(run_result) -> str | None:
+def _extract_raw_response(run_result: Any) -> str | None:
     """Extract raw LLM response text from a pydantic-ai RunResult.
 
     Finds the last ModelResponse in run_result.new_messages() and serializes
