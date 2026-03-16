@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260316-tool-calling-agents
 ## Plugins: python-development, backend-development, llm-application-dev, frontend-mobile-development
@@ -22,10 +22,10 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a039fbacda721881a | 19366631 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a044d2048f8cc83f9 | c4cc41ee | - |
 | AgentSpec + Registry | python-development:python-pro | implementation | 1 | - | A | complete | 0 | afab2d489be2e56a0 | e0c933c3 | /pydantic/pydantic-ai |
-| step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a09c425826571b8a2 | de0390a2 | - |
-| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | complete | 0 | a7e33819cc697e76a | f304b1c4 | - |
-| build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai |
-| pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a09c425826571b8a2 | de0390a2,e0c933c3 | - |
+| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | complete | 0 | a7e33819cc697e76a | f304b1c4,e0c933c3 | - |
+| build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | in-progress | 0 | pending | pending | /pydantic/pydantic-ai |
+| pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | in-progress | 0 | pending | pending | - |
 | EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | pending | 0 | pending | pending | - |
 | Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | pending | 0 | pending | pending | - |
