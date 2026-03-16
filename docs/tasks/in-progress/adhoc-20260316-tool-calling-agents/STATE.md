@@ -26,7 +26,7 @@
 | Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | complete | 1 | a7e33819cc697e76a | f304b1c4,e0c933c3,36df7d45 | - |
 | build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | complete | 1 | af873fb05d84b475c | 14247ed4,ea241a76 | /pydantic/pydantic-ai |
 | pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | complete | 0 | aa46d0b317774f351 | eacb3e5f,14247ed4 | - |
-| EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | in-progress | 0 | a31e6bb7fe3d0823c | 97cdf208 | /pydantic/pydantic-ai |
+| EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | in-progress | 1 | a31e6bb7fe3d0823c | 97cdf208 | /pydantic/pydantic-ai |
 | Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a6c2c3a88c44fcc95 | 7af07319,97cdf208 | - |
 | Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a7cc922276b879df5 | e9058b51,97cdf208 | - |
 | Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | ab483a410599572e7 | a17e88b6 | - |
