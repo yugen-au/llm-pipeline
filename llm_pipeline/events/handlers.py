@@ -209,10 +209,59 @@ class SQLiteEventHandler:
         return f"SQLiteEventHandler(engine={self._engine.url})"
 
 
+class BufferedEventHandler:
+    """Buffer events in memory, flush to DB on demand.
+
+    Designed for UI pipeline runs where the pipeline holds a DB write lock
+    during execution. Events are collected in a thread-safe list and
+    bulk-inserted via :meth:`flush` after the pipeline releases its connection.
+    """
+
+    __slots__ = ("_engine", "_buffer", "_lock")
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+        self._buffer: list[PipelineEventRecord] = []
+        self._lock = threading.Lock()
+
+    def emit(self, event: "PipelineEvent") -> None:
+        """Buffer event in memory (no DB write)."""
+        step_name: str | None = getattr(event, "step_name", None)
+        record = PipelineEventRecord(
+            run_id=event.run_id,
+            event_type=event.event_type,
+            pipeline_name=event.pipeline_name,
+            step_name=step_name,
+            timestamp=event.timestamp,
+            event_data=event.to_dict(),
+        )
+        with self._lock:
+            self._buffer.append(record)
+
+    def flush(self) -> int:
+        """Bulk-insert buffered events to DB. Returns count written."""
+        with self._lock:
+            records = list(self._buffer)
+            self._buffer.clear()
+        if not records:
+            return 0
+        session = Session(self._engine)
+        try:
+            session.add_all(records)
+            session.commit()
+        finally:
+            session.close()
+        return len(records)
+
+    def __repr__(self) -> str:
+        return f"BufferedEventHandler(buffered={len(self._buffer)})"
+
+
 __all__ = [
     "DEFAULT_LEVEL_MAP",
     "LoggingEventHandler",
     "InMemoryEventHandler",
     "SQLiteEventHandler",
+    "BufferedEventHandler",
     "PipelineEventRecord",
 ]

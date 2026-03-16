@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlmodel import Session, select
 
 from llm_pipeline.events.emitter import CompositeEmitter
-from llm_pipeline.events.handlers import SQLiteEventHandler
+from llm_pipeline.events.handlers import BufferedEventHandler
 from llm_pipeline.state import PipelineRun, PipelineStepState
 from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
@@ -239,8 +239,8 @@ def trigger_run(
 
     def run_pipeline() -> None:
         bridge = UIBridge(run_id=run_id)
-        db_handler = SQLiteEventHandler(engine)
-        emitter = CompositeEmitter([bridge, db_handler])
+        db_buffer = BufferedEventHandler(engine)
+        emitter = CompositeEmitter([bridge, db_buffer])
         try:
             pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter, input_data=body.input_data or {})
             pipeline.execute(data=None, input_data=body.input_data)
@@ -263,6 +263,11 @@ def trigger_run(
                 )
         finally:
             bridge.complete()
+            try:
+                count = db_buffer.flush()
+                logger.info("Flushed %d events to DB for run_id=%s", count, run_id)
+            except Exception:
+                logger.exception("Failed to flush events to DB for run_id=%s", run_id)
 
     background_tasks.add_task(run_pipeline)
 

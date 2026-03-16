@@ -127,11 +127,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     if engine is None:
         db_path = get_default_db_path()
         db_url = f"sqlite:///{db_path}"
-        engine = create_engine(
-            db_url,
-            echo=False,
-            connect_args={"check_same_thread": False, "timeout": 30},
-        )
+        engine = create_engine(db_url, echo=False)
         logger.info(f"Auto-created SQLite database at {db_path}")
 
     _engine = engine

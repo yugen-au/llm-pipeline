@@ -166,10 +166,7 @@ def create_app(
                 poolclass=StaticPool,
             )
         else:
-            engine = create_engine(
-                f"sqlite:///{db_path}",
-                connect_args={"check_same_thread": False, "timeout": 30},
-            )
+            engine = create_engine(f"sqlite:///{db_path}")
         app.state.engine = init_pipeline_db(engine)
     else:
         app.state.engine = init_pipeline_db()
