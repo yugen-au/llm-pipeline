@@ -9,8 +9,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 def main() -> None:
+    load_dotenv()
     """Parse arguments and dispatch to the appropriate subcommand."""
     parser = argparse.ArgumentParser(prog="llm-pipeline")
     sub = parser.add_subparsers(dest="command")
