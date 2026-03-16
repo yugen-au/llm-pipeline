@@ -84,6 +84,42 @@ class StepKeyDict(dict):
         return super().pop(self._normalize_key(key), *args)
 
 
+def _extract_raw_response(run_result) -> str | None:
+    """Extract raw LLM response text from a pydantic-ai RunResult.
+
+    Finds the last ModelResponse in run_result.new_messages() and serializes
+    its parts: ToolCallPart.args as JSON, TextPart.content as-is.
+    Returns None if no ModelResponse found.
+    """
+    from pydantic_ai.messages import ModelResponse, ToolCallPart, TextPart
+
+    try:
+        messages = run_result.new_messages()
+    except Exception:
+        return None
+
+    # Find last ModelResponse
+    model_response = None
+    for msg in messages:
+        if isinstance(msg, ModelResponse):
+            model_response = msg
+
+    if model_response is None:
+        return None
+
+    parts_text: list[str] = []
+    for part in model_response.parts:
+        if isinstance(part, ToolCallPart):
+            try:
+                parts_text.append(json.dumps(part.args))
+            except (TypeError, ValueError):
+                parts_text.append(str(part.args))
+        elif isinstance(part, TextPart):
+            parts_text.append(part.content)
+
+    return "\n".join(parts_text) if parts_text else None
+
+
 class PipelineConfig(ABC):
     """
     Base class for defining LLM pipeline configurations.
@@ -826,6 +862,7 @@ class PipelineConfig(ABC):
                             _step_output_tokens += _c_output or 0
                             _step_total_requests += _c_requests
                         else:
+                            run_result = None
                             try:
                                 run_result = agent.run_sync(
                                     user_prompt,
@@ -854,7 +891,7 @@ class PipelineConfig(ABC):
                                     pipeline_name=self.pipeline_name,
                                     step_name=step.step_name,
                                     call_index=idx,
-                                    raw_response=None,
+                                    raw_response=_extract_raw_response(run_result) if run_result else None,
                                     parsed_result=(
                                         instruction.model_dump()
                                         if hasattr(instruction, 'model_dump')
@@ -1253,6 +1290,7 @@ class PipelineConfig(ABC):
             _call_input_tokens = None
             _call_output_tokens = None
             _call_total_tokens = None
+            run_result = None
             try:
                 run_result = agent.run_sync(user_prompt, deps=step_deps, model=self._model)
                 instruction = run_result.output
@@ -1278,7 +1316,7 @@ class PipelineConfig(ABC):
                     pipeline_name=self.pipeline_name,
                     step_name=current_step_name,
                     call_index=attempt,
-                    raw_response=None,
+                    raw_response=_extract_raw_response(run_result) if run_result else None,
                     parsed_result=(
                         instruction.model_dump()
                         if hasattr(instruction, 'model_dump')
