@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-step-input-output-tabs
 ## Description: Populate step input/output tabs with raw LLM prompts (system+user with variables injected) and raw LLM response
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
