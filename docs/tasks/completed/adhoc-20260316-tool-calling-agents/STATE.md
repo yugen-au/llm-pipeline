@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-tool-calling-agents
 ## Description: Add tool-calling agent support to build_step_agent() - add tools param and extend StepDeps with extra dict for domain-specific deps
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
