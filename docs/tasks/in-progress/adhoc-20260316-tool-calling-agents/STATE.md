@@ -6,7 +6,7 @@
 ## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260316-tool-calling-agents
-## Plugins: python-development, backend-development, llm-application-dev
+## Plugins: python-development, backend-development, llm-application-dev, frontend-mobile-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
@@ -20,4 +20,13 @@
 | StepDeps and Builder Architecture | python-development:python-pro | research | 2 | - | A | complete | 0 | a7b22640266b64171 | 197b9739 | - |
 | Tool Registration Patterns | backend-development:backend-architect | research | 3 | - | A | complete | 0 | a64e34d133e8102c6 | 197b9739 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a039fbacda721881a | 19366631 | - |
-| Plan | planning | planning | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a044d2048f8cc83f9 | pending | - |
+| AgentSpec + Registry | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | pending | 0 | pending | pending | - |
+| build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
+| Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | pending | 0 | pending | pending | - |
+| Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | pending | 0 | pending | pending | - |
+| Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | pending | 0 | pending | pending | - |
