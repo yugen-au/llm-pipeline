@@ -8,7 +8,7 @@ resolution via PromptService.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -51,6 +51,9 @@ class StepDeps:
     # Per-call validation config, read by output validators via ctx.deps
     array_validation: Any | None = None  # ArrayValidationConfig
     validation_context: Any | None = None  # ValidationContext for Pydantic field_validators
+
+    # Extensible bag for domain-specific deps (e.g. workbook_context)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 def build_step_agent(
