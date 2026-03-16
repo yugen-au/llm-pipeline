@@ -734,7 +734,7 @@ class PipelineConfig(ABC):
                         ))
 
                     # Build agent once per step (reused across consensus iterations)
-                    output_type = step.get_agent(self.AGENT_REGISTRY)
+                    output_type, step_tools = step.get_agent(self.AGENT_REGISTRY)
 
                     # Build validators: always register both, they adapt per-call via ctx.deps
                     step_validators = [
@@ -747,6 +747,7 @@ class PipelineConfig(ABC):
                         output_type=output_type,
                         validators=step_validators,
                         instrument=self._instrumentation_settings,
+                        tools=step_tools,
                     )
 
                     for idx, params in enumerate(call_params):
