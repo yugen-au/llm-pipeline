@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { StepDetailPanel } from './StepDetailPanel'
-import type { StepDetail, EventListResponse } from '@/api/types'
+import type { StepDetail, EventListResponse, PipelineMetadata, StepPromptsResponse } from '@/api/types'
 
 vi.mock('@/lib/time', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/time')>()
@@ -62,6 +62,66 @@ const mockUseRunContext = vi.fn()
 vi.mock('@/api/runs', () => ({
   useRunContext: (...args: unknown[]) => mockUseRunContext(...args),
 }))
+
+// Sample pipeline metadata with instructions_schema for the "extract" step
+const mockPipelineData: PipelineMetadata = {
+  pipeline_name: 'test-pipeline',
+  registry_models: ['gemini-2.0-flash'],
+  strategies: [
+    {
+      name: 'default',
+      display_name: 'Default',
+      class_name: 'DefaultStrategy',
+      steps: [
+        {
+          step_name: 'extract',
+          class_name: 'ExtractStep',
+          system_key: null,
+          user_key: null,
+          instructions_class: 'WidgetDetectionInstructions',
+          instructions_schema: {
+            type: 'object',
+            properties: {
+              widget_count: { type: 'integer' },
+              category: { type: 'string' },
+            },
+            required: ['widget_count', 'category'],
+          },
+          context_class: null,
+          context_schema: null,
+          extractions: [],
+          transformation: null,
+          action_after: null,
+        },
+      ],
+      error: null,
+    },
+  ],
+  execution_order: ['extract'],
+  pipeline_input_schema: null,
+}
+
+// Sample prompt templates (what useStepInstructions returns)
+const mockPromptsData: StepPromptsResponse = {
+  pipeline_name: 'test-pipeline',
+  step_name: 'extract',
+  prompts: [
+    {
+      prompt_key: 'extract_system',
+      prompt_type: 'system',
+      content: 'You are a widget detector. Analyze {document_text} for widgets.',
+      required_variables: ['document_text'],
+      version: '1.0',
+    },
+    {
+      prompt_key: 'extract_user',
+      prompt_type: 'user',
+      content: 'Find all widgets in: {input_data}',
+      required_variables: ['input_data'],
+      version: '1.0',
+    },
+  ],
+}
 
 const NOW = '2025-06-15T12:00:00.000Z'
 
@@ -307,5 +367,148 @@ describe('StepDetailPanel', () => {
     expect(metaTab!.getAttribute('data-state')).toBe('active')
     // Previous tab should no longer be active
     expect(promptsTab!.getAttribute('data-state')).not.toBe('active')
+  })
+
+  // -----------------------------------------------------------------------
+  // InstructionsTab content tests (Step 2 rewire: shows JSON schema)
+  // -----------------------------------------------------------------------
+
+  it('InstructionsTab renders JSON schema from usePipeline metadata', async () => {
+    vi.useRealTimers()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    mockUsePipeline.mockReturnValue({
+      data: mockPipelineData,
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <StepDetailPanel runId="r1" stepNumber={1} open={true} onClose={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const tabs = screen.getAllByRole('tab')
+    const instrTab = tabs.find((t) => t.textContent?.toLowerCase().includes('instructions'))
+    expect(instrTab).toBeTruthy()
+    await user.click(instrTab!)
+
+    // Should render instructions_class as a badge
+    expect(screen.getByText('WidgetDetectionInstructions')).toBeInTheDocument()
+
+    // Should render JSON schema fields (from instructions_schema)
+    expect(screen.getByText(/widget_count/)).toBeInTheDocument()
+    expect(screen.getByText(/category/)).toBeInTheDocument()
+  })
+
+  it('InstructionsTab shows empty state when no pipeline schema available', async () => {
+    vi.useRealTimers()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    // usePipeline returns undefined data (no pipeline metadata)
+    mockUsePipeline.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <StepDetailPanel runId="r1" stepNumber={1} open={true} onClose={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const tabs = screen.getAllByRole('tab')
+    const instrTab = tabs.find((t) => t.textContent?.toLowerCase().includes('instructions'))
+    await user.click(instrTab!)
+
+    expect(screen.getByText('No schema available')).toBeInTheDocument()
+  })
+
+  // -----------------------------------------------------------------------
+  // PromptsTab content tests (Step 2 rewire: shows prompt templates)
+  // -----------------------------------------------------------------------
+
+  it('PromptsTab renders prompt templates from useStepInstructions', async () => {
+    vi.useRealTimers()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    mockUseStepInstructions.mockReturnValue({
+      data: mockPromptsData,
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <StepDetailPanel runId="r1" stepNumber={1} open={true} onClose={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const tabs = screen.getAllByRole('tab')
+    const promptsTab = tabs.find((t) => t.textContent?.toLowerCase().includes('prompts'))
+    expect(promptsTab).toBeTruthy()
+    await user.click(promptsTab!)
+
+    // Should show prompt_type badges
+    expect(screen.getByText('system')).toBeInTheDocument()
+    expect(screen.getByText('user')).toBeInTheDocument()
+
+    // Should show prompt_key labels
+    expect(screen.getByText('extract_system')).toBeInTheDocument()
+    expect(screen.getByText('extract_user')).toBeInTheDocument()
+
+    // Should show template content with {variable} placeholders
+    expect(screen.getByText(/\{document_text\}/)).toBeInTheDocument()
+    expect(screen.getByText(/\{input_data\}/)).toBeInTheDocument()
+  })
+
+  it('PromptsTab shows empty state when no prompt templates available', async () => {
+    vi.useRealTimers()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    mockUseStepInstructions.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    })
+    render(
+      <StepDetailPanel runId="r1" stepNumber={1} open={true} onClose={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const tabs = screen.getAllByRole('tab')
+    const promptsTab = tabs.find((t) => t.textContent?.toLowerCase().includes('prompts'))
+    await user.click(promptsTab!)
+
+    expect(screen.getByText('No prompt templates registered')).toBeInTheDocument()
+  })
+
+  it('PromptsTab shows loading skeleton when instructions are loading', async () => {
+    vi.useRealTimers()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    mockUseStepInstructions.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      isError: false,
+    })
+    render(
+      <StepDetailPanel runId="r1" stepNumber={1} open={true} onClose={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const tabs = screen.getAllByRole('tab')
+    const promptsTab = tabs.find((t) => t.textContent?.toLowerCase().includes('prompts'))
+    await user.click(promptsTab!)
+
+    // PromptsTab loading state renders animate-pulse skeletons
+    const panel = screen.getByRole('tabpanel')
+    const pulses = panel.querySelectorAll('.animate-pulse')
+    expect(pulses.length).toBeGreaterThan(0)
+  })
+
+  it('PromptsTab shows error when instructions fail to load', async () => {
+    vi.useRealTimers()
+    mockUseStep.mockReturnValue({ data: mockStepData, isLoading: false, isError: false })
+    mockUseStepInstructions.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+    })
+    render(
+      <StepDetailPanel runId="r1" stepNumber={1} open={true} onClose={vi.fn()} />,
+    )
+    const user = userEvent.setup()
+    const tabs = screen.getAllByRole('tab')
+    const promptsTab = tabs.find((t) => t.textContent?.toLowerCase().includes('prompts'))
+    await user.click(promptsTab!)
+
+    expect(screen.getByText('Failed to load prompts')).toBeInTheDocument()
   })
 })
