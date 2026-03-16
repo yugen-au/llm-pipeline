@@ -29,7 +29,8 @@ from llm_pipeline.events.types import (
     CATEGORY_TRANSFORMATION,
     CATEGORY_EXTRACTION,
     CATEGORY_STATE,
-    # All 31 concrete event classes
+    CATEGORY_TOOL_CALL,
+    # All 33 concrete event classes
     PipelineStarted,
     PipelineCompleted,
     PipelineError,
@@ -204,6 +205,8 @@ EXPECTED_CATEGORIES = {
     "extraction_completed": CATEGORY_EXTRACTION,
     "extraction_error": CATEGORY_EXTRACTION,
     "state_saved": CATEGORY_STATE,
+    "tool_call_starting": CATEGORY_TOOL_CALL,
+    "tool_call_completed": CATEGORY_TOOL_CALL,
 }
 
 

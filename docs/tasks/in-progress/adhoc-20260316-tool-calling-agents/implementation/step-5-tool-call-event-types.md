@@ -60,3 +60,40 @@ Updated registry count assertion from 31 to 33. Added two tool call fixtures to 
 [x] All 384 event tests pass (no regressions)
 [x] Frozen dataclass pattern matches existing events (frozen=True, slots=True, kw_only=True)
 [x] StepScopedEvent inheritance gives run_id, pipeline_name, timestamp, step_name
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] MEDIUM - Stale comment line 32 said "All 31 concrete event classes" but registry has 33; updated to 33
+[x] LOW - EXPECTED_CATEGORIES dict missing tool_call_starting and tool_call_completed entries; added both with CATEGORY_TOOL_CALL
+
+### Changes Made
+#### File: `tests/events/test_event_types.py`
+Updated stale import comment from 31 to 33, added CATEGORY_TOOL_CALL import, added two entries to EXPECTED_CATEGORIES dict.
+
+```python
+# Before (line 32)
+    # All 31 concrete event classes
+
+# After
+    # All 33 concrete event classes
+```
+
+```python
+# Before (line 206-207)
+    "state_saved": CATEGORY_STATE,
+}
+
+# After
+    "state_saved": CATEGORY_STATE,
+    "tool_call_starting": CATEGORY_TOOL_CALL,
+    "tool_call_completed": CATEGORY_TOOL_CALL,
+}
+```
+
+### Verification
+[x] All 171 event type tests pass (up from 169; 2 new category parametrized tests)
+[x] tool_call_starting category verified as CATEGORY_TOOL_CALL
+[x] tool_call_completed category verified as CATEGORY_TOOL_CALL
