@@ -101,3 +101,56 @@ StepDetailPanel (16 tests):
 ## Recommendations
 1. Fix or skip `test_wal.py::test_file_based_sqlite_sets_wal` on Windows -- either mark `@pytest.mark.skipif(sys.platform == 'win32', ...)` or investigate why `init_pipeline_db` WAL PRAGMA is not taking effect on Windows SQLite.
 2. Run human validation steps above after deploying to a dev environment with a real pipeline to confirm Response tab now shows non-null raw_response.
+
+---
+
+# Re-run: Review Fixes (commits c60c5c99, 6a767d90, 00a81cef)
+
+## Summary
+**Status:** passed
+
+Re-run after three review-fix commits: type annotation added to `_extract_raw_response` in `pipeline.py`, `usePipeline` hook signature updated to accept `undefined` in `pipelines.ts` and `StepDetailPanel.tsx`, and comments added to `tests/test_raw_response.py`. No regressions. Results identical to initial run.
+
+## Test Execution
+
+**Backend Pass Rate:** 1054/1055 (same pre-existing WAL failure; 6 skipped)
+```
+platform win32 -- Python 3.13.3, pytest-9.0.2
+collected 1061 items
+
+tests\test_raw_response.py .......
+...
+tests\ui\test_wal.py F...
+
+FAILED tests/ui/test_wal.py::TestWALMode::test_file_based_sqlite_sets_wal - AssertionError: assert 'delete' == 'wal'
+1 failed, 1054 passed, 6 skipped in 159.61s
+```
+
+**Frontend Pass Rate:** 213/213 (StepDetailPanel now shows 16 tests incl. 2 new loading/error state tests added by review fix)
+```
+Test Files  26 passed (26)
+      Tests 213 passed (213)
+   Duration 33.91s
+
+StepDetailPanel (16 tests -- all pass):
+  - renders panel content when open=true and step loaded
+  - renders all 7 tab triggers when step loaded
+  - calls onClose when close button clicked
+  - switches tab content when a different tab trigger is clicked
+  - InstructionsTab renders JSON schema from usePipeline metadata
+  - InstructionsTab shows empty state when no pipeline schema available
+  - PromptsTab renders prompt templates from useStepInstructions
+  - PromptsTab shows loading skeleton when instructions are loading
+  - PromptsTab shows error when instructions fail to load
+  (+ 7 other pre-existing tests)
+```
+
+### Failed Tests
+#### TestWALMode.test_file_based_sqlite_sets_wal
+**Step:** pre-existing (not introduced by this task)
+**Error:** `AssertionError: assert 'delete' == 'wal'` -- unchanged from initial run, confirmed pre-existing.
+
+## Changes Verified
+- [x] `pipeline.py` type annotation on `_extract_raw_response` -- no test impact, no new failures
+- [x] `pipelines.ts` + `StepDetailPanel.tsx` `usePipeline` signature accepts `undefined` -- all 16 StepDetailPanel tests pass
+- [x] `tests/test_raw_response.py` comment additions -- 7/7 backend tests still pass, no behaviour change
