@@ -1,4 +1,9 @@
-"""Unit tests for _extract_raw_response helper in pipeline.py."""
+"""Unit tests for _extract_raw_response helper in pipeline.py.
+
+Testing _extract_raw_response directly despite underscore prefix because it is
+a standalone utility with complex edge cases (ToolCallPart serialization,
+multi-part joining, exception handling) that warrant isolated unit coverage.
+"""
 import json
 from unittest.mock import MagicMock
 
@@ -20,7 +25,10 @@ def _model_response(parts):
 
     mr = MagicMock(spec=ModelResponse)
     mr.parts = parts
-    # Make isinstance checks work
+    # Override __class__ so isinstance() checks in _extract_raw_response match
+    # ModelResponse. MagicMock(spec=...) alone does not satisfy isinstance();
+    # __class__ assignment is the lightest way to fake it without constructing
+    # real pydantic-ai message objects (which require valid constructor args).
     mr.__class__ = ModelResponse
     return mr
 
@@ -30,6 +38,7 @@ def _tool_call_part(args):
 
     p = MagicMock(spec=ToolCallPart)
     p.args = args
+    # See _model_response docstring for why __class__ override is needed.
     p.__class__ = ToolCallPart
     return p
 
@@ -39,6 +48,7 @@ def _text_part(content):
 
     p = MagicMock(spec=TextPart)
     p.content = content
+    # See _model_response docstring for why __class__ override is needed.
     p.__class__ = TextPart
     return p
 

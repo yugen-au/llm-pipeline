@@ -56,3 +56,60 @@ New tests:
 [x] No regressions in existing tests
 [x] InstructionsTab assertions verify JSON schema content (not prompt templates)
 [x] PromptsTab assertions verify prompt template items with {variable} placeholders
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] Underscore-prefixed function exported in tests (LOW) - added module docstring explaining why private function is tested directly
+[x] MagicMock __class__ override fragility (LOW) - added comments on _model_response, _tool_call_part, _text_part explaining why __class__ override is needed
+
+### Changes Made
+#### File: `tests/test_raw_response.py`
+Added explanatory comments for both review issues.
+
+```
+# Before (module docstring)
+"""Unit tests for _extract_raw_response helper in pipeline.py."""
+
+# After (module docstring)
+"""Unit tests for _extract_raw_response helper in pipeline.py.
+
+Testing _extract_raw_response directly despite underscore prefix because it is
+a standalone utility with complex edge cases (ToolCallPart serialization,
+multi-part joining, exception handling) that warrant isolated unit coverage.
+"""
+```
+
+```
+# Before (_model_response __class__ comment)
+    # Make isinstance checks work
+    mr.__class__ = ModelResponse
+
+# After (_model_response __class__ comment)
+    # Override __class__ so isinstance() checks in _extract_raw_response match
+    # ModelResponse. MagicMock(spec=...) alone does not satisfy isinstance();
+    # __class__ assignment is the lightest way to fake it without constructing
+    # real pydantic-ai message objects (which require valid constructor args).
+    mr.__class__ = ModelResponse
+```
+
+```
+# Before (_tool_call_part / _text_part)
+    p.__class__ = ToolCallPart  # (no comment)
+    p.__class__ = TextPart      # (no comment)
+
+# After
+    # See _model_response docstring for why __class__ override is needed.
+    p.__class__ = ToolCallPart
+    # See _model_response docstring for why __class__ override is needed.
+    p.__class__ = TextPart
+```
+
+Also verified Step 1/2 changes (type annotation on `_extract_raw_response`, `usePipeline` accepting `string | undefined`) do not break existing tests. No mock updates needed; `mockUsePipeline` is a `vi.fn()` that accepts any args.
+
+### Verification
+[x] Backend tests pass: 7/7 after comment additions
+[x] Frontend tests pass: 16/16 unchanged
+[x] Step 1/2 signature changes do not affect test behavior
