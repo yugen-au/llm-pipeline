@@ -289,8 +289,9 @@ class TestLLMStepMethods:
         }):
             pass
         step = self._make_step()
-        output_type = step.get_agent(GetAgentRegistry)
+        output_type, tools = step.get_agent(GetAgentRegistry)
         assert output_type is ExtractionOutput
+        assert tools == []
 
     def test_get_agent_uses_override(self):
         class OverrideRegistry(AgentRegistry, agents={
@@ -298,8 +299,9 @@ class TestLLMStepMethods:
         }):
             pass
         step = self._make_step(agent_name_override="custom_name")
-        output_type = step.get_agent(OverrideRegistry)
+        output_type, tools = step.get_agent(OverrideRegistry)
         assert output_type is ValidationOutput
+        assert tools == []
 
     def test_build_user_prompt_calls_service(self):
         step = self._make_step()
