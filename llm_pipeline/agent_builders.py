@@ -7,6 +7,7 @@ resolution via PromptService.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
@@ -61,6 +62,7 @@ def build_step_agent(
     model_settings: Any | None = None,
     validators: list[Any] | None = None,
     instrument: Any | None = None,
+    tools: Sequence[Any] | None = None,
 ) -> Agent[StepDeps, Any]:
     """Build a pydantic-ai Agent configured for a pipeline step.
 
@@ -93,6 +95,10 @@ def build_step_agent(
             When provided, enables per-agent OpenTelemetry instrumentation
             (spans for model requests, token usage). Passed directly to
             the Agent constructor. None = no instrumentation.
+        tools: Optional sequence of tool callables to register on the
+            agent. When provided, wraps them in FunctionToolset then
+            EventEmittingToolset for automatic tool call event emission.
+            None or empty = no tools registered.
 
     Returns:
         Configured Agent[StepDeps, Any] with dynamic instructions and
@@ -112,6 +118,14 @@ def build_step_agent(
     )
     if instrument is not None:
         agent_kwargs["instrument"] = instrument
+
+    if tools:
+        from pydantic_ai.toolsets import FunctionToolset
+        from llm_pipeline.toolsets import EventEmittingToolset
+
+        inner = FunctionToolset(tools=list(tools))
+        emitting = EventEmittingToolset(inner)
+        agent_kwargs["toolsets"] = [emitting]
 
     agent: Agent[StepDeps, Any] = Agent(**agent_kwargs)
 
