@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-step-input-output-tabs
 ## Description: Populate step input/output tabs with raw LLM prompts (system+user with variables injected) and raw LLM response
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -24,4 +24,5 @@
 | Frontend Tab Rewire | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 1 | a8410cc2272f7b6bf | c9d9cf4e,322a1536,6a767d90 | /reactjs/react.dev |
 | Test Updates | backend-development:tdd-orchestrator | implementation | 3 | - | B | complete | 1 | a0ceec233120e7aea | 5103dea5,00a81cef | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | afa374ac35bbbdbb8 | 94f15db9,0b0c2dc2 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | af0c21e86699ac49a | 577ce5ae | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | af0c21e86699ac49a | 577ce5ae,1f5e73f4 | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
