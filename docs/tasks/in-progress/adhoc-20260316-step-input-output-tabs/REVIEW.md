@@ -62,3 +62,57 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is correct, well-tested, and properly scoped. The medium issue (missing type annotation) is a minor improvement that can be addressed in a follow-up. All changes align with existing architecture patterns and project conventions.
+
+---
+
+# Re-Review: Fix Verification (Post c60c5c99, 00a81cef, 6a767d90)
+
+## Overall Assessment
+**Status:** complete
+All 4 previously identified issues have been addressed. Fixes are minimal and correct.
+
+## Fix Verification
+
+### 1. MEDIUM - Missing type annotation (c60c5c99)
+**Status:** RESOLVED
+`_extract_raw_response(run_result: Any) -> str | None` -- annotation added using `Any` (already imported) rather than `RunResult[Any]`. This avoids a module-level import of `RunResult` which is consistent with the lazy-import pattern inside the function body. Docstring already documents expected type as `RunResult`. Acceptable.
+
+### 2. LOW - Underscore naming comment (00a81cef)
+**Status:** RESOLVED
+Module docstring in `tests/test_raw_response.py` now explains why the private function is tested directly: standalone utility with complex edge cases warranting isolated coverage. Clear and sufficient.
+
+### 3. LOW - MagicMock __class__ fragility comment (00a81cef)
+**Status:** RESOLVED
+Comment added to `_model_response()` helper explaining why `__class__` override is needed (`MagicMock(spec=...)` alone does not satisfy `isinstance()`). Same comment referenced from `_tool_call_part()` and `_text_part()` via "See _model_response docstring". Consistent and maintainable.
+
+### 4. LOW - usePipeline empty string (6a767d90)
+**Status:** RESOLVED
+`usePipeline` signature changed from `name: string` to `name: string | undefined`. Hook now uses `name ?? ''` in queryKey (safe) and `enabled: Boolean(name)` (blocks undefined/empty). Call site in StepDetailPanel passes `step?.pipeline_name` directly (type `string | undefined`) instead of `step?.pipeline_name ?? ''`. No unused cache entry created when `name` is undefined since TanStack Query skips disabled queries entirely.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/pipeline.py` (line 87) | pass | `Any` annotation added, consistent with lazy-import pattern |
+| `tests/test_raw_response.py` (lines 1-6, 28-31, 41, 51) | pass | Module docstring + inline comments explain testing rationale and mock pattern |
+| `llm_pipeline/ui/frontend/src/api/pipelines.ts` (line 42-48) | pass | `string \| undefined` param, `name ?? ''` in queryKey, `Boolean(name)` guard |
+| `llm_pipeline/ui/frontend/src/components/runs/StepDetailPanel.tsx` (line 412) | pass | Passes `step?.pipeline_name` without `?? ''` fallback |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All 4 issues from initial review resolved. No new issues introduced. Implementation is clean and ready to merge.
