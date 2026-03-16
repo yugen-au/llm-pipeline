@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-tool-calling-agents
 ## Description: Add tool-calling agent support to build_step_agent() - add tools param and extend StepDeps with extra dict for domain-specific deps
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -30,5 +30,5 @@
 | Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a6c2c3a88c44fcc95 | 7af07319,97cdf208 | - |
 | Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a7cc922276b879df5 | e9058b51,97cdf208 | - |
 | Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | complete | 0 | ab483a410599572e7 | a17e88b6 | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a1f487950615b73ac | fdfe75b6 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a87f1495f24a3f11a | 5897f3df | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a1f487950615b73ac | fdfe75b6,84ce0230 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | a87f1495f24a3f11a | 5897f3df | - |
