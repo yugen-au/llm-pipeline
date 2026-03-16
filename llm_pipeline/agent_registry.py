@@ -5,9 +5,27 @@ Defines the interface for declaring which output types a pipeline's agents produ
 Mirrors PipelineDatabaseRegistry pattern: registry = WHAT, runtime factory = HOW.
 """
 from abc import ABC
-from typing import ClassVar, Type
+from dataclasses import dataclass, field
+from typing import Any, ClassVar, Type
 
 from pydantic import BaseModel
+
+
+@dataclass
+class AgentSpec:
+    """Specification for a pipeline agent, bundling output type with optional tools.
+
+    Use this instead of a bare Type[BaseModel] in AGENTS dict when tools are needed.
+
+    Example:
+        class MyRegistry(AgentRegistry, agents={
+            "simple_step": SimpleOutput,                          # bare type (no tools)
+            "tool_step": AgentSpec(ToolOutput, tools=[my_func]),  # with tools
+        }):
+            pass
+    """
+    output_type: Type[BaseModel]
+    tools: list[Any] = field(default_factory=list)
 
 
 class AgentRegistry(ABC):
@@ -31,14 +49,15 @@ class AgentRegistry(ABC):
             pass
     """
 
-    AGENTS: ClassVar[dict[str, Type[BaseModel]]] = {}
+    AGENTS: ClassVar[dict[str, Type[BaseModel] | AgentSpec]] = {}
 
     def __init_subclass__(cls, agents=None, **kwargs):
         """
         Called when a subclass is defined. Sets AGENTS from class parameter.
 
         Args:
-            agents: Dict mapping step_name to output BaseModel type (required)
+            agents: Dict mapping step_name to either a bare Type[BaseModel] or an
+                AgentSpec(output_type, tools) for steps that need tool-calling support.
             **kwargs: Additional keyword arguments passed to super().__init_subclass__
 
         Raises:
@@ -59,6 +78,8 @@ class AgentRegistry(ABC):
         """
         Get the output type for a given step name.
 
+        Normalizes both bare Type[BaseModel] and AgentSpec entries.
+
         Args:
             step_name: The snake_case step name to look up
 
@@ -73,7 +94,36 @@ class AgentRegistry(ABC):
                 f"No agent registered for step '{step_name}' in {cls.__name__}. "
                 f"Available steps: {list(cls.AGENTS.keys())}"
             )
-        return cls.AGENTS[step_name]
+        entry = cls.AGENTS[step_name]
+        if isinstance(entry, AgentSpec):
+            return entry.output_type
+        return entry
+
+    @classmethod
+    def get_tools(cls, step_name: str) -> list[Any]:
+        """
+        Get the tools list for a given step name.
+
+        Returns the tools from an AgentSpec entry, or an empty list for bare types.
+
+        Args:
+            step_name: The snake_case step name to look up
+
+        Returns:
+            List of tool callables registered for this step, or []
+
+        Raises:
+            KeyError: If step_name not found in registry
+        """
+        if step_name not in cls.AGENTS:
+            raise KeyError(
+                f"No agent registered for step '{step_name}' in {cls.__name__}. "
+                f"Available steps: {list(cls.AGENTS.keys())}"
+            )
+        entry = cls.AGENTS[step_name]
+        if isinstance(entry, AgentSpec):
+            return entry.tools
+        return []
 
 
-__all__ = ["AgentRegistry"]
+__all__ = ["AgentRegistry", "AgentSpec"]
