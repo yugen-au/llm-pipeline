@@ -49,10 +49,12 @@ vi.mock('@/api/events', () => ({
   useStepEvents: (...args: unknown[]) => mockUseStepEvents(...args),
 }))
 
-// Mock useStepInstructions hook
+// Mock useStepInstructions and usePipeline hooks
 const mockUseStepInstructions = vi.fn()
+const mockUsePipeline = vi.fn()
 vi.mock('@/api/pipelines', () => ({
   useStepInstructions: (...args: unknown[]) => mockUseStepInstructions(...args),
+  usePipeline: (...args: unknown[]) => mockUsePipeline(...args),
 }))
 
 // Mock useRunContext hook
@@ -75,6 +77,7 @@ describe('StepDetailPanel', () => {
     mockUseStep.mockReset()
     mockUseStepEvents.mockReset()
     mockUseStepInstructions.mockReset()
+    mockUsePipeline.mockReset()
     mockUseRunContext.mockReset()
     // Default: events, instructions, and context return empty/idle
     mockUseStepEvents.mockReturnValue({
@@ -83,6 +86,11 @@ describe('StepDetailPanel', () => {
       isError: false,
     })
     mockUseStepInstructions.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+    })
+    mockUsePipeline.mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: false,
