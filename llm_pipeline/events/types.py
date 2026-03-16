@@ -33,6 +33,7 @@ CATEGORY_INSTRUCTIONS_CONTEXT = "instructions_context"
 CATEGORY_TRANSFORMATION = "transformation"
 CATEGORY_EXTRACTION = "extraction"
 CATEGORY_STATE = "state"
+CATEGORY_TOOL_CALL = "tool_call"
 
 
 # -- Registry & helpers -------------------------------------------------------
@@ -545,6 +546,42 @@ class StateSaved(StepScopedEvent):
     execution_time_ms: float
 
 
+# -- Tool Call Events ----------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ToolCallStarting(StepScopedEvent):
+    """Emitted when a tool call begins during agent execution.
+
+    tool_args is a mutable container; must not be mutated after creation
+    (convention, not enforced at runtime).
+    """
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_TOOL_CALL
+
+    tool_name: str
+    tool_args: dict[str, Any]
+    call_index: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ToolCallCompleted(StepScopedEvent):
+    """Emitted when a tool call completes during agent execution.
+
+    result_preview is truncated to 200 chars by the emitting toolset.
+    error is populated when the tool raised an exception (which is re-raised
+    after emission).
+    """
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_TOOL_CALL
+
+    tool_name: str
+    result_preview: str | None
+    execution_time_ms: float
+    call_index: int
+    error: str | None = None
+
+
 # -- Exports -------------------------------------------------------------------
 
 __all__ = [
@@ -561,6 +598,7 @@ __all__ = [
     "CATEGORY_TRANSFORMATION",
     "CATEGORY_EXTRACTION",
     "CATEGORY_STATE",
+    "CATEGORY_TOOL_CALL",
     # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
     # -- use PipelineEvent.resolve_event() for registry access
     # Pipeline Lifecycle
@@ -603,4 +641,7 @@ __all__ = [
     "ExtractionError",
     # State
     "StateSaved",
+    # Tool Call
+    "ToolCallStarting",
+    "ToolCallCompleted",
 ]

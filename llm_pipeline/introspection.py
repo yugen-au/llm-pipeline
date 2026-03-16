@@ -131,8 +131,9 @@ class PipelineIntrospector:
 
         for step_def in step_defs:
             step_cls = step_def.step_class
+            step_name = self._step_name(step_cls)
             step_entry: Dict[str, Any] = {
-                "step_name": self._step_name(step_cls),
+                "step_name": step_name,
                 "class_name": step_cls.__name__,
                 "system_key": step_def.system_instruction_key,
                 "user_key": step_def.user_prompt_key,
@@ -150,8 +151,20 @@ class PipelineIntrospector:
                 "context_schema": self._get_schema(step_def.context),
                 "extractions": [],
                 "transformation": None,
+                "tools": [],
                 "action_after": step_def.action_after,
             }
+
+            # Tools from AGENT_REGISTRY (safe: never fails introspection)
+            try:
+                agent_registry = getattr(self._pipeline_cls, 'AGENT_REGISTRY', None)
+                if agent_registry is not None and hasattr(agent_registry, 'get_tools'):
+                    tool_fns = agent_registry.get_tools(step_name)
+                    step_entry["tools"] = [
+                        getattr(fn, '__name__', str(fn)) for fn in tool_fns
+                    ]
+            except Exception:
+                pass  # keep tools=[] default
 
             # Extractions
             for ext_cls in (step_def.extractions or []):

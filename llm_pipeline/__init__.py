@@ -38,7 +38,7 @@ from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.session import ReadOnlySession
 from llm_pipeline.introspection import PipelineIntrospector
-from llm_pipeline.agent_registry import AgentRegistry
+from llm_pipeline.agent_registry import AgentRegistry, AgentSpec
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
 from llm_pipeline.validators import not_found_validator, array_length_validator, DEFAULT_NOT_FOUND_INDICATORS
 
@@ -84,6 +84,7 @@ __all__ = [
     "PipelineIntrospector",
     # Agent
     "AgentRegistry",
+    "AgentSpec",
     "StepDeps",
     "build_step_agent",
     # Validators

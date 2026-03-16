@@ -289,8 +289,9 @@ class TestLLMStepMethods:
         }):
             pass
         step = self._make_step()
-        output_type = step.get_agent(GetAgentRegistry)
+        output_type, tools = step.get_agent(GetAgentRegistry)
         assert output_type is ExtractionOutput
+        assert tools == []
 
     def test_get_agent_uses_override(self):
         class OverrideRegistry(AgentRegistry, agents={
@@ -298,8 +299,9 @@ class TestLLMStepMethods:
         }):
             pass
         step = self._make_step(agent_name_override="custom_name")
-        output_type = step.get_agent(OverrideRegistry)
+        output_type, tools = step.get_agent(OverrideRegistry)
         assert output_type is ValidationOutput
+        assert tools == []
 
     def test_build_user_prompt_calls_service(self):
         step = self._make_step()
@@ -549,3 +551,98 @@ class TestBuildStepAgentValidators:
         assert hasattr(agent, "_validation_context")
         assert agent._validation_context is not None
         assert callable(agent._validation_context)
+
+
+# ============================================================
+# agent_builders.py - build_step_agent tools param
+# ============================================================
+
+class TestBuildStepAgentTools:
+    """Tests for the tools parameter of build_step_agent.
+
+    Verifies that tool callables are wrapped in FunctionToolset ->
+    EventEmittingToolset and attached to the Agent via toolsets=.
+    """
+
+    @staticmethod
+    def _dummy_tool(query: str) -> str:
+        """A minimal tool callable for testing."""
+        return f"result:{query}"
+
+    @staticmethod
+    def _another_tool(x: int) -> int:
+        """Second tool callable for multi-tool tests."""
+        return x * 2
+
+    def test_tools_none_no_toolset(self):
+        """tools=None (default) should not attach any user toolsets."""
+        agent = build_step_agent("step", SimpleOutput, tools=None)
+        assert agent._user_toolsets == []
+
+    def test_tools_empty_list_no_toolset(self):
+        """tools=[] (falsy) should not attach any user toolsets."""
+        agent = build_step_agent("step", SimpleOutput, tools=[])
+        assert agent._user_toolsets == []
+
+    def test_tools_provided_attaches_toolset(self):
+        """Non-empty tools list should produce exactly one user toolset."""
+        agent = build_step_agent("step", SimpleOutput, tools=[self._dummy_tool])
+        assert len(agent._user_toolsets) == 1
+
+    def test_tools_wrapped_in_event_emitting_toolset(self):
+        """The attached toolset should be an EventEmittingToolset."""
+        from llm_pipeline.toolsets import EventEmittingToolset
+
+        agent = build_step_agent("step", SimpleOutput, tools=[self._dummy_tool])
+        toolset = agent._user_toolsets[0]
+        assert isinstance(toolset, EventEmittingToolset)
+
+    def test_inner_toolset_is_function_toolset(self):
+        """EventEmittingToolset.wrapped should be a FunctionToolset."""
+        from pydantic_ai.toolsets import FunctionToolset
+
+        agent = build_step_agent("step", SimpleOutput, tools=[self._dummy_tool])
+        toolset = agent._user_toolsets[0]
+        assert isinstance(toolset.wrapped, FunctionToolset)
+
+    def test_multiple_tools_registered(self):
+        """Multiple tool callables should all be registered in the inner toolset."""
+        agent = build_step_agent(
+            "step", SimpleOutput, tools=[self._dummy_tool, self._another_tool]
+        )
+        assert len(agent._user_toolsets) == 1
+        # inner FunctionToolset.tools is a dict keyed by tool name
+        inner = agent._user_toolsets[0].wrapped
+        tool_names = list(inner.tools.keys())
+        assert "_dummy_tool" in tool_names
+        assert "_another_tool" in tool_names
+
+    def test_tools_with_other_params_coexist(self):
+        """tools param should work alongside validators and instrument."""
+        from pydantic_ai import RunContext
+
+        async def dummy_validator(ctx: RunContext, output: Any) -> Any:
+            return output
+
+        agent = build_step_agent(
+            "step",
+            SimpleOutput,
+            validators=[dummy_validator],
+            tools=[self._dummy_tool],
+        )
+        # toolset attached
+        assert len(agent._user_toolsets) == 1
+        # validator also registered
+        validator_fns = [v.function for v in agent._output_validators]
+        assert dummy_validator in validator_fns
+
+    def test_agent_still_valid_with_tools(self):
+        """Agent with tools should still have correct name and retries."""
+        from pydantic_ai import Agent
+
+        agent = build_step_agent(
+            "my_tool_step", SimpleOutput, retries=7, tools=[self._dummy_tool]
+        )
+        assert isinstance(agent, Agent)
+        assert agent.name == "my_tool_step"
+        assert agent._max_result_retries == 7

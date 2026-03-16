@@ -214,24 +214,26 @@ class LLMStep(ABC):
             )
         return to_snake_case(class_name, strip_suffix='Step')
 
-    def get_agent(self, registry: 'AgentRegistry') -> type:
+    def get_agent(self, registry: 'AgentRegistry') -> tuple[type, list]:
         """
-        Look up this step's output type from the agent registry.
+        Look up this step's output type and tools from the agent registry.
 
         Uses agent_name override (set by StepDefinition) if available,
         otherwise falls back to the auto-derived step_name.
 
-        Returns the output_type class reference (not an Agent instance).
-        Task 2 will provide the full Agent instance via build_step_agent().
+        Returns (output_type, tools) tuple. output_type is the BaseModel class
+        reference; tools is a list of tool callables (empty if none registered).
 
         Args:
             registry: AgentRegistry subclass to look up from
 
         Returns:
-            The BaseModel output type registered for this step
+            Tuple of (output_type BaseModel class, list of tool callables)
         """
         agent_name = getattr(self, '_agent_name', None) or self.step_name
-        return registry.get_output_type(agent_name)
+        output_type = registry.get_output_type(agent_name)
+        tools = registry.get_tools(agent_name)
+        return (output_type, tools)
 
     def build_user_prompt(
         self,

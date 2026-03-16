@@ -200,6 +200,24 @@ export interface ExtractionCompletedData {
   execution_time_ms: number
 }
 
+/** event_data shape for tool_call_starting events. */
+export interface ToolCallStartingData {
+  tool_name: string
+  tool_args: Record<string, unknown>
+  call_index: number
+  step_name: string | null
+}
+
+/** event_data shape for tool_call_completed events. */
+export interface ToolCallCompletedData {
+  tool_name: string
+  result_preview: string | null
+  execution_time_ms: number
+  call_index: number
+  error: string | null
+  step_name: string | null
+}
+
 // ---------------------------------------------------------------------------
 // Step prompt content (GET /api/pipelines/{name}/steps/{step_name}/prompts)
 // ---------------------------------------------------------------------------
@@ -325,6 +343,7 @@ export interface PipelineStepMetadata {
   extractions: ExtractionMetadata[]
   transformation: TransformationMetadata | null
   action_after: string | null
+  tools?: string[]
 }
 
 /**
