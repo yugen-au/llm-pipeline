@@ -1,7 +1,7 @@
 ## Task: adhoc-20260316-tool-calling-agents
 ## Description: Add tool-calling agent support to build_step_agent() - add tools param and extend StepDeps with extra dict for domain-specific deps
 
-## Phase: planning
+## Phase: implementation
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-16 14:17
+## Last Updated: 2026-03-16 14:44
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -20,10 +20,10 @@
 | StepDeps and Builder Architecture | python-development:python-pro | research | 2 | - | A | complete | 0 | a7b22640266b64171 | 197b9739 | - |
 | Tool Registration Patterns | backend-development:backend-architect | research | 3 | - | A | complete | 0 | a64e34d133e8102c6 | 197b9739 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a039fbacda721881a | 19366631 | - |
-| Plan | planning | planning | 1 | - | A | complete | 0 | a044d2048f8cc83f9 | pending | - |
-| AgentSpec + Registry | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | /pydantic/pydantic-ai |
-| step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | pending | 0 | pending | pending | - |
-| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | pending | 0 | pending | pending | - |
+| Plan | planning | planning | 1 | - | A | complete | 0 | a044d2048f8cc83f9 | c4cc41ee | - |
+| AgentSpec + Registry | python-development:python-pro | implementation | 1 | - | A | in-progress | 0 | pending | pending | /pydantic/pydantic-ai |
+| step.py get_agent tuple | python-development:python-pro | implementation | 2 | - | A | in-progress | 0 | pending | pending | - |
+| Tool Call Event Types | python-development:python-pro | implementation | 5 | - | A | in-progress | 0 | pending | pending | - |
 | build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | pending | 0 | pending | pending | - |
 | EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | pending | 0 | pending | pending | /pydantic/pydantic-ai |
