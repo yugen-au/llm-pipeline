@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260316-tool-calling-agents
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-3-buildstepagent-tools.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-eventemittingtoolset.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 3
+- Step to fix: 6
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. Context7 library IDs to query: /pydantic/pydantic-ai
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 3
+1. Read REVIEW.md for issues assigned to Step 6
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-3-buildstepagent-tools.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-6-eventemittingtoolset.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
