@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260316-tool-calling-agents
 ## Plugins: python-development, backend-development, llm-application-dev, frontend-mobile-development
@@ -27,6 +27,6 @@
 | build_step_agent tools | python-development:python-pro | implementation | 3 | - | B | complete | 0 | af873fb05d84b475c | 14247ed4 | /pydantic/pydantic-ai |
 | pipeline.py wiring | python-development:python-pro | implementation | 4 | - | B | complete | 0 | aa46d0b317774f351 | eacb3e5f,14247ed4 | - |
 | EventEmittingToolset | llm-application-dev:ai-engineer | implementation | 6 | - | C | complete | 0 | a31e6bb7fe3d0823c | 97cdf208 | /pydantic/pydantic-ai |
-| Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a6c2c3a88c44fcc95 | 7af07319 | - |
-| Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a7cc922276b879df5 | e9058b51 | - |
-| Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | pending | 0 | pending | pending | - |
+| Introspection tools metadata | python-development:python-pro | implementation | 7 | - | C | complete | 0 | a6c2c3a88c44fcc95 | 7af07319,97cdf208 | - |
+| Frontend TS types | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | a7cc922276b879df5 | e9058b51,97cdf208 | - |
+| Frontend UI display | frontend-mobile-development:frontend-developer | implementation | 9 | - | D | in-progress | 0 | pending | pending | - |
