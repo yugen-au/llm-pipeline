@@ -125,6 +125,20 @@ function StepRow({ step }: StepRowProps) {
             </div>
           )}
 
+          {/* Tools */}
+          {step.tools && step.tools.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Tools</p>
+              <div className="flex flex-wrap gap-1.5">
+                {step.tools.map((tool) => (
+                  <Badge key={tool} variant="outline" className="border-cyan-500 text-cyan-600 dark:text-cyan-400 font-mono text-xs">
+                    {tool}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Transformation */}
           {step.transformation && (
             <div className="space-y-1">

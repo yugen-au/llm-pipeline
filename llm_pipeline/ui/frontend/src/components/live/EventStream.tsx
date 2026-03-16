@@ -50,6 +50,9 @@ function getEventBadgeConfig(eventType: string): EventBadgeConfig {
   if (eventType.startsWith('context')) {
     return { variant: 'outline', className: 'border-teal-500 text-teal-600 dark:text-teal-400' }
   }
+  if (eventType.startsWith('tool_call')) {
+    return { variant: 'outline', className: 'border-cyan-500 text-cyan-600 dark:text-cyan-400' }
+  }
   if (eventType.startsWith('pipeline_started') || eventType.startsWith('pipeline_completed')) {
     return { variant: 'default', className: '' }
   }
