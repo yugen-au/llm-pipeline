@@ -5,3 +5,8 @@
 [2026-03-16 13:13:42] [INFO] Created: STATE.md
 [2026-03-16 13:13:42] [INFO] ============================================================
 [2026-03-16 13:13:42] [DEBUG] STATE.md atomic write complete
+[2026-03-16 13:15:02] [ERROR] BLOCKED: Invalid AgentRow 'pydantic-ai Agent Patterns': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-03-16 13:15:14] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-03-16 13:15:23] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-03-16 13:15:23] [INFO] Auto-updated agent statuses: pydantic-ai Agent Patterns: pending -> in-progress, StepDeps and Builder Architecture: pending -> in-progress, Tool Registration Patterns: pending -> in-progress
+[2026-03-16 13:15:23] [DEBUG] STATE.md atomic write complete
