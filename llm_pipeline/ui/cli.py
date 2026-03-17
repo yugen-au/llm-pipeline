@@ -77,31 +77,62 @@ def _run_prod_mode(app: object, port: int) -> None:
 
 
 def _run_dev_mode(args: argparse.Namespace) -> None:
-    """Run in dev mode: Vite + FastAPI if frontend/ exists, else reload-only."""
-    frontend_dir = Path(__file__).resolve().parent / "frontend"
-    if frontend_dir.exists():
-        from llm_pipeline.ui.app import create_app
+    """Run in dev mode with hot reload for both frontend (Vite) and backend (uvicorn)."""
+    # Pass db_path via env var so the factory can pick it up on reload
+    if args.db:
+        os.environ["LLM_PIPELINE_DB"] = args.db
 
-        app = create_app(db_path=args.db)
-        _start_vite_mode(app, args.port, frontend_dir)
+    frontend_dir = Path(__file__).resolve().parent / "frontend"
+    vite_proc = None
+
+    if frontend_dir.exists():
+        # Check npx availability
+        try:
+            subprocess.run(
+                ["npx", "--version"],
+                capture_output=True,
+                shell=(sys.platform == "win32"),
+            )
+        except FileNotFoundError:
+            print("ERROR: npx not found; install Node.js to use dev mode", file=sys.stderr)
+            sys.exit(1)
+
+        vite_port = args.port + 1
+        vite_proc = _start_vite(frontend_dir, vite_port, args.port)
+        atexit.register(_cleanup_vite, vite_proc)
+
+        if hasattr(signal, "SIGTERM"):
+            signal.signal(
+                signal.SIGTERM,
+                lambda s, f: (_cleanup_vite(vite_proc), sys.exit(0)),
+            )
+
+        print(
+            f"Vite dev server: http://localhost:{vite_port}\n"
+            f"FastAPI server:  http://127.0.0.1:{args.port}\n"
+            f"Open the Vite URL in your browser.",
+            file=sys.stderr,
+        )
     else:
         print(
             "INFO: No frontend/ directory found; starting in headless reload mode",
             file=sys.stderr,
         )
-        # Pass db_path via env var so the factory can pick it up on reload
-        if args.db:
-            os.environ["LLM_PIPELINE_DB"] = args.db
 
-        import uvicorn
+    import uvicorn
 
+    try:
         uvicorn.run(
             "llm_pipeline.ui.cli:_create_dev_app",
             factory=True,
             host="127.0.0.1",
             port=args.port,
             reload=True,
+            reload_dirs=[str(Path(__file__).resolve().parent.parent)],
         )
+    finally:
+        if vite_proc is not None:
+            _cleanup_vite(vite_proc)
 
 
 def _create_dev_app() -> object:
@@ -111,44 +142,6 @@ def _create_dev_app() -> object:
     db_path = os.environ.get("LLM_PIPELINE_DB")
     return create_app(db_path=db_path)
 
-
-def _start_vite_mode(app: object, port: int, frontend_dir: Path) -> None:
-    """Start Vite dev server alongside FastAPI."""
-    # Check npx availability
-    try:
-        subprocess.run(
-            ["npx", "--version"],
-            capture_output=True,
-            shell=(sys.platform == "win32"),
-        )
-    except FileNotFoundError:
-        print("ERROR: npx not found; install Node.js to use dev mode", file=sys.stderr)
-        sys.exit(1)
-
-    vite_port = port + 1
-    vite_proc = _start_vite(frontend_dir, vite_port, port)
-
-    atexit.register(_cleanup_vite, vite_proc)
-
-    if hasattr(signal, "SIGTERM"):
-        signal.signal(
-            signal.SIGTERM,
-            lambda s, f: (_cleanup_vite(vite_proc), sys.exit(0)),
-        )
-
-    print(
-        f"Vite dev server: http://localhost:{vite_port}\n"
-        f"FastAPI server:  http://127.0.0.1:{port}\n"
-        f"Open the Vite URL in your browser.",
-        file=sys.stderr,
-    )
-
-    import uvicorn
-
-    try:
-        uvicorn.run(app, host="127.0.0.1", port=port)  # type: ignore[arg-type]
-    finally:
-        _cleanup_vite(vite_proc)
 
 
 def _start_vite(
