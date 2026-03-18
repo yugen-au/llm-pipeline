@@ -326,3 +326,12 @@ To proceed, either:
 [2026-03-19 10:22:17] [ERROR] BLOCKED: Bash not allowed in task dir
 [2026-03-19 10:22:23] [ERROR] BLOCKED: Bash not allowed in task dir
 [2026-03-19 10:22:32] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:23:48] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:24:18] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-03-19 10:25:21] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:27:22] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:29:23] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:29:39] [ERROR] BLOCKED: Invalid Task description format
+[2026-03-19 10:29:47] [INFO] Task call: python-development:python-pro (phase: fixing-review)
+[2026-03-19 10:29:47] [INFO] Incremented Revisions: 2 -> 3
+[2026-03-19 10:29:47] [DEBUG] STATE.md atomic write complete
