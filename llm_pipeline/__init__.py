@@ -42,6 +42,12 @@ from llm_pipeline.agent_registry import AgentRegistry, AgentSpec
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
 from llm_pipeline.validators import not_found_validator, array_length_validator, DEFAULT_NOT_FOUND_INDICATORS
 
+try:
+    from llm_pipeline.creator import StepCreatorPipeline
+    _has_creator = True
+except ImportError:
+    _has_creator = False
+
 __version__ = "0.1.0"
 
 __all__ = [
@@ -99,3 +105,6 @@ __all__ = [
     "AdaptiveStrategy",
     "SoftVoteStrategy",
 ]
+
+if _has_creator:
+    __all__ += ["StepCreatorPipeline"]
