@@ -211,3 +211,9 @@ To proceed, either:
 [2026-03-19 09:46:20] [INFO] Task call: python-development:python-pro (phase: fixing-review)
 [2026-03-19 09:46:20] [INFO] Incremented Revisions: 0 -> 1
 [2026-03-19 09:46:20] [DEBUG] STATE.md atomic write complete
+[2026-03-19 09:47:02] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-03-19 09:47:21] [ERROR] BLOCKED: Invalid Task description format
+[2026-03-19 09:47:24] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-19 09:47:33] [INFO] Task call: python-development:python-pro (phase: fixing-review)
+[2026-03-19 09:47:33] [INFO] Incremented Revisions: 1 -> 2
+[2026-03-19 09:47:33] [DEBUG] STATE.md atomic write complete
