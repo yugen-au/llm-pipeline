@@ -1,5 +1,7 @@
 """Jinja2 template environment and rendering utilities for step code generation."""
 
+from functools import lru_cache
+
 try:
     from jinja2 import Environment, PackageLoader, StrictUndefined
 except ImportError:
@@ -52,6 +54,7 @@ def _format_dict(value: dict, indent: int = 4) -> str:
     return "\n".join(lines)
 
 
+@lru_cache(maxsize=None)
 def get_template_env() -> Environment:
     """Build a Jinja2 Environment configured for Python code generation.
 

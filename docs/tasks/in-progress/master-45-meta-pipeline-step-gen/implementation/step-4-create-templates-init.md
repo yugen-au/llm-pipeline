@@ -66,3 +66,30 @@ try:
 ### Verification
 [x] Module imports cleanly after removal
 [x] No references to `_pprint` or `_textwrap` anywhere in the file
+
+## Review Fix Iteration 3
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+- [x] `get_template_env()` recreates Jinja2 Environment and PackageLoader on every call; cache with `lru_cache`
+
+### Changes Made
+#### File: `llm_pipeline/creator/templates/__init__.py`
+Added `functools.lru_cache(maxsize=None)` decorator to `get_template_env()` so the Environment is created once and reused.
+
+```
+# Before
+def get_template_env() -> Environment:
+
+# After
+from functools import lru_cache
+
+@lru_cache(maxsize=None)
+def get_template_env() -> Environment:
+```
+
+### Verification
+[x] `get_template_env() is get_template_env()` returns True (same cached instance)
+[x] Module imports cleanly
+[x] `render_template` still works through cached env
