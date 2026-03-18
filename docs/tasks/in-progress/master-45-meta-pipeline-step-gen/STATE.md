@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-18 23:23
+## Last Updated: 2026-03-18 23:25
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,7 +26,7 @@
 | Create validators.py | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad2ecdc027ba24bdb | 6b529acf | - |
 | Create templates init | python-development:python-pro | implementation | 4 | - | C | complete | 0 | a33ffc8fab2b7be6b | fde19a55 | /pallets/jinja |
 | Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a906d7d68d844d62b | dee989a5 | /pallets/jinja |
-| Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | in-progress | 0 | pending | pending | /pallets/jinja |
+| Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | complete | 0 | a7b6ab4cb82b8fe87 | 4fa922c0 | /pallets/jinja |
 | Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | complete | 0 | aa3b4cfa4375c21f2 | 85a18228 | /pallets/jinja |
 | Create prompts.yaml.j2 | python-development:python-pro | implementation | 8 | - | D | in-progress | 0 | pending | pending | /pallets/jinja |
 | Create prompts.py | python-development:python-pro | implementation | 9 | - | E | pending | 0 | pending | pending | - |
