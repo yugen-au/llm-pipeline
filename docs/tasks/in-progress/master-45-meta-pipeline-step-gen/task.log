@@ -247,3 +247,10 @@ To proceed, either:
 [2026-03-19 09:54:13] [INFO] Incremented Revisions: 0 -> 1
 [2026-03-19 09:54:13] [DEBUG] STATE.md atomic write complete
 [2026-03-19 09:57:29] [DEBUG] STATE.md atomic write complete
+[2026-03-19 09:59:37] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 09:59:39] [ERROR] BLOCKED: Agent 'Architecture review' status 'pending' cannot be spawned
+[2026-03-19 09:59:48] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 09:59:56] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-19 10:00:16] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-19 10:00:16] [INFO] Incremented Revisions: 0 -> 1
+[2026-03-19 10:00:16] [DEBUG] STATE.md atomic write complete
