@@ -104,6 +104,7 @@ def _discover_pipelines(
 
 def create_app(
     db_path: Optional[str] = None,
+    database_url: Optional[str] = None,
     cors_origins: Optional[list] = None,
     pipeline_registry: Optional[dict] = None,
     introspection_registry: Optional[Dict[str, Type[PipelineConfig]]] = None,
@@ -116,6 +117,9 @@ def create_app(
         db_path: Path to SQLite database file. If None, uses
             init_pipeline_db() default (LLM_PIPELINE_DB env var
             or .llm_pipeline/pipeline.db).
+        database_url: Full SQLAlchemy database URL (e.g.
+            ``'postgresql://user:pass@host:port/db'``). Takes precedence
+            over db_path. Falls back to ``LLM_PIPELINE_DATABASE_URL`` env var.
         cors_origins: List of allowed CORS origins. Defaults to ["*"].
         pipeline_registry: Optional mapping of pipeline names to factory
             callables. Each factory has signature
@@ -157,7 +161,14 @@ def create_app(
     # NOTE: init_pipeline_db() sets the module-level _engine global in
     # llm_pipeline.db as a side-effect. Multiple create_app() calls will
     # overwrite that global with the last-created engine.
-    if db_path is not None:
+    resolved_db_url = (
+        database_url
+        or os.environ.get("LLM_PIPELINE_DATABASE_URL")
+    )
+    if resolved_db_url is not None:
+        engine = create_engine(resolved_db_url)
+        app.state.engine = init_pipeline_db(engine)
+    elif db_path is not None:
         if db_path == ":memory:":
             from sqlalchemy.pool import StaticPool
             engine = create_engine(

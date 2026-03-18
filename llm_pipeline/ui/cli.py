@@ -140,7 +140,8 @@ def _create_dev_app() -> object:
     from llm_pipeline.ui.app import create_app
 
     db_path = os.environ.get("LLM_PIPELINE_DB")
-    return create_app(db_path=db_path)
+    database_url = os.environ.get("LLM_PIPELINE_DATABASE_URL")
+    return create_app(db_path=db_path, database_url=database_url)
 
 
 
