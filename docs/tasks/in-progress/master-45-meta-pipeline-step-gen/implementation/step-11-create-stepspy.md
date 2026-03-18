@@ -64,3 +64,66 @@ Fix 4 - `_syntax_check()`: replaced stub-wrapping approach with `ast.parse(code,
 - [x] All 3 template variable sets match actual .j2 template variables verified by reading each template
 - [x] `_syntax_check()` now calls `ast.parse(code, mode="exec")` directly
 - [x] pytest passes with no new failures
+
+## Review Fix Iteration 1
+**Issues Source:** REVIEW.md (Additional Review Pass)
+**Status:** fixed
+
+### Issues Addressed
+- [x] MEDIUM: PromptGenerationStep.prepare_calls() passes unused step_code/instructions_code to LLM prompt
+- [x] LOW: GenerationRecordExtraction.default() accesses results[0] without bounds check
+
+### Changes Made
+#### File: `llm_pipeline/creator/steps.py`
+
+Fix 1 - Removed unused `step_code` and `instructions_code` variables from `PromptGenerationStep.prepare_calls()`. The `PROMPT_GENERATION_USER` prompt only uses `{step_name}`, `{description}`, `{input_variables}`; extra vars waste tokens.
+
+```python
+# Before
+"variables": {
+    "step_name": ctx.get("step_name", ""),
+    "description": self.pipeline.validated_input.description,
+    "input_variables": ctx.get("input_variables", []),
+    "step_code": ctx.get("step_code", ""),
+    "instructions_code": ctx.get("instructions_code", ""),
+}
+
+# After
+"variables": {
+    "step_name": ctx.get("step_name", ""),
+    "description": self.pipeline.validated_input.description,
+    "input_variables": ctx.get("input_variables", []),
+}
+```
+
+Fix 2 - Added `if not results: return []` guard in `GenerationRecordExtraction.default()` before `results[0]` access. Graceful degradation on empty results instead of IndexError.
+
+```python
+# Before
+def default(self, results: list[CodeValidationInstructions]) -> list[GenerationRecord]:
+    return [
+        GenerationRecord(
+            ...
+            is_valid=results[0].is_valid,
+            ...
+        )
+    ]
+
+# After
+def default(self, results: list[CodeValidationInstructions]) -> list[GenerationRecord]:
+    if not results:
+        return []
+    return [
+        GenerationRecord(
+            ...
+            is_valid=results[0].is_valid,
+            ...
+        )
+    ]
+```
+
+### Verification
+- [x] `from llm_pipeline.creator.steps import *` imports without error
+- [x] pytest: 413 passed, 1 pre-existing failure (test_field_count), no regressions
+- [x] PromptGenerationStep.prepare_calls() variables match PROMPT_GENERATION_USER required_variables
+- [x] GenerationRecordExtraction.default() safely handles empty results list

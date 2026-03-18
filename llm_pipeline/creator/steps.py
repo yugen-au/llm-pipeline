@@ -37,6 +37,8 @@ class GenerationRecordExtraction(PipelineExtraction, model=GenerationRecord):
 
     def default(self, results: list[CodeValidationInstructions]) -> list[GenerationRecord]:
         """Convert CodeValidationInstructions into GenerationRecord instances."""
+        if not results:
+            return []
         return [
             GenerationRecord(
                 run_id=self.pipeline.run_id,
@@ -199,8 +201,6 @@ class PromptGenerationStep(LLMStep):
                     "step_name": ctx.get("step_name", ""),
                     "description": self.pipeline.validated_input.description,
                     "input_variables": ctx.get("input_variables", []),
-                    "step_code": ctx.get("step_code", ""),
-                    "instructions_code": ctx.get("instructions_code", ""),
                 }
             }
         ]
