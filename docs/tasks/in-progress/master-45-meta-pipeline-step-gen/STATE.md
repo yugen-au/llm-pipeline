@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/45-meta-pipeline-step-gen
 ## Plugins: python-development, backend-development, llm-application-dev
@@ -23,8 +23,8 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | ac6720146bb80a06b | 4f42f7e2 | - |
 | Create models.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | addf4be5d3d34bbe3 | 23795d55 | /websites/sqlmodel_tiangolo,/pydantic/pydantic-ai |
 | Create schemas.py | python-development:python-pro | implementation | 2 | - | B | complete | 0 | ad293fec4f8309cb9 | 6b529acf | /pydantic/pydantic-ai |
-| Create validators.py | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad2ecdc027ba24bdb | pending | - |
-| Create templates init | python-development:python-pro | implementation | 4 | - | C | pending | 0 | pending | pending | /pallets/jinja |
+| Create validators.py | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad2ecdc027ba24bdb | 6b529acf | - |
+| Create templates init | python-development:python-pro | implementation | 4 | - | C | in-progress | 0 | pending | pending | /pallets/jinja |
 | Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | pending | 0 | pending | pending | /pallets/jinja |
 | Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | pending | 0 | pending | pending | /pallets/jinja |
 | Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | pending | 0 | pending | pending | /pallets/jinja |
