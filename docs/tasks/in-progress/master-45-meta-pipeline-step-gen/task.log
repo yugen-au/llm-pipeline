@@ -267,3 +267,17 @@ To proceed, either:
 [2026-03-19 10:06:30] [INFO] Incremented Revisions: 1 -> 2
 [2026-03-19 10:06:30] [DEBUG] STATE.md atomic write complete
 [2026-03-19 10:08:02] [DEBUG] STATE.md atomic write complete
+[2026-03-19 10:08:38] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:/Documents/claude-projects/llm-pipeline/docs/tasks/in-progress/master-45-meta-pipeline-step-gen/REVIEW.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-19 10:09:32] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-03-19 10:09:35] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-19 10:09:35] [INFO] Updated Commits for 'Architecture review': 35313fca
+[2026-03-19 10:09:35] [INFO] Auto-set Current Group -> B (entering fixing-review)
+[2026-03-19 10:09:35] [INFO] Auto-updated agent statuses: Create validators.py: complete -> in-progress, Create templates init: complete -> pending, Create steps.py: complete -> pending, Architecture review: complete -> pending
+[2026-03-19 10:09:35] [INFO] Deleted 1 old contract file(s)
+[2026-03-19 10:09:35] [DEBUG] STATE.md atomic write complete
