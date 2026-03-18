@@ -72,3 +72,18 @@ llm_pipeline/creator/validators.py  (126 lines — two unwired factory functions
 [x] grep for `validators` across `llm_pipeline/creator/*.py` returns no results
 [x] grep for `from.*creator.*validators` / `import.*creator.*validators` across `llm_pipeline/` returns no results
 [x] No `__init__.py` or other creator module imported or re-exported from validators
+
+---
+
+## Review Fix Iteration 1
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+- [x] validators.py is unreachable dead code (HIGH) — confirm removal persists
+
+### Changes Made
+No changes required. `llm_pipeline/creator/validators.py` does not exist; confirmed absent from filesystem. Removal was completed in Iteration 0 via `git rm`.
+
+### Verification
+[x] `ls llm_pipeline/creator/` confirms file absent (no `validators.py` in directory listing)
