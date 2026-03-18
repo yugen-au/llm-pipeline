@@ -8,6 +8,7 @@ No internal error handling: exceptions propagate to
 per-handler failures.
 """
 
+import json
 import logging
 import threading
 from typing import TYPE_CHECKING
@@ -209,12 +210,34 @@ class SQLiteEventHandler:
         return f"SQLiteEventHandler(engine={self._engine.url})"
 
 
+def _safe_event_data(event_data: dict) -> dict:
+    """Return event_data guaranteed to be JSON-serializable.
+
+    Serializes and re-parses the dict so any non-JSON-serializable values
+    (bytes, custom objects, etc.) are converted to strings before the record
+    is stored.  Falls back to a minimal error dict if serialization fails
+    entirely.
+    """
+    try:
+        return json.loads(json.dumps(event_data, default=str))
+    except Exception:
+        return {"_serialization_error": True}
+
+
 class BufferedEventHandler:
     """Buffer events in memory, flush to DB on demand.
 
     Designed for UI pipeline runs where the pipeline holds a DB write lock
     during execution. Events are collected in a thread-safe list and
     bulk-inserted via :meth:`flush` after the pipeline releases its connection.
+
+    Serialization safety: :meth:`emit` normalises ``event_data`` through
+    JSON round-trip so non-serializable values (bytes, custom objects) are
+    coerced to strings before reaching the database.
+
+    Commit safety: :meth:`flush` does NOT clear the buffer until after a
+    successful commit.  On failure it falls back to per-record inserts so
+    that good records are still persisted.
     """
 
     __slots__ = ("_engine", "_buffer", "_lock")
@@ -225,7 +248,12 @@ class BufferedEventHandler:
         self._lock = threading.Lock()
 
     def emit(self, event: "PipelineEvent") -> None:
-        """Buffer event in memory (no DB write)."""
+        """Buffer event in memory (no DB write).
+
+        ``event_data`` is JSON-normalised at emit time so any
+        non-serializable values are converted to strings before the record
+        reaches :meth:`flush`.
+        """
         step_name: str | None = getattr(event, "step_name", None)
         record = PipelineEventRecord(
             run_id=event.run_id,
@@ -233,25 +261,60 @@ class BufferedEventHandler:
             pipeline_name=event.pipeline_name,
             step_name=step_name,
             timestamp=event.timestamp,
-            event_data=event.to_dict(),
+            event_data=_safe_event_data(event.to_dict()),
         )
         with self._lock:
             self._buffer.append(record)
 
     def flush(self) -> int:
-        """Bulk-insert buffered events to DB. Returns count written."""
+        """Bulk-insert buffered events to DB. Returns count written.
+
+        Buffer is cleared only after a successful bulk commit.  If the bulk
+        commit fails (e.g. a bad row slipped through) this method falls back
+        to per-record inserts so good rows still reach the DB, then clears
+        the buffer.
+        """
         with self._lock:
             records = list(self._buffer)
-            self._buffer.clear()
+
         if not records:
             return 0
+
+        # --- attempt bulk insert ---
         session = Session(self._engine)
         try:
             session.add_all(records)
             session.commit()
+            # Bulk succeeded: clear buffer and return
+            with self._lock:
+                self._buffer.clear()
+            return len(records)
+        except Exception:
+            session.rollback()
         finally:
             session.close()
-        return len(records)
+
+        # --- bulk failed: fall back to per-record inserts ---
+        written = 0
+        for record in records:
+            session = Session(self._engine)
+            try:
+                session.add(record)
+                session.commit()
+                written += 1
+            except Exception:
+                session.rollback()
+                logger.warning(
+                    "Failed to persist event run_id=%s type=%s",
+                    record.run_id,
+                    record.event_type,
+                )
+            finally:
+                session.close()
+
+        with self._lock:
+            self._buffer.clear()
+        return written
 
     def __repr__(self) -> str:
         return f"BufferedEventHandler(buffered={len(self._buffer)})"

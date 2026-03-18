@@ -241,12 +241,23 @@ def trigger_run(
         bridge = UIBridge(run_id=run_id)
         db_buffer = BufferedEventHandler(engine)
         emitter = CompositeEmitter([bridge, db_buffer])
+        pipeline = None
         try:
             pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter, input_data=body.input_data or {})
             pipeline.execute(data=None, input_data=body.input_data)
             pipeline.save()
         except Exception:
             logger.exception("Background pipeline execution failed for run_id=%s", run_id)
+            # Release pipeline session lock BEFORE opening err_session.
+            # pipeline._real_session holds an open transaction with a row
+            # lock on pipeline_runs.  If we open err_session and try to
+            # UPDATE the same row while that lock is held, PostgreSQL will
+            # block indefinitely (single-threaded deadlock).
+            if pipeline is not None:
+                try:
+                    pipeline.close()
+                except Exception:
+                    pass
             try:
                 with Session(engine) as err_session:
                     run = err_session.exec(
