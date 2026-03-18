@@ -24,7 +24,7 @@
 | Create models.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | addf4be5d3d34bbe3 | 23795d55 | /websites/sqlmodel_tiangolo,/pydantic/pydantic-ai |
 | Create schemas.py | python-development:python-pro | implementation | 2 | - | B | complete | 0 | ad293fec4f8309cb9 | 6b529acf | /pydantic/pydantic-ai |
 | Create validators.py | python-development:python-pro | implementation | 3 | - | B | complete | 2 | abcbccd2219c17cf0 | 6b529acf,c906c746 | - |
-| Create templates init | python-development:python-pro | implementation | 4 | - | C | in-progress | 2 | a33ffc8fab2b7be6b | fde19a55,06cc090e | /pallets/jinja |
+| Create templates init | python-development:python-pro | implementation | 4 | - | C | in-progress | 3 | a33ffc8fab2b7be6b | fde19a55,06cc090e | /pallets/jinja |
 | Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a906d7d68d844d62b | dee989a5,9c25f842 | /pallets/jinja |
 | Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | complete | 0 | a7b6ab4cb82b8fe87 | 4fa922c0,9c25f842 | /pallets/jinja |
 | Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | complete | 0 | aa3b4cfa4375c21f2 | 85a18228,9c25f842 | /pallets/jinja |
