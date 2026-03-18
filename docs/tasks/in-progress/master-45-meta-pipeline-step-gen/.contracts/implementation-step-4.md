@@ -4,23 +4,23 @@
 - Task folder: docs\tasks\in-progress\master-45-meta-pipeline-step-gen
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-3-create-validatorspy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-create-templates-init.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 3
+- Step to fix: 4
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /pallets/jinja
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 3
+1. Read REVIEW.md for issues assigned to Step 4
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-3-create-validatorspy.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-4-create-templates-init.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
-## Review Fix Iteration 1
+## Review Fix Iteration 2
 **Issues Source:** [REVIEW.md]
 **Status:** [fixed/partial/blocked]
 
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-4-create-templates-init.md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
