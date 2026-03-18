@@ -254,3 +254,15 @@ To proceed, either:
 [2026-03-19 10:00:16] [INFO] Task call: comprehensive-review:architect-review (phase: review)
 [2026-03-19 10:00:16] [INFO] Incremented Revisions: 0 -> 1
 [2026-03-19 10:00:16] [DEBUG] STATE.md atomic write complete
+[2026-03-19 10:03:55] [INFO] WARNING: No active agent found for 'python-development:python-pro'
+[2026-03-19 10:05:50] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\master-45-meta-pipeline-step-gen\REVIEW.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-19 10:06:13] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 10:06:30] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-19 10:06:30] [INFO] Incremented Revisions: 1 -> 2
+[2026-03-19 10:06:30] [DEBUG] STATE.md atomic write complete
