@@ -208,3 +208,100 @@ All prior rejection reasons hold. New critical finding added: `prompts.yaml.j2` 
 6. (LOW) Remove unused pprint/textwrap imports from templates/__init__.py
 7. (LOW) Add bounds guard to GenerationRecordExtraction.default()
 8. (LOW) Cache template environment in get_template_env()
+
+---
+
+## Review Pass 3 (Post-Fix Verification)
+
+### Overall Assessment
+**Status:** complete
+
+All critical and high issues from prior reviews have been resolved. The `llm_pipeline/creator/` package is now architecturally sound, follows all framework patterns correctly, and should be functional at runtime. The template variable contracts are satisfied, syntax checking uses the correct abstraction, dead code has been removed, and safety guards are in place. Two low-severity issues remain (template environment caching, extra variable in CodeValidationStep) -- neither affects correctness.
+
+### Project Guidelines Compliance
+**CLAUDE.md:** `C:\Users\SamSG\Documents\claude_projects\llm-pipeline\.claude\CLAUDE.md`
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| PipelineConfig subclass pattern | pass | `StepCreatorPipeline` follows `TextAnalyzerPipeline` pattern exactly |
+| step_definition decorator naming | pass | All 4 steps satisfy `{Prefix}Step`, `{Prefix}Instructions`, `{Prefix}Context`; validated at import time |
+| LLMResultMixin subclass with `example` ClassVar | pass | All 4 Instructions classes have valid `example` dicts |
+| PipelineExtraction with `model=` parameter | pass | `GenerationRecordExtraction(PipelineExtraction, model=GenerationRecord)` correct |
+| PipelineDatabaseRegistry with `models=` parameter | pass | `StepCreatorRegistry(PipelineDatabaseRegistry, models=[GenerationRecord])` correct |
+| Jinja2 as optional dependency with ImportError guard | pass | Guards in `creator/__init__.py` and `templates/__init__.py`; pyproject.toml has `creator = ["jinja2>=3.0"]` |
+| Inline imports to break circular dependency | pass | `DefaultCreatorStrategy.get_steps()` uses inline imports |
+| GenerationRecord JSON column pattern | pass | `Field(default_factory=list, sa_column=Column(JSON))` matches framework |
+| seed_prompts idempotent seeding | pass | Checks `(prompt_key, prompt_type)` uniqueness before insert, matches demo |
+| StrictUndefined on Jinja2 Environment | pass | Correctly configured to catch missing template vars |
+| `__all__` in all modules | pass | Present in all 7 Python modules |
+| Docstrings on all public classes | pass | Every class and public function has docstrings |
+| No hardcoded values | pass | Prompt content uses descriptive strings; no magic numbers |
+| Error handling present | pass | `_syntax_check` handles SyntaxError; `GenerationRecordExtraction.default()` guards empty results |
+
+### Issues Found
+
+#### Critical
+None
+
+#### High
+None
+
+#### Medium
+None
+
+#### Low
+
+##### Extra variable in CodeValidationStep.prepare_calls()
+**Step:** 11 (Create steps.py)
+**Details:** `CodeValidationStep.prepare_calls()` (steps.py L256-275) passes `step_name` as a template variable, but `CODE_VALIDATION_USER` content (prompts.py L214-220) does not use `{step_name}` as a placeholder, and `step_name` is not in `required_variables`. The extra key is silently ignored by `str.format_map()` but wastes a small amount of token context. Not a correctness issue.
+
+##### Template environment created on every render_template() call
+**Step:** 4 (Create templates/__init__.py)
+**Details:** `render_template()` calls `get_template_env()` which creates a fresh `jinja2.Environment` and `PackageLoader` per invocation. `CodeGenerationStep` makes 2-3 sequential render calls per pipeline run. A `functools.lru_cache` on `get_template_env()` would eliminate repeated filesystem lookups. Performance-only concern; no correctness impact.
+
+### Verification of Prior Fix Items
+
+| Prior Issue | Severity | Status | Verification |
+| --- | --- | --- | --- |
+| render_template variable mismatches in steps.py | CRITICAL | FIXED | All 4 render_template calls now pass every variable their templates require. Verified: `step.py.j2` receives `docstring`, `system_key`, `user_key`, `extractions`; `instructions.py.j2` receives `docstring`, `additional_imports`; `extraction.py.j2` receives `docstring`, `model_import`, `instructions_import`. StrictUndefined will not raise. |
+| prompts.yaml.j2 double-quote breakage | CRITICAL | FIXED | Template now uses triple-quoted strings (`"""{{ system_content }}"""`) for content values. LLM-generated prompts containing double quotes will render valid Python. |
+| validators.py dead code | HIGH | FIXED | File removed from `llm_pipeline/creator/`. No file exists at that path. No imports of validators across the package. |
+| _syntax_check function stub wrapping | MEDIUM | FIXED | `_syntax_check()` (steps.py L235-243) now calls `ast.parse(code, mode="exec")` directly without the `def _f():\n` wrapper. Correct for validating full Python module source. |
+| PromptGenerationStep unused variables | MEDIUM | FIXED | `prepare_calls()` (steps.py L196-206) now passes only `step_name`, `description`, `input_variables` -- matching `PROMPT_GENERATION_USER.required_variables` exactly. |
+| Unused pprint/textwrap imports in templates/__init__.py | LOW | FIXED | No `pprint` or `textwrap` imports in `templates/__init__.py`. Only imports are `jinja2` components and `llm_pipeline.naming.to_snake_case`. |
+| GenerationRecordExtraction.default() unsafe results[0] | LOW | FIXED | `default()` (steps.py L40-52) now has `if not results: return []` guard before accessing `results[0]`. |
+| Template environment caching | LOW | NOT FIXED | `get_template_env()` still creates new Environment per call. Retained as low severity. |
+
+### Review Checklist
+- [x] Architecture patterns followed -- PipelineConfig subclass, step_definition, LLMResultMixin, PipelineExtraction, PipelineDatabaseRegistry all used correctly; matches demo pipeline structure
+- [x] Code quality and maintainability -- clean module boundaries, no dead code, proper separation of concerns, `__all__` exports in every module
+- [x] Error handling present -- `_syntax_check` catches SyntaxError gracefully; `GenerationRecordExtraction.default()` guards empty results; template StrictUndefined catches variable mismatches at render time
+- [x] No hardcoded values -- all configurable via prompt dicts, template variables, and pipeline input
+- [x] Project conventions followed -- naming conventions enforced by framework decorators; inline imports for circular deps; `__all__` in all modules; docstrings everywhere
+- [x] Security considerations -- no user-supplied input in dangerous operations; template rendering uses trusted LLM output; no credentials or secrets; ast.parse is safe for untrusted code (parse-only, no exec)
+- [x] Properly scoped (DRY, YAGNI, no over-engineering) -- dead validators.py removed; no unnecessary abstractions; templates are minimal and focused
+
+### Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/creator/__init__.py` | pass | ImportError guard correct; re-exports StepCreatorPipeline; `__all__` correct |
+| `llm_pipeline/creator/models.py` | pass | FieldDefinition, ExtractionTarget, GenerationRecord correct; JSON column pattern matches framework |
+| `llm_pipeline/creator/schemas.py` | pass | All 4 Instructions + 4 Context classes correct; `example` ClassVars valid |
+| `llm_pipeline/creator/pipeline.py` | pass | All wiring classes correct; inline imports in `get_steps()` prevent circular dependency; `seed_prompts` delegates correctly |
+| `llm_pipeline/creator/steps.py` | pass | All 4 steps correct; template variable contracts satisfied; `_syntax_check` uses proper `ast.parse(mode="exec")`; `GenerationRecordExtraction.default()` has empty-results guard |
+| `llm_pipeline/creator/prompts.py` | pass | 8 prompt seed dicts correct; `seed_prompts` idempotent; prompt content quality appropriate |
+| `llm_pipeline/creator/templates/__init__.py` | pass | No unused imports; StrictUndefined configured; custom filters (snake_case, camel_case, indent_code, format_dict) correct |
+| `llm_pipeline/creator/templates/step.py.j2` | pass | Template structure correct; all required variables supplied by caller |
+| `llm_pipeline/creator/templates/instructions.py.j2` | pass | Template correct; dict dot-access works in Jinja2 for field iteration; all required variables supplied |
+| `llm_pipeline/creator/templates/extraction.py.j2` | pass | Template correct; all required variables supplied |
+| `llm_pipeline/creator/templates/prompts.yaml.j2` | pass | Triple-quoted strings handle embedded double quotes correctly |
+| `pyproject.toml` | pass | `creator = ["jinja2>=3.0"]` in optional-dependencies; `step_creator` entry point registered |
+| `llm_pipeline/__init__.py` | pass | Conditional import with `_has_creator` flag; conditional `__all__` append |
+
+### New Issues Introduced
+None detected. All fixes from the prior review cycle addressed their respective issues without introducing regressions. The template variable contracts between callers (steps.py) and templates (*.j2) are now fully aligned.
+
+### Recommendation
+**Decision:** APPROVE
+
+All critical, high, and medium issues from prior reviews are resolved. The implementation is architecturally correct, follows all framework patterns, and the template/caller contracts are now fully satisfied. Two low-severity items remain (extra variable in CodeValidationStep, template env caching) that do not affect correctness or functionality. The package is ready for integration.
