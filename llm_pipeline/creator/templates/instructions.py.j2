@@ -14,8 +14,8 @@ class {{ class_name }}(LLMResultMixin):
 {% if field.is_required %}
     {{ field.name }}: {{ field.type_annotation }}
 {% else %}
-    {{ field.name }}: {{ field.type_annotation }} = {{ field.default }}
+    {{ field.name }}: {{ field.type_annotation }} = {{ field.default if field.default is not none else '""' }}
 {% endif %}
 {% endfor %}
 
-    example: ClassVar[dict] = {{ example_dict | pprint }}
+    example: ClassVar[dict] = {{ example_dict | format_dict(4) | indent(4, false) }}

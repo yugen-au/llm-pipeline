@@ -33,27 +33,26 @@ def _indent_code(code: str, width: int = 4) -> str:
 def _format_dict(value: dict, indent: int = 4) -> str:
     """Format a Python dict as a clean, indented literal string.
 
-    Produces output like::
+    Produces output matching the hand-written style used in the demo::
 
         {
             "key": "value",
-            "nested": [1, 2, 3],
+            "nested": [{"a": 1}, {"b": 2}],
         }
 
-    Continuation lines are indented by *indent* spaces so the result
-    can be dropped into a class body at a given indentation level.
+    *indent* controls the indentation of entries relative to the opening
+    brace.  The closing brace aligns with the opening brace (column 0 of
+    the returned string).  Each top-level key gets its own line; nested
+    values use ``repr()``.
     """
-    raw = _pprint.pformat(value, width=72, sort_dicts=False)
-    # pformat may produce single-line or multi-line output.
-    # For multi-line, re-indent all lines after the first.
-    lines = raw.splitlines()
-    if len(lines) <= 1:
-        return raw
+    if not value:
+        return "{}"
     prefix = " " * indent
-    result_lines = [lines[0]]
-    for line in lines[1:]:
-        result_lines.append(f"{prefix}{line}")
-    return "\n".join(result_lines)
+    lines = ["{"]
+    for key, val in value.items():
+        lines.append(f"{prefix}{key!r}: {val!r},")
+    lines.append("}")
+    return "\n".join(lines)
 
 
 def get_template_env() -> Environment:
