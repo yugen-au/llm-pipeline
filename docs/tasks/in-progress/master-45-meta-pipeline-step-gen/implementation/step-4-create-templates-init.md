@@ -38,3 +38,31 @@ New module providing Jinja2 template environment for code generation.
 [x] `indent_code` filter works (correct indentation, empty lines preserved)
 [x] `render_template` callable
 [x] No new test failures (7 pre-existing failures, 1048 passed)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+- [x] Remove unused `import pprint as _pprint` and `import textwrap as _textwrap`
+
+### Changes Made
+#### File: `llm_pipeline/creator/templates/__init__.py`
+Removed two unused stdlib imports from the top of the module.
+
+```
+# Before
+import pprint as _pprint
+import textwrap as _textwrap
+
+try:
+    from jinja2 import ...
+
+# After
+try:
+    from jinja2 import ...
+```
+
+### Verification
+[x] Module imports cleanly after removal
+[x] No references to `_pprint` or `_textwrap` anywhere in the file

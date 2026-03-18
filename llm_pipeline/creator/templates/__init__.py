@@ -1,8 +1,5 @@
 """Jinja2 template environment and rendering utilities for step code generation."""
 
-import pprint as _pprint
-import textwrap as _textwrap
-
 try:
     from jinja2 import Environment, PackageLoader, StrictUndefined
 except ImportError:
