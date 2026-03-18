@@ -314,3 +314,15 @@ To proceed, either:
 [2026-03-19 10:21:28] [INFO] Task call: python-development:python-pro (phase: fixing-review)
 [2026-03-19 10:21:28] [INFO] Incremented Revisions: 1 -> 2
 [2026-03-19 10:21:28] [DEBUG] STATE.md atomic write complete
+[2026-03-19 10:21:57] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:22:02] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:\Documents\claude-projects\llm-pipeline\llm_pipeline\creator\steps.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-19 10:22:12] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 10:22:17] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 10:22:23] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 10:22:32] [INFO] Cleaned up stale semaphores: subagent, state, git
