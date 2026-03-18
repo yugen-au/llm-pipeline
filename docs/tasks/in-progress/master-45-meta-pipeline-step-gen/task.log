@@ -173,3 +173,25 @@
 [2026-03-19 09:28:36] [INFO] Auto-updated agent statuses: Architecture review: pending -> in-progress
 [2026-03-19 09:28:36] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 09:28:36] [DEBUG] STATE.md atomic write complete
+[2026-03-19 09:28:53] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\master-45-meta-pipeline-step-gen\TESTING.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-19 09:28:55] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-19 09:29:27] [INFO] WARNING: No active agent found for 'full-stack-orchestration:test-automator'
+[2026-03-19 09:30:17] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-19 09:41:09] [INFO] WARNING: No active agent found for 'comprehensive-review:architect-review'
+[2026-03-19 09:41:36] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 09:41:44] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-19 09:41:52] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '11,3,4'
+[2026-03-19 09:42:00] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-19 09:42:13] [INFO] Committed review-A: ['REVIEW.md'] -> 82cd6bec
+[2026-03-19 09:42:15] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-19 09:42:15] [INFO] Updated Commits for 'Architecture review': 82cd6bec
+[2026-03-19 09:42:15] [INFO] Auto-set Current Group -> B (entering fixing-review)
+[2026-03-19 09:42:15] [INFO] Auto-updated agent statuses: Create validators.py: complete -> in-progress, Create templates init: complete -> pending, Create steps.py: complete -> pending, Architecture review: complete -> pending
+[2026-03-19 09:42:15] [INFO] Deleted 1 old contract file(s)
+[2026-03-19 09:42:15] [DEBUG] STATE.md atomic write complete
