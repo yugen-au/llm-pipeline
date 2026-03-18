@@ -223,3 +223,13 @@ To proceed, either:
 [2026-03-19 09:48:12] [INFO] Auto-updated agent statuses: Create steps.py: pending -> in-progress
 [2026-03-19 09:48:12] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 09:48:12] [DEBUG] STATE.md atomic write complete
+[2026-03-19 09:48:14] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:\Documents\claude-projects\llm-pipeline\llm_pipeline\creator\templates\__init__.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-19 09:48:35] [INFO] Task call: python-development:python-pro (phase: fixing-review)
+[2026-03-19 09:48:35] [INFO] Incremented Revisions: 0 -> 1
+[2026-03-19 09:48:35] [DEBUG] STATE.md atomic write complete
