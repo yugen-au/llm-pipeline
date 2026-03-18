@@ -127,3 +127,33 @@ def default(self, results: list[CodeValidationInstructions]) -> list[GenerationR
 - [x] pytest: 413 passed, 1 pre-existing failure (test_field_count), no regressions
 - [x] PromptGenerationStep.prepare_calls() variables match PROMPT_GENERATION_USER required_variables
 - [x] GenerationRecordExtraction.default() safely handles empty results list
+
+## Review Fix Iteration 3
+**Issues Source:** REVIEW.md (Review Pass 3, Low)
+**Status:** fixed
+
+### Issues Addressed
+- [x] Unused `context_fields` variable in `CodeGenerationStep.process_instructions()` (dead code)
+
+### Changes Made
+#### File: `llm_pipeline/creator/steps.py`
+Removed unused `context_fields = ctx.get("context_fields", [])` assignment from `CodeGenerationStep.process_instructions()`. Variable was assigned but never passed to any template or used elsewhere.
+
+```python
+# Before
+step_name = ctx.get("step_name", "")
+step_class_name = ctx.get("step_class_name", "")
+instruction_fields = ctx.get("instruction_fields", [])
+context_fields = ctx.get("context_fields", [])
+extraction_targets = ctx.get("extraction_targets", [])
+
+# After
+step_name = ctx.get("step_name", "")
+step_class_name = ctx.get("step_class_name", "")
+instruction_fields = ctx.get("instruction_fields", [])
+extraction_targets = ctx.get("extraction_targets", [])
+```
+
+### Verification
+- [x] Variable `context_fields` confirmed unused in any render_template call or return value
+- [x] `from llm_pipeline.creator.steps import *` imports without error

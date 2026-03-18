@@ -124,7 +124,6 @@ class CodeGenerationStep(LLMStep):
         step_name = ctx.get("step_name", "")
         step_class_name = ctx.get("step_class_name", "")
         instruction_fields = ctx.get("instruction_fields", [])
-        context_fields = ctx.get("context_fields", [])
         extraction_targets = ctx.get("extraction_targets", [])
 
         # Derive prefix and class names from step_class_name
