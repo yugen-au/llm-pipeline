@@ -25,12 +25,10 @@ _wal_registered_engines: set = set()
 def _migrate_add_columns(engine: Engine) -> None:
     """Add columns introduced after initial schema to existing tables.
 
-    **SQLite-only.** Uses PRAGMA table_info to check column existence
-    before ALTER TABLE. Non-SQLite engines are skipped silently; users
-    on other databases must add the columns manually.
+    Works with both SQLite and Postgres/other databases. Uses
+    information_schema on non-SQLite, PRAGMA on SQLite.
     """
-    if not engine.url.drivername.startswith("sqlite"):
-        return
+    is_sqlite = engine.url.drivername.startswith("sqlite")
 
     # (table_name, column_name, column_type)
     _MIGRATIONS = [
@@ -41,7 +39,7 @@ def _migrate_add_columns(engine: Engine) -> None:
         ("pipeline_events", "step_name", "VARCHAR(100)"),
     ]
 
-    # Group by table to minimise PRAGMA calls
+    # Group by table to minimise lookups
     tables: dict[str, list[tuple[str, str]]] = {}
     for tbl, col, typ in _MIGRATIONS:
         tables.setdefault(tbl, []).append((col, typ))
@@ -49,16 +47,25 @@ def _migrate_add_columns(engine: Engine) -> None:
     for tbl, columns in tables.items():
         try:
             with engine.connect() as conn:
-                result = conn.execute(text(f"PRAGMA table_info({tbl})"))
-                existing = {row[1] for row in result}
+                if is_sqlite:
+                    result = conn.execute(text(f"PRAGMA table_info({tbl})"))
+                    existing = {row[1] for row in result}
+                else:
+                    result = conn.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name = :tbl"
+                        ),
+                        {"tbl": tbl},
+                    )
+                    existing = {row[0] for row in result}
                 for col_name, col_type in columns:
                     if col_name not in existing:
-                        conn.execute(
-                            text(
-                                f"ALTER TABLE {tbl} "
-                                f"ADD COLUMN {col_name} {col_type}"
-                            )
-                        )
+                        if is_sqlite:
+                            stmt = f"ALTER TABLE {tbl} ADD COLUMN {col_name} {col_type}"
+                        else:
+                            stmt = f"ALTER TABLE {tbl} ADD COLUMN IF NOT EXISTS {col_name} {col_type}"
+                        conn.execute(text(stmt))
                 conn.commit()
         except OperationalError:
             pass  # table doesn't exist yet; create_all will handle it
