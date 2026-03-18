@@ -357,3 +357,11 @@ To proceed, either:
 [2026-03-19 10:39:48] [INFO] Incremented Revisions: 2 -> 3
 [2026-03-19 10:39:48] [DEBUG] STATE.md atomic write complete
 [2026-03-19 10:43:58] [DEBUG] STATE.md atomic write complete
+[2026-03-19 10:44:47] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-19 10:44:55] [INFO] Committed review-A: ['REVIEW.md'] -> 21548a0a
+[2026-03-19 10:44:57] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-19 10:44:58] [INFO] Updated Commits for 'Architecture review': c9594b82
+[2026-03-19 10:44:58] [INFO] Auto-set Current Group -> C (entering fixing-review)
+[2026-03-19 10:44:58] [INFO] Auto-updated agent statuses: Create templates init: complete -> in-progress, Create steps.py: complete -> pending, Architecture review: complete -> pending
+[2026-03-19 10:44:58] [INFO] Deleted 1 old contract file(s)
+[2026-03-19 10:44:58] [DEBUG] STATE.md atomic write complete
