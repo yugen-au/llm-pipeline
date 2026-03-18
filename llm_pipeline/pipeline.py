@@ -791,6 +791,7 @@ class PipelineConfig(ABC):
                         validators=step_validators,
                         instrument=self._instrumentation_settings,
                         tools=step_tools,
+                        system_instruction_key=step.system_instruction_key,
                     )
 
                     for idx, params in enumerate(call_params):
