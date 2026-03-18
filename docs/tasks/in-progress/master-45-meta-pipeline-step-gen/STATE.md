@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/45-meta-pipeline-step-gen
 ## Plugins: python-development, backend-development, llm-application-dev
@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: [11,3,4]
 ## Work Mode: standard
-## Last Updated: 2026-03-19 09:42
+## Last Updated: 2026-03-19 09:45
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -23,8 +23,8 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | ac6720146bb80a06b | 4f42f7e2 | - |
 | Create models.py | python-development:python-pro | implementation | 1 | - | A | complete | 0 | addf4be5d3d34bbe3 | 23795d55 | /websites/sqlmodel_tiangolo,/pydantic/pydantic-ai |
 | Create schemas.py | python-development:python-pro | implementation | 2 | - | B | complete | 0 | ad293fec4f8309cb9 | 6b529acf | /pydantic/pydantic-ai |
-| Create validators.py | python-development:python-pro | implementation | 3 | - | B | in-progress | 1 | ad2ecdc027ba24bdb | 6b529acf | - |
-| Create templates init | python-development:python-pro | implementation | 4 | - | C | pending | 0 | a33ffc8fab2b7be6b | fde19a55 | /pallets/jinja |
+| Create validators.py | python-development:python-pro | implementation | 3 | - | B | complete | 1 | ad2ecdc027ba24bdb | 6b529acf | - |
+| Create templates init | python-development:python-pro | implementation | 4 | - | C | in-progress | 0 | a33ffc8fab2b7be6b | fde19a55 | /pallets/jinja |
 | Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a906d7d68d844d62b | dee989a5,9c25f842 | /pallets/jinja |
 | Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | complete | 0 | a7b6ab4cb82b8fe87 | 4fa922c0,9c25f842 | /pallets/jinja |
 | Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | complete | 0 | aa3b4cfa4375c21f2 | 85a18228,9c25f842 | /pallets/jinja |
