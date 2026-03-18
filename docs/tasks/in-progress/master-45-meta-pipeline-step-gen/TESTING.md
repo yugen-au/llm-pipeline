@@ -188,3 +188,77 @@ Full suite after step-11 review fixes (template variable mismatches removed from
 1. Pre-existing test failures in tests/ui/test_cli.py and test_agent_registry_core.py should be addressed separately
 2. Flaky test_returns_422_when_no_model_configured in test_runs.py is order-dependent, unrelated to this task
 3. Consider passing context_fields to instructions.py.j2 template in a follow-up if context class generation needs it
+
+---
+
+# Re-run: Post-LOW-Fix Regression Check (Fourth Pass)
+
+## Summary
+**Status:** passed
+Full suite after two LOW fixes: lru_cache on get_template_env() (commit 71d675f6) and context_fields dead code removal from CodeGenerationStep.process_instructions (commit 08454db3). Identical result to third pass: 5 failures (4 confirmed pre-existing + 1 flaky). No new failures. All success criteria remain met.
+
+## Automated Testing
+
+### Test Scripts Created
+| Script | Purpose | Location |
+| --- | --- | --- |
+| pytest (full suite) | Regression check | project root |
+| python -c import check | Creator package import verification | inline |
+| python -c lru_cache check | get_template_env() returns same instance | inline |
+| python -c dead code check | context_fields assignment absent from process_instructions | inline |
+
+### Test Execution
+**Pass Rate:** 1050/1055 (4 pre-existing failures + 1 flaky, 6 skipped)
+```
+5 failed, 1050 passed, 6 skipped, 1 warning in 121.05s (0:02:01)
+```
+
+### Failed Tests
+#### TestStepDepsFields::test_field_count
+**Step:** pre-existing (not caused by implementation)
+**Error:** assert 11 == 10
+
+#### TestCreateDevApp::test_reads_env_var_and_passes_to_create_app
+**Step:** pre-existing
+**Error:** Expected create_app(db_path=...) but actual includes database_url=None
+
+#### TestCreateDevApp::test_passes_none_when_env_var_absent
+**Step:** pre-existing
+**Error:** Expected create_app(db_path=None) but actual includes database_url=None
+
+#### TestDevModeWithFrontend::test_uvicorn_no_reload_in_vite_mode
+**Step:** pre-existing
+**Error:** assert not True -- reload=True unexpected
+
+#### TestTriggerRun::test_returns_422_when_no_model_configured
+**Step:** pre-existing (flaky/order-dependent)
+**Error:** Passes in isolation; fails in full suite due to test ordering pollution
+
+## Build Verification
+- [x] `from llm_pipeline.creator import StepCreatorPipeline` imports without error
+- [x] `get_template_env()` returns same cached instance on repeated calls (lru_cache verified)
+- [x] `context_fields` assignment removed from CodeGenerationStep.process_instructions (dead code absent)
+- [x] No new import errors from either fix
+
+## Success Criteria (from PLAN.md)
+- [x] `llm_pipeline/creator/` package exists with all 8 files: `__init__.py`, `pipeline.py`, `steps.py`, `schemas.py`, `models.py`, `prompts.py`, `validators.py`, `templates/__init__.py`
+- [x] 4 Jinja2 template files exist: `creator/templates/step.py.j2`, `instructions.py.j2`, `extraction.py.j2`, `prompts.yaml.j2`
+- [x] `from llm_pipeline.creator import StepCreatorPipeline` works (with jinja2 installed)
+- [x] `StepCreatorPipeline.__init_subclass__` validation passes
+- [x] All 4 `@step_definition` decorators succeed at class definition
+- [x] `GenerationRecord` table creatable via `SQLModel.metadata.create_all(engine)`
+- [x] `GenerationRecordExtraction` correctly linked to `CodeValidationStep` via `default_extractions`
+- [x] `pyproject.toml` has `creator = ["jinja2>=3.0"]` in optional-dependencies
+- [x] `pyproject.toml` has `step_creator = "llm_pipeline.creator:StepCreatorPipeline"` entry point
+- [x] `pytest` passes with no new failures
+- [ ] `StepCreatorPipeline.seed_prompts(engine)` seeds 8 prompts idempotently -- deferred (human validation)
+
+## LOW Fixes Verified
+- [x] `@lru_cache(maxsize=None)` on `get_template_env()` in `templates/__init__.py` (commit 71d675f6): same object returned on repeated calls
+- [x] `context_fields = ctx.get("context_fields", [])` removed from `CodeGenerationStep.process_instructions` in `steps.py` (commit 08454db3): no assignment found via AST inspection
+
+## Issues Found
+None
+
+## Recommendations
+1. No action required -- both LOW fixes verified clean, no regressions introduced
