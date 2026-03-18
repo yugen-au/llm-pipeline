@@ -11,7 +11,7 @@
 ## Excluded Phases: none
 ## Steps to Fix: none
 ## Work Mode: standard
-## Last Updated: 2026-03-18 23:18
+## Last Updated: 2026-03-18 23:23
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -27,7 +27,7 @@
 | Create templates init | python-development:python-pro | implementation | 4 | - | C | complete | 0 | a33ffc8fab2b7be6b | fde19a55 | /pallets/jinja |
 | Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a906d7d68d844d62b | dee989a5 | /pallets/jinja |
 | Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | in-progress | 0 | pending | pending | /pallets/jinja |
-| Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | in-progress | 0 | pending | pending | /pallets/jinja |
+| Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | complete | 0 | aa3b4cfa4375c21f2 | 85a18228 | /pallets/jinja |
 | Create prompts.yaml.j2 | python-development:python-pro | implementation | 8 | - | D | in-progress | 0 | pending | pending | /pallets/jinja |
 | Create prompts.py | python-development:python-pro | implementation | 9 | - | E | pending | 0 | pending | pending | - |
 | Create pipeline.py | backend-development:backend-architect | implementation | 10 | - | F | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo,/pydantic/pydantic-ai |
