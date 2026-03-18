@@ -143,3 +143,68 @@ Required changes before approval:
 2. (HIGH) Resolve `validators.py` dead code: either wire validators into the agent-building path (requires framework change) or remove the module.
 3. (MEDIUM) Fix `_syntax_check()` to call `ast.parse(code, mode="exec")` directly for full module source.
 4. (LOW) Remove unused `import pprint as _pprint` and `import textwrap as _textwrap` from `templates/__init__.py`.
+
+---
+
+## Additional Review Pass (Step 1 Review)
+
+### Additional Findings Beyond Prior Review
+
+#### CRITICAL - Step 8: prompts.yaml.j2 generates syntactically broken Python for any prompt with double quotes
+**Step:** 8 (Create prompts.yaml.j2 template)
+**Details:** The template renders `system_content` and `user_content` inside double-quoted Python string literals:
+```
+"content": (
+    "{{ system_content }}"
+),
+```
+If LLM-generated prompt content contains any double-quote characters (virtually guaranteed for real system prompts, e.g. `You must return "step_name" as a snake_case string`), the rendered Python has a `SyntaxError`. The `CodeValidationStep._syntax_check()` running on this file will return `False`, marking the generation as invalid even though the content is semantically correct. Confirmed via `ast.parse()` test: content with internal double quotes produces `SyntaxError: invalid syntax`.
+
+Fix: Use triple-quoted strings in the template (`"""{{ system_content }}"""`), or add a Jinja2 filter that escapes internal double quotes (e.g., `{{ system_content | replace('"', '\\"') }}`), or use `repr()` to render the content as a Python string literal.
+
+#### CRITICAL - Step 6: instructions.py.j2 field access crashes with StrictUndefined when fields are non-empty
+**Step:** 6 (Create instructions.py.j2 template)
+**Details:** The template accesses `field.is_required`, `field.name`, `field.type_annotation`, and `field.default`. In `CodeGenerationStep.process_instructions()`, `instruction_fields` is retrieved from `ctx.get("instruction_fields", [])`. This value was serialized via `[f.model_dump() for f in inst.instruction_fields]` in `RequirementsAnalysisStep.process_instructions()` (steps.py L81), so each field is a `dict`, not a `FieldDefinition` object.
+
+Jinja2 attribute access (`field.is_required`) on a dict falls back to dict key lookup in Jinja2's standard `Undefined` mode, but with `StrictUndefined`, attribute access on a dict that has no `is_required` attribute (only a key) raises `UndefinedError`. Testing confirms that `StrictUndefined` does resolve dict keys via dot notation in Jinja2 (Jinja2 tries `getattr` then `getitem`), so `field.is_required` on a dict will actually work for key lookup. However, the `field.default is not none` Jinja2 comparison uses Jinja2's `none` constant which is Python's `None` -- this is correct Jinja2 syntax. No crash here but the dot-access on dicts is fragile and undocumented behavior. The primary masking issue remains the missing `docstring` and `additional_imports` variables which crash before field iteration.
+
+Revised severity: this is LOW risk once the missing variables are fixed, as Jinja2 does resolve dict keys via dot notation. Retain as medium concern for code clarity.
+
+#### MEDIUM - Step 11: PromptGenerationStep passes unused variables to LLM prompt
+**Step:** 11 (Create steps.py)
+**Details:** `PromptGenerationStep.prepare_calls()` (steps.py L186-198) passes `step_code` and `instructions_code` as template variables. The `PROMPT_GENERATION_USER` prompt dict (prompts.py L192-206) only uses `{step_name}`, `{description}`, and `{input_variables}` as placeholders. The extra variables are sent to the prompt service but cannot be used in the template string. This wastes tokens and inflates LLM context size unnecessarily.
+
+#### LOW - Step 11: GenerationRecordExtraction.default() unsafe results[0] access
+**Step:** 11 (Create steps.py)
+**Details:** `results[0]` accessed on line 47 without length check. Consistent with `TopicExtraction.default()` in the demo (also uses `results[0]`), so this matches the existing codebase style. Risk is low since the framework guarantees at least one result per LLM call, but the extraction will `IndexError` rather than return `[]` on empty results, which is worse than graceful degradation for the audit record. This is LOW (not CRITICAL) because the framework guarantees are sufficient in practice.
+
+#### LOW - Step 4: get_template_env() creates new Environment on every render_template() call
+**Step:** 4 (Create templates/__init__.py)
+**Details:** `render_template()` calls `get_template_env()` which constructs a fresh `jinja2.Environment` and `PackageLoader` every invocation. `PackageLoader` performs `importlib.resources` filesystem lookups on initialization. In the pipeline, `CodeGenerationStep` calls `render_template` 2-3 times in sequence. The Environment should be module-level singleton (e.g., via `functools.lru_cache(maxsize=None)` on `get_template_env()` or a module-level `_ENV` variable). Not a correctness issue but an avoidable overhead.
+
+### Confirmed Findings from Prior Review (verified independently)
+- CRITICAL template variable mismatches in steps.py: confirmed, all 3 render_template calls missing required vars
+- HIGH validators.py dead code: confirmed, zero imports of validators across entire creator package
+- MEDIUM _syntax_check function stub wrapping: confirmed harmless but semantically wrong for module source
+- LOW unused pprint/textwrap imports in templates/__init__.py: confirmed
+
+### Pre-existing Test Failure (Not Introduced by This Implementation)
+`tests/test_agent_registry_core.py::TestStepDepsFields::test_field_count` fails with `assert 11 == 10`. This failure reproduces identically on the dev branch baseline (git stash / restore verified). The creator package does not touch `agent_builders.py` and did not introduce this failure.
+
+### Updated File Status
+| File | Status | Notes |
+| --- | --- | --- |
+| `llm_pipeline/creator/templates/prompts.yaml.j2` | fail | Content rendered in double-quoted strings -- LLM-generated prompts with double quotes produce SyntaxError in output Python |
+| `llm_pipeline/creator/templates/instructions.py.j2` | partial | Jinja2 dict dot-access is functional but fragile; missing docstring/additional_imports still critical |
+| `llm_pipeline/creator/steps.py` | fail | Per prior review + new: PromptGenerationStep passes unused vars to LLM; results[0] safety |
+
+### Final Decision: REJECT (maintained)
+All prior rejection reasons hold. New critical finding added: `prompts.yaml.j2` generates syntactically broken Python for any real LLM prompt content. Required fixes now include:
+1. (CRITICAL) Fix render_template variable mismatches in steps.py (per prior review, 9 missing variables)
+2. (CRITICAL) Fix prompts.yaml.j2 to use triple-quoted strings or escaping for content values
+3. (HIGH) Resolve validators.py dead code
+4. (MEDIUM) Fix _syntax_check to use direct ast.parse for module source
+5. (MEDIUM) Remove unused variables from PromptGenerationStep.prepare_calls()
+6. (LOW) Remove unused pprint/textwrap imports from templates/__init__.py
+7. (LOW) Add bounds guard to GenerationRecordExtraction.default()
+8. (LOW) Cache template environment in get_template_env()
