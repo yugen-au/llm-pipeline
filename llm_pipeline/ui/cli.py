@@ -149,7 +149,7 @@ def _start_vite(
 ) -> subprocess.Popen:  # type: ignore[type-arg]
     """Launch vite dev server as a subprocess."""
     env = {**os.environ, "VITE_PORT": str(vite_port), "VITE_API_PORT": str(api_port)}
-    cmd = ["npx", "vite", "--port", str(vite_port)]
+    cmd = ["npx", "vite", "--host", "127.0.0.1", "--port", str(vite_port)]
     return subprocess.Popen(
         cmd, cwd=str(frontend_dir), env=env, shell=(sys.platform == "win32")
     )
