@@ -1,0 +1,15 @@
+"""{{ docstring }}"""
+from llm_pipeline.extraction import PipelineExtraction
+{{ model_import }}
+{{ instructions_import }}
+
+
+class {{ class_name }}(PipelineExtraction, model={{ model_name }}):
+    """{{ docstring }}"""
+
+    def default(self, results: list[{{ instructions_class_name }}]) -> list[{{ model_name }}]:
+{% if extraction_method_body %}
+{{ extraction_method_body | indent_code(8) }}
+{% else %}
+        return []
+{% endif %}

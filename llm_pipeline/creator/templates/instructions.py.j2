@@ -1,0 +1,21 @@
+"""{{ docstring }}"""
+from typing import ClassVar
+
+from llm_pipeline.step import LLMResultMixin
+{% for import_line in additional_imports %}
+{{ import_line }}
+{% endfor %}
+
+
+class {{ class_name }}(LLMResultMixin):
+    """{{ docstring }}"""
+
+{% for field in fields %}
+{% if field.is_required %}
+    {{ field.name }}: {{ field.type_annotation }}
+{% else %}
+    {{ field.name }}: {{ field.type_annotation }} = {{ field.default }}
+{% endif %}
+{% endfor %}
+
+    example: ClassVar[dict] = {{ example_dict | pprint }}
