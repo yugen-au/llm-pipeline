@@ -294,3 +294,20 @@ To proceed, either:
 [2026-03-19 10:12:41] [INFO] Task call: python-development:python-pro (phase: fixing-review)
 [2026-03-19 10:12:41] [INFO] Incremented Revisions: 2 -> 3
 [2026-03-19 10:12:41] [DEBUG] STATE.md atomic write complete
+[2026-03-19 10:14:14] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:14:43] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:14:53] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: D:\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\master-45-meta-pipeline-step-gen\implementation\step-4-create-templates-init.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-03-19 10:15:09] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 10:17:49] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 10:20:22] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 10:20:43] [INFO] Already committed fixing-review-C: ['step-4-create-templates-init.md']
+[2026-03-19 10:20:53] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-19 10:20:53] [INFO] Auto-updated agent statuses: Create templates init: in-progress -> complete, Create steps.py: pending -> in-progress
+[2026-03-19 10:20:53] [INFO] Deleted 1 old contract file(s)
+[2026-03-19 10:20:53] [DEBUG] STATE.md atomic write complete
