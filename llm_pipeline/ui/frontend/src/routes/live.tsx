@@ -21,6 +21,7 @@ import { InputForm, validateForm } from '@/components/live/InputForm'
 import { EventStream } from '@/components/live/EventStream'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 // ---------------------------------------------------------------------------
@@ -223,8 +224,9 @@ function LivePage() {
   // -- Shared column content (reused in desktop grid + mobile tabs) --
 
   const pipelineColumn = (
-    <Card className="flex h-full flex-col">
-      <CardContent className="flex flex-col gap-4 p-4">
+    <Card className="flex h-full flex-col overflow-hidden">
+      {/* Fixed header: selector + run button */}
+      <CardContent className="shrink-0 flex flex-col gap-4 p-4">
         <PipelineSelector
           selectedPipeline={selectedPipeline}
           onSelect={setSelectedPipeline}
@@ -239,18 +241,24 @@ function LivePage() {
           <Play className="size-4" />
           {createRun.isPending ? 'Starting...' : 'Run Pipeline'}
         </Button>
-
-        {/* Task 38: InputForm -- renders null when schema is null */}
-        <InputForm
-          schema={inputSchema}
-          values={inputValues}
-          onChange={(field, value) =>
-            setInputValues((prev) => ({ ...prev, [field]: value }))
-          }
-          fieldErrors={fieldErrors}
-          isSubmitting={createRun.isPending}
-        />
       </CardContent>
+
+      {/* Scrollable form area */}
+      {inputSchema && (
+        <ScrollArea thin className="min-h-0 flex-1">
+          <div className="px-4 pb-4">
+            <InputForm
+              schema={inputSchema}
+              values={inputValues}
+              onChange={(field, value) =>
+                setInputValues((prev) => ({ ...prev, [field]: value }))
+              }
+              fieldErrors={fieldErrors}
+              isSubmitting={createRun.isPending}
+            />
+          </div>
+        </ScrollArea>
+      )}
     </Card>
   )
 

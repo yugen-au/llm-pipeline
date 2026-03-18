@@ -75,6 +75,7 @@ export function InputForm({
             onChange={(value) => onChange(name, value)}
             error={fieldErrors[name]}
             required={required.includes(name)}
+            rootSchema={schema}
           />
         ))}
       </fieldset>
