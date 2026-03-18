@@ -67,3 +67,41 @@ None
 ## Recommendations
 1. Pre-existing test failures in tests/ui/test_cli.py and test_agent_registry_core.py should be addressed separately from this task
 2. Consider adding a pytest fixture-based integration test for `seed_prompts` idempotency in a follow-up task
+
+---
+
+# Re-run: Post-Review-Fix Regression Check
+
+## Summary
+**Status:** passed
+Ran full suite after review fixes (dead code removal, unused import cleanup, render_template variable fixes, ast.parse mode fix). Identical result to initial test run: 4 pre-existing failures, no new failures. Creator import still OK.
+
+## Automated Testing
+
+### Test Execution
+**Pass Rate:** 1051/1055 (4 pre-existing failures, 6 skipped)
+```
+4 failed, 1051 passed, 6 skipped, 1 warning in 118.46s (0:01:58)
+```
+
+### Failed Tests
+Same 4 pre-existing failures as initial run:
+- TestStepDepsFields::test_field_count (assert 11 == 10)
+- TestCreateDevApp::test_reads_env_var_and_passes_to_create_app (extra database_url=None arg)
+- TestCreateDevApp::test_passes_none_when_env_var_absent (extra database_url=None arg)
+- TestDevModeWithFrontend::test_uvicorn_no_reload_in_vite_mode (reload=True unexpected)
+
+None caused by review fixes.
+
+## Build Verification
+- [x] `from llm_pipeline.creator import StepCreatorPipeline` prints OK
+- [x] No new import errors from cleanup changes
+
+## Review Fixes Verified
+- [x] validators.py deletion: no import errors (nothing imported it)
+- [x] Unused imports removed from templates/__init__.py: no regressions
+- [x] render_template() variable fixes in steps.py: imports succeed, no AttributeError at class definition
+- [x] ast.parse(code, mode="exec") fix: no SyntaxErrors from method body parsing
+
+## Issues Found
+None
