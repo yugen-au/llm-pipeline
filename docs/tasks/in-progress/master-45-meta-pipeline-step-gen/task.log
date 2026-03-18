@@ -242,3 +242,7 @@ To proceed, either:
 [2026-03-19 09:53:58] [INFO] Auto-updated agent statuses: Verify build: complete -> in-progress
 [2026-03-19 09:53:58] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 09:53:58] [DEBUG] STATE.md atomic write complete
+[2026-03-19 09:54:08] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 09:54:13] [INFO] Task call: full-stack-orchestration:test-automator (phase: testing)
+[2026-03-19 09:54:13] [INFO] Incremented Revisions: 0 -> 1
+[2026-03-19 09:54:13] [DEBUG] STATE.md atomic write complete
