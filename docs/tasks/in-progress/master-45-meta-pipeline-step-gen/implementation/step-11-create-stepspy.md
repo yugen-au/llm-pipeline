@@ -39,3 +39,28 @@ New file. Key classes:
 - [x] `GenerationRecordExtraction` ends with "Extraction" (naming convention enforced by PipelineExtraction.__init_subclass__)
 - [x] `CodeValidationStep` includes `default_extractions=[GenerationRecordExtraction]`
 - [x] All 4 step classes follow `{Prefix}Step` / `{Prefix}Instructions` / `{Prefix}Context` naming
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md (user-reported)
+**Status:** fixed
+
+### Issues Addressed
+- [x] CRITICAL: render_template() calls missing required template variables (StrictUndefined crash)
+- [x] MEDIUM: _syntax_check() wrapping full module source in function stub unnecessarily
+
+### Changes Made
+#### File: `llm_pipeline/creator/steps.py`
+
+Fix 1 - step.py.j2 call: added `docstring`, `system_key=step_name`, `user_key=step_name`, `extractions=[]`
+
+Fix 2 - instructions.py.j2 call: added `docstring`, `additional_imports=[]`
+
+Fix 3 - extraction.py.j2 call: added `docstring`, `model_import`, `instructions_import`; removed spurious `fields` kwarg (not referenced in template)
+
+Fix 4 - `_syntax_check()`: replaced stub-wrapping approach with `ast.parse(code, mode="exec")` directly; receives full module source not method bodies
+
+### Verification
+- [x] `from llm_pipeline.creator.steps import ...` imports without error
+- [x] All 3 template variable sets match actual .j2 template variables verified by reading each template
+- [x] `_syntax_check()` now calls `ast.parse(code, mode="exec")` directly
+- [x] pytest passes with no new failures

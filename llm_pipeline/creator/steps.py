@@ -141,6 +141,10 @@ class CodeGenerationStep(LLMStep):
             prepare_calls_body=inst.prepare_calls_body,
             process_instructions_body=inst.process_instructions_body,
             should_skip_condition=inst.should_skip_condition,
+            docstring=f"Generated {step_class_name} step.",
+            system_key=step_name,
+            user_key=step_name,
+            extractions=[],
         )
 
         instructions_code = render_template(
@@ -148,6 +152,8 @@ class CodeGenerationStep(LLMStep):
             class_name=instructions_class_name,
             fields=instruction_fields,
             example_dict={},
+            docstring=f"Generated {instructions_class_name} instructions.",
+            additional_imports=[],
         )
 
         extraction_code: str | None = None
@@ -159,7 +165,9 @@ class CodeGenerationStep(LLMStep):
                 model_name=first_target["model_name"],
                 instructions_class_name=instructions_class_name,
                 extraction_method_body=inst.extraction_method_body,
-                fields=first_target.get("fields", []),
+                docstring=f"Generated extraction for {first_target['model_name']}.",
+                model_import=f"from .models import {first_target['model_name']}",
+                instructions_import=f"from .schemas import {instructions_class_name}",
             )
 
         return CodeGenerationContext(
@@ -225,13 +233,11 @@ class PromptGenerationStep(LLMStep):
 
 
 def _syntax_check(code: str | None) -> bool:
-    """Return True if code string is syntactically valid Python, False otherwise."""
+    """Return True if code string is syntactically valid Python module source."""
     if not code:
         return True
-    stub = f"def _f():\n"
-    indented = "\n".join(f"    {line}" for line in code.splitlines())
     try:
-        ast.parse(stub + indented)
+        ast.parse(code, mode="exec")
         return True
     except SyntaxError:
         return False
