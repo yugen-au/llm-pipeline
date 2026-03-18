@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/45-meta-pipeline-step-gen
 ## Plugins: python-development, backend-development, llm-application-dev
@@ -25,11 +25,11 @@
 | Create schemas.py | python-development:python-pro | implementation | 2 | - | B | complete | 0 | ad293fec4f8309cb9 | 6b529acf | /pydantic/pydantic-ai |
 | Create validators.py | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad2ecdc027ba24bdb | 6b529acf | - |
 | Create templates init | python-development:python-pro | implementation | 4 | - | C | complete | 0 | a33ffc8fab2b7be6b | fde19a55 | /pallets/jinja |
-| Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a906d7d68d844d62b | dee989a5 | /pallets/jinja |
-| Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | complete | 0 | a7b6ab4cb82b8fe87 | 4fa922c0 | /pallets/jinja |
-| Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | complete | 0 | aa3b4cfa4375c21f2 | 85a18228 | /pallets/jinja |
+| Create step.py.j2 | python-development:python-pro | implementation | 5 | - | D | complete | 0 | a906d7d68d844d62b | dee989a5,9c25f842 | /pallets/jinja |
+| Create instructions.py.j2 | python-development:python-pro | implementation | 6 | - | D | complete | 0 | a7b6ab4cb82b8fe87 | 4fa922c0,9c25f842 | /pallets/jinja |
+| Create extraction.py.j2 | python-development:python-pro | implementation | 7 | - | D | complete | 0 | aa3b4cfa4375c21f2 | 85a18228,9c25f842 | /pallets/jinja |
 | Create prompts.yaml.j2 | python-development:python-pro | implementation | 8 | - | D | complete | 0 | a8ad8540b087c8102 | 9c25f842 | /pallets/jinja |
-| Create prompts.py | python-development:python-pro | implementation | 9 | - | E | pending | 0 | pending | pending | - |
+| Create prompts.py | python-development:python-pro | implementation | 9 | - | E | in-progress | 0 | pending | pending | - |
 | Create pipeline.py | backend-development:backend-architect | implementation | 10 | - | F | pending | 0 | pending | pending | /websites/sqlmodel_tiangolo,/pydantic/pydantic-ai |
 | Create steps.py | python-development:python-pro | implementation | 11 | - | G | pending | 0 | pending | pending | /pydantic/pydantic-ai |
 | Package wiring | python-development:python-pro | implementation | 12 | - | H | pending | 0 | pending | pending | - |
