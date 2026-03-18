@@ -11,7 +11,7 @@ from __future__ import annotations
     "category": "{{ category }}",
     "step_name": "{{ step_name }}",
     "content": (
-        "{{ system_content }}"
+        """{{ system_content }}"""
     ),
     "required_variables": [],
     "description": "System prompt for {{ step_name }} step",
@@ -24,7 +24,7 @@ from __future__ import annotations
     "category": "{{ category }}",
     "step_name": "{{ step_name }}",
     "content": (
-        "{{ user_content }}"
+        """{{ user_content }}"""
     ),
     "required_variables": [
 {% for var in required_variables %}
