@@ -83,3 +83,71 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is architecturally sound, follows project conventions, and provides comprehensive security constraints. The two medium issues (mutable _TYPE_MAP references, missing integration test) are not blockers -- they can be addressed in a follow-up. All 34 tests pass. No Docker daemon required for test suite. Defense-in-depth pattern is correctly implemented with proper graceful degradation.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+All three fixes correctly address the issues from the initial review. 43 tests pass (22 original + 9 new integration + 12 sample_data). No regressions introduced. All previous medium and low issues resolved or addressed.
+
+## Fix Verification
+
+### Fix 1: sandbox.py -- warnings.warn category + empty stdout parse error
+**Previous issues:** LOW - Step 1: `warnings.warn` missing `category`; LOW - Step 1: empty stdout no error message
+**Verification:**
+- Lines 183, 194, 293: `category=UserWarning` now explicitly passed to all three `warnings.warn()` calls. Confirmed.
+- Lines 403-404, 418-420: `parsed` boolean flag tracks whether JSON was found; line 420 appends `"Could not parse container output"` to errors when `not parsed`. Correct -- provides observability for empty/unparseable container output.
+
+### Fix 2: sample_data.py -- deep-copy mutable _TYPE_MAP values
+**Previous issue:** MEDIUM - Step 2: mutable _TYPE_MAP values returned by reference
+**Verification:**
+- Line 11: `import copy` added.
+- Lines 117-118: `elif isinstance(value, (list, dict)): value = copy.deepcopy(value)` in `generate()`. Correctly deep-copies mutable values before returning. The `str` template path (line 114-115) is not affected since strings are immutable. Confirmed -- class-level `_TYPE_MAP` can no longer be corrupted by caller mutations.
+
+### Fix 3: test_sandbox.py -- CodeValidationStep integration tests
+**Previous issue:** MEDIUM - Step 6: no integration test for CodeValidationStep sandbox wiring
+**Verification:**
+- 9 new tests in `TestCodeValidationStepSandboxIntegration` class (lines 415-635).
+- Sandbox-available path (6 tests): validates `sandbox_valid`, `sandbox_skipped`, `sandbox_output`, security issue propagation, artifact map contents, sample data generator invocation, `is_valid=False` on import failure.
+- Sandbox-unavailable path (3 tests): validates `sandbox_output` message, `sandbox_skipped=True`, and `is_valid=True` when syntax+llm pass.
+- Test helpers (`_make_pipeline_mock`, `_make_code_validation_step`, `_make_instructions`) properly bypass LLMStep constructor to test process_instructions in isolation. Clean approach.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None -- both previous medium issues resolved.
+
+### Low
+#### UserWarning in test output from _discover_framework_path
+**Step:** 6
+**Details:** 6 pytest warnings emitted from `_discover_framework_path` during mock Docker tests (visible in test output). These are cosmetic -- the tests that don't patch `_discover_framework_path` trigger the real method which emits `UserWarning`. Could suppress with `@pytest.mark.filterwarnings("ignore::UserWarning")` or by patching `_discover_framework_path` in all mock Docker tests. Not a functional issue.
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/creator/sandbox.py | pass | `category=UserWarning` added to all warn calls; `parsed` flag + error message for empty stdout |
+| llm_pipeline/creator/sample_data.py | pass | `copy.deepcopy()` for mutable _TYPE_MAP values |
+| tests/creator/test_sandbox.py | pass | 9 new integration tests for CodeValidationStep sandbox wiring, all passing |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All previous medium/low issues resolved. 43 tests pass with no Docker daemon required. Fixes are minimal, targeted, and introduce no new complexity. Implementation is ready for merge.
