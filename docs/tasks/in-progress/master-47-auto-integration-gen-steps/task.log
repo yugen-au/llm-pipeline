@@ -65,3 +65,14 @@
 [2026-03-19 18:16:59] [INFO] Auto-updated agent statuses: AST Modifier Module: pending -> in-progress
 [2026-03-19 18:16:59] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 18:16:59] [DEBUG] STATE.md atomic write complete
+[2026-03-19 18:17:20] [ERROR] BLOCKED: Expected one of ['python-development:python-pro', 'code-refactoring:legacy-modernizer', 'backend-development:backend-architect', 'backend-development:test-automator', 'backend-development:test-automator']. Got: dependency-management:legacy-modernizer
+[2026-03-19 18:17:44] [INFO] Task call: code-refactoring:legacy-modernizer (phase: implementation)
+[2026-03-19 18:17:55] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-03-19 18:17:58] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-03-19 18:18:32] [ERROR] BLOCKED: Expected one of ['python-development:python-pro', 'code-refactoring:legacy-modernizer', 'backend-development:backend-architect', 'backend-development:test-automator', 'backend-development:test-automator']. Got: dependency-management:legacy-modernizer
+[2026-03-19 18:20:59] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 18:21:11] [ERROR] BLOCKED: Agent plugin 'code-refactoring' not in selected Plugins: ['python-development', 'backend-development', 'dependency-management']
+[2026-03-19 18:21:39] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-03-19 18:21:57] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-03-19 18:22:24] [INFO] Task call: dependency-management:legacy-modernizer (phase: implementation)
+[2026-03-19 18:28:01] [ERROR] BLOCKED: Invalid commit message format
