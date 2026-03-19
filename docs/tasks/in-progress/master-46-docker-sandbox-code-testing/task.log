@@ -184,3 +184,6 @@
 [2026-03-19 15:22:49] [WARN] enter_phase returned no updates: old=summary, new=pending-merge, state.phase=pending-merge, state.current_group=A
 [2026-03-19 15:22:49] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 15:22:49] [DEBUG] STATE.md atomic write complete
+[2026-03-19 15:23:30] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-03-19 15:23:56] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-03-19 15:24:02] [ERROR] BLOCKED: Bash not allowed in task dir
