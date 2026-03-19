@@ -394,8 +394,8 @@ describe('StepDetailPanel', () => {
     expect(screen.getByText('WidgetDetectionInstructions')).toBeInTheDocument()
 
     // Should render JSON schema fields (from instructions_schema)
-    expect(screen.getByText(/widget_count/)).toBeInTheDocument()
-    expect(screen.getByText(/category/)).toBeInTheDocument()
+    expect(screen.getAllByText(/widget_count/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/category/).length).toBeGreaterThan(0)
   })
 
   it('InstructionsTab shows empty state when no pipeline schema available', async () => {

@@ -5,126 +5,19 @@ import { ChevronRight, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ---------------------------------------------------------------------------
-// Types
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-interface JsonDiffProps {
-  before: Record<string, unknown>
-  after: Record<string, unknown>
-  maxDepth?: number
+function isObject(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v)
 }
 
-interface DiffTreeNode {
-  key: string
-  diff?: Difference
-  children?: DiffTreeNode[]
-  unchangedValue?: unknown
+function isArray(v: unknown): v is unknown[] {
+  return Array.isArray(v)
 }
 
-// ---------------------------------------------------------------------------
-// Color classes (dual-theme, matches StatusBadge / StepTimeline patterns)
-// ---------------------------------------------------------------------------
-
-const diffColors = {
-  CREATE: 'bg-green-500/10 text-green-600 dark:text-green-400',
-  REMOVE: 'bg-red-500/10 text-red-600 dark:text-red-400 line-through',
-  CHANGE: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
-} as const
-
-// ---------------------------------------------------------------------------
-// Tree construction from microdiff flat output
-// ---------------------------------------------------------------------------
-
-function buildDiffTree(
-  diffs: Difference[],
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
-): DiffTreeNode[] {
-  // Group diffs by first path segment
-  const grouped = new Map<string | number, Difference[]>()
-  for (const d of diffs) {
-    const key = d.path[0]
-    const existing = grouped.get(key)
-    if (existing) {
-      existing.push(d)
-    } else {
-      grouped.set(key, [d])
-    }
-  }
-
-  const nodes: DiffTreeNode[] = []
-
-  // Process changed keys (normalize to string -- Object.keys returns strings
-  // but microdiff path segments can be numeric for array indices)
-  const changedKeys = new Set<string>()
-  for (const [key, group] of grouped) {
-    changedKeys.add(String(key))
-    const strKey = String(key)
-
-    // Check if all diffs in group are leaf-level (path.length === 1)
-    const allLeaf = group.every((d) => d.path.length === 1)
-
-    if (allLeaf) {
-      // Leaf node -- use the single diff directly
-      nodes.push({ key: strKey, diff: group[0] })
-    } else {
-      // Branch node -- recurse with shifted paths
-      const shifted: Difference[] = group.map((d) => ({
-        ...d,
-        path: d.path.slice(1),
-      })) as Difference[]
-
-      // Resolve nested before/after objects for recursion
-      const nestedBefore = (before[strKey] ?? {}) as Record<string, unknown>
-      const nestedAfter = (after[strKey] ?? {}) as Record<string, unknown>
-
-      // Mix of leaf and nested diffs: separate them
-      const leafDiffs = group.filter((d) => d.path.length === 1)
-      const nestedDiffs = group.filter((d) => d.path.length > 1)
-
-      if (leafDiffs.length > 0 && nestedDiffs.length > 0) {
-        // Key itself changed AND has nested changes -- treat whole key as leaf
-        nodes.push({ key: strKey, diff: leafDiffs[0] })
-      } else {
-        const children = buildDiffTree(
-          shifted,
-          nestedBefore,
-          nestedAfter,
-        )
-        nodes.push({ key: strKey, children })
-      }
-    }
-  }
-
-  // Add unchanged keys from `after`
-  const allAfterKeys = Object.keys(after)
-  for (const key of allAfterKeys) {
-    if (!changedKeys.has(key)) {
-      nodes.push({ key, unchangedValue: after[key] })
-    }
-  }
-
-  // Sort: changed keys first, then unchanged, alphabetical within each group
-  nodes.sort((a, b) => {
-    const aChanged = a.diff != null || a.children != null
-    const bChanged = b.diff != null || b.children != null
-    if (aChanged !== bChanged) return aChanged ? -1 : 1
-    return a.key.localeCompare(b.key)
-  })
-
-  return nodes
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function countDiffs(node: DiffTreeNode): number {
-  if (node.diff) return 1
-  if (node.children) {
-    return node.children.reduce((sum, child) => sum + countDiffs(child), 0)
-  }
-  return 0
+function isComplex(v: unknown): boolean {
+  return isObject(v) || isArray(v)
 }
 
 function formatValue(value: unknown): string {
@@ -142,6 +35,236 @@ function formatValue(value: unknown): string {
   return String(value)
 }
 
+// ---------------------------------------------------------------------------
+// DATA MODE -- plain expandable JSON tree
+// ---------------------------------------------------------------------------
+
+function PrimitiveValue({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <span className="text-muted-foreground italic">null</span>
+  }
+  if (typeof value === 'string') {
+    return <span className="text-green-600 dark:text-green-400">"{value}"</span>
+  }
+  if (typeof value === 'number') {
+    return <span className="text-blue-600 dark:text-blue-400">{String(value)}</span>
+  }
+  if (typeof value === 'boolean') {
+    return <span className="text-orange-600">{String(value)}</span>
+  }
+  return <span className="text-muted-foreground">{String(value)}</span>
+}
+
+function DataNode({
+  label,
+  value,
+  depth,
+  maxDepth,
+}: {
+  label: string
+  value: unknown
+  depth: number
+  maxDepth: number
+}) {
+  const [expanded, setExpanded] = useState(depth < maxDepth)
+
+  if (isObject(value)) {
+    const entries = Object.entries(value)
+    return (
+      <div>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1 py-0.5 font-mono text-xs hover:bg-muted/30 rounded"
+          style={{ paddingLeft: `${depth * 16}px` }}
+          onClick={() => setExpanded((p) => !p)}
+        >
+          {expanded ? (
+            <ChevronDown className="h-3 w-3 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3 w-3 shrink-0" />
+          )}
+          <span className="font-medium">{label}</span>
+          {!expanded && (
+            <span className="ml-1 text-muted-foreground">
+              {'{'}...{entries.length}{'}'}
+            </span>
+          )}
+        </button>
+        {expanded && (
+          <div>
+            {entries.map(([k, v]) => (
+              <DataNode key={k} label={k} value={v} depth={depth + 1} maxDepth={maxDepth} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (isArray(value)) {
+    return (
+      <div>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1 py-0.5 font-mono text-xs hover:bg-muted/30 rounded"
+          style={{ paddingLeft: `${depth * 16}px` }}
+          onClick={() => setExpanded((p) => !p)}
+        >
+          {expanded ? (
+            <ChevronDown className="h-3 w-3 shrink-0" />
+          ) : (
+            <ChevronRight className="h-3 w-3 shrink-0" />
+          )}
+          <span className="font-medium">{label}</span>
+          {!expanded && (
+            <span className="ml-1 text-muted-foreground">
+              [{value.length}]
+            </span>
+          )}
+        </button>
+        {expanded && (
+          <div>
+            {value.map((item, i) => (
+              <DataNode key={i} label={String(i)} value={item} depth={depth + 1} maxDepth={maxDepth} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Primitive leaf
+  return (
+    <div
+      className="flex items-start gap-1 py-0.5 font-mono text-xs"
+      style={{ paddingLeft: `${depth * 16}px` }}
+    >
+      <span className="shrink-0 w-4" />
+      <span className="text-muted-foreground">{label}:</span>{' '}
+      <PrimitiveValue value={value} />
+    </div>
+  )
+}
+
+function DataView({
+  data,
+  maxDepth,
+}: {
+  data: Record<string, unknown> | unknown[] | null
+  maxDepth: number
+}) {
+  if (data === null || data === undefined) {
+    return <span className="text-muted-foreground italic text-xs font-mono">null</span>
+  }
+
+  if (isArray(data)) {
+    return (
+      <div className="space-y-0">
+        {data.map((item, i) => (
+          <DataNode key={i} label={String(i)} value={item} depth={0} maxDepth={maxDepth} />
+        ))}
+      </div>
+    )
+  }
+
+  const entries = Object.entries(data)
+  return (
+    <div className="space-y-0">
+      {entries.map(([k, v]) => (
+        <DataNode key={k} label={k} value={v} depth={0} maxDepth={maxDepth} />
+      ))}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// DIFF MODE -- microdiff-powered diff tree
+// ---------------------------------------------------------------------------
+
+interface DiffTreeNode {
+  key: string
+  diff?: Difference
+  children?: DiffTreeNode[]
+  unchangedValue?: unknown
+}
+
+const diffColors = {
+  CREATE: 'bg-green-500/10 text-green-600 dark:text-green-400',
+  REMOVE: 'bg-red-500/10 text-red-600 dark:text-red-400 line-through',
+  CHANGE: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
+} as const
+
+function buildDiffTree(
+  diffs: Difference[],
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): DiffTreeNode[] {
+  const grouped = new Map<string | number, Difference[]>()
+  for (const d of diffs) {
+    const key = d.path[0]
+    const existing = grouped.get(key)
+    if (existing) {
+      existing.push(d)
+    } else {
+      grouped.set(key, [d])
+    }
+  }
+
+  const nodes: DiffTreeNode[] = []
+  const changedKeys = new Set<string>()
+
+  for (const [key, group] of grouped) {
+    changedKeys.add(String(key))
+    const strKey = String(key)
+    const allLeaf = group.every((d) => d.path.length === 1)
+
+    if (allLeaf) {
+      nodes.push({ key: strKey, diff: group[0] })
+    } else {
+      const shifted: Difference[] = group.map((d) => ({
+        ...d,
+        path: d.path.slice(1),
+      })) as Difference[]
+
+      const nestedBefore = (before[strKey] ?? {}) as Record<string, unknown>
+      const nestedAfter = (after[strKey] ?? {}) as Record<string, unknown>
+      const leafDiffs = group.filter((d) => d.path.length === 1)
+      const nestedDiffs = group.filter((d) => d.path.length > 1)
+
+      if (leafDiffs.length > 0 && nestedDiffs.length > 0) {
+        nodes.push({ key: strKey, diff: leafDiffs[0] })
+      } else {
+        const children = buildDiffTree(shifted, nestedBefore, nestedAfter)
+        nodes.push({ key: strKey, children })
+      }
+    }
+  }
+
+  const allAfterKeys = Object.keys(after)
+  for (const key of allAfterKeys) {
+    if (!changedKeys.has(key)) {
+      nodes.push({ key, unchangedValue: after[key] })
+    }
+  }
+
+  nodes.sort((a, b) => {
+    const aChanged = a.diff != null || a.children != null
+    const bChanged = b.diff != null || b.children != null
+    if (aChanged !== bChanged) return aChanged ? -1 : 1
+    return a.key.localeCompare(b.key)
+  })
+
+  return nodes
+}
+
+function countDiffs(node: DiffTreeNode): number {
+  if (node.diff) return 1
+  if (node.children) {
+    return node.children.reduce((sum, child) => sum + countDiffs(child), 0)
+  }
+  return 0
+}
+
 function collectPaths(nodes: DiffTreeNode[], prefix: string, maxDepth: number, depth: number): string[] {
   const paths: string[] = []
   for (const node of nodes) {
@@ -155,24 +278,21 @@ function collectPaths(nodes: DiffTreeNode[], prefix: string, maxDepth: number, d
   return paths
 }
 
-// ---------------------------------------------------------------------------
 // ColoredSubtree -- renders any value as a collapsible tree with inherited color
-// ---------------------------------------------------------------------------
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  v !== null && typeof v === 'object' && !Array.isArray(v)
-const isArray = (v: unknown): v is unknown[] => Array.isArray(v)
-const isComplex = (v: unknown): boolean => isObject(v) || isArray(v)
-
-interface ColoredSubtreeProps {
+function ColoredSubtree({
+  label,
+  value,
+  depth,
+  colorClass,
+  prefix,
+}: {
   label: string
   value: unknown
   depth: number
   colorClass: string
   prefix?: string
-}
-
-function ColoredSubtree({ label, value, depth, colorClass, prefix }: ColoredSubtreeProps) {
+}) {
   const [expanded, setExpanded] = useState(depth < 4)
 
   if (isObject(value) || isArray(value)) {
@@ -233,9 +353,7 @@ function ColoredSubtree({ label, value, depth, colorClass, prefix }: ColoredSubt
   )
 }
 
-// ---------------------------------------------------------------------------
 // DiffNode (memo-wrapped recursive renderer)
-// ---------------------------------------------------------------------------
 
 interface DiffNodeProps {
   node: DiffTreeNode
@@ -429,11 +547,15 @@ const DiffNode = memo(function DiffNode({
   return null
 })
 
-// ---------------------------------------------------------------------------
-// JsonDiff (public named export)
-// ---------------------------------------------------------------------------
-
-export function JsonDiff({ before, after, maxDepth = 3 }: JsonDiffProps) {
+function DiffView({
+  before,
+  after,
+  maxDepth,
+}: {
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+  maxDepth: number
+}) {
   const diffs = useMemo(
     () => diff(before, after, { cyclesFix: false }),
     [before, after],
@@ -444,7 +566,6 @@ export function JsonDiff({ before, after, maxDepth = 3 }: JsonDiffProps) {
     [diffs, before, after],
   )
 
-  // Initialize expanded paths: all branch paths at depth < maxDepth
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const paths = collectPaths(tree, '', maxDepth, 0)
     return new Set(paths)
@@ -488,4 +609,19 @@ export function JsonDiff({ before, after, maxDepth = 3 }: JsonDiffProps) {
       ))}
     </div>
   )
+}
+
+// ---------------------------------------------------------------------------
+// JsonViewer (public export)
+// ---------------------------------------------------------------------------
+
+type JsonViewerProps =
+  | { data: Record<string, unknown> | unknown[] | null; before?: never; after?: never; maxDepth?: number }
+  | { data?: never; before: Record<string, unknown>; after: Record<string, unknown>; maxDepth?: number }
+
+export function JsonViewer(props: JsonViewerProps) {
+  if ('before' in props && props.before !== undefined) {
+    return <DiffView before={props.before} after={props.after} maxDepth={props.maxDepth ?? 3} />
+  }
+  return <DataView data={props.data} maxDepth={props.maxDepth ?? 2} />
 }

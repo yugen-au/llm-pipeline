@@ -8,7 +8,7 @@ import type {
   TransformationMetadata,
 } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
-import { JsonTree } from '@/components/pipelines/JsonTree'
+import { JsonViewer } from '@/components/JsonViewer'
 
 // ---------------------------------------------------------------------------
 // StepRow
@@ -83,7 +83,7 @@ function StepRow({ step }: StepRowProps) {
                 )}
               </p>
               <div className="rounded border bg-muted/20 p-2">
-                <JsonTree data={step.instructions_schema} />
+                <JsonViewer data={step.instructions_schema} />
               </div>
             </div>
           )}
@@ -98,7 +98,7 @@ function StepRow({ step }: StepRowProps) {
                 )}
               </p>
               <div className="rounded border bg-muted/20 p-2">
-                <JsonTree data={step.context_schema} />
+                <JsonViewer data={step.context_schema} />
               </div>
             </div>
           )}

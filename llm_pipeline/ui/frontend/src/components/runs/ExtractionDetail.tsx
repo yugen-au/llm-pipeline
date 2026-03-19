@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronRight, ChevronDown } from 'lucide-react'
-import { JsonDiff } from '@/components/JsonDiff'
+import { JsonViewer } from '@/components/JsonViewer'
 import { formatDuration } from '@/lib/time'
 import type { ExtractionCompletedData, UpdatedRecord } from '@/api/types'
 
@@ -109,7 +109,7 @@ export function ExtractionDetail({ data }: { data: ExtractionCompletedData }) {
         <div className="space-y-1">
           {records.map((rec, i) => (
             <RecordRow key={rec.key} index={i} label={rec.label}>
-              <JsonDiff before={rec.before} after={rec.after} maxDepth={3} />
+              <JsonViewer before={rec.before} after={rec.after} maxDepth={3} />
             </RecordRow>
           ))}
         </div>

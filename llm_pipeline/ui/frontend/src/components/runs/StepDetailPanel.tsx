@@ -3,7 +3,7 @@ import { useStepEvents } from '@/api/events'
 import { useStepInstructions, usePipeline } from '@/api/pipelines'
 import { useRunContext } from '@/api/runs'
 import { formatDuration, formatAbsolute } from '@/lib/time'
-import { JsonDiff } from '@/components/JsonDiff'
+import { JsonViewer } from '@/components/JsonViewer'
 import {
   Sheet,
   SheetContent,
@@ -54,15 +54,6 @@ function filterEvents<T>(events: EventItem[], type: string): { event: EventItem;
     .map((e) => ({ event: e, data: eventData<T>(e) }))
 }
 
-/** Pretty-print JSON with 2-space indent. */
-function formatJson(obj: unknown): string {
-  try {
-    return JSON.stringify(obj, null, 2)
-  } catch {
-    return String(obj)
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Tab content components (private)
 // ---------------------------------------------------------------------------
@@ -96,9 +87,7 @@ function InputTab({
         <h4 className="text-sm font-medium text-muted-foreground">
           Context after step {prevSnapshot.step_number} ({prevSnapshot.step_name})
         </h4>
-        <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-          {formatJson(prevSnapshot.context_snapshot)}
-        </pre>
+        <JsonViewer data={prevSnapshot.context_snapshot} />
       </div>
     </ScrollArea>
   )
@@ -177,9 +166,10 @@ function ResponseTab({ events }: { events: EventItem[] }) {
               </div>
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Parsed Result</p>
-                <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                  {data.parsed_result ? formatJson(data.parsed_result) : '(null)'}
-                </pre>
+                {data.parsed_result
+                  ? <JsonViewer data={data.parsed_result as Record<string, unknown>} />
+                  : <span className="text-xs text-muted-foreground">(null)</span>
+                }
               </div>
             </div>
           </div>
@@ -206,9 +196,7 @@ function InstructionsTab({
         {instructionsClass && (
           <Badge variant="secondary">{instructionsClass}</Badge>
         )}
-        <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-          {formatJson(instructionsSchema)}
-        </pre>
+        <JsonViewer data={instructionsSchema} />
       </div>
     </ScrollArea>
   )
@@ -249,7 +237,7 @@ function ContextDiffTab({
             </div>
           </div>
         )}
-        <JsonDiff
+        <JsonViewer
           before={beforeSnapshot?.context_snapshot ?? {}}
           after={afterSnapshot?.context_snapshot ?? step.context_snapshot}
           maxDepth={3}
@@ -277,9 +265,9 @@ function ExtractionsTab({ events }: { events: EventItem[] }) {
           <div className="space-y-2">
             <h4 className="text-sm font-semibold text-destructive">Extraction Errors</h4>
             {errors.map((e, i) => (
-              <pre key={i} className="whitespace-pre-wrap break-all rounded-md bg-destructive/10 p-3 text-xs text-destructive">
-                {formatJson(e.event_data)}
-              </pre>
+              <div key={i} className="rounded-md bg-destructive/10 p-3 text-destructive">
+                <JsonViewer data={e.event_data as Record<string, unknown>} />
+              </div>
             ))}
           </div>
         )}

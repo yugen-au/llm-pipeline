@@ -1,5 +1,5 @@
 import type { ContextSnapshot } from '@/api/types'
-import { JsonDiff } from '@/components/JsonDiff'
+import { JsonViewer } from '@/components/JsonViewer'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface ContextEvolutionProps {
@@ -48,7 +48,7 @@ export function ContextEvolution({ snapshots, isLoading, isError }: ContextEvolu
               <h4 className="mb-2 text-sm font-semibold">
                 Step {snapshot.step_number} &mdash; {snapshot.step_name}
               </h4>
-              <JsonDiff
+              <JsonViewer
                 before={prev?.context_snapshot ?? {}}
                 after={snapshot.context_snapshot}
                 maxDepth={3}
