@@ -6,6 +6,7 @@ This module defines the foundation for implementing LLM-powered pipeline steps:
 - LLMResultMixin: Standardized result structure for all LLM outputs
 - step_definition: Decorator for auto-generating step definition factories
 """
+import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
@@ -23,6 +24,12 @@ from llm_pipeline.naming import to_snake_case
 from llm_pipeline.types import StepCallParams
 
 logger = logging.getLogger(__name__)
+
+
+def _safe_dump(instance: SQLModel) -> dict:
+    """model_dump() with JSON-safe coercion for Decimals, datetimes, etc."""
+    return json.loads(json.dumps(instance.model_dump(), default=str))
+
 
 if TYPE_CHECKING:
     from pydantic_ai import Agent
@@ -314,6 +321,13 @@ class LLMStep(ABC):
                     self.pipeline._real_session.add(instance)
                 self.pipeline._real_session.flush()
 
+                # Build created/updated payloads (post-flush so IDs are assigned)
+                created_data = tuple(_safe_dump(inst) for inst in instances)
+                updated_data = tuple(
+                    {"id": getattr(inst, "id", None), "before": before, "after": _safe_dump(inst)}
+                    for inst, before in extraction._tracked_updates
+                )
+
                 if self.pipeline._event_emitter:
                     self.pipeline._emit(ExtractionCompleted(
                         run_id=self.pipeline.run_id,
@@ -326,6 +340,8 @@ class LLMStep(ABC):
                             datetime.now(timezone.utc) - extract_start
                         ).total_seconds() * 1000,
                         timestamp=datetime.now(timezone.utc),
+                        created=created_data,
+                        updated=updated_data,
                     ))
             except Exception as e:
                 if self.pipeline._event_emitter:

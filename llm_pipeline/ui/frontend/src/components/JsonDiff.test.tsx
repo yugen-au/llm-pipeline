@@ -80,4 +80,34 @@ describe('JsonDiff', () => {
     // Should show change count instead
     expect(screen.getByText(/1 change/)).toBeInTheDocument()
   })
+
+  it('renders complex CREATE value as expandable subtree', () => {
+    render(<JsonDiff before={{}} after={{ obj: { a: 1, b: 2 } }} />)
+    // Root should be a button (collapsible), not flat JSON string
+    const btn = screen.getByRole('button', { name: /obj/ })
+    expect(btn).toBeInTheDocument()
+    // Children should be visible (auto-expanded at depth < 4)
+    expect(screen.getByText(/a:/)).toBeInTheDocument()
+    expect(screen.getByText(/b:/)).toBeInTheDocument()
+  })
+
+  it('renders complex REMOVE value as expandable red subtree', () => {
+    render(<JsonDiff before={{ obj: { x: 'hello' } }} after={{}} />)
+    const btn = screen.getByRole('button', { name: /obj/ })
+    expect(btn).toBeInTheDocument()
+    // Should have REMOVE color class
+    expect(btn.className).toContain('text-red')
+    // Children visible
+    expect(screen.getByText(/x:/)).toBeInTheDocument()
+  })
+
+  it('renders complex unchanged value as collapsible muted subtree', () => {
+    render(<JsonDiff before={{ meta: { foo: 1 }, a: 1 }} after={{ meta: { foo: 1 }, a: 2 }} />)
+    // meta is unchanged but complex -- should be a collapsible button
+    const btn = screen.getByRole('button', { name: /meta/ })
+    expect(btn).toBeInTheDocument()
+    expect(btn.className).toContain('text-muted-foreground')
+    // Children visible
+    expect(screen.getByText(/foo:/)).toBeInTheDocument()
+  })
 })

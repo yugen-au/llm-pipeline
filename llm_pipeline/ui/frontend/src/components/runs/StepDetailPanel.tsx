@@ -14,6 +14,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { ExtractionDetail } from '@/components/runs/ExtractionDetail'
 import type {
   EventItem,
   StepDetail,
@@ -270,18 +271,7 @@ function ExtractionsTab({ events }: { events: EventItem[] }) {
     <ScrollArea className="h-[calc(100vh-220px)]">
       <div className="space-y-3">
         {extractions.map(({ data }, i) => (
-          <div key={i} className="rounded-md border p-3 text-sm">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-              <dt className="text-muted-foreground">Class</dt>
-              <dd>{data.extraction_class}</dd>
-              <dt className="text-muted-foreground">Model</dt>
-              <dd>{data.model_class}</dd>
-              <dt className="text-muted-foreground">Instances</dt>
-              <dd>{data.instance_count}</dd>
-              <dt className="text-muted-foreground">Duration</dt>
-              <dd>{formatDuration(data.execution_time_ms)}</dd>
-            </dl>
-          </div>
+          <ExtractionDetail key={i} data={data} />
         ))}
         {errors.length > 0 && (
           <div className="space-y-2">

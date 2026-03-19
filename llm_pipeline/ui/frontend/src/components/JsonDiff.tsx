@@ -156,6 +156,84 @@ function collectPaths(nodes: DiffTreeNode[], prefix: string, maxDepth: number, d
 }
 
 // ---------------------------------------------------------------------------
+// ColoredSubtree -- renders any value as a collapsible tree with inherited color
+// ---------------------------------------------------------------------------
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  v !== null && typeof v === 'object' && !Array.isArray(v)
+const isArray = (v: unknown): v is unknown[] => Array.isArray(v)
+const isComplex = (v: unknown): boolean => isObject(v) || isArray(v)
+
+interface ColoredSubtreeProps {
+  label: string
+  value: unknown
+  depth: number
+  colorClass: string
+  prefix?: string
+}
+
+function ColoredSubtree({ label, value, depth, colorClass, prefix }: ColoredSubtreeProps) {
+  const [expanded, setExpanded] = useState(depth < 4)
+
+  if (isObject(value) || isArray(value)) {
+    const entries = isArray(value)
+      ? value.map((v, i) => [String(i), v] as const)
+      : Object.entries(value)
+
+    return (
+      <div>
+        <button
+          type="button"
+          className={cn(
+            'flex w-full items-center gap-1 rounded px-1 py-0.5 font-mono text-xs hover:bg-muted/30',
+            colorClass,
+          )}
+          style={{ paddingLeft: `${depth * 16}px` }}
+          onClick={() => setExpanded((p) => !p)}
+        >
+          {prefix && <span className="shrink-0 w-4">{prefix}</span>}
+          {!prefix && (
+            expanded
+              ? <ChevronDown className="h-3 w-3 shrink-0" />
+              : <ChevronRight className="h-3 w-3 shrink-0" />
+          )}
+          <span className="font-medium">{label}</span>
+          {!expanded && (
+            <span className="ml-1 opacity-60">
+              {isArray(value) ? `[${value.length}]` : `{${entries.length}}`}
+            </span>
+          )}
+        </button>
+        {expanded && (
+          <div>
+            {entries.map(([k, v]) => (
+              <ColoredSubtree
+                key={k}
+                label={k}
+                value={v}
+                depth={depth + 1}
+                colorClass={colorClass}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Primitive leaf
+  return (
+    <div
+      className={cn('flex items-start gap-1 rounded px-1 py-0.5 font-mono text-xs', colorClass)}
+      style={{ paddingLeft: `${depth * 16}px` }}
+    >
+      <span className="shrink-0 w-4" />
+      <span>{label}: {formatValue(value)}</span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // DiffNode (memo-wrapped recursive renderer)
 // ---------------------------------------------------------------------------
 
@@ -176,6 +254,16 @@ const DiffNode = memo(function DiffNode({
 }: DiffNodeProps) {
   // Unchanged leaf
   if (node.unchangedValue !== undefined && !node.diff && !node.children) {
+    if (isComplex(node.unchangedValue)) {
+      return (
+        <ColoredSubtree
+          label={node.key}
+          value={node.unchangedValue}
+          depth={depth}
+          colorClass="text-muted-foreground"
+        />
+      )
+    }
     return (
       <div
         className="flex items-start gap-1 py-0.5 font-mono text-xs text-muted-foreground"
@@ -192,6 +280,17 @@ const DiffNode = memo(function DiffNode({
     const d = node.diff
     switch (d.type) {
       case 'CREATE':
+        if (isComplex(d.value)) {
+          return (
+            <ColoredSubtree
+              label={node.key}
+              value={d.value}
+              depth={depth}
+              colorClass={diffColors.CREATE}
+              prefix="+"
+            />
+          )
+        }
         return (
           <div
             className={cn('flex items-start gap-1 rounded px-1 py-0.5 font-mono text-xs', diffColors.CREATE)}
@@ -202,6 +301,17 @@ const DiffNode = memo(function DiffNode({
           </div>
         )
       case 'REMOVE':
+        if (isComplex(d.oldValue)) {
+          return (
+            <ColoredSubtree
+              label={node.key}
+              value={d.oldValue}
+              depth={depth}
+              colorClass={diffColors.REMOVE}
+              prefix="-"
+            />
+          )
+        }
         return (
           <div
             className={cn('flex items-start gap-1 rounded px-1 py-0.5 font-mono text-xs', diffColors.REMOVE)}
@@ -211,7 +321,49 @@ const DiffNode = memo(function DiffNode({
             <span>{node.key}: {formatValue(d.oldValue)}</span>
           </div>
         )
-      case 'CHANGE':
+      case 'CHANGE': {
+        const oldComplex = isComplex(d.oldValue)
+        const newComplex = isComplex(d.value)
+        if (oldComplex || newComplex) {
+          return (
+            <div>
+              {oldComplex ? (
+                <ColoredSubtree
+                  label={node.key}
+                  value={d.oldValue}
+                  depth={depth}
+                  colorClass={diffColors.REMOVE}
+                  prefix="-"
+                />
+              ) : (
+                <div
+                  className={cn('flex items-start gap-1 rounded px-1 py-0.5 font-mono text-xs', diffColors.REMOVE)}
+                  style={{ paddingLeft: `${depth * 16}px` }}
+                >
+                  <span className="shrink-0 w-4">-</span>
+                  <span>{node.key}: {formatValue(d.oldValue)}</span>
+                </div>
+              )}
+              {newComplex ? (
+                <ColoredSubtree
+                  label={node.key}
+                  value={d.value}
+                  depth={depth}
+                  colorClass={diffColors.CREATE}
+                  prefix="+"
+                />
+              ) : (
+                <div
+                  className={cn('flex items-start gap-1 rounded px-1 py-0.5 font-mono text-xs', diffColors.CREATE)}
+                  style={{ paddingLeft: `${depth * 16}px` }}
+                >
+                  <span className="shrink-0 w-4">+</span>
+                  <span>{node.key}: {formatValue(d.value)}</span>
+                </div>
+              )}
+            </div>
+          )
+        }
         return (
           <div
             className={cn('flex items-start gap-1 rounded px-1 py-0.5 font-mono text-xs', diffColors.CHANGE)}
@@ -225,6 +377,7 @@ const DiffNode = memo(function DiffNode({
             </span>
           </div>
         )
+      }
     }
   }
 
