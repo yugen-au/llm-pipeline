@@ -51,6 +51,7 @@ export default defineConfig(({ mode: _mode }) => ({
   },
   server: {
     port: devPort,
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: `http://localhost:${apiPort}`,

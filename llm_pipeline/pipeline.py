@@ -59,6 +59,18 @@ if TYPE_CHECKING:
 TModel = TypeVar("TModel", bound=SQLModel)
 
 
+def _calc_llm_cost(usage: object, model: str | None) -> tuple[float | None, float | None, float | None]:
+    """Best-effort cost calculation via genai_prices. Returns (total, input, output) or (None,None,None)."""
+    if not usage or not model:
+        return None, None, None
+    try:
+        from genai_prices import calc_price
+        price = calc_price(usage=usage, model_ref=model)
+        return float(price.total_price), float(price.input_price), float(price.output_price)
+    except Exception:
+        return None, None, None
+
+
 class StepKeyDict(dict):
     """Dictionary that accepts both string keys and Step class keys."""
 
@@ -397,7 +409,7 @@ class PipelineConfig(ABC):
         if step_class in self._executed_steps:
             return
         if step_class == self._current_step and model_class is not None:
-            if model_class in self.extractions and len(self.extractions[model_class]) > 0:
+            if model_class in self.extractions:
                 return
             current_extraction_name = (
                 self._current_extraction.__name__ if self._current_extraction else "Unknown"
@@ -673,6 +685,7 @@ class PipelineConfig(ABC):
                 _step_output_tokens = 0
                 _step_total_requests = 0
                 _step_total_tokens: int | None = None
+                _step_cost_usd = 0.0
 
                 if cached_state:
                     if self._event_emitter:
@@ -859,7 +872,7 @@ class PipelineConfig(ABC):
                         if step_def.consensus_strategy is not None:
                             # Consensus path: per-attempt LLMCallCompleted events
                             # are emitted inside _execute_with_consensus
-                            instruction, _c_input, _c_output, _c_requests = (
+                            instruction, _c_input, _c_output, _c_requests, _c_cost = (
                                 self._execute_with_consensus(
                                     agent, user_prompt, step_deps, output_type,
                                     strategy=step_def.consensus_strategy,
@@ -870,6 +883,7 @@ class PipelineConfig(ABC):
                             _step_input_tokens += _c_input or 0
                             _step_output_tokens += _c_output or 0
                             _step_total_requests += _c_requests
+                            _step_cost_usd += _c_cost or 0.0
                         else:
                             run_result = None
                             try:
@@ -894,6 +908,8 @@ class PipelineConfig(ABC):
                                 instruction = output_type.create_failure(str(exc))
 
                             # Non-consensus: emit single LLMCallCompleted per call
+                            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, self._model)
+                            _step_cost_usd += _cost_total or 0.0
                             if self._event_emitter:
                                 self._emit(LLMCallCompleted(
                                     run_id=self.run_id,
@@ -912,6 +928,9 @@ class PipelineConfig(ABC):
                                     input_tokens=_call_input_tokens,
                                     output_tokens=_call_output_tokens,
                                     total_tokens=_call_total_tokens,
+                                    cost_usd=_cost_total,
+                                    input_cost_usd=_cost_in,
+                                    output_cost_usd=_cost_out,
                                 ))
 
                         instructions.append(instruction)
@@ -987,6 +1006,7 @@ class PipelineConfig(ABC):
                         input_tokens=_step_input_tokens if _step_total_requests > 0 else None,
                         output_tokens=_step_output_tokens if _step_total_requests > 0 else None,
                         total_tokens=_step_total_tokens if _step_total_requests > 0 else None,
+                        cost_usd=_step_cost_usd if _step_total_requests > 0 and _step_cost_usd > 0 else None,
                     ))
 
                 self._executed_steps.add(step_class)
@@ -1283,6 +1303,7 @@ class PipelineConfig(ABC):
         _consensus_input_tokens = 0
         _consensus_output_tokens = 0
         _consensus_requests = 0
+        _consensus_cost_usd = 0.0
         _has_any_usage = False
 
         if self._event_emitter:
@@ -1319,6 +1340,8 @@ class PipelineConfig(ABC):
             _consensus_requests += 1
 
             # Emit per-attempt LLMCallCompleted with per-call token values
+            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, self._model)
+            _consensus_cost_usd += _cost_total or 0.0
             if self._event_emitter:
                 self._emit(LLMCallCompleted(
                     run_id=self.run_id,
@@ -1337,6 +1360,9 @@ class PipelineConfig(ABC):
                     input_tokens=_call_input_tokens,
                     output_tokens=_call_output_tokens,
                     total_tokens=_call_total_tokens,
+                    cost_usd=_cost_total,
+                    input_cost_usd=_cost_in,
+                    output_cost_usd=_cost_out,
                 ))
 
             results.append(instruction)
@@ -1395,11 +1421,16 @@ class PipelineConfig(ABC):
             _consensus_input_tokens if _has_any_usage else None,
             _consensus_output_tokens if _has_any_usage else None,
             _consensus_requests,
+            _consensus_cost_usd,
         )
 
     def close(self) -> None:
         """Close the database session if the pipeline owns it."""
         if self._owns_session and self._real_session:
+            try:
+                self._real_session.rollback()
+            except Exception:
+                pass
             self._real_session.close()
             self._real_session = None
 
