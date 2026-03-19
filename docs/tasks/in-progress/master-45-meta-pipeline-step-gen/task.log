@@ -407,3 +407,5 @@ To proceed, either:
 [2026-03-19 11:03:39] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-03-19 11:03:39] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 11:03:39] [DEBUG] STATE.md atomic write complete
+[2026-03-19 11:03:55] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-03-19 11:07:12] [DEBUG] STATE.md atomic write complete
