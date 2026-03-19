@@ -29,4 +29,4 @@
 | Create test_sandbox.py | backend-development:test-automator | implementation | 6 | - | D | complete | 1 | a00fb43300c16cbd2 | 626191bf,acab7f5e,451fdba4 | /docker/docker-py |
 | Create test_sample_data.py | backend-development:test-automator | implementation | 7 | - | D | complete | 0 | acade71669a565179 | 626191bf,acab7f5e | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | ae304d22d76f87a92 | 925dee70,2528a3a1 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | ad6725b47640ec7c2 | ba497550 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 1 | ad6725b47640ec7c2 | ba497550 | - |
