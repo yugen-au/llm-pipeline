@@ -409,7 +409,7 @@ class PipelineConfig(ABC):
         if step_class in self._executed_steps:
             return
         if step_class == self._current_step and model_class is not None:
-            if model_class in self.extractions and len(self.extractions[model_class]) > 0:
+            if model_class in self.extractions:
                 return
             current_extraction_name = (
                 self._current_extraction.__name__ if self._current_extraction else "Unknown"
