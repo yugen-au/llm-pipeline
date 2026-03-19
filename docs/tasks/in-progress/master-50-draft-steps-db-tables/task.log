@@ -91,3 +91,11 @@
 [2026-03-19 16:42:57] [DEBUG] STATE.md atomic write complete
 [2026-03-19 16:43:11] [INFO] Task call: comprehensive-review:architect-review (phase: review)
 [2026-03-19 16:46:03] [DEBUG] STATE.md atomic write complete
+[2026-03-19 16:48:44] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 16:49:02] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '1'
+[2026-03-19 16:49:17] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-03-19 16:49:19] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-19 16:49:19] [INFO] Updated Commits for 'Architecture review': 42b2cf07
+[2026-03-19 16:49:19] [INFO] Auto-updated agent statuses: Add Draft Models: complete -> in-progress, Architecture review: complete -> pending
+[2026-03-19 16:49:19] [INFO] Deleted 1 old contract file(s)
+[2026-03-19 16:49:19] [DEBUG] STATE.md atomic write complete
