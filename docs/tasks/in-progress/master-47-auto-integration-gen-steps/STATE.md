@@ -21,3 +21,8 @@
 | DB Integration Patterns | backend-development:backend-architect | research | 3 | - | A | complete | 0 | a00b01c4d5218693b | 4ae3b879 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a10c0fd929ca130db | 6ca253e8 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | aa23df08561ef0dbc | pending | - |
+| GeneratedStep Model | python-development:python-pro | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| AST Modifier Module | code-refactoring:legacy-modernizer | implementation | 2 | - | B | pending | 0 | pending | pending | - |
+| StepIntegrator | backend-development:backend-architect | implementation | 3 | - | C | pending | 0 | pending | pending | - |
+| Tests Models+AST | backend-development:test-automator | implementation | 4 | - | D | pending | 0 | pending | pending | - |
+| Tests Integrator | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | pending | pending | - |
