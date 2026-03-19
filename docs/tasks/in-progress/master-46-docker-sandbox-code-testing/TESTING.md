@@ -2,7 +2,7 @@
 
 ## Summary
 **Status:** passed
-All 34 new tests pass. 5 pre-existing failures confirmed unrelated to this task (verified by stashing changes and re-running the same 5 tests -- same failures on base branch). No regressions introduced.
+All 43 new tests pass (34 original + 9 new CodeValidationStep integration tests). 3 fixes applied to sandbox.py, sample_data.py, and test_sandbox.py verified. 5 pre-existing failures unchanged. No regressions introduced. Full suite: 1093 passed, 5 failed (pre-existing), 6 skipped.
 
 ## Automated Testing
 ### Test Scripts Created
@@ -12,7 +12,7 @@ All 34 new tests pass. 5 pre-existing failures confirmed unrelated to this task 
 | test_sample_data.py | SampleDataGenerator all type mappings and edge cases | tests/creator/test_sample_data.py |
 
 ### Test Execution
-**Pass Rate:** 34/34 new tests (1084/1089 total -- 5 pre-existing failures, 6 skipped)
+**Pass Rate:** 43/43 new tests (1093/1098 total -- 5 pre-existing failures, 6 skipped)
 
 ```
 ============================= test session starts =============================
@@ -54,10 +54,19 @@ tests/creator/test_sandbox.py::TestStepSandbox_WithMockDocker::test_run_handles_
 tests/creator/test_sandbox.py::TestStepSandbox_WithMockDocker::test_run_kills_container_on_timeout PASSED
 tests/creator/test_sandbox.py::TestStepSandbox_WithMockDocker::test_run_removes_container_on_success PASSED
 tests/creator/test_sandbox.py::TestStepSandbox_WithMockDocker::test_run_handles_docker_exception PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_available_sets_sandbox_valid_from_result PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_available_sets_sandbox_skipped_when_docker_unavailable PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_available_security_issues_added_to_context_issues PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_available_passes_artifacts_to_run PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_available_calls_sample_data_generator_with_fields PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_available_is_valid_false_when_import_fails PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_unavailable_sets_sandbox_output_message PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_unavailable_sandbox_skipped_true PASSED
+tests/creator/test_sandbox.py::TestCodeValidationStepSandboxIntegration::test_sandbox_unavailable_is_valid_passes_when_syntax_and_llm_ok PASSED
 
-============================== 34 passed, 6 warnings in 1.41s ==============================
+============================== 43 passed, 6 warnings in 1.24s ==============================
 
-Full suite: 5 failed (pre-existing), 1084 passed, 6 skipped in 122.16s
+Full suite: 5 failed (pre-existing), 1093 passed, 6 skipped in 124.09s
 ```
 
 ### Failed Tests
