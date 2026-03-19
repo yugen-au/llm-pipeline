@@ -17,5 +17,5 @@
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Docker SDK & Creator Integration | python-development:python-pro | research | 1 | - | A | needs-input | 0 | a9722e102219a5e21 | pending | - |
-| Sandbox Architecture & Container Isolation | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | - | pending | - |
+| Sandbox Architecture & Container Isolation | backend-development:backend-architect | research | 2 | - | A | complete | 0 | af26a9f1cefd00a69 | pending | - |
 | Code Security & Dangerous Import Detection | security-scanning:security-auditor | research | 3 | - | A | complete | 0 | a4dab48323fe26d52 | pending | - |
