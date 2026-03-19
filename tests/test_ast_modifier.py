@@ -120,124 +120,124 @@ _SINGLELINE_STEPS_TEMPLATE = (
 )
 
 # Multiline models keyword
-_MULTILINE_MODELS_TEMPLATE = """\
-from llm_pipeline.agent_registry import AgentRegistry
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.strategy import PipelineStrategy
-from myapp.steps import ExistingStep
-from myapp.schemas import ExistingInstructions
-from myapp.models import ExistingModel
-
-
-class MyRegistry(PipelineDatabaseRegistry, models=[
-    ExistingModel,
-]):
-    pass
-
-
-class MyAgentRegistry(AgentRegistry, agents={{
-    "existing_step": ExistingInstructions,
-}}):
-    pass
-
-
-class DefaultStrategy(PipelineStrategy):
-    def can_handle(self, context):
-        return True
-
-    def get_steps(self):
-        return [
-            ExistingStep.create_definition(),
-        ]
-"""
+_MULTILINE_MODELS_TEMPLATE = (
+    'from llm_pipeline.agent_registry import AgentRegistry\n'
+    'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
+    'from llm_pipeline.strategy import PipelineStrategy\n'
+    'from myapp.steps import ExistingStep\n'
+    'from myapp.schemas import ExistingInstructions\n'
+    'from myapp.models import ExistingModel\n'
+    '\n'
+    '\n'
+    'class MyRegistry(PipelineDatabaseRegistry, models=[\n'
+    '    ExistingModel,\n'
+    ']):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class MyAgentRegistry(AgentRegistry, agents={\n'
+    '    "existing_step": ExistingInstructions,\n'
+    '}):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class DefaultStrategy(PipelineStrategy):\n'
+    '    def can_handle(self, context):\n'
+    '        return True\n'
+    '\n'
+    '    def get_steps(self):\n'
+    '        return [\n'
+    '            ExistingStep.create_definition(),\n'
+    '        ]\n'
+)
 
 # Singleline models keyword
-_SINGLELINE_MODELS_TEMPLATE = """\
-from llm_pipeline.agent_registry import AgentRegistry
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.strategy import PipelineStrategy
-from myapp.steps import ExistingStep
-from myapp.schemas import ExistingInstructions
-from myapp.models import ExistingModel
-
-
-class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):
-    pass
-
-
-class MyAgentRegistry(AgentRegistry, agents={{
-    "existing_step": ExistingInstructions,
-}}):
-    pass
-
-
-class DefaultStrategy(PipelineStrategy):
-    def can_handle(self, context):
-        return True
-
-    def get_steps(self):
-        return [
-            ExistingStep.create_definition(),
-        ]
-"""
+_SINGLELINE_MODELS_TEMPLATE = (
+    'from llm_pipeline.agent_registry import AgentRegistry\n'
+    'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
+    'from llm_pipeline.strategy import PipelineStrategy\n'
+    'from myapp.steps import ExistingStep\n'
+    'from myapp.schemas import ExistingInstructions\n'
+    'from myapp.models import ExistingModel\n'
+    '\n'
+    '\n'
+    'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class MyAgentRegistry(AgentRegistry, agents={\n'
+    '    "existing_step": ExistingInstructions,\n'
+    '}):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class DefaultStrategy(PipelineStrategy):\n'
+    '    def can_handle(self, context):\n'
+    '        return True\n'
+    '\n'
+    '    def get_steps(self):\n'
+    '        return [\n'
+    '            ExistingStep.create_definition(),\n'
+    '        ]\n'
+)
 
 # Multiline agents dict
-_MULTILINE_AGENTS_TEMPLATE = """\
-from llm_pipeline.agent_registry import AgentRegistry
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.strategy import PipelineStrategy
-from myapp.steps import ExistingStep
-from myapp.schemas import ExistingInstructions
-from myapp.models import ExistingModel
-
-
-class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):
-    pass
-
-
-class MyAgentRegistry(AgentRegistry, agents={{
-    "existing_step": ExistingInstructions,
-}}):
-    pass
-
-
-class DefaultStrategy(PipelineStrategy):
-    def can_handle(self, context):
-        return True
-
-    def get_steps(self):
-        return [
-            ExistingStep.create_definition(),
-        ]
-"""
+_MULTILINE_AGENTS_TEMPLATE = (
+    'from llm_pipeline.agent_registry import AgentRegistry\n'
+    'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
+    'from llm_pipeline.strategy import PipelineStrategy\n'
+    'from myapp.steps import ExistingStep\n'
+    'from myapp.schemas import ExistingInstructions\n'
+    'from myapp.models import ExistingModel\n'
+    '\n'
+    '\n'
+    'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class MyAgentRegistry(AgentRegistry, agents={\n'
+    '    "existing_step": ExistingInstructions,\n'
+    '}):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class DefaultStrategy(PipelineStrategy):\n'
+    '    def can_handle(self, context):\n'
+    '        return True\n'
+    '\n'
+    '    def get_steps(self):\n'
+    '        return [\n'
+    '            ExistingStep.create_definition(),\n'
+    '        ]\n'
+)
 
 # Singleline agents dict
-_SINGLELINE_AGENTS_TEMPLATE = """\
-from llm_pipeline.agent_registry import AgentRegistry
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.strategy import PipelineStrategy
-from myapp.steps import ExistingStep
-from myapp.schemas import ExistingInstructions
-from myapp.models import ExistingModel
-
-
-class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):
-    pass
-
-
-class MyAgentRegistry(AgentRegistry, agents={{"existing_step": ExistingInstructions}}):
-    pass
-
-
-class DefaultStrategy(PipelineStrategy):
-    def can_handle(self, context):
-        return True
-
-    def get_steps(self):
-        return [
-            ExistingStep.create_definition(),
-        ]
-"""
+_SINGLELINE_AGENTS_TEMPLATE = (
+    'from llm_pipeline.agent_registry import AgentRegistry\n'
+    'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
+    'from llm_pipeline.strategy import PipelineStrategy\n'
+    'from myapp.steps import ExistingStep\n'
+    'from myapp.schemas import ExistingInstructions\n'
+    'from myapp.models import ExistingModel\n'
+    '\n'
+    '\n'
+    'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class MyAgentRegistry(AgentRegistry, agents={"existing_step": ExistingInstructions}):\n'
+    '    pass\n'
+    '\n'
+    '\n'
+    'class DefaultStrategy(PipelineStrategy):\n'
+    '    def can_handle(self, context):\n'
+    '        return True\n'
+    '\n'
+    '    def get_steps(self):\n'
+    '        return [\n'
+    '            ExistingStep.create_definition(),\n'
+    '        ]\n'
+)
 
 _INVALID_SYNTAX_SOURCE = """\
 def broken(:
