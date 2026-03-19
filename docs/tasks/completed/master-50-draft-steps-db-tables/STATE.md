@@ -1,7 +1,7 @@
 ## Task: master-50-draft-steps-db-tables
 ## Description: Add SQLModel definitions for draft_steps and draft_pipelines tables for cross-session persistence of pipeline creator state
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
