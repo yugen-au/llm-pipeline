@@ -1,7 +1,7 @@
 ## Task: master-46-docker-sandbox-code-testing
 ## Description: Create secure Docker sandbox for testing generated step code with strict resource limits, network isolation, and dangerous import detection. Graceful fallback when Docker unavailable.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
