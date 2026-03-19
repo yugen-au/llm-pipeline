@@ -63,3 +63,31 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Remove the redundant `Index("ix_draft_steps_name", "name")` from DraftStep.__table_args__ in state.py and the corresponding `assert "ix_draft_steps_name" in index_names` from tests/test_draft_tables.py. The unique constraint already provides an index on name. After that fix, this is a clean APPROVE.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+MEDIUM issue resolved. DraftStep.__table_args__ now contains only UniqueConstraint + status Index, matching DraftPipeline exactly. Test updated to assert absence of redundant index. 15/15 tests pass. No new issues.
+
+## Verified Changes
+| File | Change | Verified |
+| --- | --- | --- |
+| llm_pipeline/state.py | `Index("ix_draft_steps_name", "name")` removed from DraftStep.__table_args__ | pass -- __table_args__ now has exactly UniqueConstraint("name") + Index("ix_draft_steps_status", "status"), symmetric with DraftPipeline |
+| tests/test_draft_tables.py | test_index_creation assertion changed to `assert "ix_draft_steps_name" not in index_names` | pass -- correctly verifies the index no longer exists; docstring updated to explain name uniqueness via constraint |
+
+## Previous Issues Status
+| Issue | Severity | Status |
+| --- | --- | --- |
+| Redundant name index on DraftStep | MEDIUM | RESOLVED -- index removed, test updated |
+| updated_at not auto-updated on UPDATE | LOW | Acknowledged, consistent with codebase, deferred to tasks 51/52 |
+| Prompt lambda vs utc_now inconsistency | LOW | Pre-existing, no action needed |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All issues from initial review resolved or acknowledged as pre-existing/deferred. Implementation is clean, consistent with codebase patterns, and fully tested.
