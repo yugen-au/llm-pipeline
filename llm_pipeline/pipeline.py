@@ -1427,6 +1427,10 @@ class PipelineConfig(ABC):
     def close(self) -> None:
         """Close the database session if the pipeline owns it."""
         if self._owns_session and self._real_session:
+            try:
+                self._real_session.rollback()
+            except Exception:
+                pass
             self._real_session.close()
             self._real_session = None
 
