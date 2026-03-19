@@ -1,7 +1,7 @@
 ## Task: master-50-draft-steps-db-tables
 ## Description: Add SQLModel definitions for draft_steps and draft_pipelines tables for cross-session persistence of pipeline creator state
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
@@ -24,4 +24,5 @@
 | Register Tables | backend-development:backend-architect | implementation | 2 | - | B | complete | 0 | a987db2403f899dbe | 440b2cf6 | /sqlmodel/sqlmodel |
 | Package Exports | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a28bcbcf24a1f4917 | 440b2cf6 | - |
 | Integration Tests | backend-development:test-automator | implementation | 4 | - | C | complete | 0 | ac2b3560d1897dae2 | 1ca84f95 | /pytest-dev/pytest |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a1351a1e32a2a5c9f | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a1351a1e32a2a5c9f | 0413b733 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
