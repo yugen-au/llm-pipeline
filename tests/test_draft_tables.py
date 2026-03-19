@@ -23,7 +23,7 @@ class TestDraftStepTableCreation:
             engine.dispose()
 
     def test_index_creation(self):
-        """draft_steps table has ix_draft_steps_status and ix_draft_steps_name indexes."""
+        """draft_steps table has ix_draft_steps_status index; name uniqueness via constraint not explicit index."""
         engine = create_engine("sqlite://")
         try:
             init_pipeline_db(engine=engine)
@@ -31,7 +31,7 @@ class TestDraftStepTableCreation:
             indexes = inspector.get_indexes("draft_steps")
             index_names = {idx["name"] for idx in indexes}
             assert "ix_draft_steps_status" in index_names
-            assert "ix_draft_steps_name" in index_names
+            assert "ix_draft_steps_name" not in index_names
         finally:
             engine.dispose()
 

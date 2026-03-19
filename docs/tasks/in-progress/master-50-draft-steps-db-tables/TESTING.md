@@ -90,3 +90,67 @@ None - all success criteria verified via automated tests.
 
 ## Issues Found
 None
+
+---
+
+# Testing Results - Re-run after ix_draft_steps_name removal
+
+## Summary
+**Status:** passed
+Re-run after review fix removed redundant `ix_draft_steps_name` Index from `DraftStep.__table_args__`. Updated `test_index_creation` to assert the index is absent (UniqueConstraint provides implicit index). All 15 new tests pass. Full suite unchanged: 1114 passed, 5 pre-existing failures, 6 skipped.
+
+## Automated Testing
+### Test Scripts Created
+| Script | Purpose | Location |
+| --- | --- | --- |
+| test_draft_tables.py | Same as previous run; test_index_creation updated for ix_draft_steps_name removal | tests/test_draft_tables.py |
+
+### Test Execution
+**Pass Rate:** 15/15 (new tests), 1114/1119 (full suite excluding pre-existing failures)
+
+```
+tests/test_draft_tables.py::TestDraftStepTableCreation::test_table_creation PASSED
+tests/test_draft_tables.py::TestDraftStepTableCreation::test_index_creation PASSED
+tests/test_draft_tables.py::TestDraftStepTableCreation::test_unique_constraint_on_name PASSED
+tests/test_draft_tables.py::TestDraftPipelineTableCreation::test_table_creation PASSED
+tests/test_draft_tables.py::TestDraftPipelineTableCreation::test_index_creation PASSED
+tests/test_draft_tables.py::TestDraftPipelineTableCreation::test_unique_constraint_on_name PASSED
+tests/test_draft_tables.py::TestDraftStepCRUD::test_insert_and_retrieve PASSED
+tests/test_draft_tables.py::TestDraftStepCRUD::test_json_serialization PASSED
+tests/test_draft_tables.py::TestDraftStepCRUD::test_optional_json_fields_nullable PASSED
+tests/test_draft_tables.py::TestDraftStepCRUD::test_run_id_optional PASSED
+tests/test_draft_tables.py::TestDraftStepCRUD::test_status_transitions PASSED
+tests/test_draft_tables.py::TestDraftPipelineCRUD::test_insert_and_retrieve PASSED
+tests/test_draft_tables.py::TestDraftPipelineCRUD::test_json_serialization PASSED
+tests/test_draft_tables.py::TestDraftPipelineCRUD::test_optional_json_fields_nullable PASSED
+tests/test_draft_tables.py::TestDraftPipelineCRUD::test_status_transitions PASSED
+
+15 passed in 2.07s
+```
+
+Full suite summary:
+```
+5 failed, 1114 passed, 6 skipped in 131.82s
+```
+
+### Failed Tests
+None from this task's implementation. Same 5 pre-existing failures as prior run.
+
+## Build Verification
+- [x] All imports still succeed after state.py change
+- [x] Full suite collection: 1125 items, no collection errors
+- [x] No new failures introduced
+
+## Success Criteria (from PLAN.md)
+- [x] All criteria from previous run remain satisfied
+- [x] test_index_creation updated to reflect removed ix_draft_steps_name (Step 1 fix)
+- [x] UniqueConstraint on name still enforced (test_unique_constraint_on_name passes)
+
+## Human Validation Required
+None.
+
+## Issues Found
+None
+
+## Recommendations
+1. No action needed - implementation and tests consistent after redundant index removal.
