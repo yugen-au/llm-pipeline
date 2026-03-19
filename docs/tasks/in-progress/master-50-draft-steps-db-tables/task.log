@@ -99,3 +99,7 @@
 [2026-03-19 16:49:19] [INFO] Auto-updated agent statuses: Add Draft Models: complete -> in-progress, Architecture review: complete -> pending
 [2026-03-19 16:49:19] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 16:49:19] [DEBUG] STATE.md atomic write complete
+[2026-03-19 16:49:34] [ERROR] BLOCKED: Invalid Task description format
+[2026-03-19 16:49:43] [INFO] Task call: backend-development:backend-architect (phase: fixing-review)
+[2026-03-19 16:49:43] [INFO] Incremented Revisions: 0 -> 1
+[2026-03-19 16:49:43] [DEBUG] STATE.md atomic write complete
