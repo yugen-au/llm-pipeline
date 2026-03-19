@@ -8,6 +8,7 @@ validating LLM-generated step code without manual fixture creation.
 from __future__ import annotations
 
 import ast
+import copy
 import json
 import re
 from typing import Any, ClassVar
@@ -112,6 +113,9 @@ class SampleDataGenerator:
                 # For str type, interpolate field name
                 if isinstance(value, str) and "{name}" in value:
                     value = value.format(name=field.name)
+                # Deep-copy mutable values to prevent caller corruption
+                elif isinstance(value, (list, dict)):
+                    value = copy.deepcopy(value)
                 result[field.name] = value
             else:
                 # 4. Unknown type -> string fallback

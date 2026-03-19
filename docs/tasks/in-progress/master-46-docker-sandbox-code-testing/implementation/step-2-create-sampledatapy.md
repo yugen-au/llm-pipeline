@@ -44,3 +44,40 @@ New file. Key components:
 [x] Unknown type returns string fallback without exception
 [x] generate_json returns valid parseable JSON
 [x] Imports resolve correctly (from .models import FieldDefinition)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] _TYPE_MAP returns mutable defaults by reference -- caller mutation corrupts class-level map for future calls
+
+### Changes Made
+#### File: `llm_pipeline/creator/sample_data.py`
+Added `import copy` and deep-copy guard for mutable _TYPE_MAP values in `generate()`.
+```
+# Before
+            if inner_type in self._TYPE_MAP:
+                value = self._TYPE_MAP[inner_type]
+                # For str type, interpolate field name
+                if isinstance(value, str) and "{name}" in value:
+                    value = value.format(name=field.name)
+                result[field.name] = value
+
+# After
+            if inner_type in self._TYPE_MAP:
+                value = self._TYPE_MAP[inner_type]
+                # For str type, interpolate field name
+                if isinstance(value, str) and "{name}" in value:
+                    value = value.format(name=field.name)
+                # Deep-copy mutable values to prevent caller corruption
+                elif isinstance(value, (list, dict)):
+                    value = copy.deepcopy(value)
+                result[field.name] = value
+```
+
+### Verification
+[x] Mutating returned list[str] value does not corrupt _TYPE_MAP for subsequent calls
+[x] Mutating returned dict[str, str] value does not corrupt _TYPE_MAP for subsequent calls
+[x] All 8 type mappings still produce correct values
+[x] generate_json still returns valid JSON
