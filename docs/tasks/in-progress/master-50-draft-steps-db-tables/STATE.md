@@ -18,4 +18,4 @@
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Existing State Models | backend-development:backend-architect | research | 1 | - | A | complete | 0 | a0dd61f5a235c5642 | a2816d19 | - |
 | Schema Design Patterns | database-design:database-architect | research | 2 | - | A | complete | 0 | a1bbea14214d58d56 | a2816d19 | - |
-| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | needs-input | 1 | acc37ae3667bacd2d | pending | - |
+| Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | acc37ae3667bacd2d | pending | - |
