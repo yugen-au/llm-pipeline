@@ -8,7 +8,7 @@
 ## Task Branch: sam/master/47-auto-integration-gen-steps
 ## Plugins: python-development, backend-development, code-refactoring, dependency-management
 ## Graphiti Group ID: llm-pipeline
-## Excluded Phases: none
+## Excluded Phases: review
 ## Steps to Fix: none
 ## Work Mode: standard
 ## Last Updated: 2026-03-19 18:56
