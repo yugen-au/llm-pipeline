@@ -45,3 +45,59 @@ New file with:
 [x] DraftStep placeholder name on generate, updated from GenerationRecord after pipeline completes
 [x] 146 existing UI tests pass (2 pre-existing cli test failures unrelated)
 [x] Pydantic models are plain BaseModel, not SQLModel
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] CRITICAL - Wrong context key: `ctx.get("generated_code")` changed to `ctx.get("all_artifacts")` to match CodeValidationContext.all_artifacts field used by CodeValidationStep
+[x] HIGH - Missing pipeline.close(): Added `pipeline = None` before try block, added guarded `pipeline.close()` in except block before opening err_session, matching trigger_run pattern (runs.py lines 244-260)
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/creator.py`
+Fix 1: Wrong context key in run_creator success path
+```
+# Before
+code_dict = ctx.get("generated_code", {})
+
+# After
+code_dict = ctx.get("all_artifacts", {})
+```
+
+Fix 2: Missing pipeline.close() and pipeline=None declaration
+```
+# Before
+    def run_creator() -> None:
+        bridge = UIBridge(run_id=run_id)
+        db_buffer = BufferedEventHandler(engine)
+        emitter = CompositeEmitter([bridge, db_buffer])
+        try:
+            ...
+        except Exception:
+            logger.exception(...)
+            try:
+                with Session(engine) as err_session:
+
+# After
+    def run_creator() -> None:
+        bridge = UIBridge(run_id=run_id)
+        db_buffer = BufferedEventHandler(engine)
+        emitter = CompositeEmitter([bridge, db_buffer])
+        pipeline = None
+        try:
+            ...
+        except Exception:
+            logger.exception(...)
+            if pipeline is not None:
+                try:
+                    pipeline.close()
+                except Exception:
+                    pass
+            try:
+                with Session(engine) as err_session:
+```
+
+### Verification
+[x] Module imports successfully
+[x] 164 existing UI tests pass (excluding 2 pre-existing cli failures)

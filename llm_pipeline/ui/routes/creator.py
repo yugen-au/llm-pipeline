@@ -176,6 +176,7 @@ def generate_step(
         bridge = UIBridge(run_id=run_id)
         db_buffer = BufferedEventHandler(engine)
         emitter = CompositeEmitter([bridge, db_buffer])
+        pipeline = None
         try:
             from llm_pipeline.creator.pipeline import StepCreatorPipeline
 
@@ -205,7 +206,7 @@ def generate_step(
                     # Collect generated_code from pipeline context
                     ctx = getattr(pipeline, "_context", None)
                     if ctx and hasattr(ctx, "get"):
-                        code_dict = ctx.get("generated_code", {})
+                        code_dict = ctx.get("all_artifacts", {})
                         if code_dict:
                             draft.generated_code = code_dict
                     draft.status = "draft"
@@ -216,6 +217,11 @@ def generate_step(
             logger.exception(
                 "Background step creator failed for run_id=%s", run_id
             )
+            if pipeline is not None:
+                try:
+                    pipeline.close()
+                except Exception:
+                    pass
             try:
                 with Session(engine) as err_session:
                     draft = err_session.exec(
