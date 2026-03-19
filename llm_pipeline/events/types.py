@@ -262,6 +262,7 @@ class StepCompleted(StepScopedEvent):
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    cost_usd: float | None = None
 
 
 # -- Cache Events --------------------------------------------------------------
@@ -349,6 +350,9 @@ class LLMCallCompleted(StepScopedEvent):
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    cost_usd: float | None = None
+    input_cost_usd: float | None = None
+    output_cost_usd: float | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

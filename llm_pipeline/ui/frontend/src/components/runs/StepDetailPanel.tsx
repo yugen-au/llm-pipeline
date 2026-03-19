@@ -296,6 +296,8 @@ function MetaTab({
   const inputTokens = completedCalls.reduce((sum, { data }) => sum + (data.input_tokens ?? 0), 0)
   const outputTokens = completedCalls.reduce((sum, { data }) => sum + (data.output_tokens ?? 0), 0)
   const hasTokens = completedCalls.some(({ data }) => data.input_tokens != null || data.output_tokens != null)
+  const totalCost = completedCalls.reduce((sum, { data }) => sum + (data.cost_usd ?? 0), 0)
+  const hasCost = completedCalls.some(({ data }) => data.cost_usd != null)
 
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
@@ -317,6 +319,12 @@ function MetaTab({
               <dd>{outputTokens.toLocaleString()}</dd>
               <dt className="text-muted-foreground">Tokens Total</dt>
               <dd>{(inputTokens + outputTokens).toLocaleString()}</dd>
+            </>
+          )}
+          {hasCost && (
+            <>
+              <dt className="text-muted-foreground">Cost</dt>
+              <dd>${totalCost.toFixed(4)}</dd>
             </>
           )}
           <dt className="text-muted-foreground">Created</dt>
