@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "llm-pipeline"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Declarative LLM pipeline orchestration framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,8 +23,11 @@ llm-pipeline = "llm_pipeline.ui.cli:main"
 
 [project.entry-points."llm_pipeline.pipelines"]
 text_analyzer = "llm_pipeline.demo:TextAnalyzerPipeline"
+step_creator = "llm_pipeline.creator:StepCreatorPipeline"
 
 [project.optional-dependencies]
+creator = ["jinja2>=3.0"]
+sandbox = ["docker>=7.0"]
 ui = ["fastapi>=0.115.0", "uvicorn[standard]>=0.32.0", "python-multipart>=0.0.9"]
 otel = [
     "opentelemetry-sdk>=1.20.0",
@@ -43,12 +46,17 @@ dev = [
     "opentelemetry-exporter-otlp-proto-http>=1.20.0",
 ]
 
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["llm_pipeline"]
 artifacts = ["llm_pipeline/ui/frontend/dist/**"]
 exclude = [
     "llm_pipeline/ui/frontend/node_modules/**",
-    "llm_pipeline/ui/frontend/src/**",
     "llm_pipeline/ui/frontend/.vite/**",
     "llm_pipeline/ui/frontend/tsconfig*",
     "llm_pipeline/ui/frontend/vite.config*",

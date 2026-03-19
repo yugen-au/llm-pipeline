@@ -1,7 +1,7 @@
 import { usePipeline } from '@/api/pipelines'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { JsonTree } from '@/components/pipelines/JsonTree'
+import { JsonViewer } from '@/components/JsonViewer'
 import { StrategySection } from '@/components/pipelines/StrategySection'
 
 // ---------------------------------------------------------------------------
@@ -96,7 +96,7 @@ export function PipelineDetail({ pipelineName }: PipelineDetailProps) {
                 Input Schema
               </span>
               <div className="rounded border p-2">
-                <JsonTree data={data.pipeline_input_schema} />
+                <JsonViewer data={data.pipeline_input_schema} />
               </div>
             </div>
           )}

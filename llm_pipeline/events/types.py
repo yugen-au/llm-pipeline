@@ -514,6 +514,8 @@ class ExtractionCompleted(StepScopedEvent):
     model_class: str
     instance_count: int
     execution_time_ms: float
+    created: tuple[dict, ...] = ()
+    updated: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

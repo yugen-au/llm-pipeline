@@ -192,12 +192,21 @@ export interface ContextUpdatedData {
   context_snapshot: Record<string, unknown>
 }
 
+/** Before/after snapshot for a single updated record. */
+export interface UpdatedRecord {
+  id: number | null
+  before: Record<string, unknown>
+  after: Record<string, unknown>
+}
+
 /** event_data shape for extraction_completed events. */
 export interface ExtractionCompletedData {
   extraction_class: string
   model_class: string
   instance_count: number
   execution_time_ms: number
+  created?: Record<string, unknown>[]
+  updated?: UpdatedRecord[]
 }
 
 /** event_data shape for tool_call_starting events. */
