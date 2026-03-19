@@ -184,6 +184,9 @@ export interface LLMCallCompletedData {
   model_name: string | null
   attempt_count: number
   validation_errors: string[]
+  input_tokens: number | null
+  output_tokens: number | null
+  total_tokens: number | null
 }
 
 /** event_data shape for context_updated events. */

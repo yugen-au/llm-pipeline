@@ -288,11 +288,14 @@ function MetaTab({
   const cacheMiss = events.find((e) => e.event_type === 'cache_miss')
   const stepSelected = events.find((e) => e.event_type === 'step_selected')
 
-  // Aggregate validation errors across all calls
+  // Aggregate validation errors and token usage across all calls
   const validationErrors = completedCalls.flatMap(({ data }) => data.validation_errors ?? [])
   const maxAttempts = completedCalls.length > 0
     ? Math.max(...completedCalls.map(({ data }) => data.attempt_count))
     : null
+  const inputTokens = completedCalls.reduce((sum, { data }) => sum + (data.input_tokens ?? 0), 0)
+  const outputTokens = completedCalls.reduce((sum, { data }) => sum + (data.output_tokens ?? 0), 0)
+  const hasTokens = completedCalls.some(({ data }) => data.input_tokens != null || data.output_tokens != null)
 
   return (
     <ScrollArea className="h-[calc(100vh-220px)]">
@@ -306,6 +309,16 @@ function MetaTab({
           <dd>{step.model ?? '\u2014'}</dd>
           <dt className="text-muted-foreground">Duration</dt>
           <dd>{formatDuration(step.execution_time_ms)}</dd>
+          {hasTokens && (
+            <>
+              <dt className="text-muted-foreground">Tokens In</dt>
+              <dd>{inputTokens.toLocaleString()}</dd>
+              <dt className="text-muted-foreground">Tokens Out</dt>
+              <dd>{outputTokens.toLocaleString()}</dd>
+              <dt className="text-muted-foreground">Tokens Total</dt>
+              <dd>{(inputTokens + outputTokens).toLocaleString()}</dd>
+            </>
+          )}
           <dt className="text-muted-foreground">Created</dt>
           <dd>{formatAbsolute(step.created_at)}</dd>
           {step.prompt_system_key && (
