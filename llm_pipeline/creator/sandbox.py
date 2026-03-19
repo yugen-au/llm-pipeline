@@ -180,6 +180,7 @@ class StepSandbox:
             warnings.warn(
                 "docker package not installed; sandbox container execution skipped. "
                 "Install with: pip install llm-pipeline[sandbox]",
+                category=UserWarning,
                 stacklevel=2,
             )
             return None
@@ -190,6 +191,7 @@ class StepSandbox:
         except Exception:
             warnings.warn(
                 "Docker daemon not available; sandbox container execution skipped.",
+                category=UserWarning,
                 stacklevel=2,
             )
             return None
@@ -288,6 +290,7 @@ class StepSandbox:
             warnings.warn(
                 "Could not discover llm_pipeline package path; "
                 "framework will not be available in sandbox.",
+                category=UserWarning,
                 stacklevel=2,
             )
 
@@ -397,6 +400,7 @@ class StepSandbox:
                 )
 
                 # Parse last JSON line from stdout
+                parsed = False
                 results = {"import_ok": False, "errors": [], "modules_found": []}
                 stdout_logs = container.logs(stdout=True, stderr=False).decode(
                     "utf-8", errors="replace"
@@ -406,16 +410,21 @@ class StepSandbox:
                     if line.startswith("{"):
                         try:
                             results = json.loads(line)
+                            parsed = True
                             break
                         except json.JSONDecodeError:
                             continue
+
+                errors = results.get("errors", [])
+                if not parsed:
+                    errors.append("Could not parse container output")
 
                 return SandboxResult(
                     import_ok=results.get("import_ok", False),
                     security_issues=[],
                     sandbox_skipped=False,
                     output=logs,
-                    errors=results.get("errors", []),
+                    errors=errors,
                     modules_found=results.get("modules_found", []),
                 )
 
