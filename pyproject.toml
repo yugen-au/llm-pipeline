@@ -27,6 +27,7 @@ step_creator = "llm_pipeline.creator:StepCreatorPipeline"
 
 [project.optional-dependencies]
 creator = ["jinja2>=3.0"]
+sandbox = ["docker>=7.0"]
 ui = ["fastapi>=0.115.0", "uvicorn[standard]>=0.32.0", "python-multipart>=0.0.9"]
 otel = [
     "opentelemetry-sdk>=1.20.0",
