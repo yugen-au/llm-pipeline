@@ -1,18 +1,21 @@
 ## Task: master-46-docker-sandbox-code-testing
-## Description: pending
+## Description: Create secure Docker sandbox for testing generated step code with strict resource limits, network isolation, and dangerous import detection. Graceful fallback when Docker unavailable.
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/46-docker-sandbox-code-testing
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: python-development, backend-development, security-scanning
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Work Mode: pending
-## Last Updated: 2026-03-19 11:13
+## Work Mode: standard
+## Last Updated: 2026-03-19 11:24
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| Docker SDK & Creator Integration | python-development:python-pro | research | 1 | - | A | in-progress | 0 | - | pending | - |
+| Sandbox Architecture & Container Isolation | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | - | pending | - |
+| Code Security & Dangerous Import Detection | security-scanning:security-auditor | research | 3 | - | A | in-progress | 0 | - | pending | - |
