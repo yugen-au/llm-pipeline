@@ -1,9 +1,9 @@
 ## Task: master-47-auto-integration-gen-steps
 ## Description: Create StepIntegrator that writes generated files, registers prompts in DB, updates strategy/registry via AST manipulation, with rollback on failure
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: D
+## Current Group: A
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/47-auto-integration-gen-steps
 ## Plugins: python-development, backend-development, code-refactoring, dependency-management
@@ -25,4 +25,5 @@
 | AST Modifier Module | dependency-management:legacy-modernizer | implementation | 2 | - | B | complete | 0 | a558f15a09737735a | a45879b9 | - |
 | StepIntegrator | backend-development:backend-architect | implementation | 3 | - | C | complete | 0 | a3ef0abbf39ad85e7 | 547a9c47 | - |
 | Tests Models+AST | backend-development:test-automator | implementation | 4 | - | D | complete | 0 | a30704bcc77b098b5 | 5022e579 | - |
-| Tests Integrator | backend-development:test-automator | implementation | 5 | - | D | complete | 0 | af135213531fa9b6a | b8f136d1 | - |
+| Tests Integrator | backend-development:test-automator | implementation | 5 | - | D | complete | 0 | af135213531fa9b6a | b8f136d1,5022e579 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
