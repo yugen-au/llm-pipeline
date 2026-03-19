@@ -9,7 +9,7 @@
 ## Plugins: python-development, backend-development, security-scanning
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: [1,2,6]
+## Steps to Fix: none
 ## Work Mode: standard
 ## Last Updated: 2026-03-19 13:55
 
