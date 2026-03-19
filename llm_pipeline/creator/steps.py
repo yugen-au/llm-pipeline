@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.step import LLMStep, step_definition
 
-from .models import GenerationRecord
+from .models import FieldDefinition, GenerationRecord
 from .schemas import (
     CodeGenerationContext,
     CodeGenerationInstructions,
@@ -24,7 +24,6 @@ from .schemas import (
     RequirementsAnalysisContext,
     RequirementsAnalysisInstructions,
 )
-from .models import FieldDefinition
 from .templates import render_template
 
 try:
