@@ -4,28 +4,28 @@
 - Task folder: docs\tasks\in-progress\master-50-draft-steps-db-tables
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-3-package-exports.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-integration-tests.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 3 - implement ONLY this step, not others
+- Step: 4 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /pytest-dev/pytest
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-3-package-exports.md
+4. Document decisions in implementation\step-4-integration-tests.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 3: PACKAGE EXPORTS
+# IMPLEMENTATION - STEP 4: INTEGRATION TESTS
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -73,7 +73,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-4-integration-tests.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']

@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/50-draft-steps-db-tables
 ## Plugins: backend-development, database-design
@@ -23,4 +23,4 @@
 | Add Draft Models | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | a4f1bb4b71b1f5a3a | cbbac387 | /sqlmodel/sqlmodel,/sqlalchemy/sqlalchemy |
 | Register Tables | backend-development:backend-architect | implementation | 2 | - | B | complete | 0 | a987db2403f899dbe | 440b2cf6 | /sqlmodel/sqlmodel |
 | Package Exports | backend-development:backend-architect | implementation | 3 | - | B | complete | 0 | a28bcbcf24a1f4917 | 440b2cf6 | - |
-| Integration Tests | backend-development:test-automator | implementation | 4 | - | C | pending | 0 | pending | pending | /pytest-dev/pytest |
+| Integration Tests | backend-development:test-automator | implementation | 4 | - | C | in-progress | 0 | pending | pending | /pytest-dev/pytest |
