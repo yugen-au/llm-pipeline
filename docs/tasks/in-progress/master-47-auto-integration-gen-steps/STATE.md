@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/47-auto-integration-gen-steps
 ## Plugins: python-development, backend-development, code-refactoring, dependency-management
@@ -23,6 +23,6 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | aa23df08561ef0dbc | 5b6156de | - |
 | GeneratedStep Model | python-development:python-pro | implementation | 1 | - | A | complete | 0 | a5b27e77d68b985f7 | d38a795f | - |
 | AST Modifier Module | dependency-management:legacy-modernizer | implementation | 2 | - | B | complete | 0 | a558f15a09737735a | a45879b9 | - |
-| StepIntegrator | backend-development:backend-architect | implementation | 3 | - | C | pending | 0 | pending | pending | - |
+| StepIntegrator | backend-development:backend-architect | implementation | 3 | - | C | in-progress | 0 | pending | pending | - |
 | Tests Models+AST | backend-development:test-automator | implementation | 4 | - | D | pending | 0 | pending | pending | - |
 | Tests Integrator | backend-development:test-automator | implementation | 5 | - | D | pending | 0 | pending | pending | - |

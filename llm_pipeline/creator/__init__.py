@@ -12,5 +12,6 @@ except ImportError:
     )
 
 from llm_pipeline.creator.pipeline import StepCreatorPipeline
+from llm_pipeline.creator.integrator import StepIntegrator
 
-__all__ = ["StepCreatorPipeline"]
+__all__ = ["StepCreatorPipeline", "StepIntegrator"]
