@@ -1,0 +1,40 @@
+{% set step_upper = step_name | upper %}
+{% set step_title = step_name.replace("_", " ").title() %}
+"""Prompt definitions for the {{ step_title }} step."""
+from __future__ import annotations
+
+
+{{ step_upper }}_SYSTEM: dict = {
+    "prompt_key": "{{ step_name }}",
+    "prompt_name": "{{ step_title }} System",
+    "prompt_type": "system",
+    "category": "{{ category }}",
+    "step_name": "{{ step_name }}",
+    "content": (
+        """{{ system_content }}"""
+    ),
+    "required_variables": [],
+    "description": "System prompt for {{ step_name }} step",
+}
+
+{{ step_upper }}_USER: dict = {
+    "prompt_key": "{{ step_name }}",
+    "prompt_name": "{{ step_title }} User",
+    "prompt_type": "user",
+    "category": "{{ category }}",
+    "step_name": "{{ step_name }}",
+    "content": (
+        """{{ user_content }}"""
+    ),
+    "required_variables": [
+{% for var in required_variables %}
+        "{{ var }}",
+{% endfor %}
+    ],
+    "description": "User prompt for {{ step_name }} step",
+}
+
+ALL_PROMPTS: list[dict] = [
+    {{ step_upper }}_SYSTEM,
+    {{ step_upper }}_USER,
+]

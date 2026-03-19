@@ -1,0 +1,29 @@
+"""{{ docstring }}"""
+from llm_pipeline.step import LLMStep, step_definition
+{% for import_line in imports %}
+{{ import_line }}
+{% endfor %}
+
+
+@step_definition(
+    instructions={{ instructions_class_name }},
+    default_system_key="{{ system_key }}",
+    default_user_key="{{ user_key }}",
+    context={{ context_class_name }},
+{% if extractions %}
+    default_extractions=[{{ extractions | join(", ") }}],
+{% endif %}
+)
+class {{ step_class_name }}(LLMStep):
+    """{{ docstring }}"""
+
+    def prepare_calls(self):
+{{ prepare_calls_body | indent_code(8) }}
+
+    def process_instructions(self, instructions):
+{{ process_instructions_body | indent_code(8) }}
+{% if should_skip_condition %}
+
+    def should_skip(self):
+{{ should_skip_condition | indent_code(8) }}
+{% endif %}
