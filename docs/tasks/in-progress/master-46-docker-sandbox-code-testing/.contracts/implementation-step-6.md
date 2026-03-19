@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\master-46-docker-sandbox-code-testing
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-2-create-sampledatapy.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-create-testsandboxpy.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 2
+- Step to fix: 6
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /docker/docker-py
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 2
+1. Read REVIEW.md for issues assigned to Step 6
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-2-create-sampledatapy.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-6-create-testsandboxpy.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
