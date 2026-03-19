@@ -77,3 +77,68 @@ Implementation follows established codebase patterns well (trigger_run backgroun
 ## Recommendation
 **Decision:** CONDITIONAL
 Two required fixes before merge: (1) Change `"generated_code"` to `"all_artifacts"` in the generate background task's context extraction -- without this, the entire generate workflow produces empty DraftStep records. (2) Add `pipeline.close()` before the error session in generate's except block, matching trigger_run's deadlock prevention pattern. The medium issues are real but not blocking.
+
+---
+
+# Architecture Re-Review (Post-Fix)
+
+## Overall Assessment
+**Status:** complete
+Both required fixes applied correctly. The generate background task now uses the correct context key and releases the pipeline session before error handling, matching the established trigger_run pattern in runs.py exactly. Medium/low issues from first review remain unchanged -- these were explicitly non-blocking and no changes were expected.
+
+## Fixes Verified
+
+### Fix 1: CRITICAL -- Context key corrected
+**Previous:** `ctx.get("generated_code", {})` (line 209, always returned `{}`)
+**Now:** `ctx.get("all_artifacts", {})` (line 209)
+**Verification:** Matches `CodeValidationContext.all_artifacts` field in `creator/schemas.py` line 177 and `CodeValidationStep.save_records()` usage in `creator/steps.py` line 55 (`pipeline.context.get("all_artifacts", {})`). DraftStep.generated_code will now be populated after generation completes. Fix is correct.
+
+### Fix 2: HIGH -- pipeline.close() before error session
+**Previous:** No `pipeline.close()` call; `pipeline` variable scoped inside try, inaccessible in except.
+**Now:** `pipeline = None` at line 179 (before try); `if pipeline is not None: pipeline.close()` at lines 220-224 (in except, before err_session).
+**Verification:** Pattern matches runs.py lines 244, 256-260 exactly. The try/except around `pipeline.close()` is defensive (correct -- close itself could fail). Session lock is released before err_session opens, preventing PostgreSQL deadlock.
+
+## Remaining Issues (Unchanged, Non-Blocking)
+
+### Medium
+#### Accept endpoint session not using context manager
+**Step:** 1
+**Details:** Unchanged from first review. Manual session lifecycle with explicit close() in multiple paths. Works correctly but less maintainable than context manager pattern. Not a bug.
+
+#### Error path in generate uses single session for two separate entity updates
+**Step:** 1
+**Details:** Unchanged from first review. Double commit in err_session (DraftStep then PipelineRun). Partial failure leaves inconsistent state. Acceptable for current scale.
+
+### Low
+#### Test mock targets may be fragile for accept endpoint
+**Step:** 3
+**Details:** Unchanged. Lazy imports make mocks work; module-level refactor would break them silently.
+
+#### DraftItem response model excludes generated_code and test_results
+**Step:** 1
+**Details:** Unchanged. Can be addressed in task 49 when frontend needs are clearer.
+
+#### _ensure_seeded sets _seed_done=True even on failure
+**Step:** 1
+**Details:** Unchanged. Documented as intentional in PLAN.md.
+
+## Review Checklist
+[x] Architecture patterns followed -- 202+BackgroundTasks, Session(engine) for writes, DBSession for reads, pipeline.close() before error session
+[x] Code quality and maintainability -- consistent with runs.py patterns
+[x] Error handling present -- pipeline.close() fix resolves the blocking issue
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/creator.py | pass | Both fixes verified correct; matches runs.py patterns |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+Both required fixes are correct and match the established codebase patterns. Remaining medium/low issues are acceptable technical debt for current scope. Implementation is ready for merge.
