@@ -215,12 +215,14 @@ def create_app(
     from llm_pipeline.ui.routes.prompts import router as prompts_router
     from llm_pipeline.ui.routes.pipelines import router as pipelines_router
     from llm_pipeline.ui.routes.websocket import router as ws_router
+    from llm_pipeline.ui.routes.creator import router as creator_router
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
     app.include_router(events_router, prefix="/api")
     app.include_router(prompts_router, prefix="/api")
     app.include_router(pipelines_router, prefix="/api")
+    app.include_router(creator_router, prefix="/api")
     app.include_router(ws_router)  # no /api prefix for websocket
 
     return app
