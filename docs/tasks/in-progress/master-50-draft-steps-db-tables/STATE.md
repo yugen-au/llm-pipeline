@@ -20,3 +20,7 @@
 | Schema Design Patterns | database-design:database-architect | research | 2 | - | A | complete | 0 | a1bbea14214d58d56 | a2816d19 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | acc37ae3667bacd2d | 55b60075 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a5792e41708a505fc | pending | - |
+| Add Draft Models | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /sqlmodel/sqlmodel,/sqlalchemy/sqlalchemy |
+| Register Tables | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | /sqlmodel/sqlmodel |
+| Package Exports | backend-development:backend-architect | implementation | 3 | - | B | pending | 0 | pending | pending | - |
+| Integration Tests | backend-development:test-automator | implementation | 4 | - | C | pending | 0 | pending | pending | /pytest-dev/pytest |
