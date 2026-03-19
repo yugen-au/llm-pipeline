@@ -20,3 +20,6 @@
 | Existing Creator Module Analysis | python-development:python-pro | research | 2 | - | A | complete | 0 | adb69aaba57c6866f | 1e332290 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a8cf36c7cb40f190a | 262f0067 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a6741f45336d3006e | pending | - |
+| Creator Route Module | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /fastapi/fastapi |
+| App Wiring | backend-development:backend-architect | implementation | 2 | - | B | pending | 0 | pending | pending | /fastapi/fastapi |
+| Creator Endpoint Tests | backend-development:backend-architect | implementation | 3 | - | C | pending | 0 | pending | pending | /fastapi/fastapi |
