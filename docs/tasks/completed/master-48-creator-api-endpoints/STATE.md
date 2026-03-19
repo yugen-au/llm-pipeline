@@ -1,7 +1,7 @@
 ## Task: master-48-creator-api-endpoints
 ## Description: REST endpoints for step generation, testing, and acceptance workflow (creator module Phase 3)
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
