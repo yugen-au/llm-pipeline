@@ -235,7 +235,6 @@ class DraftStep(SQLModel, table=True):
     __table_args__ = (
         UniqueConstraint("name", name="uq_draft_steps_name"),
         Index("ix_draft_steps_status", "status"),
-        Index("ix_draft_steps_name", "name"),
     )
 
 
