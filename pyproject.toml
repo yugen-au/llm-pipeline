@@ -56,7 +56,6 @@ packages = ["llm_pipeline"]
 artifacts = ["llm_pipeline/ui/frontend/dist/**"]
 exclude = [
     "llm_pipeline/ui/frontend/node_modules/**",
-    "llm_pipeline/ui/frontend/src/**",
     "llm_pipeline/ui/frontend/.vite/**",
     "llm_pipeline/ui/frontend/tsconfig*",
     "llm_pipeline/ui/frontend/vite.config*",
