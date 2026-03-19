@@ -344,3 +344,174 @@ class TestExtractionEventFields:
         ee = _extraction_events(events)
         for e in ee:
             assert e["step_name"] == "item_detection"
+
+
+# -- Tests: Created/Updated Instance Data ------------------------------------
+
+
+class TestExtractionCreatedData:
+    """Verify ExtractionCompleted includes full instance data in `created`."""
+
+    def test_created_has_instance_data(self, seeded_session, in_memory_handler):
+        """created contains model_dump() of each new instance post-flush."""
+        _, events = _run_extraction_pipeline(seeded_session, in_memory_handler)
+        completed = [e for e in events if e["event_type"] == "extraction_completed"][0]
+
+        assert "created" in completed
+        assert len(completed["created"]) == 2
+
+        for record in completed["created"]:
+            assert "name" in record
+            assert "value" in record
+            assert "id" in record
+            assert record["id"] is not None, "IDs should be assigned post-flush"
+
+    def test_created_values_match(self, seeded_session, in_memory_handler):
+        """created records have correct field values."""
+        _, events = _run_extraction_pipeline(seeded_session, in_memory_handler)
+        completed = [e for e in events if e["event_type"] == "extraction_completed"][0]
+
+        names = [r["name"] for r in completed["created"]]
+        assert "item_0" in names
+        assert "item_1" in names
+
+    def test_created_empty_by_default(self, seeded_session, in_memory_handler):
+        """Old extractions without begin_update get empty updated list."""
+        _, events = _run_extraction_pipeline(seeded_session, in_memory_handler)
+        completed = [e for e in events if e["event_type"] == "extraction_completed"][0]
+
+        assert completed["updated"] == [] or completed["updated"] == ()
+
+
+# -- Tests: Updated (begin_update) ------------------------------------------
+
+
+class UpdatingItemExtraction(PipelineExtraction, model=Item):
+    """Extraction that updates existing records using begin_update()."""
+    def default(self, results):
+        existing = self.pipeline.session.query(Item).all()
+        for item in existing:
+            self.begin_update(item)
+            item.value = item.value + 100
+        return []  # updates tracked, no new records
+
+
+class UpdatingItemDetectionInstructions(LLMResultMixin):
+    """Instruction model for updating extraction step."""
+    item_count: int
+    category: str
+
+    example: ClassVar[dict] = {"item_count": 0, "category": "test", "notes": "ok"}
+
+
+class UpdatingItemDetectionContext(ItemDetectionContext):
+    pass
+
+
+@step_definition(
+    instructions=UpdatingItemDetectionInstructions,
+    default_system_key="item_detection.system",
+    default_user_key="item_detection.user",
+    default_extractions=[UpdatingItemExtraction],
+    context=UpdatingItemDetectionContext,
+)
+class UpdatingItemDetectionStep(LLMStep):
+    def prepare_calls(self) -> List[StepCallParams]:
+        return [{"variables": {"data": "test"}}]
+
+    def process_instructions(self, instructions):
+        return UpdatingItemDetectionContext(category=instructions[0].category)
+
+
+class UpdatingExtractionStrategy(PipelineStrategy):
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return [UpdatingItemDetectionStep.create_definition()]
+
+
+class UpdatingExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
+    pass
+
+
+class UpdatingExtractionAgentRegistry(AgentRegistry, agents={
+    "updating_item_detection": UpdatingItemDetectionInstructions,
+}):
+    pass
+
+
+class UpdatingExtractionStrategies(PipelineStrategies, strategies=[UpdatingExtractionStrategy]):
+    pass
+
+
+class UpdatingExtractionPipeline(
+    PipelineConfig,
+    registry=UpdatingExtractionRegistry,
+    strategies=UpdatingExtractionStrategies,
+    agent_registry=UpdatingExtractionAgentRegistry,
+):
+    pass
+
+
+class TestExtractionUpdatedData:
+    """Verify begin_update() produces before/after diffs in `updated`."""
+
+    @staticmethod
+    def _make_updating_run_result():
+        instruction = UpdatingItemDetectionInstructions(
+            item_count=0, category="test", confidence_score=1.0, notes="ok"
+        )
+        mock_result = MagicMock()
+        mock_result.output = instruction
+        usage = MagicMock()
+        usage.input_tokens = 10
+        usage.output_tokens = 5
+        usage.requests = 1
+        mock_result.usage.return_value = usage
+        return mock_result
+
+    def _seed_and_run(self, seeded_session, handler):
+        """Pre-seed items, run updating extraction."""
+        seeded_session.add(Item(name="existing_0", value=10))
+        seeded_session.add(Item(name="existing_1", value=20))
+        seeded_session.commit()
+
+        pipeline = UpdatingExtractionPipeline(
+            session=seeded_session,
+            model="test-model",
+            event_emitter=handler,
+        )
+        with patch("pydantic_ai.Agent.run_sync", return_value=self._make_updating_run_result()):
+            pipeline.execute(data="test data", initial_context={})
+        return pipeline, handler.get_events()
+
+    def test_updated_has_before_after(self, seeded_session, in_memory_handler):
+        """updated contains {id, before, after} for each begin_update() call."""
+        _, events = self._seed_and_run(seeded_session, in_memory_handler)
+        completed = [e for e in events if e["event_type"] == "extraction_completed"][0]
+
+        assert len(completed["updated"]) == 2
+
+        for record in completed["updated"]:
+            assert "id" in record
+            assert "before" in record
+            assert "after" in record
+            assert record["id"] is not None
+
+    def test_updated_shows_value_change(self, seeded_session, in_memory_handler):
+        """before/after reflect the actual mutation (+100)."""
+        _, events = self._seed_and_run(seeded_session, in_memory_handler)
+        completed = [e for e in events if e["event_type"] == "extraction_completed"][0]
+
+        for record in completed["updated"]:
+            before_val = record["before"]["value"]
+            after_val = record["after"]["value"]
+            assert after_val == before_val + 100
+
+    def test_created_empty_when_only_updating(self, seeded_session, in_memory_handler):
+        """created is empty when extraction only updates existing records."""
+        _, events = self._seed_and_run(seeded_session, in_memory_handler)
+        completed = [e for e in events if e["event_type"] == "extraction_completed"][0]
+
+        assert len(completed["created"]) == 0

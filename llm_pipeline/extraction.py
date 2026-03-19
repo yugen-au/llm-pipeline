@@ -109,6 +109,11 @@ class PipelineExtraction(ABC):
             )
         
         self.pipeline = pipeline
+        self._tracked_updates: list[tuple[SQLModel, dict]] = []
+
+    def begin_update(self, instance: SQLModel) -> None:
+        """Snapshot instance state before mutation for before/after diffing."""
+        self._tracked_updates.append((instance, instance.model_dump()))
     
     def _validate_instance(self, instance: SQLModel, index: int) -> None:
         """

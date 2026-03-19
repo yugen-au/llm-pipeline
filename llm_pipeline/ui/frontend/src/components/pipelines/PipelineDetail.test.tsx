@@ -24,9 +24,9 @@ vi.mock('./StrategySection', () => ({
   ),
 }))
 
-// Mock JsonTree to keep assertions simple
-vi.mock('./JsonTree', () => ({
-  JsonTree: ({ data }: { data: Record<string, unknown> | null }) => (
+// Mock JsonViewer to keep assertions simple
+vi.mock('@/components/JsonViewer', () => ({
+  JsonViewer: ({ data }: { data: Record<string, unknown> | null }) => (
     <div data-testid="json-tree">
       {data ? Object.keys(data).join(', ') : 'null'}
     </div>
