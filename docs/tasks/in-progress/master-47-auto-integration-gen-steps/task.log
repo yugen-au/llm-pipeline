@@ -53,3 +53,9 @@
 [2026-03-19 17:58:35] [INFO] Auto-updated agent statuses: GeneratedStep Model: pending -> in-progress
 [2026-03-19 17:58:35] [INFO] Deleted 1 old contract file(s)
 [2026-03-19 17:58:35] [DEBUG] STATE.md atomic write complete
+[2026-03-19 18:10:47] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-19 18:11:34] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-03-19 18:11:42] [INFO] Task call: python-development:python-pro (phase: implementation)
+[2026-03-19 18:14:48] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-03-19 18:16:01] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-19 18:16:26] [DEBUG] STATE.md atomic write complete
