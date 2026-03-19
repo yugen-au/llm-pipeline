@@ -1,7 +1,7 @@
 ## Task: master-47-auto-integration-gen-steps
 ## Description: Create StepIntegrator that writes generated files, registers prompts in DB, updates strategy/registry via AST manipulation, with rollback on failure
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
