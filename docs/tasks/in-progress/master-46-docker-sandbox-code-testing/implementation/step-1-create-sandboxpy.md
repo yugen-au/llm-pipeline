@@ -65,3 +65,62 @@ Container constraints applied: `network_mode='none'`, `read_only=True`, tmpfs `/
 [x] try/finally ensures container.remove(force=True) always called
 [x] Module imports and loads without Docker installed
 [x] Syntax validation passes (ast.parse)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] warnings.warn missing category parameter in _get_client() and run() framework path warning
+[x] Empty stdout observability gap -- no error message when JSON parse finds nothing
+
+### Changes Made
+#### File: `llm_pipeline/creator/sandbox.py`
+Added `category=UserWarning` to all three `warnings.warn()` calls for filterability.
+
+```
+# Before
+warnings.warn(
+    "docker package not installed; ...",
+    stacklevel=2,
+)
+
+# After
+warnings.warn(
+    "docker package not installed; ...",
+    category=UserWarning,
+    stacklevel=2,
+)
+```
+
+Added `parsed` flag and error append when no JSON line found in container stdout.
+
+```
+# Before
+results = {"import_ok": False, "errors": [], "modules_found": []}
+...
+return SandboxResult(
+    errors=results.get("errors", []),
+    ...
+)
+
+# After
+parsed = False
+results = {"import_ok": False, "errors": [], "modules_found": []}
+...
+    parsed = True
+...
+errors = results.get("errors", [])
+if not parsed:
+    errors.append("Could not parse container output")
+return SandboxResult(
+    errors=errors,
+    ...
+)
+```
+
+### Verification
+[x] warnings.warn category is UserWarning (caught with warnings.catch_warnings)
+[x] Empty stdout produces "Could not parse container output" in errors list
+[x] Module still imports and loads correctly
+[x] All previous verification checks still pass
