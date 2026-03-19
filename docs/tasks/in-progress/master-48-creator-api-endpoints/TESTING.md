@@ -82,3 +82,23 @@ None
 ## Recommendations
 1. The pre-existing TestStepDepsFields::test_field_count failure (assert 11 == 10) should be fixed in a separate task -- StepDeps has a new field not reflected in the test assertion.
 2. Consider adding a timeout wrapper for POST /test/{draft_id} (StepSandbox.run() can block up to 60s per plan documentation).
+
+---
+
+## Re-run After Review Fixes (2026-03-19)
+
+### Changes Verified
+- `ctx.get("generated_code")` -> `ctx.get("all_artifacts")` in generate background task
+- `pipeline = None` declared before try block; `pipeline.close()` called before error session
+
+### Test Execution
+**Pass Rate:** 18/18 creator tests; 1160/1161 full suite (same pre-existing failure only)
+```
+18 passed in 0.42s
+
+Full suite (--ignore=tests/ui/test_cli.py):
+1 failed, 1160 passed, 6 skipped, 10 warnings in 119.69s
+```
+
+### Result
+No regressions. Both review fixes are compatible with existing test mocks (tests mock pipeline.save() and pipeline._context; `all_artifacts` key and `pipeline.close()` path are covered by existing mock setup). All 18 creator tests pass unchanged.
