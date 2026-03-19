@@ -13,7 +13,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun
+from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline
 from llm_pipeline.events.models import PipelineEventRecord
 
 logger = logging.getLogger(__name__)
@@ -120,8 +120,9 @@ def get_default_db_path() -> Path:
 def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     """Initialize pipeline database tables.
 
-    Creates PipelineStepState, PipelineRunInstance, Prompt, and
-    PipelineEventRecord (pipeline_events) tables.
+    Creates PipelineStepState, PipelineRunInstance, Prompt,
+    PipelineEventRecord (pipeline_events), DraftStep (draft_steps),
+    and DraftPipeline (draft_pipelines) tables.
 
     Args:
         engine: Optional SQLAlchemy engine. If None, creates auto-SQLite.
@@ -158,6 +159,8 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineRun.__table__,
             Prompt.__table__,
             PipelineEventRecord.__table__,
+            DraftStep.__table__,
+            DraftPipeline.__table__,
         ],
     )
 
