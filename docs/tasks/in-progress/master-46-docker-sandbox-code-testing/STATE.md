@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/46-docker-sandbox-code-testing
 ## Plugins: python-development, backend-development, security-scanning
@@ -25,6 +25,6 @@
 | Create sample_data.py | python-development:python-pro | implementation | 2 | - | A | complete | 0 | a3b93679152bee105 | fc4eb209,7ec2f9f4 | - |
 | Extend CodeValidationContext | python-development:python-pro | implementation | 3 | - | B | complete | 0 | ad46177c63910f3d1 | 595cee2c | - |
 | Integrate sandbox into steps.py | python-development:python-pro | implementation | 4 | - | C | complete | 0 | ac7b3e328bf47f02d | 1434c7ba | - |
-| Add sandbox optional-dep | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a7e02271badce431f | 3f4339ce | - |
-| Create test_sandbox.py | backend-development:test-automator | implementation | 6 | - | D | pending | 0 | pending | pending | /docker/docker-py |
-| Create test_sample_data.py | backend-development:test-automator | implementation | 7 | - | D | pending | 0 | pending | pending | - |
+| Add sandbox optional-dep | python-development:python-pro | implementation | 5 | - | C | complete | 0 | a7e02271badce431f | 3f4339ce,1434c7ba | - |
+| Create test_sandbox.py | backend-development:test-automator | implementation | 6 | - | D | in-progress | 0 | pending | pending | /docker/docker-py |
+| Create test_sample_data.py | backend-development:test-automator | implementation | 7 | - | D | in-progress | 0 | pending | pending | - |
