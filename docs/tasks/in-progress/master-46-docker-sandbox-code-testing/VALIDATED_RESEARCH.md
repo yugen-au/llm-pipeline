@@ -2,14 +2,14 @@
 
 ## Executive Summary
 
-Consolidated findings from 3 domain research files covering Docker SDK integration, container isolation architecture, and code security analysis. Research quality is high overall, with thorough Docker SDK coverage and well-reasoned security layering. However, several critical hidden assumptions were identified that block planning:
+Consolidated findings from 3 domain research files covering Docker SDK integration, container isolation architecture, and code security analysis. All 4 blocking questions resolved by CEO. Key architectural decisions:
 
-1. The **test harness (`run_test.py`) is entirely unspecified** -- all 3 research files reference it but none define its contents
-2. The **run() method signature is inconsistent** between Step-1 (`code: str`) and Step-2 (`artifacts: dict[str, str]`)
-3. Generated step code **imports from llm_pipeline framework** -- cannot run in bare `python:3.11-slim` without the framework present
-4. The **security approach** (AST allowlist vs task-spec string denylist) represents significant scope difference needing CEO decision
+1. **Import-check only** for v1 execution scope -- run_test.py verifies generated modules can be imported
+2. **AST-based denylist** for security scanning (~80 lines, Python ast module, no false positives)
+3. **Auto-generate sample data** from instruction_fields spec (FieldDefinition has name, type_annotation, description, default, is_required -- sufficient for synthetic data generation)
+4. **importlib auto-discovery** for framework mount -- `importlib.util.find_spec('llm_pipeline')` locates package install path, mount read-only into container. Zero config, works in dev (editable install) and prod (pip install).
 
-Four questions require CEO input before planning can proceed (see Q&A History).
+Research quality is high. Remaining open items are implementation details, not architectural blockers.
 
 ## Domain Findings
 
@@ -21,6 +21,7 @@ Four questions require CEO input before planning can proceed (see Q&A History).
 - `container.wait(timeout=60)` raises `requests.exceptions.ReadTimeout` on timeout; container must be explicitly killed
 - `auto_remove=False` required to read logs before cleanup
 - Context7 docs confirm `cpu_period/cpu_quota` is correct cross-platform approach; task spec's `cpu_count` is Windows-only
+- `docker.types.Mount` required for tmpfs support (confirmed via Context7 advanced mount examples)
 
 ### Container Isolation (6-Layer Defense-in-Depth)
 **Source:** step-2-sandbox-architecture-container-isolation.md
@@ -39,11 +40,12 @@ Additional: `memswap_limit='512m'` (matches `mem_limit`) prevents swap usage -- 
 ### Code Security & Import Detection
 **Source:** step-3-code-security-dangerous-import-detection.md
 
-- 7 pattern categories identified (A-G): system access, dynamic execution, dynamic imports, builtin manipulation, FFI, network, resource exhaustion
-- AST-based analysis recommended over string matching -- no false positives from comments/strings/variable names
-- Allowlist approach recommended for generated code (well-defined narrow scope)
-- `CodeSecurityValidator` proposed as separate class with `SecurityIssue` dataclass
-- Defense-in-depth: pre-scan catches obvious patterns fast; Docker contains everything else
+- 7 pattern categories (A-G): system access, dynamic execution, dynamic imports, builtin manipulation, FFI, network, resource exhaustion
+- **CEO decision: AST-based denylist** (not allowlist). Use `ast.NodeVisitor` with `visit_Import`, `visit_ImportFrom`, `visit_Call` methods
+- `CodeSecurityValidator` as internal class; expose `validate_code() -> list[str]` on StepSandbox per task spec
+- Defense-in-depth: pre-scan catches obvious patterns fast (~10ms); Docker contains everything else
+- Denylist constants: `BLOCKED_MODULES` (frozenset), `BLOCKED_BUILTINS` (frozenset), `BLOCKED_ATTRIBUTES` (frozenset)
+- `_resolve_attribute_chain()` helper for dotted attribute detection (e.g., `os.system`)
 
 ### Integration Points with Creator Package
 **Source:** step-1-docker-sdk-creator-integration.md, step-2-sandbox-architecture-container-isolation.md
@@ -52,6 +54,38 @@ Additional: `memswap_limit='512m'` (matches `mem_limit`) prevents swap usage -- 
 - `CodeValidationContext` gains `sandbox_valid`, `sandbox_skipped`, `sandbox_output` fields
 - `SandboxResult` is Pydantic `BaseModel` (not SQLModel), lives in `sandbox.py`
 - `creator/__init__.py` has jinja2 `ImportError` guard that raises -- sandbox import guard must be SEPARATE and soft (degrade, not raise)
+- Do NOT add sandbox exports to `creator/__init__.py`; import directly from `llm_pipeline.creator.sandbox`
+
+### Framework Auto-Discovery (CEO Decision)
+**Source:** CEO answer to Q4
+
+`importlib.util.find_spec('llm_pipeline')` returns a `ModuleSpec` whose `origin` or `submodule_search_locations` reveals the package install path. This works for:
+- **pip install**: `site-packages/llm_pipeline/` -- mount that directory
+- **editable install** (`pip install -e .`): points to source directory
+- **source checkout**: same as editable
+
+Mount discovered path as read-only bind mount at `/usr/local/lib/python3.11/site-packages/llm_pipeline/` (or equivalent) inside container. The generated step code's `from llm_pipeline.step import LLMStep` resolves naturally.
+
+Key implementation detail: must also mount pydantic, sqlmodel, sqlalchemy, pyyaml (llm_pipeline's core deps) or mount the entire `site-packages` directory. Mounting just `llm_pipeline/` is insufficient -- the framework imports its own deps.
+
+### Sample Data Auto-Generation (CEO Decision)
+**Source:** CEO answer to Q3, FieldDefinition model in models.py
+
+`FieldDefinition` has: `name`, `type_annotation`, `description`, `default`, `is_required`. Auto-generation strategy:
+
+| type_annotation | Generated value |
+|-----------------|----------------|
+| `str` | `"test_{name}"` or `description[:50]` |
+| `int` | `1` |
+| `float` | `1.0` |
+| `bool` | `True` |
+| `list[str]` | `["test_item"]` |
+| `dict[str, str]` | `{"key": "value"}` |
+| `Optional[X]` / `X \| None` | `None` if not required, else default for X |
+
+If `default` is set on FieldDefinition, use that. Otherwise generate from type_annotation.
+
+This data feeds into the run_test.py harness as `sample_data.json`, used to verify the import-check passes with realistic field shapes even if methods aren't called in v1.
 
 ### Dependency Management
 **Source:** step-1-docker-sdk-creator-integration.md, pyproject.toml analysis
@@ -60,14 +94,59 @@ Additional: `memswap_limit='512m'` (matches `mem_limit`) prevents swap usage -- 
 - `sandbox = ["docker>=7.0"]` follows same pattern
 - Import guard in `sandbox.py` degrades gracefully (unlike `creator/__init__.py` which raises)
 
+### run() Method Signature (Resolved)
+**Source:** Step-1 vs Step-2 inconsistency, resolved by analysis
+
+Use `run(self, artifacts: dict[str, str], sample_data: dict | None = None) -> SandboxResult`:
+- `artifacts` aligns with `CodeValidationContext.all_artifacts` (dict of filename -> code)
+- `sample_data` is auto-generated from instruction_fields by the caller (CodeValidationStep) before passing to sandbox
+- Step-1's `code: str` signature is discarded
+
+### run_test.py Harness (Resolved)
+**Source:** CEO answer to Q1 -- import-check only
+
+```python
+# run_test.py (generated into tmpdir, executed inside container)
+import sys
+import json
+
+results = {"import_ok": False, "errors": [], "modules_found": []}
+
+# Attempt to import each artifact module
+for module_file in sys.argv[1:]:
+    module_name = module_file.replace('.py', '')
+    try:
+        __import__(module_name)
+        results["modules_found"].append(module_name)
+    except Exception as e:
+        results["errors"].append(f"{module_name}: {type(e).__name__}: {e}")
+
+results["import_ok"] = len(results["errors"]) == 0
+print(json.dumps(results))
+sys.exit(0 if results["import_ok"] else 1)
+```
+
+Container command: `python /code/run_test.py step_code instructions_code extraction_code`
+
+This catches:
+- Missing framework imports (ImportError)
+- Syntax errors missed by ast.parse edge cases
+- Class definition errors (metaclass conflicts, invalid bases)
+- Import-time side effects that crash
+
+Does NOT test (deferred to future versions):
+- Runtime behavior of prepare_calls / process_instructions
+- Data flow correctness with sample data
+- Method-level logic errors
+
 ## Q&A History
 
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Q1: What should run_test.py actually do? Import-only, instantiate classes, or call methods with mock data? | PENDING | Determines harness complexity, whether framework must be in container, and sample_data requirements |
-| Q2: Should security scanning use simple string matching (per task spec) or AST-based analysis (per research)? | PENDING | ~5 lines vs ~80 lines implementation difference; false positive/negative tradeoffs |
-| Q3: Where does sample_data come from? User-provided, auto-generated from instruction_fields, or skip in v1? | PENDING | Affects StepCreatorInputData schema and test harness design |
-| Q4: Does the container need llm-pipeline installed to test generated code? (Generated code has `from llm_pipeline.step import LLMStep, step_definition`) | PENDING | Determines Docker image strategy: bare python:3.11-slim vs pre-built image vs source mount |
+| Q1: What should run_test.py do? | Import-check only -- verify module loads | Simplest harness. Framework must be in container (see Q4). No mock objects needed. |
+| Q2: Security scanning approach? | AST-based denylist using Python ast module | ~80 lines. No false positives on comments/strings. BLOCKED_MODULES + BLOCKED_BUILTINS + BLOCKED_ATTRIBUTES as frozensets. Can upgrade to allowlist later. |
+| Q3: Sample data source? | Auto-generate from instruction_fields spec | FieldDefinition has name, type_annotation, default, is_required. Generate type-appropriate synthetic values. No changes to StepCreatorInputData schema. |
+| Q4: Framework availability in container? | importlib auto-discovery + read-only mount | `importlib.util.find_spec('llm_pipeline')` locates package. Mount into container. Zero config. Works for pip install, editable install, source. |
 
 ## Assumptions Validated
 
@@ -77,26 +156,32 @@ Additional: `memswap_limit='512m'` (matches `mem_limit`) prevents swap usage -- 
 - [x] `container.wait(timeout=N)` raises `requests.exceptions.ReadTimeout` on timeout (confirmed via Context7 API docs)
 - [x] Task 45 completed with all creator files in place; `CodeValidationStep` does AST syntax check + LLM review; no runtime execution (confirmed via codebase inspection)
 - [x] `CodeValidationContext.all_artifacts` contains `dict[str, str]` mapping filename to code (confirmed in schemas.py and steps.py)
-- [x] Task 47 (StepIntegrator) reads `all_artifacts` from context and writes files -- sandbox result informs but does not block integration (confirmed from task 47 description)
+- [x] Task 47 (StepIntegrator) reads `all_artifacts` from context -- sandbox result informs but does not block integration (confirmed from task 47 description)
 - [x] `creator/__init__.py` raises ImportError on missing jinja2 -- sandbox must NOT follow this pattern (confirmed in __init__.py)
 - [x] `SandboxResult` belongs in `sandbox.py` not `models.py` -- it's Pydantic BaseModel, not SQLModel (models.py uses SQLModel pattern)
 - [x] Separate `sandbox = ["docker>=7.0"]` extra is correct dependency grouping (follows existing pyproject.toml pattern)
+- [x] FieldDefinition model has sufficient fields (name, type_annotation, description, default, is_required) for synthetic data generation (confirmed in models.py)
+- [x] `importlib.util.find_spec()` works for pip install, editable install, and source checkout (standard Python mechanism)
+- [x] Generated step code has `from llm_pipeline.step import LLMStep, step_definition` -- framework MUST be available in container for import-check (confirmed in step.py.j2 template and CodeGenerationInstructions.example)
 
 ## Open Items
 
-- **run_test.py harness content**: Completely unspecified. All 3 research files reference it but none define what it executes. This is the single biggest gap in the research.
-- **run() method signature inconsistency**: Step-1 uses `run(self, code: str, sample_data)`, Step-2 uses `run(self, artifacts: dict[str, str], sample_data)`. Step-2's `artifacts` dict aligns better with `CodeValidationContext.all_artifacts` but needs explicit resolution.
-- **Framework availability in container**: Generated step code has hard imports like `from llm_pipeline.step import LLMStep`. If the harness tries to import the module, the framework must be available. Options: pre-built image, source mount, or snippet-only testing.
-- **Scope of CodeSecurityValidator**: Research proposes a separate class with `SecurityIssue` dataclass -- more complex than task spec's `validate_code() -> list[str]`. Acceptable as internal implementation detail if external API stays `list[str]`.
-- **TYPE_CHECKING guard awareness**: Research notes imports inside `if TYPE_CHECKING:` blocks are flagged by AST scan but never execute. Decision on whether to skip/downgrade these is deferred.
-- **Image pull timeout/failure handling**: Step-2 recommends lazy pull but doesn't specify timeout or behavior when pull fails (e.g., no network). Should produce clear error in SandboxResult.
+- **Site-packages mount scope**: Mounting just `llm_pipeline/` is insufficient since the framework imports pydantic, sqlmodel, etc. Need to either mount entire site-packages or discover and mount each transitive dependency. Implementation detail for planning phase.
+- **TYPE_CHECKING guard awareness**: Imports inside `if TYPE_CHECKING:` blocks never execute at runtime. AST denylist will flag them as errors. Decision: accept false positives on these (rare in generated code) or add special handling. Low priority.
+- **Image pull timeout/failure handling**: Lazy pull of `python:3.11-slim` needs timeout and clear error in SandboxResult when pull fails (e.g., no network). Implementation detail.
+- **run_test.py PYTHONPATH setup**: Container needs `/code` on PYTHONPATH so `__import__('step_code')` works. Also needs the mounted site-packages on PYTHONPATH. Set via `environment` param in container config.
+- **Cross-platform path normalization for importlib**: `find_spec().submodule_search_locations` may return Windows paths on Windows host. Docker Desktop handles Windows-to-WSL2 path translation for bind mounts, but verify behavior with edge cases.
+- **Artifact filename normalization**: `all_artifacts` keys like `sentiment_analysis_step.py` need to map to importable module names (`sentiment_analysis_step`). The harness strips `.py` suffix.
 
 ## Recommendations for Planning
 
-1. **Resolve execution scope before planning** -- the answer to "what does run_test.py do" cascades into image strategy, sample data needs, and harness complexity. Recommend starting with import-check-only in v1.
-2. **Use `artifacts: dict[str, str]` as run() parameter** -- aligns with `CodeValidationContext.all_artifacts` which is the natural caller input.
-3. **Use AST-based denylist (not allowlist) for v1 security** -- provides the robustness benefits of AST (no false positives on comments/strings) without the restrictiveness of allowlist. Can upgrade to allowlist later.
-4. **Keep `CodeSecurityValidator` as internal class** -- expose `validate_code() -> list[str]` on StepSandbox per task spec; use structured `SecurityIssue` internally for extensibility.
-5. **Do NOT add sandbox exports to `creator/__init__.py`** -- sandbox has its own import guard pattern (soft degrade). Import directly from `llm_pipeline.creator.sandbox`.
-6. **`memswap_limit='512m'` and `pids_limit=50` should be included** despite not being in task spec -- they are low-cost additions that close real attack vectors.
-7. **Pin run() signature early in planning** to avoid rework across harness, tests, and integration code.
+1. **Use `artifacts: dict[str, str]` as run() parameter** -- aligns with `CodeValidationContext.all_artifacts`.
+2. **AST-based denylist with `BLOCKED_MODULES`, `BLOCKED_BUILTINS`, `BLOCKED_ATTRIBUTES` frozensets** -- `CodeSecurityValidator` internal class, `validate_code() -> list[str]` external API.
+3. **importlib auto-discovery** for framework mount -- `find_spec('llm_pipeline')` then mount the parent directory (site-packages or source root) as read-only. Consider mounting all of site-packages for simplicity (deps included).
+4. **Auto-generate sample data from instruction_fields** -- build a `_generate_sample_data(fields: list[FieldDefinition]) -> dict` utility. Map type_annotation strings to synthetic values. Write as `sample_data.json` in tmpdir even if not consumed by import-check harness (ready for future execution-scope upgrades).
+5. **Include `memswap_limit='512m'` and `pids_limit=50`** despite not being in task spec -- low-cost, high-value security additions.
+6. **Do NOT add sandbox to `creator/__init__.py`** -- import directly from `llm_pipeline.creator.sandbox`.
+7. **Container environment setup**: Set `PYTHONPATH=/code:/mounted-site-packages` so both generated code and framework are importable.
+8. **Plan for 3 files in sandbox.py**: `SandboxResult` (model), `CodeSecurityValidator` (AST scanner), `StepSandbox` (orchestrator). Single module, ~250-300 lines estimated.
+9. **run_test.py is generated at runtime** -- written into tmpdir by `StepSandbox._write_files()`, not a static file in the package. Content is the import-check harness from the harness section above.
+10. **Test strategy**: Unit tests mock docker client. Integration tests (optional, needs Docker) run real containers. Security validator tests use known-bad code snippets against AST scanner.
