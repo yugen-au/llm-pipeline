@@ -43,3 +43,68 @@ Four test classes:
 [x] Warnings are expected (framework path discovery returns None) -- not failures
 [x] Test names match plan spec exactly
 [x] Test classes match plan spec: TestCodeSecurityValidator, TestSandboxResult, TestStepSandbox_DockerUnavailable, TestStepSandbox_WithMockDocker
+
+---
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] No integration test for CodeValidationStep sandbox wiring: no test verified that `CodeValidationStep.process_instructions()` correctly wires sandbox results into `CodeValidationContext` via `_SANDBOX_AVAILABLE`, `StepSandbox().run()`, and `SampleDataGenerator().generate()`.
+
+### Changes Made
+#### File: `tests/creator/test_sandbox.py`
+Added `TestCodeValidationStepSandboxIntegration` class (9 tests) at end of file.
+
+Helpers added:
+- `_make_pipeline_mock(context)` - minimal `MagicMock` pipeline with `.context`, `.validated_input.include_extraction=False`
+- `_make_code_validation_step(pipeline)` - instantiates `CodeValidationStep` via `__new__` bypassing `LLMStep.__init__` (no DB/agent setup needed)
+- `_make_instructions(is_valid, issues)` - builds `CodeValidationInstructions` with sensible defaults
+- `_MINIMAL_CONTEXT` - module-level dict with all keys `process_instructions` reads from `ctx`
+
+Patching strategy: `patch.object(steps_module, "_SANDBOX_AVAILABLE", True/False)` controls the branch. `patch("llm_pipeline.creator.steps.StepSandbox")` and `patch("llm_pipeline.creator.steps.SampleDataGenerator")` mock the classes at their import site so constructor calls inside `process_instructions` return controlled mocks.
+
+Tests (sandbox-available path):
+```
+# Before: no integration coverage for steps.py sandbox wiring
+
+# After:
+test_sandbox_available_sets_sandbox_valid_from_result
+  -> import_ok=True in SandboxResult => result.sandbox_valid=True, sandbox_skipped=False
+
+test_sandbox_available_sets_sandbox_skipped_when_docker_unavailable
+  -> sandbox_skipped=True in SandboxResult => result.sandbox_skipped=True
+
+test_sandbox_available_security_issues_added_to_context_issues
+  -> security_issues from SandboxResult appended alongside llm issues
+
+test_sandbox_available_passes_artifacts_to_run
+  -> StepSandbox.run() receives artifact keys built from step_name
+
+test_sandbox_available_calls_sample_data_generator_with_fields
+  -> SampleDataGenerator.generate() called when instruction_fields non-empty
+
+test_sandbox_available_is_valid_false_when_import_fails
+  -> import_ok=False + sandbox_skipped=False => is_valid=False
+```
+
+Tests (sandbox-unavailable path):
+```
+test_sandbox_unavailable_sets_sandbox_output_message
+  -> sandbox_output == "sandbox module not available"
+
+test_sandbox_unavailable_sandbox_skipped_true
+  -> sandbox_skipped remains True
+
+test_sandbox_unavailable_is_valid_passes_when_syntax_and_llm_ok
+  -> is_valid=True when sandbox skipped and syntax+llm both pass
+```
+
+### Verification
+[x] 31/31 tests pass: `pytest tests/creator/test_sandbox.py -v` -> 31 passed, 6 warnings
+[x] Original 22 tests unaffected
+[x] Both `_SANDBOX_AVAILABLE=True` and `_SANDBOX_AVAILABLE=False` branches covered
+[x] `sandbox_valid`, `sandbox_skipped`, `sandbox_output` fields all asserted
+[x] `StepSandbox.run()` artifact keys asserted
+[x] `SampleDataGenerator.generate()` call asserted when fields present

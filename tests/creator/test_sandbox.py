@@ -355,3 +355,280 @@ class TestStepSandbox_WithMockDocker:
         assert result.sandbox_skipped is False
         assert len(result.errors) > 0
         assert any("docker daemon error" in e for e in result.errors)
+
+
+# ---------------------------------------------------------------------------
+# TestCodeValidationStepSandboxIntegration
+# ---------------------------------------------------------------------------
+
+
+def _make_pipeline_mock(context: dict) -> MagicMock:
+    """Build a minimal pipeline mock that CodeValidationStep.process_instructions needs."""
+    pipeline = MagicMock()
+    pipeline.context = context
+    pipeline.validated_input = MagicMock()
+    pipeline.validated_input.include_extraction = False
+    return pipeline
+
+
+def _make_code_validation_step(pipeline: MagicMock) -> "CodeValidationStep":
+    """Instantiate CodeValidationStep bypassing the normal LLMStep constructor."""
+    from llm_pipeline.creator.steps import CodeValidationStep
+    from llm_pipeline.creator.schemas import CodeValidationInstructions
+
+    step = CodeValidationStep.__new__(CodeValidationStep)
+    step.system_instruction_key = "code_validation"
+    step.user_prompt_key = "code_validation"
+    step.instructions = CodeValidationInstructions
+    step.pipeline = pipeline
+    return step
+
+
+def _make_instructions(
+    is_valid: bool = True,
+    issues: list[str] | None = None,
+) -> "CodeValidationInstructions":
+    from llm_pipeline.creator.schemas import CodeValidationInstructions
+
+    return CodeValidationInstructions(
+        is_valid=is_valid,
+        issues=issues or [],
+        suggestions=[],
+        naming_valid=True,
+        imports_valid=True,
+        type_annotations_valid=True,
+    )
+
+
+_MINIMAL_CONTEXT = {
+    "step_name": "my_step",
+    "step_code": "x = 1",
+    "instructions_code": "y = 2",
+    "extraction_code": None,
+    "prompt_yaml": "prompts: {}",
+    "system_prompt": "You are helpful.",
+    "user_prompt_template": "Do {task}.",
+    "instruction_fields": [],
+}
+
+
+class TestCodeValidationStepSandboxIntegration:
+    """Integration tests: CodeValidationStep.process_instructions() sandbox wiring."""
+
+    # -- sandbox-available path ------------------------------------------------
+
+    def test_sandbox_available_sets_sandbox_valid_from_result(self):
+        """When sandbox runs and import_ok=True, sandbox_valid=True in context."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        sandbox_result = SandboxResult(
+            import_ok=True,
+            sandbox_skipped=False,
+            output="all good",
+            errors=[],
+            modules_found=["my_step_step"],
+        )
+
+        with (
+            patch.object(steps_module, "_SANDBOX_AVAILABLE", True),
+            patch("llm_pipeline.creator.steps.StepSandbox") as MockSandbox,
+            patch("llm_pipeline.creator.steps.SampleDataGenerator") as MockSampleData,
+        ):
+            MockSandbox.return_value.run.return_value = sandbox_result
+            MockSampleData.return_value.generate.return_value = None
+
+            result = step.process_instructions([inst])
+
+        assert result.sandbox_valid is True
+        assert result.sandbox_skipped is False
+        assert result.sandbox_output == "all good"
+
+    def test_sandbox_available_sets_sandbox_skipped_when_docker_unavailable(self):
+        """When sandbox returns sandbox_skipped=True, context reflects that."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        sandbox_result = SandboxResult(
+            import_ok=True,
+            sandbox_skipped=True,
+            output="Docker unavailable; AST scan passed",
+            errors=[],
+            modules_found=[],
+        )
+
+        with (
+            patch.object(steps_module, "_SANDBOX_AVAILABLE", True),
+            patch("llm_pipeline.creator.steps.StepSandbox") as MockSandbox,
+            patch("llm_pipeline.creator.steps.SampleDataGenerator") as MockSampleData,
+        ):
+            MockSandbox.return_value.run.return_value = sandbox_result
+            MockSampleData.return_value.generate.return_value = None
+
+            result = step.process_instructions([inst])
+
+        assert result.sandbox_skipped is True
+        assert result.sandbox_output == "Docker unavailable; AST scan passed"
+
+    def test_sandbox_available_security_issues_added_to_context_issues(self):
+        """security_issues from SandboxResult are appended into context issues."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True, issues=["llm issue"])
+
+        sandbox_result = SandboxResult(
+            import_ok=False,
+            sandbox_skipped=True,
+            security_issues=["Blocked module import: os (line 1)"],
+            output="",
+            errors=[],
+            modules_found=[],
+        )
+
+        with (
+            patch.object(steps_module, "_SANDBOX_AVAILABLE", True),
+            patch("llm_pipeline.creator.steps.StepSandbox") as MockSandbox,
+            patch("llm_pipeline.creator.steps.SampleDataGenerator") as MockSampleData,
+        ):
+            MockSandbox.return_value.run.return_value = sandbox_result
+            MockSampleData.return_value.generate.return_value = None
+
+            result = step.process_instructions([inst])
+
+        assert "llm issue" in result.issues
+        assert any("os" in issue for issue in result.issues)
+
+    def test_sandbox_available_passes_artifacts_to_run(self):
+        """StepSandbox.run() receives the correct artifact map."""
+        import llm_pipeline.creator.steps as steps_module
+
+        ctx = _MINIMAL_CONTEXT.copy()
+        ctx["step_name"] = "calc_step"
+        ctx["step_code"] = "result = 42"
+        ctx["instructions_code"] = "answer = 42"
+
+        pipeline = _make_pipeline_mock(ctx)
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        sandbox_result = SandboxResult(import_ok=True, sandbox_skipped=False)
+
+        with (
+            patch.object(steps_module, "_SANDBOX_AVAILABLE", True),
+            patch("llm_pipeline.creator.steps.StepSandbox") as MockSandbox,
+            patch("llm_pipeline.creator.steps.SampleDataGenerator") as MockSampleData,
+        ):
+            MockSandbox.return_value.run.return_value = sandbox_result
+            MockSampleData.return_value.generate.return_value = None
+
+            step.process_instructions([inst])
+
+        call_kwargs = MockSandbox.return_value.run.call_args
+        artifacts_arg = call_kwargs.kwargs.get("artifacts") or call_kwargs[1].get("artifacts") or call_kwargs[0][0]
+        assert "calc_step_step.py" in artifacts_arg
+        assert "calc_step_instructions.py" in artifacts_arg
+
+    def test_sandbox_available_calls_sample_data_generator_with_fields(self):
+        """SampleDataGenerator.generate() is called when instruction_fields present."""
+        import llm_pipeline.creator.steps as steps_module
+
+        ctx = _MINIMAL_CONTEXT.copy()
+        ctx["instruction_fields"] = [
+            {"name": "sentiment", "type_annotation": "str", "description": "x", "default": None, "is_required": True}
+        ]
+
+        pipeline = _make_pipeline_mock(ctx)
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        sandbox_result = SandboxResult(import_ok=True, sandbox_skipped=False)
+
+        with (
+            patch.object(steps_module, "_SANDBOX_AVAILABLE", True),
+            patch("llm_pipeline.creator.steps.StepSandbox") as MockSandbox,
+            patch("llm_pipeline.creator.steps.SampleDataGenerator") as MockSampleData,
+        ):
+            MockSandbox.return_value.run.return_value = sandbox_result
+            MockSampleData.return_value.generate.return_value = {"sentiment": "positive"}
+
+            step.process_instructions([inst])
+
+        MockSampleData.return_value.generate.assert_called_once()
+
+    def test_sandbox_available_is_valid_false_when_import_fails(self):
+        """is_valid=False when sandbox import_ok=False and sandbox not skipped."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        sandbox_result = SandboxResult(
+            import_ok=False,
+            sandbox_skipped=False,
+            output="ImportError: no module named x",
+            errors=["ImportError"],
+            modules_found=[],
+        )
+
+        with (
+            patch.object(steps_module, "_SANDBOX_AVAILABLE", True),
+            patch("llm_pipeline.creator.steps.StepSandbox") as MockSandbox,
+            patch("llm_pipeline.creator.steps.SampleDataGenerator") as MockSampleData,
+        ):
+            MockSandbox.return_value.run.return_value = sandbox_result
+            MockSampleData.return_value.generate.return_value = None
+
+            result = step.process_instructions([inst])
+
+        assert result.is_valid is False
+        assert result.sandbox_valid is False
+
+    # -- sandbox-unavailable path ----------------------------------------------
+
+    def test_sandbox_unavailable_sets_sandbox_output_message(self):
+        """When _SANDBOX_AVAILABLE=False, sandbox_output='sandbox module not available'."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        with patch.object(steps_module, "_SANDBOX_AVAILABLE", False):
+            result = step.process_instructions([inst])
+
+        assert result.sandbox_output == "sandbox module not available"
+
+    def test_sandbox_unavailable_sandbox_skipped_true(self):
+        """When _SANDBOX_AVAILABLE=False, sandbox_skipped remains True."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        with patch.object(steps_module, "_SANDBOX_AVAILABLE", False):
+            result = step.process_instructions([inst])
+
+        assert result.sandbox_skipped is True
+
+    def test_sandbox_unavailable_is_valid_passes_when_syntax_and_llm_ok(self):
+        """is_valid=True when sandbox skipped and syntax+llm review both pass."""
+        import llm_pipeline.creator.steps as steps_module
+
+        pipeline = _make_pipeline_mock(_MINIMAL_CONTEXT.copy())
+        step = _make_code_validation_step(pipeline)
+        inst = _make_instructions(is_valid=True)
+
+        with patch.object(steps_module, "_SANDBOX_AVAILABLE", False):
+            result = step.process_instructions([inst])
+
+        assert result.is_valid is True
