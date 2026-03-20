@@ -42,7 +42,7 @@ export function PipelineList({
 }: PipelineListProps) {
   if (isLoading) {
     return (
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <SkeletonRows />
       </ScrollArea>
     )
@@ -63,7 +63,7 @@ export function PipelineList({
   }
 
   return (
-    <ScrollArea className="flex-1">
+    <ScrollArea className="min-h-0 flex-1">
       <div className="space-y-1 p-2">
         {pipelines.map((pipeline) => {
           const isSelected = selectedName === pipeline.name

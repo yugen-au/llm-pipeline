@@ -260,7 +260,7 @@ export function EventStream({ events, wsStatus, runId }: EventStreamProps) {
   return (
     <div className="flex h-full flex-col">
       <ConnectionIndicator status={wsStatus} />
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <TooltipProvider>
           <div ref={contentRef} className="space-y-0.5 p-2">
             {events.map((event, index) => {

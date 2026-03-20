@@ -178,7 +178,7 @@ function RunDetailPage() {
         <div className="flex min-h-0 flex-1 gap-4">
           {/* Step timeline - main column */}
           <CardContent className="flex flex-1 flex-col overflow-hidden rounded-xl border p-0">
-            <ScrollArea className="flex-1">
+            <ScrollArea className="min-h-0 flex-1">
               <StepTimeline
                 items={timelineItems}
                 isLoading={stepsLoading || eventsLoading}
