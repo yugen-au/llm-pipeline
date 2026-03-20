@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\master-51-visual-pipeline-editor
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-5-multi-strategy-dnd-canvas.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-properties-panel-auto-compile.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 5
+- Step to fix: 6
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /clauderic/dnd-kit
+3. Context7 library IDs to query: /tanstack/query
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 5
+1. Read REVIEW.md for issues assigned to Step 6
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-5-multi-strategy-dnd-canvas.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-6-properties-panel-auto-compile.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
