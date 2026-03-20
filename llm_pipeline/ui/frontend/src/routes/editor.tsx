@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import type { CompileResponse } from '@/api/editor'
+import type { AvailableStep, CompileResponse } from '@/api/editor'
+import { EditorPalettePanel } from '@/components/editor'
 
 export const Route = createFileRoute('/editor')({
   component: EditorPage,
@@ -27,21 +28,8 @@ export interface EditorStrategyState {
 type CompileStatus = 'idle' | 'pending' | 'error'
 
 // ---------------------------------------------------------------------------
-// Placeholder panel components
+// Placeholder panel components (replaced incrementally in Steps 4-7)
 // ---------------------------------------------------------------------------
-
-function EditorPalettePanel() {
-  return (
-    <Card className="flex h-full flex-col overflow-hidden p-4">
-      <h2 className="mb-2 text-xs font-medium text-muted-foreground">
-        Step Palette
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        Available steps will appear here.
-      </p>
-    </Card>
-  )
-}
 
 function EditorStrategyCanvas() {
   return (
@@ -74,8 +62,8 @@ function EditorPropertiesPanel() {
 // ---------------------------------------------------------------------------
 
 function EditorPage() {
-  // -- Editor state (wired in Steps 4-7) --
-  const [_strategies, _setStrategies] = useState<EditorStrategyState[]>([])
+  // -- Editor state (wired incrementally in Steps 4-7) --
+  const [strategies, setStrategies] = useState<EditorStrategyState[]>([])
   const [_selectedStepId, _setSelectedStepId] = useState<string | null>(null)
   const [_activeDraftPipelineId, _setActiveDraftPipelineId] = useState<
     number | null
@@ -84,9 +72,42 @@ function EditorPage() {
     useState<CompileResponse | null>(null)
   const [_compileStatus, _setCompileStatus] = useState<CompileStatus>('idle')
 
+  // -- Handlers --
+
+  /** Add a step from the palette to a specific strategy */
+  const handleAddStepToStrategy = useCallback(
+    (strategyName: string, step: AvailableStep) => {
+      setStrategies((prev) =>
+        prev.map((s) =>
+          s.strategy_name === strategyName
+            ? {
+                ...s,
+                steps: [
+                  ...s.steps,
+                  {
+                    id: crypto.randomUUID(),
+                    step_ref: step.step_ref,
+                    source: step.source,
+                  },
+                ],
+              }
+            : s,
+        ),
+      )
+    },
+    [],
+  )
+
   // -- Shared column content --
 
-  const paletteColumn = <EditorPalettePanel />
+  const strategyNames = strategies.map((s) => s.strategy_name)
+
+  const paletteColumn = (
+    <EditorPalettePanel
+      onAddStepToStrategy={handleAddStepToStrategy}
+      strategyNames={strategyNames}
+    />
+  )
 
   const canvasColumn = <EditorStrategyCanvas />
 
