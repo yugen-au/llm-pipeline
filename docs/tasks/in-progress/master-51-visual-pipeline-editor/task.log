@@ -55,3 +55,8 @@
 [2026-03-20 17:24:48] [INFO] Auto-updated agent statuses: Backend Editor Router: pending -> in-progress
 [2026-03-20 17:24:48] [INFO] Deleted 1 old contract file(s)
 [2026-03-20 17:24:48] [DEBUG] STATE.md atomic write complete
+[2026-03-20 21:49:57] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-20 21:50:16] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-03-20 21:53:29] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-03-20 21:54:37] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-20 21:54:58] [DEBUG] STATE.md atomic write complete
