@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: D
+## Current Group: E
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/master/49-step-creator-frontend
 ## Plugins: frontend-mobile-development, ui-design, backend-development
@@ -24,8 +24,8 @@
 | Shared Component Library | frontend-mobile-development:frontend-developer | implementation | 2 | - | B | complete | 0 | a8b575e5c0aa624ee | 835ea735 | - |
 | Creator API Layer | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | af8dc08f7e9309a37 | 6f96ab1f,835ea735 | - |
 | Monaco Editor Install + Vite | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | complete | 0 | aef3e0675bee3311f | e25cb28e | /suren-atoyan/monaco-react |
-| CreatorEditor Component | frontend-mobile-development:frontend-developer | implementation | 5 | - | D | complete | 0 | abb2299e775b3ddb0 | 767ddefa | /suren-atoyan/monaco-react |
-| CreatorInputForm + DraftPicker | ui-design:ui-designer | implementation | 6 | - | D | complete | 0 | a162fef283ca203bf | pending | - |
+| CreatorEditor Component | frontend-mobile-development:frontend-developer | implementation | 5 | - | D | complete | 0 | abb2299e775b3ddb0 | 767ddefa,a097f556 | /suren-atoyan/monaco-react |
+| CreatorInputForm + DraftPicker | ui-design:ui-designer | implementation | 6 | - | D | complete | 0 | a162fef283ca203bf | a097f556 | - |
 | CreatorResultsPanel | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 0 | a33fb04b53bfb58c8 | a097f556 | - |
-| Route Skeleton + Sidebar Nav | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | pending | pending | - |
+| Route Skeleton + Sidebar Nav | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | in-progress | 0 | pending | pending | - |
 | Wire DraftPicker Integration | frontend-mobile-development:frontend-developer | implementation | 9 | - | F | pending | 0 | pending | pending | - |
