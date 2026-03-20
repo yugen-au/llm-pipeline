@@ -37,6 +37,12 @@ export const queryKeys = {
     drafts: () => ['creator', 'drafts'] as const,
     draft: (id: number) => ['creator', 'drafts', id] as const,
   },
+  editor: {
+    all: ['editor'] as const,
+    availableSteps: () => ['editor', 'available-steps'] as const,
+    drafts: () => ['editor', 'drafts'] as const,
+    draft: (id: number) => ['editor', 'drafts', id] as const,
+  },
 } as const
 
 /**

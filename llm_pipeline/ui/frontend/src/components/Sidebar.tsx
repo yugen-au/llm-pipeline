@@ -5,6 +5,7 @@ import {
   FileText,
   Box,
   Wand2,
+  GitBranch,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -42,6 +43,7 @@ const navItems: NavItem[] = [
   { to: '/prompts', label: 'Prompts', icon: FileText },
   { to: '/pipelines', label: 'Pipelines', icon: Box },
   { to: '/creator', label: 'Creator', icon: Wand2 },
+  { to: '/editor', label: 'Editor', icon: GitBranch },
 ]
 
 const activeLinkClasses =
