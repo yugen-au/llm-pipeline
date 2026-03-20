@@ -1,7 +1,7 @@
 ## Task: master-51-visual-pipeline-editor
 ## Description: Implement Visual Pipeline Editor view with DnD step reordering, add/remove steps, compile-to-validate, and step properties panel
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
@@ -28,5 +28,5 @@
 | Multi-Strategy DnD Canvas | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 1 | a8b2f936da790274e | e5d5a7d2,1eb2ea25 | /clauderic/dnd-kit |
 | Properties Panel + Auto-Compile | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 1 | afce527f2195db074 | cf71f184,c882c8d8 | /tanstack/query |
 | Fork Pipeline Flow | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 0 | a10c7179d19981a2b | cf71f184 | /tanstack/query |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a2c4b12dc2975a5e4 | 1df76545 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a6d179fd53e16c503 | e61ca9bb | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a2c4b12dc2975a5e4 | 1df76545,01de659a | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | a6d179fd53e16c503 | e61ca9bb | - |
