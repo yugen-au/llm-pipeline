@@ -67,7 +67,7 @@ function ScrollBar({
         data-slot="scroll-area-thumb"
         className={cn(
           "relative flex-1 rounded-full",
-          thin ? "bg-border/50 hover:bg-border/80" : "bg-border",
+          thin ? "bg-foreground/15 hover:bg-foreground/30" : "bg-foreground/20 hover:bg-foreground/40",
         )}
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
