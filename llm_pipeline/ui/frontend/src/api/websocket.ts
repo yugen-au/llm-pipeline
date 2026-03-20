@@ -118,18 +118,32 @@ function parseWsMessage(data: string): WsMessage | null {
  * Append a pipeline event to the events query cache for a run.
  * Also writes to step-filtered cache if the event has a step_name.
  */
+/** Deduplicated append -- skips if an event with same timestamp+type already cached. */
+function appendIfNew(items: EventItem[], event: EventItem): EventItem[] | null {
+  const isDup = items.some(
+    (e) => e.timestamp === event.timestamp && e.event_type === event.event_type,
+  )
+  return isDup ? null : [...items, event]
+}
+
 function appendEventToCache(qc: QueryClient, runId: string, event: EventItem): void {
   // Append to unfiltered events cache
-  qc.setQueryData<EventListResponse>(queryKeys.runs.events(runId, {}), (old) =>
-    old ? { ...old, items: [...old.items, event], total: old.total + 1 } : undefined,
-  )
+  qc.setQueryData<EventListResponse>(queryKeys.runs.events(runId, {}), (old) => {
+    if (!old) return undefined
+    const updated = appendIfNew(old.items, event)
+    return updated ? { ...old, items: updated, total: old.total + 1 } : old
+  })
 
   // Fan-out to step-filtered cache if event has step_name
   const stepName = event.event_data?.step_name as string | undefined
   if (stepName) {
     qc.setQueryData<EventListResponse>(
       queryKeys.runs.events(runId, { step_name: stepName }),
-      (old) => (old ? { ...old, items: [...old.items, event], total: old.total + 1 } : undefined),
+      (old) => {
+        if (!old) return undefined
+        const updated = appendIfNew(old.items, event)
+        return updated ? { ...old, items: updated, total: old.total + 1 } : old
+      },
     )
   }
 }
