@@ -6,7 +6,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useRun, useRunContext } from '@/api/runs'
 import { useSteps } from '@/api/steps'
 import { useEvents } from '@/api/events'
-import { useWebSocket } from '@/api/websocket'
+import { useSubscribeRun } from '@/api/websocket'
 import { useUIStore } from '@/stores/ui'
 import { StepTimeline, deriveStepStatus } from '@/components/runs/StepTimeline'
 import { ContextEvolution } from '@/components/runs/ContextEvolution'
@@ -106,13 +106,13 @@ function RunNotFound() {
 function RunDetailPage() {
   const { runId } = Route.useParams()
 
-  // WebSocket for live updates
-  useWebSocket(runId)
+  // Subscribe to live events for this run
+  useSubscribeRun(runId)
 
   // Data hooks
   const { data: run, isLoading: runLoading, isError: runError } = useRun(runId)
-  const { data: steps, isLoading: stepsLoading, isError: stepsError } = useSteps(runId, run?.status)
-  const { data: events, isLoading: eventsLoading, isError: eventsError } = useEvents(runId, {}, run?.status)
+  const { data: steps, isLoading: stepsLoading, isError: stepsError } = useSteps(runId)
+  const { data: events, isLoading: eventsLoading, isError: eventsError } = useEvents(runId)
   const { data: context, isLoading: contextLoading, isError: contextError } = useRunContext(
     runId,
     isRunStatus(run?.status) ? run.status : undefined,

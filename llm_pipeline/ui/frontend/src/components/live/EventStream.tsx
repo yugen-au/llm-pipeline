@@ -68,8 +68,6 @@ const statusDotColors: Record<WsConnectionStatus, string> = {
   idle: 'bg-gray-400',
   connecting: 'bg-yellow-400',
   connected: 'bg-green-500',
-  replaying: 'bg-green-500',
-  closed: 'bg-muted-foreground',
   error: 'bg-red-500',
 }
 
@@ -77,8 +75,6 @@ const statusLabels: Record<WsConnectionStatus, string> = {
   idle: 'Idle',
   connecting: 'Connecting...',
   connected: 'Connected',
-  replaying: 'Replaying...',
-  closed: 'Disconnected',
   error: 'Error',
 }
 
