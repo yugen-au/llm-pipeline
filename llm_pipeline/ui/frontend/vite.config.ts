@@ -36,6 +36,9 @@ export default defineConfig(({ mode: _mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
+          if (id.includes('node_modules/monaco-editor/')) {
+            return 'monaco'
+          }
           if (id.includes('node_modules/react-dom/') || id.includes('node_modules/react/')) {
             return 'vendor'
           }
