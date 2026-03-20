@@ -92,3 +92,62 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 Approve contingent on fixing the MEDIUM issue: 409 rename suggested_name data loss. This is a planned feature (collision handling with suggestion) that silently fails. The fix is small -- either restructure the backend 409 response to nest suggested_name inside the `detail` field (which apiClient preserves), or modify the frontend to handle the 409 differently. All other issues are LOW severity and can be addressed in a follow-up.
+
+---
+
+# Re-Review: 409 Rename Fix Verification
+
+## Overall Assessment
+**Status:** complete
+The MEDIUM issue (409 rename suggested_name silently lost) is resolved. The fix introduces a RenameConflictError subclass in types.ts, bypasses apiClient with raw fetch in useRenameDraft to preserve the full 409 response body, and correctly surfaces the suggested name in handleRename. No new significant issues introduced.
+
+## Fix Verification
+
+### RenameConflictError (src/api/types.ts lines 518-526)
+- Extends ApiError correctly -- existing `instanceof ApiError` checks still match
+- `suggestedName` stored as readonly property
+- Constructor delegates to super(409, detail)
+- Clean, minimal class design
+
+### useRenameDraft (src/api/creator.ts lines 174-209)
+- Uses raw fetch instead of apiClient -- documented in JSDoc
+- Checks `response.status === 409` before generic non-OK handling (correct order)
+- Parses full 409 body to extract `suggested_name`
+- Falls back to `vars.name` if `suggested_name` absent (defensive)
+- Non-409 errors replicate apiClient's extraction pattern manually
+- Success path only reached after both error branches throw (verified flow)
+
+### handleRename (src/routes/creator.tsx lines 317-337)
+- `instanceof RenameConflictError` checked before `instanceof ApiError` (correct order since RenameConflictError extends ApiError)
+- Displays "Name conflict. Suggested: {suggestedName}" on 409
+- Falls through to ApiError.detail for other HTTP errors
+- Final fallback: generic "Rename failed" string
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None -- previous MEDIUM issue resolved
+
+### Low
+#### useRenameDraft duplicates '/api' prefix knowledge
+**Step:** 8
+**Details:** The raw fetch in useRenameDraft hardcodes `'/api/creator/drafts/'` prefix (line 179) instead of going through apiClient. This duplicates the base URL knowledge from client.ts. If the API base path changes, this endpoint would break silently. Documented in JSDoc as intentional trade-off to preserve full 409 response body. Acceptable given apiClient is a thin wrapper with no auth/retry middleware.
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/frontend/src/api/types.ts | pass | RenameConflictError extends ApiError cleanly, readonly props, proper constructor delegation |
+| llm_pipeline/ui/frontend/src/api/creator.ts | pass | Raw fetch for rename preserves 409 body, error handling replicates apiClient pattern, JSDoc documents rationale |
+| llm_pipeline/ui/frontend/src/routes/creator.tsx | pass | instanceof check order correct (subclass before superclass), suggested name surfaced in error message |
+
+## New Issues Introduced
+- LOW: '/api' prefix duplicated in useRenameDraft raw fetch (Step 8)
+
+## Recommendation
+**Decision:** APPROVE
+The MEDIUM issue from the first review is fully resolved. RenameConflictError design is clean (subclass approach, correct instanceof ordering). The only new concern is the '/api' prefix duplication which is LOW severity and documented. All remaining issues from the first review are LOW and non-blocking.
