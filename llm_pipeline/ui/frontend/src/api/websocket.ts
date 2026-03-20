@@ -1,24 +1,32 @@
 /**
- * WebSocket hook with TanStack Query cache integration.
+ * Single always-on WebSocket connection to /ws/runs.
  *
- * Connects to /ws/runs/{runId} and handles three server behaviors:
- * 1. **Not found** - server closes with 4004, hook sets error status
- * 2. **Replay** - server replays persisted events then sends replay_complete
- * 3. **Live streaming** - server streams events in real-time, ends with stream_complete
+ * useGlobalWebSocket() -- mount once at app root. Manages the WS
+ * lifecycle, reconnects on failure, and dispatches incoming messages
+ * to the TanStack Query cache and Zustand store.
  *
- * Pipeline events are appended to the event query cache via setQueryData.
- * Control messages (heartbeat, stream_complete, replay_complete, error) update
- * the Zustand connection store instead.
+ * useSubscribeRun(runId) -- mount in any component that needs per-run
+ * events. Sends subscribe/unsubscribe messages over the global WS.
+ * No WS lifecycle management -- just subscription control.
  */
 
 import { useEffect, useRef, useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import { useWsStore } from '../stores/websocket'
 import { queryKeys } from './query-keys'
-import type { WsMessage, EventListResponse, EventItem } from './types'
+import type {
+  WsMessage,
+  WsClientMessage,
+  EventListResponse,
+  EventItem,
+  StepListItem,
+  StepListResponse,
+  RunDetail,
+} from './types'
 
-/** Close codes that should NOT trigger reconnection. */
-const NO_RECONNECT_CODES = new Set([1000, 4004])
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 /** Max reconnect delay in ms (capped exponential backoff). */
 const MAX_RECONNECT_DELAY = 30_000
@@ -26,33 +34,52 @@ const MAX_RECONNECT_DELAY = 30_000
 /** Base delay for reconnect backoff in ms. */
 const BASE_RECONNECT_DELAY = 1_000
 
-/**
- * Check whether an event_type is step-scoped (warrants steps list invalidation).
- *
- * Step-scoped events contain "step" in their type string, matching backend
- * event types like "step_started", "step_completed", "step_failed", etc.
- */
-function isStepScopedEvent(eventType: string): boolean {
-  return eventType.includes('step')
-}
+// ---------------------------------------------------------------------------
+// Module-level WS singleton state
+// ---------------------------------------------------------------------------
+
+let globalWs: WebSocket | null = null
+let pendingMessages: WsClientMessage[] = []
 
 /**
- * Construct the WebSocket URL for a given run.
- *
- * Uses the current page origin with ws/wss protocol. In dev, Vite's
- * proxy config handles the upgrade to the backend port.
+ * Send a message over the global WS. If not yet open, queues for delivery.
  */
-function buildWsUrl(runId: string): string {
+function sendWsMessage(msg: WsClientMessage): void {
+  if (globalWs && globalWs.readyState === WebSocket.OPEN) {
+    globalWs.send(JSON.stringify(msg))
+  } else {
+    pendingMessages.push(msg)
+  }
+}
+
+/** Flush any messages queued while WS was connecting. */
+function flushPending(): void {
+  if (!globalWs || globalWs.readyState !== WebSocket.OPEN) return
+  for (const msg of pendingMessages) {
+    globalWs.send(JSON.stringify(msg))
+  }
+  pendingMessages = []
+}
+
+// ---------------------------------------------------------------------------
+// Message parsing
+// ---------------------------------------------------------------------------
+
+/**
+ * Construct the WebSocket URL for the global /ws/runs endpoint.
+ */
+function buildWsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/runs/${runId}`
+  return `${protocol}//${window.location.host}/ws/runs`
 }
 
 /**
  * Parse raw JSON into a WsMessage discriminated union member.
  *
- * The backend sends control messages with a `type` field, but raw pipeline
- * events only have `event_type`. This function tags raw events with
- * `type: 'pipeline_event'` so the caller can use `switch(msg.type)`.
+ * Control messages have a `type` field. Raw pipeline events only have
+ * `event_type`; this function tags them with `type: 'pipeline_event'`
+ * and normalizes the shape to match EventItem (top-level keys extracted,
+ * rest nested into event_data).
  */
 function parseWsMessage(data: string): WsMessage | null {
   let raw: Record<string, unknown>
@@ -67,60 +94,126 @@ function parseWsMessage(data: string): WsMessage | null {
     return raw as unknown as WsMessage
   }
 
-  // Raw pipeline events have `event_type` but no `type`; tag them
+  // Raw pipeline events have `event_type` but no `type`; normalize
   if (typeof raw.event_type === 'string') {
-    return { ...raw, type: 'pipeline_event' } as unknown as WsMessage
+    const { event_type, run_id, pipeline_name, timestamp, ...rest } = raw
+    return {
+      type: 'pipeline_event',
+      event_type: event_type as string,
+      run_id: (run_id as string) ?? '',
+      pipeline_name: (pipeline_name as string) ?? '',
+      timestamp: (timestamp as string) ?? '',
+      event_data: rest as Record<string, unknown>,
+    } as unknown as WsMessage
   }
 
   return null
 }
 
+// ---------------------------------------------------------------------------
+// Cache helpers
+// ---------------------------------------------------------------------------
+
 /**
- * Connect to the WebSocket stream for a pipeline run.
- *
- * Returns `{ status, error }` from the Zustand store so consumers
- * can render connection state in the UI.
- *
- * @param runId - Pipeline run ID to stream, or null to stay idle
+ * Append a pipeline event to the events query cache for a run.
+ * Also writes to step-filtered cache if the event has a step_name.
  */
-export function useWebSocket(runId: string | null) {
-  const queryClient = useQueryClient()
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const hadConnectionRef = useRef(false)
-  const mountedRef = useRef(true)
-  // Stable ref to latest connect fn to avoid self-reference in useCallback deps
-  const connectRef = useRef<(() => void) | null>(null)
-
-  const { status, error, setStatus, setError, incrementReconnect, reset } = useWsStore()
-
-  /**
-   * Append a pipeline event to the events query cache.
-   * Only updates if there is existing cached data (avoids creating
-   * cache entries before the REST query has populated them).
-   */
-  const appendEventToCache = useCallback(
-    (event: EventItem) => {
-      if (!runId) return
-      queryClient.setQueryData<EventListResponse>(queryKeys.runs.events(runId, {}), (old) =>
-        old ? { ...old, items: [...old.items, event], total: old.total + 1 } : undefined,
-      )
-    },
-    [queryClient, runId],
+function appendEventToCache(qc: QueryClient, runId: string, event: EventItem): void {
+  // Append to unfiltered events cache
+  qc.setQueryData<EventListResponse>(queryKeys.runs.events(runId, {}), (old) =>
+    old ? { ...old, items: [...old.items, event], total: old.total + 1 } : undefined,
   )
 
-  /**
-   * Connect (or reconnect) to the WebSocket endpoint.
-   */
-  const connect = useCallback(() => {
-    if (!runId || !mountedRef.current) return
+  // Fan-out to step-filtered cache if event has step_name
+  const stepName = event.event_data?.step_name as string | undefined
+  if (stepName) {
+    qc.setQueryData<EventListResponse>(
+      queryKeys.runs.events(runId, { step_name: stepName }),
+      (old) => (old ? { ...old, items: [...old.items, event], total: old.total + 1 } : undefined),
+    )
+  }
+}
 
-    // React 19 Strict Mode guard: skip if a connection already exists
-    // and is not in a terminal state
+/**
+ * Upsert a step into the steps query cache from a step_completed event.
+ * Preserves existing `model` field since it's not in the event payload.
+ */
+function upsertStepFromEvent(qc: QueryClient, runId: string, event: EventItem): void {
+  const ed = event.event_data
+  const stepName = ed.step_name as string | undefined
+  const stepNumber = ed.step_number as number | undefined
+  if (!stepName || stepNumber == null) return
+
+  const newStep: StepListItem = {
+    step_name: stepName,
+    step_number: stepNumber,
+    execution_time_ms: (ed.execution_time_ms as number) ?? null,
+    model: null, // not available in event; preserve existing if present
+    created_at: event.timestamp,
+  }
+
+  qc.setQueryData<StepListResponse>(queryKeys.runs.steps(runId), (old) => {
+    if (!old) return { items: [newStep] }
+    const idx = old.items.findIndex((s) => s.step_number === stepNumber)
+    if (idx >= 0) {
+      // Preserve model from existing entry
+      const existing = old.items[idx]
+      const updated = { ...newStep, model: existing.model }
+      const items = [...old.items]
+      items[idx] = updated
+      return { ...old, items }
+    }
+    return { ...old, items: [...old.items, newStep] }
+  })
+}
+
+/**
+ * Write run detail from enriched stream_complete message.
+ */
+function writeRunDetailFromComplete(
+  qc: QueryClient,
+  msg: Extract<WsMessage, { type: 'stream_complete' }>,
+): void {
+  qc.setQueryData<RunDetail>(queryKeys.runs.detail(msg.run_id), (old) => {
+    if (!old) return undefined
+    return {
+      ...old,
+      status: msg.status ?? old.status,
+      completed_at: msg.completed_at ?? old.completed_at,
+      total_time_ms: msg.total_time_ms ?? old.total_time_ms,
+      step_count: msg.step_count ?? old.step_count,
+    }
+  })
+
+  // Also invalidate run list so it picks up the new status
+  qc.invalidateQueries({ queryKey: queryKeys.runs.all })
+}
+
+// ---------------------------------------------------------------------------
+// useGlobalWebSocket
+// ---------------------------------------------------------------------------
+
+/**
+ * Mount once at app root. Manages the single WS connection lifecycle.
+ * All incoming messages are dispatched to caches/stores as side effects.
+ */
+export function useGlobalWebSocket(): void {
+  const queryClient = useQueryClient()
+  const mountedRef = useRef(true)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hadConnectionRef = useRef(false)
+  const connectRef = useRef<(() => void) | null>(null)
+
+  const { setStatus, setError, setLatestRun, incrementReconnect } = useWsStore()
+
+  const connect = useCallback(() => {
+    if (!mountedRef.current) return
+
+    // Guard: skip if already connecting/open
     if (
-      wsRef.current &&
-      (wsRef.current.readyState === WebSocket.CONNECTING ||
-        wsRef.current.readyState === WebSocket.OPEN)
+      globalWs &&
+      (globalWs.readyState === WebSocket.CONNECTING ||
+        globalWs.readyState === WebSocket.OPEN)
     ) {
       return
     }
@@ -128,8 +221,8 @@ export function useWebSocket(runId: string | null) {
     setStatus('connecting')
     setError(null)
 
-    const ws = new WebSocket(buildWsUrl(runId))
-    wsRef.current = ws
+    const ws = new WebSocket(buildWsUrl())
+    globalWs = ws
 
     ws.onopen = () => {
       if (!mountedRef.current) {
@@ -138,6 +231,7 @@ export function useWebSocket(runId: string | null) {
       }
       hadConnectionRef.current = true
       setStatus('connected')
+      flushPending()
     }
 
     ws.onmessage = (event) => {
@@ -148,44 +242,38 @@ export function useWebSocket(runId: string | null) {
 
       switch (msg.type) {
         case 'heartbeat':
-          // keep-alive, no-op
           break
 
-        case 'replay_complete':
-          setStatus('closed')
+        case 'run_created':
+          setLatestRun(msg)
+          // Invalidate run list so new run appears
+          queryClient.invalidateQueries({ queryKey: queryKeys.runs.all })
           break
 
-        case 'stream_complete':
-          setStatus('closed')
-          // refetch run detail to pick up final status/timing
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.runs.detail(runId),
-          })
-          break
-
-        case 'error':
-          setStatus('error')
-          setError(msg.detail)
-          break
-
-        case 'pipeline_event': {
-          // Transition to 'replaying' on first event if still 'connected'
-          // so consumers can show "replaying history..." UI
-          const currentStatus = useWsStore.getState().status
-          if (currentStatus === 'connected') {
-            setStatus('replaying')
+        case 'pipeline_event':
+          appendEventToCache(queryClient, msg.run_id, msg)
+          if (msg.event_type === 'step_completed') {
+            upsertStepFromEvent(queryClient, msg.run_id, msg)
           }
-
-          appendEventToCache(msg)
-
-          // Invalidate steps list when event is step-scoped
-          if (isStepScopedEvent(msg.event_type)) {
+          // Invalidate steps on any step-scoped event (step_started, step_failed, etc.)
+          if (msg.event_type.includes('step') && msg.event_type !== 'step_completed') {
             queryClient.invalidateQueries({
-              queryKey: queryKeys.runs.steps(runId),
+              queryKey: queryKeys.runs.steps(msg.run_id),
             })
           }
           break
-        }
+
+        case 'stream_complete':
+          writeRunDetailFromComplete(queryClient, msg)
+          break
+
+        case 'replay_complete':
+          // Replay done; no special action needed, events already in cache
+          break
+
+        case 'error':
+          // Per-run errors (e.g. "Run not found" on subscribe)
+          break
       }
     }
 
@@ -194,28 +282,14 @@ export function useWebSocket(runId: string | null) {
       setStatus('error')
     }
 
-    ws.onclose = (event) => {
+    ws.onclose = () => {
       if (!mountedRef.current) return
-      wsRef.current = null
+      globalWs = null
 
-      if (event.code === 4004) {
-        setStatus('error')
-        setError('Run not found')
-        return
-      }
-
-      if (event.code === 1000) {
-        // Normal closure (replay complete or stream complete)
-        // Status already set by the control message handler
-        return
-      }
-
-      // Unexpected disconnect -- attempt reconnection if we had
-      // a successful connection previously
-      if (hadConnectionRef.current && !NO_RECONNECT_CODES.has(event.code)) {
+      // Reconnect with exponential backoff
+      if (hadConnectionRef.current) {
         incrementReconnect()
         const count = useWsStore.getState().reconnectCount
-
         const delay = Math.min(BASE_RECONNECT_DELAY * 2 ** (count - 1), MAX_RECONNECT_DELAY)
 
         reconnectTimerRef.current = setTimeout(() => {
@@ -224,45 +298,65 @@ export function useWebSocket(runId: string | null) {
         }, delay)
       }
     }
-  }, [runId, queryClient, setStatus, setError, incrementReconnect, appendEventToCache])
+  }, [queryClient, setStatus, setError, setLatestRun, incrementReconnect])
 
-  // Main effect: connect when runId changes, clean up on unmount / runId change
   useEffect(() => {
-    // Keep ref current so onclose can call latest connect without stale closure
     connectRef.current = connect
-
     mountedRef.current = true
     hadConnectionRef.current = false
-
-    if (!runId) {
-      reset()
-      return
-    }
 
     connect()
 
     return () => {
       mountedRef.current = false
 
-      // Clear any pending reconnect timer
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
       }
 
-      // Close the WebSocket if still open
-      if (wsRef.current) {
-        wsRef.current.onopen = null
-        wsRef.current.onmessage = null
-        wsRef.current.onerror = null
-        wsRef.current.onclose = null
-        wsRef.current.close()
-        wsRef.current = null
+      if (globalWs) {
+        globalWs.onopen = null
+        globalWs.onmessage = null
+        globalWs.onerror = null
+        globalWs.onclose = null
+        globalWs.close()
+        globalWs = null
       }
 
-      reset()
+      pendingMessages = []
+      useWsStore.getState().reset()
     }
-  }, [runId, connect, reset])
+  }, [connect])
+}
 
-  return { status, error }
+// ---------------------------------------------------------------------------
+// useSubscribeRun
+// ---------------------------------------------------------------------------
+
+/**
+ * Subscribe to events for a specific run over the global WS.
+ *
+ * On mount: sends subscribe message and seeds empty event cache.
+ * On unmount or runId change: sends unsubscribe for the old run_id.
+ *
+ * @param runId - Pipeline run ID to subscribe to, or null to stay idle
+ */
+export function useSubscribeRun(runId: string | null): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    if (!runId) return
+
+    // Seed event cache so WS events arriving before REST fetch aren't dropped
+    queryClient.setQueryData(queryKeys.runs.events(runId, {}), (old: EventListResponse | undefined) =>
+      old ?? { items: [], total: 0, offset: 0, limit: 50 },
+    )
+
+    sendWsMessage({ action: 'subscribe', run_id: runId })
+
+    return () => {
+      sendWsMessage({ action: 'unsubscribe', run_id: runId })
+    }
+  }, [runId, queryClient])
 }

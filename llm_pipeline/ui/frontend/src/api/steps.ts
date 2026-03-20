@@ -21,8 +21,6 @@ export function useSteps(runId: string, runStatus?: RunStatus | string) {
       apiClient<StepListResponse>('/runs/' + runId + '/steps'),
     enabled: Boolean(runId),
     staleTime: runStatus && isTerminalStatus(runStatus) ? Infinity : 5_000,
-    refetchInterval:
-      runStatus && !isTerminalStatus(runStatus) ? 3_000 : false,
   })
 }
 

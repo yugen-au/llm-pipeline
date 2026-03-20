@@ -6,8 +6,7 @@ import { useCreateRun } from '@/api/runs'
 import { usePipeline } from '@/api/pipelines'
 import { useSteps } from '@/api/steps'
 import { useEvents } from '@/api/events'
-import { useWebSocket } from '@/api/websocket'
-import { useRunNotifications } from '@/api/useRunNotifications'
+import { useSubscribeRun } from '@/api/websocket'
 import { useUIStore } from '@/stores/ui'
 import { useWsStore } from '@/stores/websocket'
 import type { WsConnectionStatus } from '@/stores/websocket'
@@ -34,25 +33,30 @@ const TERMINAL_EVENT_TYPES = new Set(['pipeline_completed', 'pipeline_failed'])
 /**
  * Derive RunStatus from the WS connection status and the event stream.
  *
- * - `connected` / `connecting` / `replaying` -> run is `running`
- * - `closed` with terminal pipeline event (`pipeline_completed`) -> `completed`
- * - `closed` with `pipeline_failed` event -> `failed`
- * - `error` or `closed` without terminal event -> `failed` (abnormal disconnect)
- * - `idle` (no active run) -> undefined
+ * - `connected` / `connecting` -> run is `running`
+ * - `idle` with terminal pipeline event -> `completed` or `failed`
+ * - `error` -> `failed`
+ * - `idle` (no active run, no events) -> undefined
  */
 function deriveRunStatus(
   wsStatus: WsConnectionStatus,
   events: EventItem[],
 ): RunStatus | undefined {
-  if (wsStatus === 'idle') return undefined
-
   // Active connection means the run is still executing
-  if (wsStatus === 'connecting' || wsStatus === 'connected' || wsStatus === 'replaying') {
+  if (wsStatus === 'connecting' || wsStatus === 'connected') {
+    // Check if we've already received a terminal event
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (TERMINAL_EVENT_TYPES.has(events[i].event_type)) {
+        return events[i].event_type === 'pipeline_completed' ? 'completed' : 'failed'
+      }
+    }
     return 'running'
   }
 
-  // WS closed or errored -- check events for terminal status
-  // Use reverse loop instead of findLast (tsconfig lib: ES2020, findLast needs ES2023)
+  // WS error
+  if (wsStatus === 'error') return 'failed'
+
+  // Idle -- check events for terminal status
   let lastTerminal: EventItem | undefined
   for (let i = events.length - 1; i >= 0; i--) {
     if (TERMINAL_EVENT_TYPES.has(events[i].event_type)) {
@@ -64,12 +68,7 @@ function deriveRunStatus(
     return lastTerminal.event_type === 'pipeline_completed' ? 'completed' : 'failed'
   }
 
-  // WS error or closed without a terminal pipeline event -> treat as failed
-  if (wsStatus === 'error') return 'failed'
-
-  // closed without terminal event (e.g. replay of a completed run that has
-  // no pipeline_completed event in the stream -- shouldn't happen but safe default)
-  return 'completed'
+  return undefined
 }
 
 export const Route = createFileRoute('/live')({
@@ -93,16 +92,13 @@ function LivePage() {
   const { data: pipelineDetail } = usePipeline(selectedPipeline ?? '')
   const inputSchema = pipelineDetail?.pipeline_input_schema ?? null
 
-  useWebSocket(activeRunId)
+  // Subscribe to active run events via global WS
+  useSubscribeRun(activeRunId)
   const wsStoreStatus = useWsStore((s) => s.status)
-  const { latestRun } = useRunNotifications()
+  const latestRun = useWsStore((s) => s.latestRun)
   const { selectedStepId, stepDetailOpen, selectStep, closeStepDetail } = useUIStore()
 
-  // -- Derived run status from WS + events (used by useEvents, useSteps, StepDetailPanel) --
-  // Must be computed before useEvents/useSteps so they receive the status on first render.
-  // On initial render (no events yet), wsStoreStatus drives the status; once events arrive
-  // the terminal event_type refines it to completed/failed.
-  // Reading cache inside useMemo to avoid creating a new array ref each render.
+  // -- Derived run status from WS + events --
   const runStatus = useMemo(() => {
     const cached = queryClient.getQueryData<{ items: EventItem[] }>(
       queryKeys.runs.events(activeRunId ?? '', {}),
@@ -113,7 +109,7 @@ function LivePage() {
   const { data: events } = useEvents(activeRunId ?? '', {}, runStatus)
   const { data: steps } = useSteps(activeRunId ?? '', runStatus)
 
-  // -- Event cache seeding + run creation --
+  // -- Run creation --
   const handleRunPipeline = useCallback(() => {
     if (!selectedPipeline) return
 
@@ -132,15 +128,6 @@ function LivePage() {
       },
       {
         onSuccess: (data) => {
-          // Seed event cache BEFORE setting activeRunId (order matters).
-          // appendEventToCache in websocket.ts only updates if cache exists;
-          // without seeding, WS events arriving before REST fetch would be dropped.
-          queryClient.setQueryData(queryKeys.runs.events(data.run_id, {}), {
-            items: [],
-            total: 0,
-            offset: 0,
-            limit: 50,
-          })
           setActiveRunId(data.run_id)
           setInputValues({})
           setFieldErrors({})
@@ -167,32 +154,21 @@ function LivePage() {
         },
       },
     )
-  }, [selectedPipeline, createRun, queryClient, inputSchema, inputValues])
+  }, [selectedPipeline, createRun, inputSchema, inputValues])
 
   // -- Python-initiated run detection --
-  // Auto-attach to runs started externally (e.g. another client, CLI).
-  // Uses a ref to track the last handled run_id and subscribes to
-  // latestRun changes without calling setState synchronously in effect body.
   const handledRunRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!latestRun || latestRun.run_id === handledRunRef.current) return
     handledRunRef.current = latestRun.run_id
 
-    // Seed cache for the new run before attaching
-    queryClient.setQueryData(queryKeys.runs.events(latestRun.run_id, {}), {
-      items: [],
-      total: 0,
-      offset: 0,
-      limit: 50,
-    })
-
     // Defer state updates to avoid synchronous setState in effect body
     queueMicrotask(() => {
       setActiveRunId(latestRun.run_id)
       setSelectedPipeline(latestRun.pipeline_name)
     })
-  }, [latestRun, queryClient])
+  }, [latestRun])
 
   // -- Reset form when pipeline selection changes --
   useEffect(() => {
@@ -207,8 +183,6 @@ function LivePage() {
   )
 
   // -- In-progress step click guard --
-  // Clicking a running step would show error/loading in StepDetailPanel
-  // because PipelineStepState rows are written only after step completion.
   const handleSelectStep = useCallback(
     (stepNum: number) => {
       const item = timelineItems.find((i) => i.step_number === stepNum)

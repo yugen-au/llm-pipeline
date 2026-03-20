@@ -5,8 +5,8 @@
  *
  * @remarks
  * - `useRun` applies dynamic staleTime: `Infinity` for terminal runs
- *   (completed/failed) since their data is immutable, and `5_000`ms with
- *   `refetchInterval: 3_000`ms for active runs to track live progress.
+ *   (completed/failed) since their data is immutable, and `5_000`ms for
+ *   active runs. Live updates come via WebSocket (no polling).
  * - `useRunContext` similarly uses `Infinity` for terminal status.
  * - `useRuns` uses the global 30s staleTime from QueryClient (list data
  *   is always considered fresh enough at the default interval).
@@ -55,8 +55,8 @@ export function useRuns(filters: Partial<RunListParams> = {}) {
  *
  * - Terminal runs (completed/failed): `staleTime: Infinity`, no polling.
  *   Their data is immutable and will never change.
- * - Active runs (running/pending): `staleTime: 5_000`ms, polls every 3s
- *   to reflect live DB writes from background pipeline execution.
+ * - Active runs (running/pending): `staleTime: 5_000`ms. Live updates
+ *   come via WebSocket; no polling needed.
  */
 export function useRun(runId: string) {
   return useQuery({
@@ -67,11 +67,6 @@ export function useRun(runId: string) {
       const status = query.state.data?.status
       if (!status) return 30_000
       return isTerminalStatus(status) ? Infinity : 5_000
-    },
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      if (status && !isTerminalStatus(status)) return 3_000
-      return false
     },
   })
 }

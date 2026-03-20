@@ -407,7 +407,7 @@ export interface PipelineListItem {
 export type JsonSchema = Record<string, unknown>
 
 // ---------------------------------------------------------------------------
-// WebSocket message types (WS /ws/runs/{run_id})
+// WebSocket message types (unified /ws/runs endpoint)
 // ---------------------------------------------------------------------------
 
 /** Server heartbeat sent every 30s on inactivity. */
@@ -416,23 +416,29 @@ export interface WsHeartbeat {
   timestamp: string
 }
 
-/** Sent when a live run's stream completes (pipeline finished). */
+/** Sent when a live run's stream completes (pipeline finished). Enriched with DB state. */
 export interface WsStreamComplete {
   type: 'stream_complete'
   run_id: string
+  status?: string
+  completed_at?: string | null
+  total_time_ms?: number | null
+  step_count?: number | null
 }
 
 /** Sent after replaying all persisted events for a completed/failed run. */
 export interface WsReplayComplete {
   type: 'replay_complete'
+  run_id: string
   run_status: string
   event_count: number
 }
 
-/** Sent on server error (e.g. run not found before close 4004). */
+/** Sent on server error (e.g. run not found on subscribe). */
 export interface WsError {
   type: 'error'
   detail: string
+  run_id?: string
 }
 
 /**
@@ -444,6 +450,14 @@ export interface WsError {
  * this type before passing them through the union.
  */
 export type WsPipelineEvent = { type: 'pipeline_event' } & EventItem
+
+/** Global run-creation notification broadcast to all connected clients. */
+export interface WsRunCreated {
+  type: 'run_created'
+  run_id: string
+  pipeline_name: string
+  started_at: string
+}
 
 /**
  * Discriminated union of all WebSocket message types.
@@ -458,19 +472,22 @@ export type WsMessage =
   | WsReplayComplete
   | WsError
   | WsPipelineEvent
+  | WsRunCreated
 
-/**
- * Global run-creation notification received on /ws/runs.
- *
- * Standalone type -- NOT part of WsMessage union which is per-run only.
- * Used by useRunNotifications hook to detect externally-started runs.
- */
-export interface WsRunCreated {
-  type: 'run_created'
+/** Client -> server subscription message. */
+export interface WsSubscribe {
+  action: 'subscribe'
   run_id: string
-  pipeline_name: string
-  started_at: string
 }
+
+/** Client -> server unsubscription message. */
+export interface WsUnsubscribe {
+  action: 'unsubscribe'
+  run_id: string
+}
+
+/** Union of client-to-server WS messages. */
+export type WsClientMessage = WsSubscribe | WsUnsubscribe
 
 // ---------------------------------------------------------------------------
 // Shared utilities

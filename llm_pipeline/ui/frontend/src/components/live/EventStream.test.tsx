@@ -69,8 +69,6 @@ describe('EventStream', () => {
       ['connected', 'Connected'],
       ['error', 'Error'],
       ['connecting', 'Connecting...'],
-      ['replaying', 'Replaying...'],
-      ['closed', 'Disconnected'],
     ]
 
     it.each(statuses)(

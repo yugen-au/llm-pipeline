@@ -9,6 +9,7 @@ Covers 5 genuine integration gaps not addressed by existing per-route unit tests
 
 All tests use _make_app() (StaticPool pattern) from conftest.py. No source changes.
 """
+import json
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -40,13 +41,24 @@ RUN_RUNNING = "aaaaaaaa-0000-0000-0000-000000000003"
 
 
 @pytest.fixture(autouse=True)
+def _fast_heartbeat(monkeypatch):
+    """Use a short heartbeat so tests don't block 30s on teardown."""
+    import llm_pipeline.ui.routes.websocket as ws_module
+    monkeypatch.setattr(ws_module, "HEARTBEAT_INTERVAL_S", 0.05)
+
+
+@pytest.fixture(autouse=True)
 def _clean_manager():
     """Clear module-level singleton state between tests."""
-    manager._connections.clear()
-    manager._queues.clear()
+    manager._client_queues.clear()
+    manager._subscriptions.clear()
+    manager._run_subscribers.clear()
+    manager._websockets.clear()
     yield
-    manager._connections.clear()
-    manager._queues.clear()
+    manager._client_queues.clear()
+    manager._subscriptions.clear()
+    manager._run_subscribers.clear()
+    manager._websockets.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -54,14 +66,24 @@ def _clean_manager():
 # ---------------------------------------------------------------------------
 
 
-def _wait_for_connection(run_id: str, count: int = 1, timeout: float = 2.0) -> None:
-    """Spin until count clients are registered in manager for run_id."""
+def _wait_for_connection(count: int = 1, timeout: float = 2.0) -> None:
+    """Spin until count clients are connected to manager."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        if len(manager._queues.get(run_id, [])) >= count:
+        if len(manager._client_queues) >= count:
             return
         time.sleep(0.005)
-    raise TimeoutError(f"Expected {count} connection(s) for {run_id} within {timeout}s")
+    raise TimeoutError(f"Expected {count} connection(s) within {timeout}s")
+
+
+def _wait_for_subscription(run_id: str, count: int = 1, timeout: float = 2.0) -> None:
+    """Spin until count clients are subscribed to run_id."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if len(manager._run_subscribers.get(run_id, set())) >= count:
+            return
+        time.sleep(0.005)
+    raise TimeoutError(f"Expected {count} subscriber(s) for {run_id} within {timeout}s")
 
 
 def _make_failing_pipeline_factory():
@@ -105,15 +127,7 @@ def _make_failing_pipeline_factory():
 
 
 def _make_no_op_factory(gate: threading.Event):
-    """No-op factory: background task inserts PipelineRun row then blocks on gate.
-
-    gate is captured at factory-creation time (closure). The test sets gate
-    after confirming the WS client is connected, then the background task
-    unblocks and returns -- allowing TestClient to exit cleanly.
-
-    Used to get a valid run_id from POST /api/runs without racing the WS.
-    The test drives UIBridge emission manually after WS is confirmed connected.
-    """
+    """No-op factory: background task inserts PipelineRun row then blocks on gate."""
     class _NoOpPipeline:
         def __init__(self, run_id, engine, event_emitter=None):
             self._run_id = run_id
@@ -146,11 +160,7 @@ def _make_no_op_factory(gate: threading.Event):
 class TestE2ETriggerWebSocket:
     """POST /api/runs triggers a real UIBridge -> WS fan-out.
 
-    Strategy: POST returns run_id; background task is blocked by a gate event
-    until the WS client connects and is confirmed registered. Then UIBridge
-    emits events directly (same bridge used by the actual flow) -- this
-    exercises ConnectionManager.broadcast_to_run() -> WS client path without
-    a race between the background task and WS connection.
+    Uses unified /ws/runs endpoint with subscribe messages.
     """
 
     def _setup(self):
@@ -164,15 +174,18 @@ class TestE2ETriggerWebSocket:
         return app, TestClient(app), gate
 
     def _collect_events(self, client, run_id):
-        """Open WS, collect until stream_complete/replay_complete. Returns (received, done_event)."""
+        """Open WS, subscribe, collect until stream_complete/replay_complete."""
         received = []
         done = threading.Event()
 
         def _run():
             try:
-                with client.websocket_connect(f"/ws/runs/{run_id}") as ws:
+                with client.websocket_connect("/ws/runs") as ws:
+                    ws.send_text(json.dumps({"action": "subscribe", "run_id": run_id}))
                     while True:
                         msg = ws.receive_json()
+                        if msg.get("type") == "heartbeat":
+                            continue
                         received.append(msg)
                         if msg.get("type") in ("stream_complete", "replay_complete"):
                             break
@@ -186,11 +199,7 @@ class TestE2ETriggerWebSocket:
         return received, done
 
     def _trigger_and_collect(self):
-        """POST trigger, wait for DB row, connect WS, emit events, collect until stream_complete.
-
-        Returns (run_id, received) after the client context exits.
-        Encapsulates the shared orchestration for all 3 E2E tests.
-        """
+        """POST trigger, connect WS, subscribe, emit events, collect until stream_complete."""
         app, client, gate = self._setup()
         with client:
             resp = client.post("/api/runs", json={"pipeline_name": "integration_test_pipeline"})
@@ -207,9 +216,9 @@ class TestE2ETriggerWebSocket:
                 time.sleep(0.01)
 
             received, done = self._collect_events(client, run_id)
-            _wait_for_connection(run_id, count=1, timeout=3.0)
+            _wait_for_subscription(run_id, count=1, timeout=3.0)
 
-            # WS is connected; emit via UIBridge (same path as real pipeline)
+            # WS is subscribed; emit via UIBridge
             bridge = UIBridge(run_id=run_id)
             bridge.emit(PipelineStarted(run_id=run_id, pipeline_name="integration_test_pipeline"))
             bridge.emit(PipelineCompleted(
@@ -436,32 +445,39 @@ class TestCORSHeaders:
 class TestWebSocketDisconnect:
     """Disconnecting a WS client mid-stream cleans up ConnectionManager state."""
 
-    def test_disconnect_mid_stream_removes_from_queues(self, seeded_app_client):
-        # RUN_RUNNING -> live stream path (status=running in seeded data)
-        with seeded_app_client.websocket_connect(f"/ws/runs/{RUN_RUNNING}") as ws:
-            _wait_for_connection(RUN_RUNNING, count=1)
-            # Confirm client is registered
-            assert len(manager._queues.get(RUN_RUNNING, [])) == 1
-            # Exit context manager early -> triggers WebSocketDisconnect on server
+    def test_disconnect_removes_client_from_manager(self, seeded_app_client):
+        with seeded_app_client.websocket_connect("/ws/runs") as ws:
+            _wait_for_connection(count=1)
+            assert len(manager._client_queues) == 1
         # After disconnect, manager should have cleaned up
-        assert RUN_RUNNING not in manager._queues
+        # Small delay for async cleanup
+        time.sleep(0.1)
+        assert len(manager._client_queues) == 0
 
-    def test_disconnect_mid_stream_removes_from_connections(self, seeded_app_client):
-        with seeded_app_client.websocket_connect(f"/ws/runs/{RUN_RUNNING}") as ws:
-            _wait_for_connection(RUN_RUNNING, count=1)
-            assert len(manager._connections.get(RUN_RUNNING, [])) == 1
-        assert RUN_RUNNING not in manager._connections
+    def test_disconnect_removes_subscriptions(self, seeded_app_client):
+        with seeded_app_client.websocket_connect("/ws/runs") as ws:
+            _wait_for_connection(count=1)
+            ws.send_text(json.dumps({"action": "subscribe", "run_id": RUN_RUNNING}))
+            _wait_for_subscription(RUN_RUNNING, count=1)
+            assert len(manager._run_subscribers.get(RUN_RUNNING, set())) == 1
+        # After disconnect, subscriptions cleaned up
+        time.sleep(0.1)
+        assert len(manager._run_subscribers.get(RUN_RUNNING, set())) == 0
 
     def test_second_client_connects_after_first_disconnects(self, seeded_app_client):
         # First client connects and disconnects
-        with seeded_app_client.websocket_connect(f"/ws/runs/{RUN_RUNNING}") as ws:
-            _wait_for_connection(RUN_RUNNING, count=1)
-        assert RUN_RUNNING not in manager._queues
+        with seeded_app_client.websocket_connect("/ws/runs") as ws:
+            _wait_for_connection(count=1)
+        time.sleep(0.1)
+        assert len(manager._client_queues) == 0
 
-        # Second client can connect cleanly to the same run_id
-        with seeded_app_client.websocket_connect(f"/ws/runs/{RUN_RUNNING}") as ws:
-            _wait_for_connection(RUN_RUNNING, count=1)
-            assert len(manager._queues.get(RUN_RUNNING, [])) == 1
-            manager.signal_run_complete(RUN_RUNNING)
+        # Second client can connect and subscribe
+        with seeded_app_client.websocket_connect("/ws/runs") as ws:
+            _wait_for_connection(count=1)
+            ws.send_text(json.dumps({"action": "subscribe", "run_id": RUN_RUNNING}))
+            _wait_for_subscription(RUN_RUNNING, count=1)
+            manager.broadcast_to_run(RUN_RUNNING, {"event_type": "test", "run_id": RUN_RUNNING})
             msg = ws.receive_json()
-        assert msg["type"] == "stream_complete"
+            while msg.get("type") == "heartbeat":
+                msg = ws.receive_json()
+        assert msg["event_type"] == "test"
