@@ -1,7 +1,7 @@
 ## Task: master-51-visual-pipeline-editor
 ## Description: Implement Visual Pipeline Editor view with DnD step reordering, add/remove steps, compile-to-validate, and step properties panel
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
