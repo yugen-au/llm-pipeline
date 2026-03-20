@@ -12,6 +12,7 @@ import {
   useDraft,
   useRenameDraft,
 } from '@/api/creator'
+import { apiClient } from '@/api/client'
 import type {
   GenerateRequest,
   TestResponse,
@@ -261,7 +262,7 @@ function CreatorPage() {
         .fetchQuery({
           queryKey: queryKeys.creator.draft(draft.id),
           queryFn: () =>
-            fetch(`/api/creator/drafts/${draft.id}`).then((r) => r.json()) as Promise<DraftDetail>,
+            apiClient<DraftDetail>(`/creator/drafts/${draft.id}`),
         })
         .then((detail) => {
           populateFromDraft(detail)
