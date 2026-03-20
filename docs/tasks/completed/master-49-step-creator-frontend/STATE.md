@@ -1,7 +1,7 @@
 ## Task: master-49-step-creator-frontend
 ## Description: Step Creator frontend view with input form, Monaco editor (lazy-loaded) for generated code, and results panel. Three-column layout with generate/test/accept workflow.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
