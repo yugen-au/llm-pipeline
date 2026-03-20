@@ -8,7 +8,9 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from llm_pipeline.events.emitter import CompositeEmitter
@@ -74,6 +76,16 @@ class DraftItem(BaseModel):
     run_id: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class DraftDetail(DraftItem):
+    """Full draft including generated code and test results (for single-draft view)."""
+    generated_code: dict
+    test_results: dict | None
+
+
+class RenameRequest(BaseModel):
+    name: str
 
 
 class DraftListResponse(BaseModel):
@@ -202,7 +214,6 @@ def generate_step(
                     select(DraftStep).where(DraftStep.run_id == run_id)
                 ).first()
                 if draft and gen_rec:
-                    draft.name = gen_rec.step_name_generated
                     # Collect generated_code from pipeline context
                     ctx = getattr(pipeline, "_context", None)
                     if ctx and hasattr(ctx, "get"):
@@ -211,8 +222,29 @@ def generate_step(
                             draft.generated_code = code_dict
                     draft.status = "draft"
                     draft.updated_at = utc_now()
-                    post_session.add(draft)
-                    post_session.commit()
+
+                    # Name assignment with collision retry (_2 .. _9)
+                    base_name = gen_rec.step_name_generated
+                    candidates = [base_name] + [f"{base_name}_{i}" for i in range(2, 10)]
+                    for candidate_name in candidates:
+                        draft.name = candidate_name
+                        post_session.add(draft)
+                        try:
+                            post_session.commit()
+                            break
+                        except IntegrityError:
+                            post_session.rollback()
+                            # re-fetch after rollback (session state cleared)
+                            draft = post_session.exec(
+                                select(DraftStep).where(DraftStep.run_id == run_id)
+                            ).first()
+                            if draft is None:
+                                break
+                            logger.warning(
+                                "Name collision for '%s', trying next suffix (run_id=%s)",
+                                candidate_name,
+                                run_id,
+                            )
         except Exception:
             logger.exception(
                 "Background step creator failed for run_id=%s", run_id
@@ -388,15 +420,15 @@ def list_drafts(db: DBSession) -> DraftListResponse:
     )
 
 
-@router.get("/drafts/{draft_id}", response_model=DraftItem)
-def get_draft(draft_id: int, db: DBSession) -> DraftItem:
-    """Get a single draft step by ID."""
+@router.get("/drafts/{draft_id}", response_model=DraftDetail)
+def get_draft(draft_id: int, db: DBSession) -> DraftDetail:
+    """Get a single draft step by ID (includes generated_code + test_results)."""
     draft = db.exec(
         select(DraftStep).where(DraftStep.id == draft_id)
     ).first()
     if draft is None:
         raise HTTPException(status_code=404, detail="Draft not found")
-    return DraftItem(
+    return DraftDetail(
         id=draft.id,
         name=draft.name,
         description=draft.description,
@@ -404,4 +436,57 @@ def get_draft(draft_id: int, db: DBSession) -> DraftItem:
         run_id=draft.run_id,
         created_at=draft.created_at,
         updated_at=draft.updated_at,
+        generated_code=draft.generated_code,
+        test_results=draft.test_results,
     )
+
+
+@router.patch("/drafts/{draft_id}", response_model=DraftDetail, responses={409: {"description": "Name conflict"}})
+def rename_draft(
+    draft_id: int,
+    body: RenameRequest,
+    request: Request,
+) -> DraftDetail | JSONResponse:
+    """Rename a draft step. Returns 409 with suggested_name on name collision."""
+    engine = request.app.state.engine
+    with Session(engine) as session:
+        draft = session.exec(
+            select(DraftStep).where(DraftStep.id == draft_id)
+        ).first()
+        if draft is None:
+            raise HTTPException(status_code=404, detail="Draft not found")
+
+        draft.name = body.name
+        draft.updated_at = utc_now()
+        try:
+            session.add(draft)
+            session.commit()
+            session.refresh(draft)
+        except IntegrityError:
+            session.rollback()
+            # find a free suffix
+            suggested = body.name
+            for i in range(2, 10):
+                candidate = f"{body.name}_{i}"
+                existing = session.exec(
+                    select(DraftStep).where(DraftStep.name == candidate)
+                ).first()
+                if existing is None:
+                    suggested = candidate
+                    break
+            return JSONResponse(
+                status_code=409,
+                content={"detail": "name_conflict", "suggested_name": suggested},
+            )
+
+        return DraftDetail(
+            id=draft.id,
+            name=draft.name,
+            description=draft.description,
+            status=draft.status,
+            run_id=draft.run_id,
+            created_at=draft.created_at,
+            updated_at=draft.updated_at,
+            generated_code=draft.generated_code,
+            test_results=draft.test_results,
+        )

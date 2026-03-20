@@ -32,6 +32,11 @@ export const queryKeys = {
     stepPrompts: (name: string, stepName: string) =>
       ['pipelines', name, 'steps', stepName, 'prompts'] as const,
   },
+  creator: {
+    all: ['creator'] as const,
+    drafts: () => ['creator', 'drafts'] as const,
+    draft: (id: number) => ['creator', 'drafts', id] as const,
+  },
 } as const
 
 /**
