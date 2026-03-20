@@ -30,4 +30,4 @@
 | Route Skeleton + Sidebar Nav | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | ad2f0b614db0d668c | 369c812a | - |
 | Wire DraftPicker Integration | frontend-mobile-development:frontend-developer | implementation | 9 | - | F | complete | 0 | a6fa0ea32c9db235e | a34e3673 | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a34689e2237f5fd7a | 2ec20b49,2fc655fe | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | a8e0e1f1492fe3bdc | 421b9217 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 1 | a8e0e1f1492fe3bdc | 421b9217 | - |
