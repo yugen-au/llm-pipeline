@@ -122,3 +122,55 @@ Stash test (reverting to prior commit) confirmed all 4 failures existed before t
 2. Add pytest tests for the 7 new editor endpoints in `tests/ui/test_editor.py` -- specifically: compile valid/invalid, available-steps merge/dedup, DraftPipeline CRUD with 409 cases.
 3. Perform human validation of drag-and-drop interactions against checklist above before marking feature complete.
 4. The 4 pre-existing test failures should be tracked as technical debt; they are not related to the visual pipeline editor implementation.
+
+---
+
+## Re-verification: Steps 5 and 6 Fixes
+
+**Date:** 2026-03-20
+**Trigger:** Review fixes applied to EditorStrategyCanvas.tsx (Step 5) and editor.tsx (Step 6)
+
+### Summary
+**Status:** passed
+
+No regressions. Refactored code is structurally sound and type-correct. Build failure remains only the pre-existing `creator.tsx` issue.
+
+### Test Execution
+**Pass Rate:** 1212/1216 (unchanged -- same 4 pre-existing failures)
+```
+4 failed, 1212 passed, 6 skipped, 10 warnings in 31.10s
+FAILED tests/test_agent_registry_core.py::TestStepDepsFields::test_field_count
+FAILED tests/ui/test_cli.py::TestCreateDevApp::test_reads_env_var_and_passes_to_create_app
+FAILED tests/ui/test_cli.py::TestCreateDevApp::test_passes_none_when_env_var_absent
+FAILED tests/ui/test_cli.py::TestDevModeWithFrontend::test_uvicorn_no_reload_in_vite_mode
+```
+
+### Frontend Build
+```
+src/routes/creator.tsx(24,10): error TS2305: Module '"@/api/websocket"' has no exported member 'useWebSocket'.
+```
+Unchanged: same single pre-existing error. No new errors from refactored Step 5/6 code.
+
+### Step 5 Fix Verification
+- [x] `buildEditorDragEnd` signature changed to `(setStrategies: Dispatch<SetStateAction<EditorStrategyState[]>>) => ...` -- no longer closes over `strategies`
+- [x] Palette drop uses `setStrategies(prev => ...)` functional updater -- resolves target strategy from `prev` not stale closure
+- [x] Sortable reorder uses `setStrategies(prev => ...)` functional updater -- finds source strategy from `prev`
+- [x] `handleRemoveStep` in `EditorStrategyCanvas` wrapped in `useCallback` with stable `[onStrategiesChange, onSelectStep]` deps
+- [x] `onSelectStep` deselect uses functional updater `(current) => current === stepId ? null : current`
+- [x] `onStrategiesChange` prop type changed to `Dispatch<SetStateAction<EditorStrategyState[]>>` -- matches `setStrategies` from useState
+- [x] `onSelectStep` prop type changed to `Dispatch<SetStateAction<string | null>>` -- matches `setSelectedStepId` from useState
+- [x] `onStepsChange` prop removed from `StrategyList` -- interface has 5 props (strategy, selectedStepId, onSelectStep, onRemoveStep, errors), no `onStepsChange`
+- [x] `editor.tsx` passes `setStrategies` directly to `buildEditorDragEnd` -- stable reference, no deps needed in `useMemo([], [])`
+- [x] `editor.tsx` passes `setStrategies` and `setSelectedStepId` directly to `EditorStrategyCanvas` -- type-compatible with new `Dispatch<SetStateAction<...>>` props
+
+### Step 6 Fix Verification
+- [x] `handleLoadDraft` uses `queryClient.fetchQuery(...)` imperative pattern -- no `loadingDraftId` state, no secondary `useEffect`
+- [x] `queryClient` is only dependency in `useCallback([queryClient])` -- stable ref
+- [x] `DraftPipelineDetail` imported from `@/api/editor` and used for fetch type annotation
+- [x] `apiClient` imported from `@/api/client` and used in `queryFn`
+- [x] `queryKeys.editor.draft(id)` used as query key for correct cache keying
+- [x] State updates (`setStrategies`, `setDraftPipelineName`, `setActiveDraftPipelineId`, `setSelectedStepId`, `setCompileResult`, `setCompileStatus`) all called imperatively after await -- no stale closure risk
+- [x] No `loadingDraftId` or secondary `useEffect` for draft loading anywhere in `editor.tsx`
+
+### Issues Found
+None -- no new issues introduced by Step 5 or Step 6 fixes.
