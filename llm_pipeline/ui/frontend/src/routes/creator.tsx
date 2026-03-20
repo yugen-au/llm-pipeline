@@ -69,7 +69,7 @@ function CreatorPage() {
   const acceptDraft = useAcceptDraft(activeDraftId)
   const renameDraft = useRenameDraft()
   const { data: draftsData, isLoading: draftsLoading } = useDrafts()
-  const { data: draftDetail, refetch: refetchDraft } = useDraft(activeDraftId)
+  const { refetch: refetchDraft } = useDraft(activeDraftId)
 
   // -- WebSocket for generation progress --
   useWebSocket(activeRunId)
