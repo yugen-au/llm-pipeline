@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import {
   DndContext,
@@ -9,12 +9,25 @@ import {
   useSensors,
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
-import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import type { AvailableStep, CompileResponse } from '@/api/editor'
+import type {
+  AvailableStep,
+  CompileRequest,
+  CompileResponse,
+  EditorStrategy,
+} from '@/api/editor'
+import {
+  useAvailableSteps,
+  useCompilePipeline,
+  useCreateDraftPipeline,
+  useUpdateDraftPipeline,
+  useDraftPipelines,
+  useDraftPipeline,
+} from '@/api/editor'
 import {
   EditorPalettePanel,
   EditorStrategyCanvas,
+  EditorPropertiesPanel,
   buildEditorDragEnd,
 } from '@/components/editor'
 
@@ -41,20 +54,42 @@ export interface EditorStrategyState {
 type CompileStatus = 'idle' | 'pending' | 'error'
 
 // ---------------------------------------------------------------------------
-// Placeholder panel components (replaced incrementally in Steps 6-7)
+// Helpers
 // ---------------------------------------------------------------------------
 
-function EditorPropertiesPanel() {
-  return (
-    <Card className="flex h-full flex-col overflow-hidden p-4">
-      <h2 className="mb-2 text-xs font-medium text-muted-foreground">
-        Properties
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        Step properties and compile status will appear here.
-      </p>
-    </Card>
-  )
+/** Convert editor state to CompileRequest with position numbering */
+function buildCompileRequest(
+  strategies: EditorStrategyState[],
+): CompileRequest {
+  return {
+    strategies: strategies.map(
+      (s): EditorStrategy => ({
+        strategy_name: s.strategy_name,
+        steps: s.steps.map((step, i) => ({
+          step_ref: step.step_ref,
+          source: step.source,
+          position: i,
+        })),
+      }),
+    ),
+  }
+}
+
+/** Serialize editor state to DraftPipeline structure JSON */
+function buildDraftStructure(
+  strategies: EditorStrategyState[],
+): Record<string, unknown> {
+  return {
+    schema_version: 1,
+    strategies: strategies.map((s) => ({
+      strategy_name: s.strategy_name,
+      steps: s.steps.map((step, i) => ({
+        step_ref: step.step_ref,
+        source: step.source,
+        position: i,
+      })),
+    })),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -62,15 +97,110 @@ function EditorPropertiesPanel() {
 // ---------------------------------------------------------------------------
 
 function EditorPage() {
-  // -- Editor state (wired incrementally in Steps 5-7) --
+  // -- Editor state --
   const [strategies, setStrategies] = useState<EditorStrategyState[]>([])
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
-  const [_activeDraftPipelineId, _setActiveDraftPipelineId] = useState<
+  const [activeDraftPipelineId, setActiveDraftPipelineId] = useState<
     number | null
   >(null)
-  const [compileResult, _setCompileResult] =
-    useState<CompileResponse | null>(null)
-  const [_compileStatus, _setCompileStatus] = useState<CompileStatus>('idle')
+  const [draftPipelineName, setDraftPipelineName] = useState('')
+  const [compileResult, setCompileResult] = useState<CompileResponse | null>(
+    null,
+  )
+  const [compileStatus, setCompileStatus] = useState<CompileStatus>('idle')
+  // Track which draft ID to load (triggers useDraftPipeline fetch)
+  const [loadingDraftId, setLoadingDraftId] = useState<number | null>(null)
+
+  // -- API hooks --
+  const { data: availableStepsData } = useAvailableSteps()
+  const availableSteps = availableStepsData?.steps ?? []
+  const compileMutation = useCompilePipeline()
+  const createDraftMutation = useCreateDraftPipeline()
+  const updateDraftMutation = useUpdateDraftPipeline()
+  const { data: draftsData } = useDraftPipelines()
+  const draftPipelines = draftsData?.items ?? []
+  const { data: loadedDraftDetail } = useDraftPipeline(loadingDraftId)
+
+  // -- Load draft detail when fetched --
+  useEffect(() => {
+    if (!loadedDraftDetail || loadingDraftId == null) return
+    // Populate editor state from draft structure
+    const structure = loadedDraftDetail.structure as {
+      schema_version?: number
+      strategies?: Array<{
+        strategy_name: string
+        steps: Array<{
+          step_ref: string
+          source: 'draft' | 'registered'
+          position: number
+        }>
+      }>
+    }
+    if (structure?.strategies) {
+      setStrategies(
+        structure.strategies.map((s) => ({
+          strategy_name: s.strategy_name,
+          steps: s.steps
+            .sort((a, b) => a.position - b.position)
+            .map((step) => ({
+              id: crypto.randomUUID(),
+              step_ref: step.step_ref,
+              source: step.source,
+            })),
+        })),
+      )
+    } else {
+      setStrategies([])
+    }
+    setDraftPipelineName(loadedDraftDetail.name)
+    setActiveDraftPipelineId(loadedDraftDetail.id)
+    setSelectedStepId(null)
+    setCompileResult(null)
+    setCompileStatus('idle')
+    setLoadingDraftId(null)
+  }, [loadedDraftDetail, loadingDraftId])
+
+  // -- Auto-compile with debounce + AbortController --
+  const abortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    // Skip compile when no strategies or all strategies empty
+    const hasSteps = strategies.some((s) => s.steps.length > 0)
+    if (!hasSteps) {
+      setCompileResult(null)
+      setCompileStatus('idle')
+      return
+    }
+
+    // Cancel any in-flight compile
+    abortRef.current?.abort()
+    setCompileStatus('idle')
+
+    const timer = setTimeout(async () => {
+      const ac = new AbortController()
+      abortRef.current = ac
+      setCompileStatus('pending')
+      try {
+        const result = await compileMutation.mutateAsync(
+          buildCompileRequest(strategies),
+          // TanStack Query v5 doesn't pass signal through mutateAsync options,
+          // but we use ac.signal.aborted check to discard stale results
+        )
+        if (ac.signal.aborted) return
+        setCompileResult(result)
+        setCompileStatus(result.valid ? 'idle' : 'error')
+      } catch {
+        if (!ac.signal.aborted) setCompileStatus('error')
+      }
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+      abortRef.current?.abort()
+    }
+    // compileMutation is stable (useMutation returns stable ref)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategies])
 
   // -- DnD sensors --
   const sensors = useSensors(
@@ -82,18 +212,18 @@ function EditorPage() {
     }),
   )
 
-  // -- DnD drag-end handler (memoized on strategies ref) --
+  // -- DnD drag-end handler --
   const handleDragEnd = useMemo(
     () => buildEditorDragEnd(strategies, setStrategies),
     [strategies],
   )
 
-  // Compile errors from latest result (empty if no result or valid)
+  // Compile errors from latest result
   const compileErrors = compileResult?.errors ?? []
 
   // -- Handlers --
 
-  /** Add a step from the palette to a specific strategy */
+  /** Add step from palette to strategy */
   const handleAddStepToStrategy = useCallback(
     (strategyName: string, step: AvailableStep) => {
       setStrategies((prev) =>
@@ -117,6 +247,69 @@ function EditorPage() {
     [],
   )
 
+  /** Save: create new draft or update existing */
+  const handleSave = useCallback(async () => {
+    const structure = buildDraftStructure(strategies)
+    if (activeDraftPipelineId) {
+      const result = await updateDraftMutation.mutateAsync({
+        id: activeDraftPipelineId,
+        name: draftPipelineName,
+        structure,
+      })
+      setActiveDraftPipelineId(result.id)
+    } else {
+      const result = await createDraftMutation.mutateAsync({
+        name: draftPipelineName,
+        structure,
+      })
+      setActiveDraftPipelineId(result.id)
+    }
+  }, [
+    strategies,
+    activeDraftPipelineId,
+    draftPipelineName,
+    updateDraftMutation,
+    createDraftMutation,
+  ])
+
+  /** Load a draft pipeline into editor state */
+  const handleLoadDraft = useCallback((id: number) => {
+    setLoadingDraftId(id)
+  }, [])
+
+  /** Reset to empty editor state */
+  const handleNewPipeline = useCallback(() => {
+    setStrategies([])
+    setSelectedStepId(null)
+    setActiveDraftPipelineId(null)
+    setDraftPipelineName('')
+    setCompileResult(null)
+    setCompileStatus('idle')
+  }, [])
+
+  /** Fork a registered pipeline into editor state (Step 7) */
+  const handleForkPipeline = useCallback(
+    (forkedStrategies: EditorStrategyState[], name: string) => {
+      setStrategies(forkedStrategies)
+      setDraftPipelineName(name)
+      setActiveDraftPipelineId(null)
+      setSelectedStepId(null)
+      setCompileResult(null)
+      setCompileStatus('idle')
+    },
+    [],
+  )
+
+  // -- Resolve selected step object from ID --
+  const selectedStep = useMemo(() => {
+    if (!selectedStepId) return null
+    for (const s of strategies) {
+      const found = s.steps.find((st) => st.id === selectedStepId)
+      if (found) return found
+    }
+    return null
+  }, [selectedStepId, strategies])
+
   // -- Shared column content --
 
   const strategyNames = strategies.map((s) => s.strategy_name)
@@ -138,7 +331,26 @@ function EditorPage() {
     />
   )
 
-  const propertiesColumn = <EditorPropertiesPanel />
+  const isSaving =
+    createDraftMutation.isPending || updateDraftMutation.isPending
+
+  const propertiesColumn = (
+    <EditorPropertiesPanel
+      selectedStep={selectedStep}
+      availableSteps={availableSteps}
+      compileResult={compileResult}
+      compileStatus={compileStatus}
+      draftPipelineId={activeDraftPipelineId}
+      draftPipelineName={draftPipelineName}
+      onNameChange={setDraftPipelineName}
+      onSave={handleSave}
+      isSaving={isSaving}
+      draftPipelines={draftPipelines}
+      onLoadDraft={handleLoadDraft}
+      onNewPipeline={handleNewPipeline}
+      onForkPipeline={handleForkPipeline}
+    />
+  )
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
