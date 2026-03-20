@@ -248,14 +248,16 @@ function LivePage() {
 
   const stepsColumn = (
     <div className="flex h-full flex-col gap-4 overflow-hidden">
-      <Card className="min-h-0 flex-1 overflow-auto">
-        <StepTimeline
-          items={timelineItems}
-          isLoading={false}
-          isError={false}
-          selectedStepId={selectedStepId}
-          onSelectStep={handleSelectStep}
-        />
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ScrollArea className="flex-1">
+          <StepTimeline
+            items={timelineItems}
+            isLoading={false}
+            isError={false}
+            selectedStepId={selectedStepId}
+            onSelectStep={handleSelectStep}
+          />
+        </ScrollArea>
       </Card>
     </div>
   )

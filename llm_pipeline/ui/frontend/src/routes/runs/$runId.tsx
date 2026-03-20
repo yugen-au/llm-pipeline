@@ -13,6 +13,7 @@ import { ContextEvolution } from '@/components/runs/ContextEvolution'
 import { StepDetailPanel } from '@/components/runs/StepDetailPanel'
 import { StatusBadge } from '@/components/runs/StatusBadge'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   Tooltip,
   TooltipContent,
@@ -176,18 +177,20 @@ function RunDetailPage() {
         {/* Page body: StepTimeline + ContextEvolution */}
         <div className="flex min-h-0 flex-1 gap-4">
           {/* Step timeline - main column */}
-          <CardContent className="flex-1 overflow-auto rounded-xl border p-0">
-            <StepTimeline
-              items={timelineItems}
-              isLoading={stepsLoading || eventsLoading}
-              isError={stepsError || eventsError}
-              selectedStepId={selectedStepId}
-              onSelectStep={selectStep}
-            />
+          <CardContent className="flex flex-1 flex-col overflow-hidden rounded-xl border p-0">
+            <ScrollArea className="flex-1">
+              <StepTimeline
+                items={timelineItems}
+                isLoading={stepsLoading || eventsLoading}
+                isError={stepsError || eventsError}
+                selectedStepId={selectedStepId}
+                onSelectStep={selectStep}
+              />
+            </ScrollArea>
           </CardContent>
 
           {/* Context evolution - right column */}
-          <div className="w-80 shrink-0 overflow-hidden rounded-xl border">
+          <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border">
             <div className="border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Context Evolution</h2>
             </div>
