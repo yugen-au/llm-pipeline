@@ -4,7 +4,7 @@
 
 Task 52's spec is largely obsolete. Task 51 already implemented all 7 editor endpoints (compile, available-steps, DraftPipeline CRUD) in `llm_pipeline/ui/routes/editor.py`, plus a full frontend with TanStack Query hooks. The spec's core differentiator -- `build_pipeline_class()` for deep PipelineConfig-level validation -- does not exist in the codebase and is infeasible for draft-step pipelines (no Python classes to instantiate). The spec also uses incorrect API patterns (`async def`, `provider=None`) that don't match the project's conventions.
 
-Three possible scopes remain: (a) mark task as done/cancelled, (b) redefine as "enhance compile validations + add pytest tests", (c) build full dynamic class construction. CEO decision required.
+**Redefined scope (CEO-approved):** Enhance compile with structural validations, make compile stateful (write compilation_errors to DraftPipeline), and add comprehensive pytest tests for all 7 editor endpoints. No `build_pipeline_class()` -- infeasible for JSON drafts.
 
 ## Domain Findings
 
@@ -73,34 +73,52 @@ Validations achievable with current architecture (no `build_pipeline_class` need
 
 Even if dynamic class construction were built, `PipelineConfig.__init__` creates an auto-SQLite DB file when no engine/session provided. Validation-only instantiation would need a throwaway in-memory engine to avoid filesystem side effects. The `model: str` parameter is also required (non-optional), needing a dummy value like `"test:dummy"`.
 
+### Finding 7: Compile Statefulness Requires Request Model Change
+**Source:** editor.py CompileRequest (L35-36), DraftPipeline model (state.py)
+
+Current `CompileRequest` has only `strategies: list[EditorStrategy]` -- no `draft_id`. To write `compilation_errors` to a DraftPipeline record, compile needs to know which draft to update. Two options:
+- Add optional `draft_id: int | None = None` to CompileRequest (write errors only when draft_id provided, stay stateless for ad-hoc validation)
+- Always require draft_id (breaking change for frontend auto-compile which fires before save)
+
+The optional approach is safer: frontend auto-compile can omit draft_id (stateless), and explicit "compile & save" flow can include it.
+
+### Finding 8: Prompt Key Validation Is Feasible via Introspection Metadata
+**Source:** introspection.py L138-139, db/prompt.py
+
+PipelineIntrospector metadata includes `system_key` and `user_key` per step. The `Prompt` table has `prompt_key` + `prompt_type` columns with a unique constraint on `(prompt_key, prompt_type)`. Compile can query the Prompt table to verify that referenced prompt keys exist for registered steps. Draft steps skip this check (their prompts are generated alongside the code, not yet in the Prompt table).
+
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| Pending: see Questions below | -- | -- |
+| Task 51 shipped all 7 endpoints. Mark done/cancelled, redefine as enhance+test, or build dynamic class? | Enhance + test: structural validations, stateful compile, pytest tests. No build_pipeline_class. | Scope redefined. No new endpoints needed. Focus on compile enhancement + tests. |
+| Should compile stay stateless or gain side-effects writing compilation_errors to DraftPipeline? | Stateful per spec -- write compilation_errors for cross-session persistence. | CompileRequest needs optional `draft_id` field. Compile endpoint gains DB write path. |
+| Add structural validations (duplicates, empty strategies, position gaps, prompt key checks)? | Yes -- all four validation types approved. | Compile grows from 1 check (step-ref existence) to 5 checks. |
+| Should pytest tests for editor endpoints be part of task 52? | Yes -- comprehensive tests for all 7 endpoints. | New test file `tests/ui/test_editor.py` needed. Follow test_creator.py pattern. |
 
 ## Assumptions Validated
 - [x] All 7 editor endpoints exist and function (confirmed via editor.py source review, lines 128-361)
 - [x] `build_pipeline_class()` does not exist anywhere in codebase (grep returns only research docs + tasks.json)
-- [x] No editor pytest tests exist (glob for `tests/ui/test_editor*` returns nothing)
+- [x] No editor pytest tests exist (glob for `tests/ui/test_editor*` returns nothing; 11 other test files in tests/ui/)
 - [x] FK validation requires live SQLAlchemy `__table__` metadata (confirmed in `_validate_foreign_key_dependencies` at pipeline.py L368-385)
 - [x] PipelineConfig.__init__ requires `model: str` not `provider=None` (confirmed at pipeline.py L209-211)
 - [x] Compile endpoint is stateless -- no DraftPipeline writes (confirmed, only reads DraftStep for existence check)
 - [x] Project uses sync `def` handlers exclusively (confirmed across all route files)
 - [x] Upstream task 50 (done): DraftStep + DraftPipeline models exist in state.py with proper table registration
 - [x] Upstream task 24 (done): Pipelines API + PipelineIntrospector exist and are used by editor's `_collect_registered_steps()`
+- [x] Prompt table exists at `llm_pipeline/db/prompt.py` with `prompt_key` + `prompt_type` columns (UniqueConstraint on both)
+- [x] PipelineIntrospector metadata includes `system_key` and `user_key` per step (introspection.py L138-139)
+- [x] CompileRequest currently has no `draft_id` field -- only `strategies` (editor.py L35-36)
+- [x] Test pattern established: in-memory SQLite with StaticPool, TestClient, app factory with seeded data (test_creator.py L25-78)
 
 ## Open Items
-- Task 52 scope needs CEO redefinition given task 51 overlap
-- Whether compile should gain side-effects (write compilation_errors to DraftPipeline) or stay stateless
-- Whether to add structural validations (duplicates, empty strategies, position checks) to compile
-- Whether pytest tests for editor endpoints belong in task 52 or separate work
-- Whether forked pipelines (all registered steps) should unlock deeper validation
+- Whether forked pipelines (all registered steps) should unlock deeper extraction-order validation as a stretch goal
+- Exact CompileRequest schema: recommend optional `draft_id: int | None = None` so stateless auto-compile (no draft_id) and stateful explicit compile (with draft_id) coexist
+- Whether CompileError model needs a `level` field (error vs warning) for prompt key warnings vs hard step-ref errors
 
 ## Recommendations for Planning
-1. **Redefine task 52 scope** before planning. The spec is obsolete. Recommend option (b): enhance compile with structural validations + add pytest tests. This provides clear deliverables without the risk/complexity of dynamic class construction.
-2. **Keep compile stateless.** Current separation (compile = validation, CRUD = POST/PATCH) is cleaner than the spec's coupled approach. The frontend already auto-compiles on structure changes and saves via separate mutations.
-3. **Add structural validations to compile:** duplicate step detection, empty strategy check, position sequencing. These are safe, fast, and catch real user errors in the visual editor.
-4. **Add prompt key validation** for registered steps only. Query the Prompt table to verify system/user keys exist. Draft steps skip this check (their prompts are generated alongside the code).
-5. **Write pytest tests** for all 7 editor endpoints using the established pattern (StaticPool in-memory SQLite, TestClient, seeded data). Task 51 explicitly recommended this.
-6. **Do NOT build `build_pipeline_class()`.** Dynamic PipelineConfig subclass creation is complex, has security implications (arbitrary code execution path), and provides no value for draft-step pipelines. Metadata-based validation via PipelineIntrospector is safer and sufficient.
-7. **Consider extraction order validation** for all-registered-step pipelines as a stretch goal. Use PipelineIntrospector metadata to check model extraction ordering without instantiation.
+1. **Enhance compile with 5 validation checks:** (1) step-ref existence (already done), (2) duplicate steps within strategy, (3) empty strategies, (4) position sequence gaps/duplicates, (5) prompt key existence for registered steps via Prompt table query.
+2. **Make compile stateful via optional `draft_id`.** Add `draft_id: int | None = None` to CompileRequest. When provided, write `compilation_errors` to the DraftPipeline record and update its status to "error" or "draft". When omitted, behave as current (stateless). This preserves backward compat with frontend auto-compile.
+3. **Do NOT build `build_pipeline_class()`.** CEO confirmed infeasible for JSON drafts. Metadata-based validation via PipelineIntrospector is sufficient.
+4. **Write pytest tests** for all 7 editor endpoints in `tests/ui/test_editor.py`. Follow `test_creator.py` pattern (StaticPool in-memory SQLite, TestClient, seeded data). Cover: compile valid/invalid/stateful, available-steps merge/dedup, DraftPipeline CRUD with 409 cases.
+5. **Consider extraction order validation** for all-registered-step pipelines as a stretch goal. Use PipelineIntrospector metadata to check model extraction ordering without instantiation.
+6. **Frontend impact:** CompileRequest schema change (optional `draft_id`) is backward compatible. Frontend auto-compile continues working without changes. Explicit "compile & save" flow can pass `draft_id` to persist errors. Response model (`CompileResponse`) may gain `draft_id` echo field.
