@@ -9,6 +9,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
+import { ApiError, RenameConflictError } from './types'
 
 // ---------------------------------------------------------------------------
 // TypeScript interfaces matching backend Pydantic models
@@ -166,17 +167,40 @@ export function useAcceptDraft(draftId: number | null) {
  * PATCH /creator/drafts/{draftId} with { name }.
  * Returns updated DraftDetail on success, 409 with suggested_name on collision.
  * On success: invalidates draft detail and list.
+ *
+ * Uses raw fetch instead of apiClient so the full 409 response body
+ * (including suggested_name) is preserved as a RenameConflictError.
  */
 export function useRenameDraft() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (vars: { draftId: number; name: string }) =>
-      apiClient<DraftDetail>('/creator/drafts/' + vars.draftId, {
+    mutationFn: async (vars: { draftId: number; name: string }): Promise<DraftDetail> => {
+      const response = await fetch('/api/creator/drafts/' + vars.draftId, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: vars.name } satisfies RenameRequest),
-      }),
+      })
+
+      if (response.status === 409) {
+        const body = await response.json() as { detail?: string; suggested_name?: string }
+        throw new RenameConflictError(
+          body.detail ?? 'name_conflict',
+          body.suggested_name ?? vars.name,
+        )
+      }
+
+      if (!response.ok) {
+        let detail = response.statusText
+        try {
+          const body = await response.json() as { detail?: string }
+          if (body.detail) detail = body.detail
+        } catch { /* keep statusText */ }
+        throw new ApiError(response.status, detail)
+      }
+
+      return response.json() as Promise<DraftDetail>
+    },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.creator.draft(vars.draftId) })
       queryClient.invalidateQueries({ queryKey: queryKeys.creator.drafts() })

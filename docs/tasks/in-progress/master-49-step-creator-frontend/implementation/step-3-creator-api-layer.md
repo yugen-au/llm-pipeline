@@ -53,3 +53,67 @@ New file with:
 [x] Cache invalidation patterns match existing codebase (useCreateRun pattern)
 [x] apiClient usage matches existing hooks (client.ts fetch wrapper)
 [x] staleTime/enabled patterns match existing hooks (useDraft mirrors useRun dynamic staleTime)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] 409 rename suggested_name silently lost through apiClient (MEDIUM)
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/api/types.ts`
+Added `RenameConflictError` subclass of `ApiError` that carries `suggestedName`.
+```
+# Before
+(only ApiError class)
+
+# After
+export class RenameConflictError extends ApiError {
+  readonly suggestedName: string
+  constructor(detail: string, suggestedName: string) {
+    super(409, detail)
+    this.name = 'RenameConflictError'
+    this.suggestedName = suggestedName
+  }
+}
+```
+
+#### File: `llm_pipeline/ui/frontend/src/api/creator.ts`
+Replaced `useRenameDraft` mutationFn: uses raw `fetch` instead of `apiClient` to intercept 409 before the response body is stripped. On 409, parses full JSON body and throws `RenameConflictError` with `suggested_name`. Non-409 errors still throw `ApiError` for consistency.
+```
+# Before
+mutationFn: (vars) => apiClient<DraftDetail>('/creator/drafts/' + vars.draftId, { method: 'PATCH', ... })
+
+# After
+mutationFn: async (vars) => {
+  const response = await fetch('/api/creator/drafts/' + vars.draftId, { method: 'PATCH', ... })
+  if (response.status === 409) {
+    const body = await response.json()
+    throw new RenameConflictError(body.detail ?? 'name_conflict', body.suggested_name ?? vars.name)
+  }
+  if (!response.ok) { ... throw new ApiError(...) }
+  return response.json()
+}
+```
+
+#### File: `llm_pipeline/ui/frontend/src/routes/creator.tsx`
+Replaced `handleRename` onError: uses `instanceof RenameConflictError` instead of broken `JSON.parse(error.detail)` approach.
+```
+# Before
+if (error instanceof ApiError && error.status === 409) {
+  try { const body = JSON.parse(error.detail) ... } catch { setRenameError('Name already taken') }
+}
+
+# After
+if (error instanceof RenameConflictError) {
+  setRenameError(`Name conflict. Suggested: ${error.suggestedName}`)
+}
+```
+
+### Verification
+[x] TypeScript compilation passes (`npx tsc --noEmit` - zero errors)
+[x] RenameConflictError extends ApiError (existing `instanceof ApiError` checks still match)
+[x] 409 response body preserved: both `detail` and `suggested_name` fields accessible
+[x] Non-409 errors still throw ApiError via fallback path in mutationFn
+[x] creator.tsx handleRename uses clean `instanceof` check instead of fragile JSON.parse

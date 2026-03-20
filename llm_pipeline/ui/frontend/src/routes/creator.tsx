@@ -25,7 +25,7 @@ import { useWebSocket } from '@/api/websocket'
 import { useWsStore } from '@/stores/websocket'
 import { queryKeys } from '@/api/query-keys'
 import type { EventItem } from '@/api/types'
-import { ApiError } from '@/api/types'
+import { ApiError, RenameConflictError } from '@/api/types'
 import { CreatorInputColumn } from '@/components/creator/CreatorInputColumn'
 import { CreatorEditor } from '@/components/creator/CreatorEditor'
 import { CreatorResultsPanel } from '@/components/creator/CreatorResultsPanel'
@@ -322,18 +322,10 @@ function CreatorPage() {
       { draftId: activeDraftId, name: editableName.trim() },
       {
         onError: (error) => {
-          if (error instanceof ApiError && error.status === 409) {
-            try {
-              const body = JSON.parse(error.detail) as {
-                detail: string
-                suggested_name: string
-              }
-              setRenameError(
-                `Name conflict. Suggested: ${body.suggested_name}`,
-              )
-            } catch {
-              setRenameError('Name already taken')
-            }
+          if (error instanceof RenameConflictError) {
+            setRenameError(
+              `Name conflict. Suggested: ${error.suggestedName}`,
+            )
           } else {
             setRenameError(
               error instanceof ApiError ? error.detail : 'Rename failed',
