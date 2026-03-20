@@ -397,7 +397,83 @@ class TestDraftsEndpoint:
         assert resp.json()["name"] == "beta_step"
         assert resp.json()["status"] == "tested"
 
+    def test_get_draft_returns_detail_fields(self, creator_client):
+        """GET /drafts/{id} returns DraftDetail with generated_code + test_results."""
+        resp = creator_client.get("/api/creator/drafts/1")
+        body = resp.json()
+        assert "generated_code" in body
+        assert "alpha_step_step.py" in body["generated_code"]
+        assert body["test_results"] is None
+
+    def test_get_draft_returns_test_results_when_present(self, creator_client):
+        resp = creator_client.get("/api/creator/drafts/2")
+        body = resp.json()
+        assert body["test_results"] is not None
+        assert body["test_results"]["import_ok"] is True
+
+    def test_list_drafts_excludes_generated_code(self, creator_client):
+        """List endpoint uses DraftItem (lightweight, no code)."""
+        resp = creator_client.get("/api/creator/drafts")
+        for item in resp.json()["items"]:
+            assert "generated_code" not in item
+            assert "test_results" not in item
+
     def test_get_draft_404(self, creator_client):
         resp = creator_client.get("/api/creator/drafts/9999")
         assert resp.status_code == 404
         assert "Draft not found" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# TestRenameEndpoint
+# ---------------------------------------------------------------------------
+
+class TestRenameEndpoint:
+    """PATCH /api/creator/drafts/{id}"""
+
+    def test_rename_success(self, creator_client):
+        resp = creator_client.patch(
+            "/api/creator/drafts/1", json={"name": "renamed_step"}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["name"] == "renamed_step"
+        # returns DraftDetail (includes generated_code)
+        assert "generated_code" in body
+
+    def test_rename_404(self, creator_client):
+        resp = creator_client.patch(
+            "/api/creator/drafts/9999", json={"name": "nope"}
+        )
+        assert resp.status_code == 404
+
+    def test_rename_conflict_returns_409(self, creator_client):
+        """Renaming to an existing name returns 409 with suggested_name."""
+        resp = creator_client.patch(
+            "/api/creator/drafts/1", json={"name": "beta_step"}
+        )
+        assert resp.status_code == 409
+        body = resp.json()
+        assert body["detail"] == "name_conflict"
+        assert "suggested_name" in body
+        # suggested should be beta_step_2 (first free suffix)
+        assert body["suggested_name"] == "beta_step_2"
+
+    def test_rename_conflict_suggested_name_skips_taken(self, creator_app_and_client):
+        """When _2 suffix also taken, suggests _3."""
+        app, client = creator_app_and_client
+        # add a third draft to take the _2 slot
+        with Session(app.state.engine) as s:
+            s.add(DraftStep(
+                name="beta_step_2",
+                description="occupies _2 suffix",
+                generated_code={},
+                status="draft",
+                run_id="aaaa-0003",
+            ))
+            s.commit()
+        resp = client.patch(
+            "/api/creator/drafts/1", json={"name": "beta_step"}
+        )
+        assert resp.status_code == 409
+        assert resp.json()["suggested_name"] == "beta_step_3"
