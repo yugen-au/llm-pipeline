@@ -21,3 +21,10 @@
 | Backend API & Validation | backend-development:backend-architect | research | 3 | - | A | complete | 0 | ad874532e10b8e913 | 012f7763 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a21432ed2deb865ac | f3c980ee | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a546ac1230b75d586 | pending | - |
+| Backend Editor Router | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | /fastapi/fastapi |
+| Frontend API Layer | frontend-mobile-development:frontend-developer | implementation | 2 | - | B | pending | 0 | pending | pending | /tanstack/query |
+| Route File + 3-Panel Shell | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | pending | pending | /tanstack/router |
+| Step Palette Panel | frontend-mobile-development:frontend-developer | implementation | 4 | - | C | pending | 0 | pending | pending | /clauderic/dnd-kit |
+| Multi-Strategy DnD Canvas | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | pending | 0 | pending | pending | /clauderic/dnd-kit |
+| Properties Panel + Auto-Compile | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | pending | 0 | pending | pending | /tanstack/query |
+| Fork Pipeline Flow | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | pending | pending | /tanstack/query |
