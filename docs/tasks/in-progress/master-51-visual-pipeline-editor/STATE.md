@@ -9,7 +9,7 @@
 ## Plugins: frontend-mobile-development, ui-design, backend-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: [5,6]
+## Steps to Fix: none
 ## Work Mode: standard
 ## Last Updated: 2026-03-20 23:03
 
