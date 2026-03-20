@@ -80,3 +80,48 @@ Added barrel exports for EditorPropertiesPanel, EditorPropertiesPanelProps, pipe
 [x] Load Draft populates editor state from DraftPipelineDetail structure
 [x] New Pipeline resets all editor state
 [x] Fork pipeline converts PipelineMetadata to EditorStrategyState[]
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH: `loadingDraftId` useEffect can fire repeatedly / fragile reactive pattern
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/editor.tsx`
+Replaced reactive `loadingDraftId` + `useDraftPipeline(loadingDraftId)` + `useEffect` chain with imperative `queryClient.fetchQuery` inside `handleLoadDraft`.
+
+```
+# Before (reactive chain)
+const [loadingDraftId, setLoadingDraftId] = useState<number | null>(null)
+const { data: loadedDraftDetail } = useDraftPipeline(loadingDraftId)
+useEffect(() => {
+  if (!loadedDraftDetail || loadingDraftId == null) return
+  // ... 7 sequential state updates ...
+  setLoadingDraftId(null)
+}, [loadedDraftDetail, loadingDraftId])
+const handleLoadDraft = useCallback((id: number) => {
+  setLoadingDraftId(id)
+}, [])
+
+# After (imperative fetch)
+const queryClient = useQueryClient()
+const handleLoadDraft = useCallback(async (id: number) => {
+  const detail = await queryClient.fetchQuery({
+    queryKey: queryKeys.editor.draft(id),
+    queryFn: () => apiClient<DraftPipelineDetail>('/editor/drafts/' + id),
+  })
+  // ... parse structure, set all state in one synchronous block ...
+}, [queryClient])
+```
+
+Removed: `loadingDraftId` state, `useDraftPipeline` import/hook call, load-draft `useEffect`.
+Added: `useQueryClient` import, `apiClient` import, `queryKeys` import, `DraftPipelineDetail` type import.
+
+### Verification
+[x] TypeScript compiles without errors (npx tsc --noEmit)
+[x] ESLint passes with 0 errors on editor.tsx
+[x] No more reactive chain -- handleLoadDraft is fully imperative
+[x] queryClient.fetchQuery populates TanStack cache for subsequent reads
+[x] All state updates happen synchronously after await resolves

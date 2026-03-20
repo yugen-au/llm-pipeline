@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import {
   DndContext,
@@ -14,6 +15,7 @@ import type {
   AvailableStep,
   CompileRequest,
   CompileResponse,
+  DraftPipelineDetail,
   EditorStrategy,
 } from '@/api/editor'
 import {
@@ -22,8 +24,9 @@ import {
   useCreateDraftPipeline,
   useUpdateDraftPipeline,
   useDraftPipelines,
-  useDraftPipeline,
 } from '@/api/editor'
+import { apiClient } from '@/api/client'
+import { queryKeys } from '@/api/query-keys'
 import {
   EditorPalettePanel,
   EditorStrategyCanvas,
@@ -108,10 +111,9 @@ function EditorPage() {
     null,
   )
   const [compileStatus, setCompileStatus] = useState<CompileStatus>('idle')
-  // Track which draft ID to load (triggers useDraftPipeline fetch)
-  const [loadingDraftId, setLoadingDraftId] = useState<number | null>(null)
 
   // -- API hooks --
+  const queryClient = useQueryClient()
   const { data: availableStepsData } = useAvailableSteps()
   const availableSteps = availableStepsData?.steps ?? []
   const compileMutation = useCompilePipeline()
@@ -119,46 +121,6 @@ function EditorPage() {
   const updateDraftMutation = useUpdateDraftPipeline()
   const { data: draftsData } = useDraftPipelines()
   const draftPipelines = draftsData?.items ?? []
-  const { data: loadedDraftDetail } = useDraftPipeline(loadingDraftId)
-
-  // -- Load draft detail when fetched --
-  useEffect(() => {
-    if (!loadedDraftDetail || loadingDraftId == null) return
-    // Populate editor state from draft structure
-    const structure = loadedDraftDetail.structure as {
-      schema_version?: number
-      strategies?: Array<{
-        strategy_name: string
-        steps: Array<{
-          step_ref: string
-          source: 'draft' | 'registered'
-          position: number
-        }>
-      }>
-    }
-    if (structure?.strategies) {
-      setStrategies(
-        structure.strategies.map((s) => ({
-          strategy_name: s.strategy_name,
-          steps: s.steps
-            .sort((a, b) => a.position - b.position)
-            .map((step) => ({
-              id: crypto.randomUUID(),
-              step_ref: step.step_ref,
-              source: step.source,
-            })),
-        })),
-      )
-    } else {
-      setStrategies([])
-    }
-    setDraftPipelineName(loadedDraftDetail.name)
-    setActiveDraftPipelineId(loadedDraftDetail.id)
-    setSelectedStepId(null)
-    setCompileResult(null)
-    setCompileStatus('idle')
-    setLoadingDraftId(null)
-  }, [loadedDraftDetail, loadingDraftId])
 
   // -- Auto-compile with debounce + AbortController --
   const abortRef = useRef<AbortController | null>(null)
@@ -272,10 +234,49 @@ function EditorPage() {
     createDraftMutation,
   ])
 
-  /** Load a draft pipeline into editor state */
-  const handleLoadDraft = useCallback((id: number) => {
-    setLoadingDraftId(id)
-  }, [])
+  /** Load a draft pipeline into editor state (imperative fetch) */
+  const handleLoadDraft = useCallback(
+    async (id: number) => {
+      const detail = await queryClient.fetchQuery({
+        queryKey: queryKeys.editor.draft(id),
+        queryFn: () =>
+          apiClient<DraftPipelineDetail>('/editor/drafts/' + id),
+      })
+      const structure = detail.structure as {
+        schema_version?: number
+        strategies?: Array<{
+          strategy_name: string
+          steps: Array<{
+            step_ref: string
+            source: 'draft' | 'registered'
+            position: number
+          }>
+        }>
+      }
+      if (structure?.strategies) {
+        setStrategies(
+          structure.strategies.map((s) => ({
+            strategy_name: s.strategy_name,
+            steps: s.steps
+              .sort((a, b) => a.position - b.position)
+              .map((step) => ({
+                id: crypto.randomUUID(),
+                step_ref: step.step_ref,
+                source: step.source,
+              })),
+          })),
+        )
+      } else {
+        setStrategies([])
+      }
+      setDraftPipelineName(detail.name)
+      setActiveDraftPipelineId(detail.id)
+      setSelectedStepId(null)
+      setCompileResult(null)
+      setCompileStatus('idle')
+    },
+    [queryClient],
+  )
 
   /** Reset to empty editor state */
   const handleNewPipeline = useCallback(() => {
