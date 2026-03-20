@@ -6,6 +6,7 @@ import { useFiltersStore } from '@/stores/filters'
 import { RunsTable } from '@/components/runs/RunsTable'
 import { FilterBar } from '@/components/runs/FilterBar'
 import { Pagination } from '@/components/runs/Pagination'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import type { RunListParams } from '@/api/types'
 
 const PAGE_SIZE = 25
@@ -42,13 +43,17 @@ function RunListPage() {
 
   return (
     <div className="flex flex-col gap-4 h-full p-6">
-      <h1 className="text-2xl font-bold">Pipeline Runs</h1>
-      <FilterBar status={status} onStatusChange={handleStatusChange} />
-      <RunsTable
-        runs={data?.items ?? []}
-        isLoading={isLoading}
-        isError={isError}
-      />
+      <h1 className="shrink-0 text-2xl font-bold">Pipeline Runs</h1>
+      <div className="shrink-0">
+        <FilterBar status={status} onStatusChange={handleStatusChange} />
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <RunsTable
+          runs={data?.items ?? []}
+          isLoading={isLoading}
+          isError={isError}
+        />
+      </ScrollArea>
       <Pagination
         total={data?.total ?? 0}
         page={page}

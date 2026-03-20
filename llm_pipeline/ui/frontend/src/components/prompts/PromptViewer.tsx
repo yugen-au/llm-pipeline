@@ -1,6 +1,7 @@
 import { usePromptDetail } from '@/api/prompts'
 import type { PromptVariant } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 
 // ---------------------------------------------------------------------------
@@ -106,32 +107,36 @@ export function PromptViewer({ promptKey }: PromptViewerProps) {
   // Single variant -- render directly without tabs
   if (variants.length <= 1) {
     return (
-      <div className="space-y-4 p-4">
-        <h2 className="text-lg font-semibold">{data.prompt_key}</h2>
-        {variants[0] && <VariantSection variant={variants[0]} />}
-      </div>
+      <ScrollArea className="h-full">
+        <div className="space-y-4 p-4">
+          <h2 className="text-lg font-semibold">{data.prompt_key}</h2>
+          {variants[0] && <VariantSection variant={variants[0]} />}
+        </div>
+      </ScrollArea>
     )
   }
 
   // Multiple variants -- wrap in tabs keyed by prompt_type
   return (
-    <div className="space-y-4 p-4">
-      <h2 className="text-lg font-semibold">{data.prompt_key}</h2>
-      <Tabs defaultValue={variants[0].prompt_type}>
-        <TabsList>
+    <ScrollArea className="h-full">
+      <div className="space-y-4 p-4">
+        <h2 className="text-lg font-semibold">{data.prompt_key}</h2>
+        <Tabs defaultValue={variants[0].prompt_type}>
+          <TabsList>
+            {variants.map((v) => (
+              <TabsTrigger key={v.prompt_type} value={v.prompt_type}>
+                {v.prompt_type}
+              </TabsTrigger>
+            ))}
+          </TabsList>
           {variants.map((v) => (
-            <TabsTrigger key={v.prompt_type} value={v.prompt_type}>
-              {v.prompt_type}
-            </TabsTrigger>
+            <TabsContent key={v.prompt_type} value={v.prompt_type}>
+              <VariantSection variant={v} />
+            </TabsContent>
           ))}
-        </TabsList>
-        {variants.map((v) => (
-          <TabsContent key={v.prompt_type} value={v.prompt_type}>
-            <VariantSection variant={v} />
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
+        </Tabs>
+      </div>
+    </ScrollArea>
   )
 }
 

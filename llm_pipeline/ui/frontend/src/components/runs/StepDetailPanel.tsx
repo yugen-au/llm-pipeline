@@ -82,7 +82,7 @@ function InputTab({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-2">
         <h4 className="text-sm font-medium text-muted-foreground">
           Context after step {prevSnapshot.step_number} ({prevSnapshot.step_name})
@@ -121,7 +121,7 @@ function PromptsTab({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-4">
         {prompts.map((item) => (
           <div key={item.prompt_key} className="space-y-1">
@@ -148,7 +148,7 @@ function ResponseTab({ events }: { events: EventItem[] }) {
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-4">
         {calls.map(({ data }, i) => (
           <div key={i} className="space-y-2">
@@ -191,7 +191,7 @@ function InstructionsTab({
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-3">
         {instructionsClass && (
           <Badge variant="secondary">{instructionsClass}</Badge>
@@ -225,7 +225,7 @@ function ContextDiffTab({
   const afterSnapshot = snapshots.find((s) => s.step_number === step.step_number)
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-3">
         {newKeys.length > 0 && (
           <div className="space-y-1">
@@ -256,7 +256,7 @@ function ExtractionsTab({ events }: { events: EventItem[] }) {
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-3">
         {extractions.map(({ data }, i) => (
           <ExtractionDetail key={i} data={data} />
@@ -300,7 +300,7 @@ function MetaTab({
   const hasCost = completedCalls.some(({ data }) => data.cost_usd != null)
 
   return (
-    <ScrollArea className="h-[calc(100vh-220px)]">
+    <ScrollArea className="h-full">
       <div className="space-y-4">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
           <dt className="text-muted-foreground">Step Name</dt>

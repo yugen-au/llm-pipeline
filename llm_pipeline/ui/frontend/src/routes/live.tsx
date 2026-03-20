@@ -292,10 +292,10 @@ function LivePage() {
           <TabsContent value="pipeline" className="min-h-0 flex-1 overflow-auto">
             {pipelineColumn}
           </TabsContent>
-          <TabsContent value="events" className="min-h-0 flex-1 overflow-hidden">
+          <TabsContent value="events" className="min-h-0 flex-1 overflow-auto">
             {eventsColumn}
           </TabsContent>
-          <TabsContent value="steps" className="min-h-0 flex-1 overflow-hidden">
+          <TabsContent value="steps" className="min-h-0 flex-1 overflow-auto">
             {stepsColumn}
           </TabsContent>
         </Tabs>
