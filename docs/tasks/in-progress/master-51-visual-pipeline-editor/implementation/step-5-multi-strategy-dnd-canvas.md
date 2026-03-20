@@ -103,3 +103,84 @@ Added exports for EditorStrategyCanvas, buildEditorDragEnd, StrategyList, Sortab
 [x] All components exported from src/components/editor/index.ts
 [x] Cross-strategy drag handled as no-op
 [x] Error indicator (red dot + destructive border) on cards with compile errors
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH: Stale closure in buildEditorDragEnd via useMemo -- strategies closed over at creation time
+[x] MEDIUM: Remove unused onStepsChange prop from StrategyList
+[x] MEDIUM: handleRemoveStep in EditorStrategyCanvas not memoized
+
+### Changes Made
+
+#### File: `src/components/editor/EditorStrategyCanvas.tsx`
+Refactored buildEditorDragEnd to use functional updater pattern. Memoized handleRemoveStep.
+```
+# Before
+export function buildEditorDragEnd(
+  strategies: EditorStrategyState[],
+  onStrategiesChange: (strategies: EditorStrategyState[]) => void,
+) {
+  // ... closes over strategies, reads stale value during drag
+  onStrategiesChange(strategies.map(...))
+
+function handleRemoveStep(stepId: string) {  // not memoized
+
+# After
+export function buildEditorDragEnd(
+  setStrategies: Dispatch<SetStateAction<EditorStrategyState[]>>,
+): (event: DragEndEvent) => void {
+  // ... all mutations use setStrategies(prev => ...), no closed-over strategies
+  setStrategies((prev) => prev.map(...))
+
+const handleRemoveStep = useCallback((stepId: string) => {
+  onStrategiesChange((prev) => prev.map(...))
+  onSelectStep((current) => (current === stepId ? null : current))
+}, [onStrategiesChange, onSelectStep])
+```
+Also changed prop types: `onStrategiesChange` and `onSelectStep` now typed as `Dispatch<SetStateAction<...>>` to support functional updater form.
+
+#### File: `src/components/editor/StrategyList.tsx`
+Removed unused `onStepsChange` from StrategyListProps interface and removed unused `EditorStepItem` import.
+```
+# Before
+export interface StrategyListProps {
+  strategy: EditorStrategyState
+  onStepsChange: (steps: EditorStepItem[]) => void
+  selectedStepId: string | null
+  ...
+import type { EditorStepItem, EditorStrategyState } from '@/routes/editor'
+
+# After
+export interface StrategyListProps {
+  strategy: EditorStrategyState
+  selectedStepId: string | null
+  ...
+import type { EditorStrategyState } from '@/routes/editor'
+```
+
+#### File: `src/routes/editor.tsx`
+Updated buildEditorDragEnd call to only pass setStrategies (no strategies arg). Empty deps array since setStrategies is stable.
+```
+# Before
+const handleDragEnd = useMemo(
+  () => buildEditorDragEnd(strategies, setStrategies),
+  [strategies],
+)
+
+# After
+const handleDragEnd = useMemo(
+  () => buildEditorDragEnd(setStrategies),
+  [],
+)
+```
+
+### Verification
+[x] TypeScript type-check passes (no errors in step-5 files)
+[x] buildEditorDragEnd no longer closes over strategies -- uses setStrategies(prev => ...) throughout
+[x] handleRemoveStep wrapped in useCallback with stable deps [onStrategiesChange, onSelectStep]
+[x] onStepsChange removed from StrategyListProps and EditorStrategyCanvas call site
+[x] Unused EditorStepItem import removed from StrategyList.tsx
+[x] handleDragEnd useMemo has empty deps (setStrategies is stable React dispatch)

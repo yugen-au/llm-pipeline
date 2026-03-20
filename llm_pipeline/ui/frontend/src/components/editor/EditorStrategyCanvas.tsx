@@ -4,10 +4,14 @@
  * Renders one StrategyList per strategy, arranged horizontally.
  * Does NOT own the DndContext -- that lives in editor.tsx so the palette
  * panel's useDraggable and the canvas's useSortable/useDroppable share the
- * same context. The parent provides onDragEnd via useEditorDragEnd.
+ * same context. The parent provides onDragEnd via buildEditorDragEnd.
  */
 
-import type { CompileError } from '@/api/editor'
+import { useCallback, type Dispatch, type SetStateAction } from 'react'
+import type { DragEndEvent } from '@dnd-kit/core'
+import { arrayMove } from '@dnd-kit/sortable'
+
+import type { CompileError, AvailableStep } from '@/api/editor'
 import type { EditorStepItem, EditorStrategyState } from '@/routes/editor'
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area'
 
@@ -19,9 +23,9 @@ import { StrategyList } from './StrategyList'
 
 export interface EditorStrategyCanvasProps {
   strategies: EditorStrategyState[]
-  onStrategiesChange: (strategies: EditorStrategyState[]) => void
+  onStrategiesChange: Dispatch<SetStateAction<EditorStrategyState[]>>
   selectedStepId: string | null
-  onSelectStep: (id: string | null) => void
+  onSelectStep: Dispatch<SetStateAction<string | null>>
   compileErrors: CompileError[]
 }
 
@@ -37,20 +41,22 @@ export function EditorStrategyCanvas({
   compileErrors,
 }: EditorStrategyCanvasProps) {
   // -------------------------------------------------------------------
-  // Remove step handler
+  // Remove step handler (memoized to avoid re-rendering all cards)
   // -------------------------------------------------------------------
 
-  function handleRemoveStep(stepId: string) {
-    onStrategiesChange(
-      strategies.map((s) => ({
-        ...s,
-        steps: s.steps.filter((st) => st.id !== stepId),
-      })),
-    )
-    if (selectedStepId === stepId) {
-      onSelectStep(null)
-    }
-  }
+  const handleRemoveStep = useCallback(
+    (stepId: string) => {
+      onStrategiesChange((prev) =>
+        prev.map((s) => ({
+          ...s,
+          steps: s.steps.filter((st) => st.id !== stepId),
+        })),
+      )
+      // Deselect if removed step was selected
+      onSelectStep((current) => (current === stepId ? null : current))
+    },
+    [onStrategiesChange, onSelectStep],
+  )
 
   // -------------------------------------------------------------------
   // Render
@@ -73,15 +79,6 @@ export function EditorStrategyCanvas({
           <StrategyList
             key={strategy.strategy_name}
             strategy={strategy}
-            onStepsChange={(steps) =>
-              onStrategiesChange(
-                strategies.map((s) =>
-                  s.strategy_name === strategy.strategy_name
-                    ? { ...s, steps }
-                    : s,
-                ),
-              )
-            }
             selectedStepId={selectedStepId}
             onSelectStep={onSelectStep}
             onRemoveStep={handleRemoveStep}
@@ -97,10 +94,6 @@ export function EditorStrategyCanvas({
 // ---------------------------------------------------------------------------
 // Drag-end logic -- used by the parent DndContext in editor.tsx
 // ---------------------------------------------------------------------------
-
-import type { DragEndEvent } from '@dnd-kit/core'
-import type { AvailableStep } from '@/api/editor'
-import { arrayMove } from '@dnd-kit/sortable'
 
 /** Find which strategy a step belongs to by step UUID. */
 function findStrategyForStep(
@@ -130,15 +123,17 @@ function resolveTargetStrategy(
 /**
  * Build the onDragEnd handler for the editor's DndContext.
  *
+ * Uses functional updater (setStrategies(prev => ...)) to avoid stale
+ * closures -- the handler never reads strategies from its creation scope.
+ *
  * Handles:
  *   - palette-step drops: add to target strategy with new UUID
  *   - sortable-step reorder: arrayMove within same strategy
  *   - cross-strategy drag: no-op (v1 limitation)
  */
 export function buildEditorDragEnd(
-  strategies: EditorStrategyState[],
-  onStrategiesChange: (strategies: EditorStrategyState[]) => void,
-) {
+  setStrategies: Dispatch<SetStateAction<EditorStrategyState[]>>,
+): (event: DragEndEvent) => void {
   return function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over) return
@@ -153,25 +148,24 @@ export function buildEditorDragEnd(
     // ----- Palette drop: add new step to target strategy -----
     if (activeData.type === 'palette-step') {
       const paletteStep = activeData.step
-      const targetStrategyName = resolveTargetStrategy(
-        strategies,
-        over.id as string,
-      )
-      if (!targetStrategyName) return
+      const overId = over.id as string
 
-      const newStep: EditorStepItem = {
-        id: crypto.randomUUID(),
-        step_ref: paletteStep.step_ref,
-        source: paletteStep.source,
-      }
+      setStrategies((prev) => {
+        const targetStrategyName = resolveTargetStrategy(prev, overId)
+        if (!targetStrategyName) return prev
 
-      onStrategiesChange(
-        strategies.map((s) =>
+        const newStep: EditorStepItem = {
+          id: crypto.randomUUID(),
+          step_ref: paletteStep.step_ref,
+          source: paletteStep.source,
+        }
+
+        return prev.map((s) =>
           s.strategy_name === targetStrategyName
             ? { ...s, steps: [...s.steps, newStep] }
             : s,
-        ),
-      )
+        )
+      })
       return
     }
 
@@ -179,39 +173,39 @@ export function buildEditorDragEnd(
     if (activeData.type === 'sortable-step') {
       if (active.id === over.id) return
 
-      const sourceStrategy = findStrategyForStep(
-        strategies,
-        active.id as string,
-      )
-      if (!sourceStrategy) return
+      const activeId = active.id as string
+      const overId = over.id as string
 
-      // Check if over target is in the same strategy
-      const overIsStep = sourceStrategy.steps.some(
-        (st) => st.id === (over.id as string),
-      )
+      setStrategies((prev) => {
+        const sourceStrategy = findStrategyForStep(prev, activeId)
+        if (!sourceStrategy) return prev
 
-      if (!overIsStep) {
-        // Cross-strategy drag: no-op (v1 limitation)
-        return
-      }
+        // Check if over target is in the same strategy
+        const overIsStep = sourceStrategy.steps.some(
+          (st) => st.id === overId,
+        )
 
-      const oldIndex = sourceStrategy.steps.findIndex(
-        (st) => st.id === active.id,
-      )
-      const newIndex = sourceStrategy.steps.findIndex(
-        (st) => st.id === over.id,
-      )
-      if (oldIndex === -1 || newIndex === -1) return
+        if (!overIsStep) {
+          // Cross-strategy drag: no-op (v1 limitation)
+          return prev
+        }
 
-      const reordered = arrayMove(sourceStrategy.steps, oldIndex, newIndex)
+        const oldIndex = sourceStrategy.steps.findIndex(
+          (st) => st.id === activeId,
+        )
+        const newIndex = sourceStrategy.steps.findIndex(
+          (st) => st.id === overId,
+        )
+        if (oldIndex === -1 || newIndex === -1) return prev
 
-      onStrategiesChange(
-        strategies.map((s) =>
+        const reordered = arrayMove(sourceStrategy.steps, oldIndex, newIndex)
+
+        return prev.map((s) =>
           s.strategy_name === sourceStrategy.strategy_name
             ? { ...s, steps: reordered }
             : s,
-        ),
-      )
+        )
+      })
     }
   }
 }

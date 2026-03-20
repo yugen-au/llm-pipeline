@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/sortable'
 
 import type { CompileError } from '@/api/editor'
-import type { EditorStepItem, EditorStrategyState } from '@/routes/editor'
+import type { EditorStrategyState } from '@/routes/editor'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
@@ -25,7 +25,6 @@ import { SortableStepCard } from './SortableStepCard'
 
 export interface StrategyListProps {
   strategy: EditorStrategyState
-  onStepsChange: (steps: EditorStepItem[]) => void
   selectedStepId: string | null
   onSelectStep: (id: string | null) => void
   onRemoveStep: (stepId: string) => void

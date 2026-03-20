@@ -212,10 +212,10 @@ function EditorPage() {
     }),
   )
 
-  // -- DnD drag-end handler --
+  // -- DnD drag-end handler (stable: no closed-over strategies) --
   const handleDragEnd = useMemo(
-    () => buildEditorDragEnd(strategies, setStrategies),
-    [strategies],
+    () => buildEditorDragEnd(setStrategies),
+    [],
   )
 
   // Compile errors from latest result
