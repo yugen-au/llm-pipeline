@@ -62,15 +62,34 @@ function EditorPropertiesPanel() {
 // ---------------------------------------------------------------------------
 
 function EditorPage() {
-  // -- Editor state (wired incrementally in Steps 4-7) --
+  // -- Editor state (wired incrementally in Steps 5-7) --
   const [strategies, setStrategies] = useState<EditorStrategyState[]>([])
-  const [_selectedStepId, _setSelectedStepId] = useState<string | null>(null)
+  const [selectedStepId, setSelectedStepId] = useState<string | null>(null)
   const [_activeDraftPipelineId, _setActiveDraftPipelineId] = useState<
     number | null
   >(null)
-  const [_compileResult, _setCompileResult] =
+  const [compileResult, _setCompileResult] =
     useState<CompileResponse | null>(null)
   const [_compileStatus, _setCompileStatus] = useState<CompileStatus>('idle')
+
+  // -- DnD sensors --
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  )
+
+  // -- DnD drag-end handler (memoized on strategies ref) --
+  const handleDragEnd = useMemo(
+    () => buildEditorDragEnd(strategies, setStrategies),
+    [strategies],
+  )
+
+  // Compile errors from latest result (empty if no result or valid)
+  const compileErrors = compileResult?.errors ?? []
 
   // -- Handlers --
 
@@ -109,7 +128,15 @@ function EditorPage() {
     />
   )
 
-  const canvasColumn = <EditorStrategyCanvas />
+  const canvasColumn = (
+    <EditorStrategyCanvas
+      strategies={strategies}
+      onStrategiesChange={setStrategies}
+      selectedStepId={selectedStepId}
+      onSelectStep={setSelectedStepId}
+      compileErrors={compileErrors}
+    />
+  )
 
   const propertiesColumn = <EditorPropertiesPanel />
 
@@ -125,47 +152,58 @@ function EditorPage() {
         </p>
       </div>
 
-      {/* Desktop layout (lg+): 3-column grid */}
-      <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-[280px_1fr_350px] lg:gap-4">
-        {/* Col 1: Step Palette */}
-        <div className="overflow-auto">{paletteColumn}</div>
+      {/* DndContext wraps both palette (useDraggable) and canvas
+          (useSortable + useDroppable) so they share the same context */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        {/* Desktop layout (lg+): 3-column grid */}
+        <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-[280px_1fr_350px] lg:gap-4">
+          {/* Col 1: Step Palette */}
+          <div className="overflow-auto">{paletteColumn}</div>
 
-        {/* Col 2: Strategy Canvas */}
-        <div className="overflow-hidden">{canvasColumn}</div>
+          {/* Col 2: Strategy Canvas */}
+          <div className="overflow-hidden">{canvasColumn}</div>
 
-        {/* Col 3: Properties Panel */}
-        <div className="overflow-hidden">{propertiesColumn}</div>
-      </div>
+          {/* Col 3: Properties Panel */}
+          <div className="overflow-hidden">{propertiesColumn}</div>
+        </div>
 
-      {/* Mobile/tablet layout (below lg): tab-based */}
-      <div className="flex min-h-0 flex-1 flex-col lg:hidden">
-        <Tabs defaultValue="palette" className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="shrink-0">
-            <TabsTrigger value="palette">Palette</TabsTrigger>
-            <TabsTrigger value="editor">Editor</TabsTrigger>
-            <TabsTrigger value="properties">Properties</TabsTrigger>
-          </TabsList>
-
-          <TabsContent
-            value="palette"
-            className="min-h-0 flex-1 overflow-auto"
+        {/* Mobile/tablet layout (below lg): tab-based */}
+        <div className="flex min-h-0 flex-1 flex-col lg:hidden">
+          <Tabs
+            defaultValue="palette"
+            className="flex min-h-0 flex-1 flex-col"
           >
-            {paletteColumn}
-          </TabsContent>
-          <TabsContent
-            value="editor"
-            className="min-h-0 flex-1 overflow-hidden"
-          >
-            {canvasColumn}
-          </TabsContent>
-          <TabsContent
-            value="properties"
-            className="min-h-0 flex-1 overflow-hidden"
-          >
-            {propertiesColumn}
-          </TabsContent>
-        </Tabs>
-      </div>
+            <TabsList className="shrink-0">
+              <TabsTrigger value="palette">Palette</TabsTrigger>
+              <TabsTrigger value="editor">Editor</TabsTrigger>
+              <TabsTrigger value="properties">Properties</TabsTrigger>
+            </TabsList>
+
+            <TabsContent
+              value="palette"
+              className="min-h-0 flex-1 overflow-auto"
+            >
+              {paletteColumn}
+            </TabsContent>
+            <TabsContent
+              value="editor"
+              className="min-h-0 flex-1 overflow-hidden"
+            >
+              {canvasColumn}
+            </TabsContent>
+            <TabsContent
+              value="properties"
+              className="min-h-0 flex-1 overflow-hidden"
+            >
+              {propertiesColumn}
+            </TabsContent>
+          </Tabs>
+        </div>
+      </DndContext>
     </div>
   )
 }
