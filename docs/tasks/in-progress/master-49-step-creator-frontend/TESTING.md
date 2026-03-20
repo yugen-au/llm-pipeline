@@ -133,3 +133,36 @@ Sidebar.test.tsx: 2/2 pass (Creator nav item added: OK, >= 4 link check still sa
 2. Consider installing `monaco-editor` as a direct dependency if offline support is needed; document the CDN dependency in README
 3. Fix the 4 pre-existing backend test failures in a separate task (test_agent_registry_core field count from pydantic-ai changes; test_cli signature mismatches from master-27)
 4. After dev server restart, verify routeTree.gen.ts includes /creator to confirm TanStack Router type-safety for Sidebar NavItem
+
+---
+
+## Re-run: useRenameDraft RenameConflictError review fix
+
+**Date:** 2026-03-20
+
+### Changes Reviewed
+- `src/api/creator.ts`: `useRenameDraft` now uses raw `fetch` instead of `apiClient`. 409 responses parsed and thrown as `RenameConflictError` (carries `suggestedName`). Non-OK responses thrown as `ApiError`. Success path returns typed `DraftDetail`.
+- `src/api/types.ts`: `RenameConflictError extends ApiError` class added with `readonly suggestedName: string` field. Exported alongside `ApiError`.
+- `src/routes/creator.tsx`: `handleRename` now checks `instanceof RenameConflictError` first, extracts `error.suggestedName` directly (no manual JSON.parse). Falls through to `instanceof ApiError` for other errors. Imports `RenameConflictError` from `@/api/types`.
+
+### Build Verification (re-run)
+- [x] TypeScript check: `npx tsc --noEmit` -- EXIT:0, zero errors
+- [x] Production build: `npm run build` -- EXIT:0, succeeded in 7.80s, 33 chunks
+- [x] creator chunk: `dist/assets/creator-BhWREQUx.js` (18.36 kB) -- slightly larger than previous (18.17 kB) reflecting RenameConflictError class addition
+- [x] badge chunk grew from 2.50 kB to 2.63 kB -- consistent with types.ts addition being shared
+
+### Automated Testing (re-run)
+
+#### Backend (pytest)
+**Pass Rate:** 1210/1220 (6 skipped) -- identical to previous run
+```
+FAILED tests/test_agent_registry_core.py::TestStepDepsFields::test_field_count
+FAILED tests/ui/test_cli.py::TestCreateDevApp::test_reads_env_var_and_passes_to_create_app
+FAILED tests/ui/test_cli.py::TestCreateDevApp::test_passes_none_when_env_var_absent
+FAILED tests/ui/test_cli.py::TestDevModeWithFrontend::test_uvicorn_no_reload_in_vite_mode
+===== 4 failed, 1210 passed, 6 skipped in 128.10s ======
+```
+No new failures. tests/ui/test_creator.py 25/25 pass.
+
+### Issues Found (re-run)
+None. No new issues introduced by the RenameConflictError refactor.
