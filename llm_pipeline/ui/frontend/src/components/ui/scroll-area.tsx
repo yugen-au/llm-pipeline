@@ -17,6 +17,7 @@ function ScrollArea({
 }: ScrollAreaProps) {
   return (
     <ScrollAreaPrimitive.Root
+      type="always"
       data-slot="scroll-area"
       className={cn("relative overflow-hidden", className)}
       {...props}
@@ -67,7 +68,7 @@ function ScrollBar({
         data-slot="scroll-area-thumb"
         className={cn(
           "relative flex-1 rounded-full",
-          thin ? "bg-foreground/15 hover:bg-foreground/30" : "bg-foreground/20 hover:bg-foreground/40",
+          thin ? "bg-foreground/25 hover:bg-foreground/40" : "bg-foreground/35 hover:bg-foreground/55",
         )}
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
