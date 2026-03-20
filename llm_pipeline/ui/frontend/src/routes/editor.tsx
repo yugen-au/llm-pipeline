@@ -1,9 +1,22 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { Card } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import type { AvailableStep, CompileResponse } from '@/api/editor'
-import { EditorPalettePanel } from '@/components/editor'
+import {
+  EditorPalettePanel,
+  EditorStrategyCanvas,
+  buildEditorDragEnd,
+} from '@/components/editor'
 
 export const Route = createFileRoute('/editor')({
   component: EditorPage,
@@ -28,21 +41,8 @@ export interface EditorStrategyState {
 type CompileStatus = 'idle' | 'pending' | 'error'
 
 // ---------------------------------------------------------------------------
-// Placeholder panel components (replaced incrementally in Steps 4-7)
+// Placeholder panel components (replaced incrementally in Steps 6-7)
 // ---------------------------------------------------------------------------
-
-function EditorStrategyCanvas() {
-  return (
-    <Card className="flex h-full flex-col overflow-hidden p-4">
-      <h2 className="mb-2 text-xs font-medium text-muted-foreground">
-        Strategy Canvas
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        Drag-and-drop strategy editor will appear here.
-      </p>
-    </Card>
-  )
-}
 
 function EditorPropertiesPanel() {
   return (
