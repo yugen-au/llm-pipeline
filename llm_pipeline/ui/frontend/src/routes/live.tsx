@@ -271,7 +271,7 @@ function LivePage() {
       </div>
 
       {/* Desktop layout (lg+): 3-column grid */}
-      <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-3 lg:gap-4">
+      <div className="hidden min-h-0 flex-1 lg:grid lg:grid-cols-3 lg:grid-rows-[1fr] lg:gap-4">
         {/* Col 1: Pipeline selector + run button + InputForm */}
         <div className="overflow-auto">{pipelineColumn}</div>
 
