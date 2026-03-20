@@ -4,28 +4,28 @@
 - Task folder: docs\tasks\in-progress\master-51-visual-pipeline-editor
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-4-step-palette-panel.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-properties-panel-auto-compile.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 4 - implement ONLY this step, not others
+- Step: 6 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 - [custom.prd_mode_guidance]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /clauderic/dnd-kit
+3. Context7 library IDs to query: /tanstack/query
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-4-step-palette-panel.md
+4. Document decisions in implementation\step-6-properties-panel-auto-compile.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 4: STEP PALETTE PANEL
+# IMPLEMENTATION - STEP 6: PROPERTIES PANEL + AUTO-COMPILE
 **Status:** [completed/failed/blocked]
 
 ## Summary
