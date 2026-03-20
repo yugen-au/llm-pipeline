@@ -41,6 +41,12 @@ const BASE_RECONNECT_DELAY = 1_000
 let globalWs: WebSocket | null = null
 let pendingMessages: WsClientMessage[] = []
 
+/** Tracks active subscriptions so they can be re-sent on reconnect. */
+const activeSubscriptions = new Set<string>()
+
+/** Guards StrictMode double-mount cleanup from tearing down a newer WS. */
+let mountGeneration = 0
+
 /**
  * Send a message over the global WS. If not yet open, queues for delivery.
  */
@@ -52,13 +58,18 @@ function sendWsMessage(msg: WsClientMessage): void {
   }
 }
 
-/** Flush any messages queued while WS was connecting. */
+/** Flush any messages queued while WS was connecting, then re-subscribe. */
 function flushPending(): void {
   if (!globalWs || globalWs.readyState !== WebSocket.OPEN) return
   for (const msg of pendingMessages) {
     globalWs.send(JSON.stringify(msg))
   }
   pendingMessages = []
+
+  // Re-subscribe all active runs on the new connection
+  for (const runId of activeSubscriptions) {
+    globalWs.send(JSON.stringify({ action: 'subscribe', run_id: runId }))
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -315,6 +326,7 @@ export function useGlobalWebSocket(): void {
   }, [queryClient, setStatus, setError, setLatestRun, incrementReconnect])
 
   useEffect(() => {
+    const gen = ++mountGeneration
     connectRef.current = connect
     mountedRef.current = true
     hadConnectionRef.current = false
@@ -322,6 +334,9 @@ export function useGlobalWebSocket(): void {
     connect()
 
     return () => {
+      // StrictMode guard: only tear down if no newer mount has taken over
+      if (gen !== mountGeneration) return
+
       mountedRef.current = false
 
       if (reconnectTimerRef.current) {
@@ -367,9 +382,12 @@ export function useSubscribeRun(runId: string | null): void {
       old ?? { items: [], total: 0, offset: 0, limit: 50 },
     )
 
+    // Track this subscription so flushPending() re-subscribes on reconnect
+    activeSubscriptions.add(runId)
     sendWsMessage({ action: 'subscribe', run_id: runId })
 
     return () => {
+      activeSubscriptions.delete(runId)
       sendWsMessage({ action: 'unsubscribe', run_id: runId })
     }
   }, [runId, queryClient])
