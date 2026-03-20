@@ -111,3 +111,57 @@ Approve with the following recommended changes before merge:
 3. **MEDIUM (acceptable to defer):** Remove unused `onStepsChange` prop from `StrategyList` interface and `EditorStrategyCanvas` call site, or wire it to a local reorder if needed.
 
 4. **LOW (defer to future):** Add "Add Strategy" button to `EditorStrategyCanvas` empty state or canvas header for new-pipeline creation flow.
+
+---
+
+# Re-Review: HIGH Issue Fixes
+
+## Overall Assessment
+**Status:** complete
+
+Both HIGH issues and two MEDIUM issues from the initial review have been resolved correctly. The fixes use idiomatic React patterns (functional state updaters, imperative fetch via queryClient). No new issues introduced by the changes.
+
+## Issues Resolved
+
+### HIGH: Stale closure in `buildEditorDragEnd` -- RESOLVED
+**Step:** 5
+**Verification:** `buildEditorDragEnd` now accepts only `setStrategies` (no `strategies` param). Both palette-drop (line 153) and sortable-reorder (line 179) use `setStrategies((prev) => { ... })` functional updater, reading from `prev` instead of a closed-over value. Helper functions `resolveTargetStrategy` and `findStrategyForStep` receive `prev` as argument inside the updater. `useMemo` in editor.tsx line 178-181 has empty deps `[]` which is correct since `setStrategies` is a stable reference from `useState`.
+
+### HIGH: `loadingDraftId` useEffect fragile reactive chain -- RESOLVED
+**Step:** 6
+**Verification:** `handleLoadDraft` (lines 238-279) is now a `useCallback` with imperative `queryClient.fetchQuery`. No `loadingDraftId` state variable exists. No reactive `useEffect` for draft loading. Structure is parsed and state is set in a single imperative callback. Dependencies are `[queryClient]` which is correct (queryClient is stable, `apiClient` is module-level).
+
+### MEDIUM: `handleRemoveStep` not memoized -- RESOLVED
+**Step:** 5
+**Verification:** `handleRemoveStep` (lines 47-58) wrapped in `useCallback` with deps `[onStrategiesChange, onSelectStep]`. Uses functional updaters: `onStrategiesChange((prev) => ...)` and `onSelectStep((current) => ...)`. Both deps are `Dispatch<SetStateAction<...>>` from `useState`, which are stable references.
+
+### MEDIUM: `onStepsChange` dead prop on StrategyList -- RESOLVED
+**Step:** 5
+**Verification:** `StrategyListProps` interface (lines 26-32) no longer includes `onStepsChange`. `EditorStrategyCanvas` no longer passes it. Clean interface with only consumed props.
+
+## Remaining Issues (Unchanged)
+
+### Medium
+- Auto-compile effect `eslint-disable-next-line react-hooks/exhaustive-deps` for `compileMutation` (Step 6) -- documented rationale, low risk
+- GET /drafts no pagination (Step 1) -- consistent with codebase norms, acceptable for v1
+
+### Low
+- Save/compile mutation coordination gap (Step 6) -- cosmetic only
+- Backend return type annotation `DraftPipelineDetail | JSONResponse` (Step 1) -- consistent with codebase
+- `resolveTargetStrategy` string prefix matching edge case (Step 5) -- unlikely scenario
+- No "Add Strategy" UI (Step 5) -- v1 scope limitation
+
+## New Issues Introduced
+None detected
+
+## Files Re-Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| `src/components/editor/EditorStrategyCanvas.tsx` | pass | Functional updaters in drag-end and remove handlers, `useCallback` memoization, clean props |
+| `src/components/editor/StrategyList.tsx` | pass | `onStepsChange` removed from interface, clean destructure |
+| `src/routes/editor.tsx` | pass | Imperative `queryClient.fetchQuery` in handleLoadDraft, `buildEditorDragEnd(setStrategies)` with empty deps |
+
+## Recommendation
+**Decision:** APPROVE
+
+All HIGH and addressed MEDIUM issues resolved correctly. Remaining MEDIUM/LOW items are acceptable for v1 and consistent with existing codebase patterns. No regressions or new issues from the fixes.
