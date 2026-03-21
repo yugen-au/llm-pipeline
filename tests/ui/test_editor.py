@@ -65,6 +65,16 @@ def _make_seeded_editor_app():
             status="error",
             run_id="aaaa-0002",
         ))
+        # gamma_step: non-errored draft used for isolated position tests
+        s.add(DraftStep(
+            name="gamma_step",
+            description="Gamma step for position isolation tests",
+            generated_code={
+                "gamma_step_step.py": "class GammaStepStep: pass",
+            },
+            status="draft",
+            run_id="aaaa-0003",
+        ))
         # Two seeded DraftPipeline rows
         s.add(DraftPipeline(
             name="pipeline_one",
@@ -184,7 +194,7 @@ class TestCompileEndpoint:
         assert empty_errors[0]["strategy_name"] == "empty_strategy"
 
     def test_compile_position_gap(self, editor_client):
-        """Positions [0, 2] have a gap at 1 -- should emit position error."""
+        """Positions [0, 2] have a gap -- isolated with distinct step_refs to avoid Pass 2."""
         resp = editor_client.post(
             "/api/editor/compile",
             json={
@@ -193,7 +203,7 @@ class TestCompileEndpoint:
                         "strategy_name": "main",
                         "steps": [
                             {"step_ref": "alpha_step", "source": "draft", "position": 0},
-                            {"step_ref": "alpha_step", "source": "draft", "position": 2},
+                            {"step_ref": "gamma_step", "source": "draft", "position": 2},
                         ],
                     }
                 ]
@@ -205,7 +215,7 @@ class TestCompileEndpoint:
         assert len(pos_errors) >= 1
 
     def test_compile_position_duplicate(self, editor_client):
-        """Positions [0, 0] are duplicated -- should emit position error."""
+        """Positions [0, 0] are duplicated -- isolated with distinct step_refs to avoid Pass 2."""
         resp = editor_client.post(
             "/api/editor/compile",
             json={
@@ -214,7 +224,7 @@ class TestCompileEndpoint:
                         "strategy_name": "main",
                         "steps": [
                             {"step_ref": "alpha_step", "source": "draft", "position": 0},
-                            {"step_ref": "alpha_step", "source": "draft", "position": 0},
+                            {"step_ref": "gamma_step", "source": "draft", "position": 0},
                         ],
                     }
                 ]
@@ -224,6 +234,17 @@ class TestCompileEndpoint:
         body = resp.json()
         pos_errors = [e for e in body["errors"] if e.get("field") == "position"]
         assert len(pos_errors) >= 1
+
+    def test_compile_empty_strategies_list(self, editor_client):
+        """strategies=[] (no strategies at all) is valid -- nothing to validate."""
+        resp = editor_client.post(
+            "/api/editor/compile",
+            json={"strategies": []},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["valid"] is True
+        assert body["errors"] == []
 
     def test_compile_stateful_writes_errors(self, editor_app_and_client):
         """Compile with invalid draft_id payload writes errors to DB row."""
