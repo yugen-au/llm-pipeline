@@ -34,12 +34,15 @@ class EditorStrategy(BaseModel):
 
 class CompileRequest(BaseModel):
     strategies: list[EditorStrategy]
+    draft_id: int | None = None
 
 
 class CompileError(BaseModel):
     strategy_name: str
     step_ref: str
     message: str
+    field: str | None = None
+    severity: Literal["error", "warning"] = "error"
 
 
 class CompileResponse(BaseModel):
