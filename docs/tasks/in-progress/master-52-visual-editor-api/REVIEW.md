@@ -210,3 +210,115 @@ Recommendation: Accumulate keys via `step_keys.setdefault(sn, [])` and extend, t
 **Decision:** CONDITIONAL
 
 Concur with Pass 1 decision. The two HIGH issues are confirmed real bugs requiring one-line fixes each before merge. Additionally recommend: (1) add `ge=0` to `EditorStep.position` to prevent negative positions breaking gap detection, and (2) track the `_collect_registered_prompt_keys` dedup behavior for review if multi-pipeline step reuse becomes common. All other medium/low items are non-blocking.
+
+---
+
+# Architecture Review (Pass 3 -- Post-Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+
+Both HIGH issues from Pass 1/2 are confirmed fixed. Line 305 now reads `draft.status = "error" if has_errors else "draft"` (commit 2c2f30f3). Lines 269-272 now include `Prompt.is_active.is_(True)` in the where clause (commit 76a6744b). No regressions introduced. All 23 tests pass. Remaining issues are MEDIUM and LOW severity, none blocking.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** D:\Documents\claude-projects\llm-pipeline\.claude\CLAUDE.md
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| No hardcoded values | pass | Unchanged from prior passes |
+| Error handling present | pass | Status write path now correctly uses `has_errors`; prompt query filters active |
+| Python 3.11+ type hints | pass | Unchanged |
+| Pydantic v2 models | pass | Unchanged |
+| SQLModel Session patterns | pass | Unchanged |
+| Test patterns (StaticPool, TestClient) | pass | Unchanged |
+| No emojis, concise style | pass | Unchanged |
+
+## Fix Verification
+
+### FIX 1: Stateful compile status logic (commit 2c2f30f3)
+**Step:** 3
+**Status:** VERIFIED
+**Details:** Line 305 now reads `draft.status = "error" if has_errors else "draft"`. The `has_errors` variable at line 292 is `any(e.severity == "error" for e in errors)`. A compile with only warning-severity items (e.g., missing prompt keys) now correctly sets status="draft" and returns `valid=True`. DB state and API response are consistent. Fix is correct and minimal.
+
+### FIX 2: Prompt key active filter (commit 76a6744b)
+**Step:** 2
+**Status:** VERIFIED
+**Details:** Lines 269-272 now read:
+```python
+stmt = select(Prompt.prompt_key).where(
+    Prompt.prompt_key.in_(list(all_expected_keys)),
+    Prompt.is_active.is_(True),
+)
+```
+Inactive prompt keys are excluded from the found set, so a deactivated prompt correctly triggers the "prompt key not found" warning. Fix is correct and uses the existing `ix_prompts_active` index.
+
+## Remaining Issues (Unchanged)
+
+### Critical
+None
+
+### High
+None (both fixed)
+
+### Medium
+
+#### _collect_registered_prompt_keys iterates introspection_registry twice
+**Step:** 2
+**Details:** Unchanged from Pass 1. Two separate iterations of registry per compile request. Mitigated by PipelineIntrospector cache. Non-blocking.
+
+#### No input length bounds on request models
+**Step:** 1
+**Details:** Unchanged from Pass 1/2. `EditorStep.position` accepts negative ints. `step_ref` and `strategy_name` unbounded. Non-blocking for internal API but recommended.
+
+#### update_draft_pipeline queries after rollback in same session
+**Step:** (pre-existing)
+**Details:** Unchanged. Pre-existing issue, not introduced by Task 52. Should be tracked separately.
+
+#### _collect_registered_prompt_keys first-wins deduplication
+**Step:** 2
+**Details:** Unchanged from Pass 2. First pipeline's keys win for shared step names. Non-blocking given step classes define prompt keys at class level.
+
+### Low
+
+#### test_compile_position_gap conflates Pass 2 and Pass 4
+**Step:** 4
+**Details:** Unchanged. Tests pass correctly but are not fully isolated. Non-blocking.
+
+#### No test for empty strategies list
+**Step:** 4
+**Details:** Unchanged. No dedicated test for `strategies=[] -> valid=True`. Non-blocking.
+
+#### CompileResponse errors field contains warnings
+**Step:** 1/2
+**Details:** Unchanged. Naming inconsistency, non-functional. Non-blocking.
+
+#### No strategies list length bound
+**Step:** 1
+**Details:** Unchanged from Pass 2. Non-blocking for internal API.
+
+## Review Checklist
+- [x] Architecture patterns followed
+- [x] Code quality and maintainability
+- [x] Error handling present (both fixes verified)
+- [x] No hardcoded values
+- [x] Project conventions followed
+- [x] Security considerations (active filter now present; input bounds remain recommended)
+- [x] Properly scoped
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/editor.py | pass | Both HIGH fixes verified correct at L269-272 and L305 |
+| tests/ui/test_editor.py | pass | 23 tests pass; no regressions from fixes |
+
+## New Issues Introduced
+None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+Both HIGH issues are fixed correctly. No regressions. Remaining MEDIUM/LOW items are non-blocking and appropriate for follow-up work:
+- Input length bounds on request models (track as tech debt)
+- Pre-existing session rollback bug in update_draft_pipeline (track separately)
+- Prompt key first-wins dedup (document assumption or fix if multi-pipeline step reuse grows)
+- Position test isolation and empty strategies test (improve in next test pass)
