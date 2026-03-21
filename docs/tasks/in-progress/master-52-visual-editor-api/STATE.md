@@ -9,7 +9,7 @@
 ## Plugins: backend-development, python-development, api-scaffolding
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [2,3]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
 ## Last Updated: 2026-03-21 19:40
