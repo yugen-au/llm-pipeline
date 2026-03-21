@@ -4,11 +4,10 @@
 - Task folder: docs\tasks\in-progress\master-52-visual-editor-api
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-1-enhance-models.md (if already exists, APPEND to file)
+- Output Files: implementation\step-2-structural-validations.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 1 - implement ONLY this step, not others
+- Step: 2 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
-- [custom.prd_mode_guidance]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -20,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-1-enhance-models.md
+4. Document decisions in implementation\step-2-structural-validations.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 1: ENHANCE MODELS
+# IMPLEMENTATION - STEP 2: STRUCTURAL VALIDATIONS
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -73,7 +72,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-1-enhance-models.md
+Created: implementation\step-2-structural-validations.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
