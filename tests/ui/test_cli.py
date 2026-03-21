@@ -293,7 +293,6 @@ class TestPipelinesFlag:
     def test_value_error_causes_exit_1(self):
         """ValueError from create_app (failed module import) causes sys.exit(1)."""
         from llm_pipeline.ui.cli import main
-        mock_app = MagicMock()
         with patch.object(sys, "argv", ["llm-pipeline", "ui", "--pipelines", "bad.mod"]), \
              patch("llm_pipeline.ui.app.create_app", side_effect=ValueError("Failed to import")), \
              patch.object(Path, "exists", _only_frontend_missing()), \
@@ -373,7 +372,12 @@ class TestDevModeNoFrontend:
 # ---------------------------------------------------------------------------
 
 class TestDevModeEnvBridge:
-    """--model and --pipelines set env vars in dev mode for factory reload."""
+    """--model and --pipelines set env vars in dev mode for factory reload.
+
+    Note: patch.dict(os.environ, {}, clear=False) restores env vars on exit,
+    so any writes _run_dev_mode makes via os.environ["KEY"] = val are cleaned
+    up automatically when the context manager closes.
+    """
 
     def test_model_sets_env_var(self):
         """--model x sets LLM_PIPELINE_MODEL env var."""

@@ -55,3 +55,47 @@ assert mock_ca.call_args.kwargs["db_path"] == "/tmp/test.db"
 [x] No regressions from changes
 [x] 5 stale assertions fixed
 [x] 4 new test classes added (11 methods)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] LOW - Unused mock_app variable in TestPipelinesFlag::test_value_error_causes_exit_1
+[x] LOW - Env var leak comment in TestDevModeEnvBridge
+
+### Changes Made
+#### File: `tests/ui/test_cli.py`
+Removed unused `mock_app = MagicMock()` from `test_value_error_causes_exit_1` (create_app raises via side_effect, never returns).
+
+Added docstring note to `TestDevModeEnvBridge` explaining `patch.dict(os.environ, {}, clear=False)` restores env vars on context manager exit.
+
+```
+# Before (test_value_error_causes_exit_1)
+from llm_pipeline.ui.cli import main
+mock_app = MagicMock()
+with patch.object(sys, "argv", ...
+
+# After
+from llm_pipeline.ui.cli import main
+with patch.object(sys, "argv", ...
+```
+
+```
+# Before (TestDevModeEnvBridge docstring)
+class TestDevModeEnvBridge:
+    """--model and --pipelines set env vars in dev mode for factory reload."""
+
+# After
+class TestDevModeEnvBridge:
+    """--model and --pipelines set env vars in dev mode for factory reload.
+
+    Note: patch.dict(os.environ, {}, clear=False) restores env vars on exit,
+    so any writes _run_dev_mode makes via os.environ["KEY"] = val are cleaned
+    up automatically when the context manager closes.
+    """
+```
+
+### Verification
+[x] All 57 tests in test_cli.py pass
+[x] No regressions
