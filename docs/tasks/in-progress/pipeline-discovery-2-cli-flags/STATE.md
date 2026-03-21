@@ -1,7 +1,7 @@
 ## Task: pipeline-discovery-2-cli-flags
 ## Description: Extend CLI with --pipelines and --model flags for manual pipeline module specification and default LLM model
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
@@ -24,5 +24,5 @@
 | App Factory Module Loading | backend-development:tdd-orchestrator | implementation | 1 | - | A | complete | 1 | a1ab37077dcd4f660 | dfed08c5,b6b34bd5 | - |
 | CLI Args & Dispatch | backend-development:tdd-orchestrator | implementation | 2 | - | A | complete | 0 | a810cd4aaeb66400c | 0f501d97,dfed08c5 | - |
 | Fix Stale Tests & Add New | backend-development:tdd-orchestrator | implementation | 3 | - | B | complete | 1 | aa24e639d49a4e096 | e5f34aaa,281eea0e | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a05e738c3862c05da | 1b07d37c | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | accb0b4fa0d1501b0 | 52aca779 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a05e738c3862c05da | 1b07d37c,c24909ca | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | accb0b4fa0d1501b0 | 52aca779 | - |
