@@ -1,19 +1,21 @@
 ## Task: pipeline-discovery-2-cli-flags
-## Description: pending
+## Description: Extend CLI with --pipelines and --model flags for manual pipeline module specification and default LLM model
 
-## Phase: initialization
+## Phase: research
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/pipeline-discovery/2-cli-flags
-## Plugins: pending
-## Graphiti Group ID: pending
+## Plugins: python-development, backend-development
+## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
 ## Steps to Fix: none
-## Work Mode: pending
+## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-03-21 20:49
+## Last Updated: 2026-03-21 20:52
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
+| CLI & Module Loading Research | python-development:python-pro | research | 1 | - | A | in-progress | 0 | pending | pending | - |
+| App Factory Integration Research | backend-development:backend-architect | research | 2 | - | A | in-progress | 0 | pending | pending | - |

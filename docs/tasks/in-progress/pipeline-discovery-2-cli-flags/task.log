@@ -5,3 +5,8 @@
 [2026-03-21 20:49:30] [INFO] Created: STATE.md
 [2026-03-21 20:49:30] [INFO] ============================================================
 [2026-03-21 20:49:31] [DEBUG] STATE.md atomic write complete
+[2026-03-21 20:51:41] [ERROR] BLOCKED: Invalid AgentRow 'CLI & Module Loading Research': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-03-21 20:51:52] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-03-21 20:52:06] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-03-21 20:52:06] [INFO] Auto-updated agent statuses: CLI & Module Loading Research: pending -> in-progress, App Factory Integration Research: pending -> in-progress
+[2026-03-21 20:52:06] [DEBUG] STATE.md atomic write complete
