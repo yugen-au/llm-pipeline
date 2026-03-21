@@ -1,7 +1,7 @@
 ## Task: pipeline-discovery-2-cli-flags
 ## Description: Extend CLI with --pipelines and --model flags for manual pipeline module specification and default LLM model
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
@@ -9,10 +9,10 @@
 ## Plugins: python-development, backend-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [1,3]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-03-21 21:50
+## Last Updated: 2026-03-21 22:04
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,8 +21,8 @@
 | App Factory Integration Research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | aec7b0ae1936e2909 | 8f17c99a | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a179416d6f6bf2149 | c6b65b3f | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a433b6b2828ea8aba | d70bb0b0 | - |
-| App Factory Module Loading | backend-development:tdd-orchestrator | implementation | 1 | - | A | complete | 0 | a1ab37077dcd4f660 | dfed08c5 | - |
+| App Factory Module Loading | backend-development:tdd-orchestrator | implementation | 1 | - | A | in-progress | 0 | a1ab37077dcd4f660 | dfed08c5 | - |
 | CLI Args & Dispatch | backend-development:tdd-orchestrator | implementation | 2 | - | A | complete | 0 | a810cd4aaeb66400c | 0f501d97,dfed08c5 | - |
-| Fix Stale Tests & Add New | backend-development:tdd-orchestrator | implementation | 3 | - | B | complete | 0 | aa24e639d49a4e096 | e5f34aaa | - |
+| Fix Stale Tests & Add New | backend-development:tdd-orchestrator | implementation | 3 | - | B | pending | 0 | aa24e639d49a4e096 | e5f34aaa | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a05e738c3862c05da | 1b07d37c | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | accb0b4fa0d1501b0 | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | accb0b4fa0d1501b0 | 52aca779 | - |
