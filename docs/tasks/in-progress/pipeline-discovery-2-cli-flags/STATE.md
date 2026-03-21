@@ -1,9 +1,9 @@
 ## Task: pipeline-discovery-2-cli-flags
 ## Description: Extend CLI with --pipelines and --model flags for manual pipeline module specification and default LLM model
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: B
+## Current Group: A
 ## Base Branch: sam/meta-pipeline
 ## Task Branch: sam/pipeline-discovery/2-cli-flags
 ## Plugins: python-development, backend-development
@@ -24,3 +24,4 @@
 | App Factory Module Loading | backend-development:tdd-orchestrator | implementation | 1 | - | A | complete | 0 | a1ab37077dcd4f660 | dfed08c5 | - |
 | CLI Args & Dispatch | backend-development:tdd-orchestrator | implementation | 2 | - | A | complete | 0 | a810cd4aaeb66400c | 0f501d97,dfed08c5 | - |
 | Fix Stale Tests & Add New | backend-development:tdd-orchestrator | implementation | 3 | - | B | complete | 0 | aa24e639d49a4e096 | e5f34aaa | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
