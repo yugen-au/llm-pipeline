@@ -95,3 +95,19 @@ None
 ## Recommendations
 1. Fix 4 pre-existing test failures in a separate task: test_field_count (update expected count to 11), two test_cli create_app tests (add database_url=None to assertions), test_uvicorn_no_reload_in_vite_mode (investigate reload behavior change).
 2. No action required on task 52 changes -- all 23 new tests pass cleanly.
+
+---
+
+## Re-test After Review Fixes (2026-03-21)
+
+### Fixes Applied
+- Step 2: Added `Prompt.is_active.is_(True)` filter to prompt key query in `compile_pipeline()`
+- Step 3: Changed `draft.status = "error" if errors else "draft"` to `draft.status = "error" if has_errors else "draft"`
+
+### Results
+**Status:** passed
+
+**Editor suite:** 23/23 passed in 0.70s (no regressions)
+**Full suite:** 4 failed, 1235 passed, 6 skipped in 33.16s
+
+Same 4 pre-existing failures -- unchanged from prior run. Zero new failures introduced by the two one-line fixes. No import errors, no new warnings.
