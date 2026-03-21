@@ -322,3 +322,112 @@ Both HIGH issues are fixed correctly. No regressions. Remaining MEDIUM/LOW items
 - Pre-existing session rollback bug in update_draft_pipeline (track separately)
 - Prompt key first-wins dedup (document assumption or fix if multi-pipeline step reuse grows)
 - Position test isolation and empty strategies test (improve in next test pass)
+
+---
+
+# Architecture Review (Pass 4 -- MEDIUM/LOW Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+
+All 3 MEDIUM/LOW fixes verified correct. Input bounds are well-chosen and consistent with domain constraints. Prompt key dedup now accumulates via set union, eliminating the first-wins gap. Position tests are fully isolated via new `gamma_step` seed, and empty strategies list has a dedicated test. 24 tests pass. Only remaining known issues are pre-existing (session rollback in `update_draft_pipeline`) and cosmetic (`errors` field naming). Implementation is ready for merge.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** D:\Documents\claude-projects\llm-pipeline\.claude\CLAUDE.md
+
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| No hardcoded values | pass | Unchanged |
+| Error handling present | pass | All prior fixes hold; input bounds add Pydantic-level rejection for invalid inputs |
+| Python 3.11+ type hints | pass | `set[str]` return type on `_collect_registered_prompt_keys` is correct |
+| Pydantic v2 models | pass | `Field(max_length=..., ge=...)` usage is idiomatic Pydantic v2 |
+| SQLModel Session patterns | pass | Unchanged |
+| Test patterns (StaticPool, TestClient) | pass | `gamma_step` seed follows same pattern as `alpha_step`/`beta_step` |
+| No emojis, concise style | pass | Unchanged |
+
+## Fix Verification
+
+### FIX 3: Input bounds on request models (commit c454f1ba)
+**Step:** 1
+**Status:** VERIFIED
+**Details:**
+- `EditorStep.step_ref: str = Field(max_length=200)` -- bounds string inputs, prevents oversized error messages in `compilation_errors` JSON (L26)
+- `EditorStep.position: int = Field(ge=0)` -- prevents negative positions that would break the `range(0, len(steps))` gap check in Pass 4 (L28)
+- `EditorStrategy.strategy_name: str = Field(max_length=200)` -- matches step_ref bound (L32)
+- `EditorStrategy.steps: list[EditorStep] = Field(max_length=500)` -- caps per-strategy step count (L33)
+- `CompileRequest.strategies: list[EditorStrategy] = Field(max_length=100)` -- caps strategy count, bounding worst-case iteration to 100*500=50000 steps across all 5 passes (L37)
+- `Field` import added at L8 -- correct
+
+Bounds are reasonable: 200-char names align with typical identifier lengths, 100 strategies and 500 steps per strategy are generous for real usage while preventing abuse. No `le=` upper bound on `position` is acceptable since `max_length=500` on the steps list implicitly caps it. Pydantic returns 422 with clear validation errors for out-of-bounds inputs -- no custom error handling needed.
+
+### FIX 4: Prompt key dedup via set union (commit e5a32ad4)
+**Step:** 2
+**Status:** VERIFIED
+**Details:**
+- Return type changed from `dict[str, list[str]]` to `dict[str, set[str]]` (L129) -- correct, sets naturally deduplicate
+- Internal storage changed to `dict[str, set[str]]` (L136) -- matches return type
+- Key accumulation at L150: `step_keys.setdefault(sn, set()).add(val)` -- replaces old first-wins guard (`if keys and sn not in step_keys`), now accumulates keys from ALL pipelines containing the step
+- Caller at L277: `step_prompt_keys.get(step.step_ref, set())` -- correctly updated to match new set type, iterating over set is fine since order doesn't matter for key existence checks
+
+This fix is clean and minimal. The `set` type is the right choice since prompt keys are unique strings and order is irrelevant for the existence check.
+
+### FIX 5: Test isolation and empty strategies test (commit b49d5629)
+**Step:** 4
+**Status:** VERIFIED
+**Details:**
+- `gamma_step` seeded at L68-77: status="draft", `run_id="aaaa-0003"`, follows exact same pattern as `alpha_step`/`beta_step` -- correct
+- `test_compile_position_gap` (L196-215): now uses `alpha_step` (position 0) and `gamma_step` (position 2). Both are known non-errored drafts (Pass 1 clean), distinct step_refs (Pass 2 clean), strategy has steps (Pass 3 clean). Only Pass 4 fires for gap [0,2] vs expected [0,1]. Fully isolated.
+- `test_compile_position_duplicate` (L217-236): now uses `alpha_step` and `gamma_step` both at position 0. Same isolation logic -- only Pass 4 fires for duplicate position. Fully isolated.
+- `test_compile_empty_strategies_list` (L238-247): `strategies=[]`, asserts `valid=True` and `errors==[]`. Covers the trivial-input path through all 5 passes. Docstring is clear.
+- Test count: 24 (was 23)
+
+## Remaining Issues
+
+### Critical
+None
+
+### High
+None
+
+### Medium
+
+#### Double introspection registry iteration per compile request
+**Step:** 2
+**Details:** Unchanged from prior passes. `_collect_registered_steps()` and `_collect_registered_prompt_keys()` each iterate the full registry. Mitigated by `PipelineIntrospector` class-level cache. Non-blocking; optimization candidate for future work if registry size grows beyond ~50 pipelines.
+
+#### update_draft_pipeline: suggested name loop queries inside rolled-back session
+**Step:** (pre-existing)
+**Details:** Unchanged. Pre-existing issue at L471-482, not introduced by Task 52. SQLite tolerates post-rollback queries; PostgreSQL may not. Should be tracked as separate tech debt item.
+
+### Low
+
+#### CompileResponse errors field contains warnings
+**Step:** 1/2
+**Details:** Unchanged. The `errors` list in `CompileResponse` holds both severity="error" and severity="warning" items. Naming inconsistency only; the `severity` field on each item disambiguates for consumers. Non-blocking.
+
+## Review Checklist
+- [x] Architecture patterns followed
+- [x] Code quality and maintainability
+- [x] Error handling present
+- [x] No hardcoded values
+- [x] Project conventions followed
+- [x] Security considerations (input bounds now enforced; active filter present)
+- [x] Properly scoped (bounds are reasonable, not over-restrictive)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/editor.py | pass | Input bounds correct (L26-37); prompt key dedup uses set union (L127-151) |
+| tests/ui/test_editor.py | pass | 24 tests; gamma_step isolates position tests; empty strategies test added |
+
+## New Issues Introduced
+None detected
+
+## Recommendation
+**Decision:** APPROVE
+
+All previously identified issues are resolved. The implementation is complete:
+- 2 HIGH fixes verified in Pass 3 (status logic, prompt active filter)
+- 3 MEDIUM/LOW fixes verified in this pass (input bounds, prompt key dedup, test isolation)
+- 24 tests pass covering all 7 endpoints and all 5 validation passes
+- Only remaining items are pre-existing (session rollback in update_draft_pipeline) and cosmetic (errors field naming), neither introduced by Task 52
