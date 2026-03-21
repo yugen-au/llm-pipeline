@@ -98,6 +98,51 @@ None
 
 ---
 
+## Re-test After Review Fixes Round 2 (2026-03-21)
+
+### Fixes Applied
+- Step 1: Added `Field(ge=0)` to `position`, `max_length` to `step_ref`/`strategy_name`, `max_length` on strategies/steps lists in CompileRequest models
+- Step 2: Changed `_collect_registered_prompt_keys` to accumulate all keys via set union instead of first-wins
+- Step 4: Seeded `gamma_step` fixture for isolation, modified position gap/duplicate tests to use `gamma_step`, added `test_compile_empty_strategies_list`
+
+### Test Execution
+**Editor suite:** 24/24 passed in 0.49s (1 new test: `test_compile_empty_strategies_list`)
+
+```
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_valid_returns_valid_true PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_unknown_step_returns_error PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_duplicate_steps_in_strategy PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_empty_strategy PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_position_gap PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_position_duplicate PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_empty_strategies_list PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_stateful_writes_errors PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_stateful_valid_clears_errors PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_stateful_draft_not_found PASSED
+tests/ui/test_editor.py::TestCompileEndpoint::test_compile_excludes_errored_draft_steps PASSED
+tests/ui/test_editor.py::TestAvailableStepsEndpoint::test_available_steps_returns_non_errored_drafts PASSED
+tests/ui/test_editor.py::TestAvailableStepsEndpoint::test_available_steps_deduplicates_registered_wins PASSED
+tests/ui/test_editor.py::TestAvailableStepsEndpoint::test_available_steps_empty_registry_returns_drafts_only PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_create_draft_pipeline_returns_201 PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_create_draft_pipeline_name_conflict_returns_409 PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_list_draft_pipelines_returns_seeded PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_get_draft_pipeline_returns_detail PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_get_draft_pipeline_not_found_returns_404 PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_update_draft_pipeline_name PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_update_draft_pipeline_name_conflict_returns_409_with_suggested PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_update_draft_pipeline_not_found_returns_404 PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_delete_draft_pipeline_returns_204 PASSED
+tests/ui/test_editor.py::TestDraftPipelineCRUD::test_delete_draft_pipeline_not_found_returns_404 PASSED
+
+24 passed in 0.49s
+```
+
+**Full suite:** 4 failed, 1236 passed, 6 skipped in 31.04s
+
+Same 4 pre-existing failures -- unchanged. Zero new failures from review round 2 fixes. Input bounds (Field(ge=0), max_length) did not require adjustments to any existing tests; all test values were within new bounds.
+
+---
+
 ## Re-test After Review Fixes (2026-03-21)
 
 ### Fixes Applied
