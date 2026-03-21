@@ -4,6 +4,44 @@
 **Status:** passed
 All implementation changes verified. 57/57 tests pass in `tests/ui/test_cli.py`. Full suite: 1250 passed, 1 pre-existing failure unrelated to this task, 6 skipped. No regressions introduced.
 
+---
+
+## Round 2 — Review Fix Verification (2026-03-21)
+
+**Status:** passed
+Review fixes verified. 68/68 pass across `tests/ui/test_cli.py` and new `tests/ui/test_load_pipeline_modules.py`. Full suite: 1261 passed (+11 new tests), same 1 pre-existing failure, 6 skipped. No regressions.
+
+### Test Scripts Created (Round 2)
+| Script | Purpose | Location |
+| --- | --- | --- |
+| test_load_pipeline_modules.py | Unit tests for `_load_pipeline_modules` with fixture modules — success scan, import failure, no-subclass error, re-export guard | tests/ui/test_load_pipeline_modules.py |
+
+### Test Execution (Round 2)
+**Pass Rate:** 1261/1262 (1 pre-existing failure; 6 skipped)
+
+`tests/ui/test_load_pipeline_modules.py` + `tests/ui/test_cli.py` isolated run:
+```
+68 passed in 0.43s
+```
+
+Full suite run:
+```
+1 failed, 1261 passed, 6 skipped, 10 warnings in 32.59s
+
+FAILED tests/test_agent_registry_core.py::TestStepDepsFields::test_field_count
+AssertionError: assert 11 == 10  (pre-existing, confirmed in Round 1)
+```
+
+### Review Fix Coverage
+- [x] `cls.__module__` guard in `_load_pipeline_modules` — `TestReexportGuard::test_reexport_only_module_raises` (PASSED), `TestReexportGuard::test_mixed_module_registers_only_local` (PASSED)
+- [x] `seed_prompts` failure isolation — `TestSuccessfulScan::test_seed_prompts_failure_does_not_unregister` (PASSED)
+- [x] Multiple module paths — `TestSuccessfulScan::test_multiple_modules` (PASSED)
+- [x] Import error chained cause — `TestImportFailure::test_chained_from_import_error` (PASSED)
+- [x] Unused `mock_app` removed from `test_cli.py` — no fixture warnings in output
+- [x] Env var restoration comment present in `test_cli.py` — no behavioral change, verified by `TestDevModeEnvBridge` (2 PASSED), `TestCreateDevAppPipelinesModel` (3 PASSED)
+
+---
+
 ## Automated Testing
 ### Test Scripts Created
 | Script | Purpose | Location |
