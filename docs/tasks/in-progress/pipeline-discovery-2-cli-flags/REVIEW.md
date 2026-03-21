@@ -62,3 +62,80 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is architecturally sound, consistent with existing patterns, well-tested, and fully backward-compatible. The medium-severity item (re-exported subclass pickup) is a behavioral nuance worth documenting but not blocking. All changes are additive with sensible defaults.
+
+---
+
+# Architecture Review - Round 2
+
+## Overall Assessment
+**Status:** complete
+All 4 issues from Round 1 are resolved correctly. The `cls.__module__` guard is well-placed and well-tested via purpose-built fixture modules. New unit tests for `_load_pipeline_modules` cover all error paths with real imports (not mocks). Dead code removed, documentation comment added. 68/68 tests pass across both test files; no regressions.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** `D:\Documents\claude-projects\llm-pipeline\CLAUDE.md`
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Pipeline + Strategy + Step pattern | pass | No changes to core pattern |
+| No hardcoded values | pass | No new hardcoded values introduced |
+| Error handling present | pass | All error paths now exercised by dedicated unit tests |
+| Tests pass (pytest) | pass | 68/68 (57 CLI + 11 unit) pass |
+| Build with hatchling | pass | No build changes |
+
+## Round 1 Issue Resolution
+### MEDIUM - Step 1: Re-exported subclasses picked up by inspect.getmembers
+**Status:** RESOLVED
+`cls.__module__ == mod.__name__` guard added at `app.py` L138. Tested by `TestReexportGuard` (2 tests): `reexport_module.py` (only re-exports, raises ValueError) and `mixed_module.py` (local + re-export, registers only local). Guard is correct and non-breaking.
+
+### LOW - Step 1: Missing dedicated unit tests for _load_pipeline_modules
+**Status:** RESOLVED
+New file `tests/ui/test_load_pipeline_modules.py` with 11 tests across 4 classes: `TestSuccessfulScan` (6 tests -- registration, factory callable, introspection class identity, seed_prompts called, seed_prompts failure tolerance, multi-module merge), `TestImportFailure` (2 tests -- ValueError raised, chained from ImportError), `TestNoSubclasses` (1 test), `TestReexportGuard` (2 tests). Uses real imports against `tests/ui/_fixtures/` modules with a real in-memory SQLite engine -- no mocking of the function under test.
+
+### LOW - Step 3: Unused mock_app variable in test_value_error_causes_exit_1
+**Status:** RESOLVED
+`mock_app = MagicMock()` removed from `test_cli.py` L293-302. Test now directly enters the `with` block without the unused variable.
+
+### LOW - Step 3: TestDevModeEnvBridge env var documentation
+**Status:** RESOLVED
+Class-level docstring added to `TestDevModeEnvBridge` (L375-380) explaining that `patch.dict(os.environ, {}, clear=False)` restores env vars on context manager exit.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed -- cls.__module__ guard is consistent with Python module-locality conventions
+[x] Code quality and maintainability -- fixture modules are minimal, well-documented, single-purpose
+[x] Error handling present -- all error paths exercised by real unit tests
+[x] No hardcoded values -- fixture module paths use dotted Python imports, no filesystem paths
+[x] Project conventions followed -- test file naming (test_load_pipeline_modules.py), fixture placement (_fixtures/), assertion style
+[x] Security considerations -- no new concerns
+[x] Properly scoped (DRY, YAGNI, no over-engineering) -- fixtures are minimal; guard is a single-line addition
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/app.py | pass | `cls.__module__ == mod.__name__` guard at L138; clean single-line addition to existing filter |
+| llm_pipeline/ui/cli.py | pass | Unchanged from Round 1 (no fixes needed here) |
+| tests/ui/test_cli.py | pass | mock_app removed, docstring added; 57/57 pass |
+| tests/ui/test_load_pipeline_modules.py | pass | 11 tests covering all _load_pipeline_modules paths with real imports |
+| tests/ui/_fixtures/__init__.py | pass | Empty package init |
+| tests/ui/_fixtures/good_module.py | pass | Minimal concrete PipelineConfig subclass with seed_prompts |
+| tests/ui/_fixtures/no_pipelines.py | pass | Module with no PipelineConfig subclasses |
+| tests/ui/_fixtures/reexport_module.py | pass | Re-exports AlphaPipeline, defines nothing local |
+| tests/ui/_fixtures/mixed_module.py | pass | Local BetaPipeline + re-exported AlphaPipeline |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+All Round 1 issues resolved. No new issues. Implementation is complete and ready for merge.
