@@ -135,6 +135,7 @@ def _load_pipeline_modules(
             if issubclass(cls, PipelineConfig)
             and cls is not PipelineConfig
             and not inspect.isabstract(cls)
+            and cls.__module__ == mod.__name__
         ]
 
         if not found:
