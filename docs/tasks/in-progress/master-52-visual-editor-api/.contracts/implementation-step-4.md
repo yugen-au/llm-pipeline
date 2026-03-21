@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-52-visual-editor-api
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-3-stateful-compile.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-pytest-test-suite.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 3 - implement ONLY this step, not others
+- Step: 4 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-3-stateful-compile.md
+4. Document decisions in implementation\step-4-pytest-test-suite.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 3: STATEFUL COMPILE
+# IMPLEMENTATION - STEP 4: PYTEST TEST SUITE
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -72,7 +72,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-3-stateful-compile.md
+Created: implementation\step-4-pytest-test-suite.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
