@@ -5,7 +5,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -23,18 +23,18 @@ router = APIRouter(prefix="/editor", tags=["editor"])
 
 
 class EditorStep(BaseModel):
-    step_ref: str
+    step_ref: str = Field(max_length=200)
     source: Literal["draft", "registered"]
-    position: int
+    position: int = Field(ge=0)
 
 
 class EditorStrategy(BaseModel):
-    strategy_name: str
-    steps: list[EditorStep]
+    strategy_name: str = Field(max_length=200)
+    steps: list[EditorStep] = Field(max_length=500)
 
 
 class CompileRequest(BaseModel):
-    strategies: list[EditorStrategy]
+    strategies: list[EditorStrategy] = Field(max_length=100)
     draft_id: int | None = None
 
 

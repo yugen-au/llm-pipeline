@@ -52,3 +52,57 @@ class CompileError(BaseModel):
 [x] CompileResponse unchanged
 [x] `Literal` already imported at line 4 -- no new import needed
 [x] Existing compile_pipeline() callers unaffected (new fields have defaults)
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] EditorStep.position accepts negative ints breaking range(0, N) gap check -- added `Field(ge=0)`
+[x] EditorStep.step_ref unbounded string -- added `Field(max_length=200)`
+[x] EditorStrategy.strategy_name unbounded string -- added `Field(max_length=200)`
+[x] CompileRequest.strategies list has no max length -- added `Field(max_length=100)`
+[x] EditorStrategy.steps list has no max length -- added `Field(max_length=500)`
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/editor.py`
+Added `Field` import from pydantic. Applied validation constraints to all request model fields.
+
+```
+# Before
+from pydantic import BaseModel
+
+class EditorStep(BaseModel):
+    step_ref: str
+    source: Literal["draft", "registered"]
+    position: int
+
+class EditorStrategy(BaseModel):
+    strategy_name: str
+    steps: list[EditorStep]
+
+class CompileRequest(BaseModel):
+    strategies: list[EditorStrategy]
+
+# After
+from pydantic import BaseModel, Field
+
+class EditorStep(BaseModel):
+    step_ref: str = Field(max_length=200)
+    source: Literal["draft", "registered"]
+    position: int = Field(ge=0)
+
+class EditorStrategy(BaseModel):
+    strategy_name: str = Field(max_length=200)
+    steps: list[EditorStep] = Field(max_length=500)
+
+class CompileRequest(BaseModel):
+    strategies: list[EditorStrategy] = Field(max_length=100)
+```
+
+### Verification
+[x] Negative position rejected by Pydantic before reaching compile logic
+[x] String fields bounded at 200 chars
+[x] List fields bounded (100 strategies, 500 steps per strategy)
+[x] `Field` imported from pydantic
+[x] Existing valid requests unaffected (constraints are generous upper bounds)
