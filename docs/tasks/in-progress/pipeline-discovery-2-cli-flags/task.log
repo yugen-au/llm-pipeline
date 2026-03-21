@@ -81,3 +81,5 @@
 [2026-03-21 21:45:34] [INFO] Auto-updated agent statuses: Architecture review: pending -> in-progress
 [2026-03-21 21:45:34] [INFO] Deleted 1 old contract file(s)
 [2026-03-21 21:45:34] [DEBUG] STATE.md atomic write complete
+[2026-03-21 21:45:49] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-21 21:50:41] [DEBUG] STATE.md atomic write complete
