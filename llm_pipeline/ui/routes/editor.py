@@ -267,7 +267,8 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
     if all_expected_keys:
         with Session(engine) as session:
             stmt = select(Prompt.prompt_key).where(
-                Prompt.prompt_key.in_(list(all_expected_keys))
+                Prompt.prompt_key.in_(list(all_expected_keys)),
+                Prompt.is_active.is_(True),
             )
             found_keys = set(session.exec(stmt).all())
 

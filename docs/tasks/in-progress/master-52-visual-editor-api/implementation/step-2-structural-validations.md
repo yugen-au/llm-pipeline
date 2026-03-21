@@ -47,3 +47,31 @@ Changed `valid` calculation from `len(errors) == 0` to `not any(e.severity == "e
 [x] All 4 validation passes implemented in correct order (2-5)
 [x] Prompt key check uses try/except pattern matching _collect_registered_steps
 [x] CompileError fields match plan: field, severity set correctly per pass
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Prompt key existence query missing `Prompt.is_active` filter -- inactive prompts treated as present, suppressing warnings
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/editor.py`
+Added `Prompt.is_active.is_(True)` to the where clause in Pass 5 prompt key query.
+```
+# Before
+stmt = select(Prompt.prompt_key).where(
+    Prompt.prompt_key.in_(list(all_expected_keys))
+)
+
+# After
+stmt = select(Prompt.prompt_key).where(
+    Prompt.prompt_key.in_(list(all_expected_keys)),
+    Prompt.is_active.is_(True),
+)
+```
+
+### Verification
+[x] Python syntax check passes
+[x] Runtime import succeeds
+[x] Query now filters on `is_active` index (`ix_prompts_active`)
