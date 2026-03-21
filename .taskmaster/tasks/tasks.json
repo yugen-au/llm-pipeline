@@ -948,8 +948,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-21T11:20:49.359Z"
       },
       {
         "id": "3",
@@ -968,9 +969,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-13T00:49:45.298Z",
+      "lastModified": "2026-03-21T11:20:49.359Z",
       "taskCount": 3,
-      "completedCount": 2,
+      "completedCount": 3,
       "tags": [
         "pipeline-discovery"
       ]

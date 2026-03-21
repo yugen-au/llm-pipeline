@@ -1,7 +1,7 @@
 ## Task: pipeline-discovery-2-cli-flags
 ## Description: Extend CLI with --pipelines and --model flags for manual pipeline module specification and default LLM model
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
