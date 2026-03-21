@@ -129,3 +129,8 @@
 [2026-03-21 19:42:12] [DEBUG] STATE.md atomic write complete
 [2026-03-21 19:43:15] [ERROR] BLOCKED: Invalid commit message format
 [2026-03-21 19:43:36] [DEBUG] STATE.md atomic write complete
+[2026-03-21 19:43:55] [INFO] Already committed fixing-review-B: ['step-2-structural-validations.md']
+[2026-03-21 19:43:57] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-03-21 19:43:57] [INFO] Auto-updated agent statuses: Stateful Compile: pending -> in-progress
+[2026-03-21 19:43:57] [INFO] Deleted 1 old contract file(s)
+[2026-03-21 19:43:57] [DEBUG] STATE.md atomic write complete
