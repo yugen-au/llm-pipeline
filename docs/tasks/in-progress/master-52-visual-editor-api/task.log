@@ -102,3 +102,14 @@
 [2026-03-21 18:31:53] [INFO] Auto-updated agent statuses: Architecture review: pending -> in-progress
 [2026-03-21 18:31:53] [INFO] Deleted 1 old contract file(s)
 [2026-03-21 18:31:53] [DEBUG] STATE.md atomic write complete
+[2026-03-21 18:32:11] [ERROR] BLOCKED: Expected one of ['comprehensive-review:architect-review']. Got: code-documentation:code-reviewer
+[2026-03-21 18:32:23] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-21 18:32:36] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-03-21 18:32:46] [ERROR] BLOCKED: Subagents cannot modify STATE.md
+[2026-03-21 18:36:56] [INFO] WARNING: No active agent found for 'backend-development:security-auditor'
+[2026-03-21 19:33:50] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-21 19:36:44] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-21 19:37:19] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-03-21 19:37:37] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-03-21 19:37:53] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-03-21 19:40:57] [DEBUG] STATE.md atomic write complete
