@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\master-52-visual-editor-api
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-2-structural-validations.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-pytest-test-suite.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 2
+- Step to fix: 4
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,13 +14,13 @@
 3. Context7 library IDs to query: /fastapi/fastapi,/websites/sqlmodel_tiangolo
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 2
+1. Read REVIEW.md for issues assigned to Step 4
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-2-structural-validations.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-4-pytest-test-suite.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
-## Review Fix Iteration 1
+## Review Fix Iteration 0
 **Issues Source:** [REVIEW.md]
 **Status:** [fixed/partial/blocked]
 
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-2-structural-validations.md
+Created: implementation\step-4-pytest-test-suite.md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
