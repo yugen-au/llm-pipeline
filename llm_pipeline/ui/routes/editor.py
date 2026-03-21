@@ -289,6 +289,23 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
                         )
 
     has_errors = any(e.severity == "error" for e in errors)
+
+    # --- Stateful write path: persist compilation results to DraftPipeline ---
+    if body.draft_id is not None:
+        with Session(engine) as session:
+            draft = session.get(DraftPipeline, body.draft_id)
+            if draft is None:
+                raise HTTPException(
+                    status_code=404, detail="Draft pipeline not found"
+                )
+            draft.compilation_errors = {
+                "errors": [e.model_dump() for e in errors]
+            }
+            draft.status = "error" if errors else "draft"
+            draft.updated_at = utc_now()
+            session.add(draft)
+            session.commit()
+
     return CompileResponse(valid=not has_errors, errors=errors)
 
 
