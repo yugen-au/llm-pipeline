@@ -207,7 +207,8 @@ class TestDbFlag:
              patch.object(Path, "exists", _only_frontend_missing()), \
              patch("uvicorn.run"):
             main()
-        mock_ca.assert_called_once_with(db_path="/tmp/test.db")
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["db_path"] == "/tmp/test.db"
 
     def test_db_none_by_default(self):
         """create_app is called with db_path=None when --db not supplied."""
@@ -218,7 +219,87 @@ class TestDbFlag:
              patch.object(Path, "exists", _only_frontend_missing()), \
              patch("uvicorn.run"):
             main()
-        mock_ca.assert_called_once_with(db_path=None)
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs.get("db_path") is None
+
+
+# ---------------------------------------------------------------------------
+# --model flag
+# ---------------------------------------------------------------------------
+
+class TestModelFlag:
+    """--model passes default_model to create_app in prod mode."""
+
+    def _run_prod(self, extra_argv=None):
+        from llm_pipeline.ui.cli import main
+        mock_app = MagicMock()
+        argv = ["llm-pipeline", "ui"] + (extra_argv or [])
+        with patch.object(sys, "argv", argv), \
+             patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca, \
+             patch.object(Path, "exists", _only_frontend_missing()), \
+             patch("uvicorn.run"):
+            main()
+        return mock_ca
+
+    def test_model_passed_to_create_app(self):
+        """--model gemini-2.0-flash passes default_model to create_app."""
+        mock_ca = self._run_prod(["--model", "gemini-2.0-flash"])
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["default_model"] == "gemini-2.0-flash"
+
+    def test_model_none_by_default(self):
+        """default_model is None when --model not supplied."""
+        mock_ca = self._run_prod()
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs.get("default_model") is None
+
+
+# ---------------------------------------------------------------------------
+# --pipelines flag
+# ---------------------------------------------------------------------------
+
+class TestPipelinesFlag:
+    """--pipelines passes pipeline_modules to create_app in prod mode."""
+
+    def _run_prod(self, extra_argv=None):
+        from llm_pipeline.ui.cli import main
+        mock_app = MagicMock()
+        argv = ["llm-pipeline", "ui"] + (extra_argv or [])
+        with patch.object(sys, "argv", argv), \
+             patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca, \
+             patch.object(Path, "exists", _only_frontend_missing()), \
+             patch("uvicorn.run"):
+            main()
+        return mock_ca
+
+    def test_single_pipeline_module(self):
+        """--pipelines my.module passes pipeline_modules=['my.module']."""
+        mock_ca = self._run_prod(["--pipelines", "my.module"])
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["pipeline_modules"] == ["my.module"]
+
+    def test_repeatable_pipelines(self):
+        """--pipelines a --pipelines b passes pipeline_modules=['a', 'b']."""
+        mock_ca = self._run_prod(["--pipelines", "a", "--pipelines", "b"])
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["pipeline_modules"] == ["a", "b"]
+
+    def test_pipelines_none_by_default(self):
+        """pipeline_modules is None when --pipelines not supplied."""
+        mock_ca = self._run_prod()
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs.get("pipeline_modules") is None
+
+    def test_value_error_causes_exit_1(self):
+        """ValueError from create_app (failed module import) causes sys.exit(1)."""
+        from llm_pipeline.ui.cli import main
+        with patch.object(sys, "argv", ["llm-pipeline", "ui", "--pipelines", "bad.mod"]), \
+             patch("llm_pipeline.ui.app.create_app", side_effect=ValueError("Failed to import")), \
+             patch.object(Path, "exists", _only_frontend_missing()), \
+             patch("uvicorn.run"):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+        assert exc_info.value.code == 1
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +368,44 @@ class TestDevModeNoFrontend:
 
 
 # ---------------------------------------------------------------------------
+# Dev mode env var bridge (--model, --pipelines -> env vars)
+# ---------------------------------------------------------------------------
+
+class TestDevModeEnvBridge:
+    """--model and --pipelines set env vars in dev mode for factory reload.
+
+    Note: patch.dict(os.environ, {}, clear=False) restores env vars on exit,
+    so any writes _run_dev_mode makes via os.environ["KEY"] = val are cleaned
+    up automatically when the context manager closes.
+    """
+
+    def test_model_sets_env_var(self):
+        """--model x sets LLM_PIPELINE_MODEL env var."""
+        from llm_pipeline.ui.cli import main
+        captured_env: dict = {}
+        with patch.object(sys, "argv", ["llm-pipeline", "ui", "--dev", "--model", "gpt-4o"]), \
+             patch.object(Path, "exists", _only_frontend_missing()), \
+             patch("uvicorn.run"), \
+             patch.dict(os.environ, {}, clear=False):
+            main()
+            captured_env["val"] = os.environ.get("LLM_PIPELINE_MODEL")
+        assert captured_env["val"] == "gpt-4o"
+
+    def test_pipelines_sets_comma_joined_env_var(self):
+        """--pipelines a --pipelines b sets LLM_PIPELINE_PIPELINES=a,b."""
+        from llm_pipeline.ui.cli import main
+        captured_env: dict = {}
+        with patch.object(sys, "argv",
+                          ["llm-pipeline", "ui", "--dev", "--pipelines", "a", "--pipelines", "b"]), \
+             patch.object(Path, "exists", _only_frontend_missing()), \
+             patch("uvicorn.run"), \
+             patch.dict(os.environ, {}, clear=False):
+            main()
+            captured_env["val"] = os.environ.get("LLM_PIPELINE_PIPELINES")
+        assert captured_env["val"] == "a,b"
+
+
+# ---------------------------------------------------------------------------
 # _create_dev_app factory
 # ---------------------------------------------------------------------------
 
@@ -299,7 +418,8 @@ class TestCreateDevApp:
         with patch.dict(os.environ, {"LLM_PIPELINE_DB": "/tmp/env.db"}), \
              patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca:
             result = _create_dev_app()
-        mock_ca.assert_called_once_with(db_path="/tmp/env.db")
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["db_path"] == "/tmp/env.db"
 
     def test_passes_none_when_env_var_absent(self):
         """_create_dev_app passes db_path=None when LLM_PIPELINE_DB not set."""
@@ -308,7 +428,8 @@ class TestCreateDevApp:
         with patch.dict(os.environ, env, clear=True), \
              patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca:
             result = _create_dev_app()
-        mock_ca.assert_called_once_with(db_path=None)
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs.get("db_path") is None
 
     def test_returns_create_app_result(self):
         """_create_dev_app returns the value returned by create_app."""
@@ -317,6 +438,50 @@ class TestCreateDevApp:
              patch("llm_pipeline.ui.app.create_app", return_value=sentinel):
             result = _create_dev_app()
         assert result is sentinel
+
+
+# ---------------------------------------------------------------------------
+# _create_dev_app - pipeline_modules and default_model from env vars
+# ---------------------------------------------------------------------------
+
+class TestCreateDevAppPipelinesModel:
+    """_create_dev_app reads LLM_PIPELINE_PIPELINES and LLM_PIPELINE_MODEL env vars."""
+
+    def _clean_env(self):
+        """Return env dict with pipeline/model vars stripped."""
+        return {k: v for k, v in os.environ.items()
+                if k not in ("LLM_PIPELINE_DB", "LLM_PIPELINE_DATABASE_URL",
+                             "LLM_PIPELINE_MODEL", "LLM_PIPELINE_PIPELINES")}
+
+    def test_pipelines_env_var_splits_on_comma(self):
+        """LLM_PIPELINE_PIPELINES=a,b splits to pipeline_modules=['a', 'b']."""
+        mock_app = MagicMock()
+        env = {**self._clean_env(), "LLM_PIPELINE_PIPELINES": "a,b"}
+        with patch.dict(os.environ, env, clear=True), \
+             patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca:
+            _create_dev_app()
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["pipeline_modules"] == ["a", "b"]
+
+    def test_model_env_var_passed_through(self):
+        """LLM_PIPELINE_MODEL=x passes default_model='x'."""
+        mock_app = MagicMock()
+        env = {**self._clean_env(), "LLM_PIPELINE_MODEL": "gpt-4o"}
+        with patch.dict(os.environ, env, clear=True), \
+             patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca:
+            _create_dev_app()
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs["default_model"] == "gpt-4o"
+
+    def test_absent_vars_give_none(self):
+        """Absent LLM_PIPELINE_MODEL and LLM_PIPELINE_PIPELINES pass None."""
+        mock_app = MagicMock()
+        with patch.dict(os.environ, self._clean_env(), clear=True), \
+             patch("llm_pipeline.ui.app.create_app", return_value=mock_app) as mock_ca:
+            _create_dev_app()
+        mock_ca.assert_called_once()
+        assert mock_ca.call_args.kwargs.get("default_model") is None
+        assert mock_ca.call_args.kwargs.get("pipeline_modules") is None
 
 
 # ---------------------------------------------------------------------------
@@ -445,11 +610,11 @@ class TestDevModeWithFrontend:
         assert env["VITE_PORT"] == str(9001)
         assert env["VITE_API_PORT"] == str(9000)
 
-    def test_uvicorn_no_reload_in_vite_mode(self):
-        """uvicorn.run is NOT called with reload=True when Vite is active."""
+    def test_uvicorn_reload_in_vite_mode(self):
+        """uvicorn.run is called with reload=True in dev mode (even with Vite)."""
         result = self._run_full_dev()
         _, kwargs = result["mock_uvicorn_run"].call_args
-        assert not kwargs.get("reload", False)
+        assert kwargs.get("reload") is True
 
     def test_sigterm_handler_registered_on_unix(self):
         """signal.signal(SIGTERM, ...) is called when SIGTERM is available."""
@@ -566,6 +731,8 @@ class TestImportGuardCli:
         args = MagicMock()
         args.dev = True
         args.db = None
+        args.model = None
+        args.pipelines = None
         with patch.object(Path, "exists", _only_frontend_missing()), \
              patch("uvicorn.run", side_effect=ImportError("uvicorn", name="uvicorn")):
             with pytest.raises(SystemExit) as exc_info:

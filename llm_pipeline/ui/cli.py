@@ -28,6 +28,16 @@ def main() -> None:
     ui_parser.add_argument(
         "--db", type=str, default=None, help="Path to SQLite database file"
     )
+    ui_parser.add_argument(
+        "--model", type=str, default=None, help="Default LLM model string"
+    )
+    ui_parser.add_argument(
+        "--pipelines",
+        action="append",
+        default=None,
+        metavar="MODULE",
+        help="Python module path to scan for PipelineConfig subclasses (repeatable)",
+    )
 
     args = parser.parse_args()
 
@@ -46,7 +56,11 @@ def _run_ui(args: argparse.Namespace) -> None:
         else:
             from llm_pipeline.ui.app import create_app
 
-            app = create_app(db_path=args.db)
+            app = create_app(
+                db_path=args.db,
+                default_model=args.model,
+                pipeline_modules=args.pipelines,
+            )
             _run_prod_mode(app, args.port)
     except ImportError as e:
         _ui_deps = {"fastapi", "uvicorn", "starlette", "multipart", "python_multipart"}
@@ -56,6 +70,9 @@ def _run_ui(args: argparse.Namespace) -> None:
             "ERROR: UI dependencies not installed. Run: pip install llm-pipeline[ui]",
             file=sys.stderr,
         )
+        sys.exit(1)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -78,9 +95,13 @@ def _run_prod_mode(app: object, port: int) -> None:
 
 def _run_dev_mode(args: argparse.Namespace) -> None:
     """Run in dev mode with hot reload for both frontend (Vite) and backend (uvicorn)."""
-    # Pass db_path via env var so the factory can pick it up on reload
+    # Pass config via env vars so the factory can pick them up on reload
     if args.db:
         os.environ["LLM_PIPELINE_DB"] = args.db
+    if args.model:
+        os.environ["LLM_PIPELINE_MODEL"] = args.model
+    if args.pipelines:
+        os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
 
     frontend_dir = Path(__file__).resolve().parent / "frontend"
     vite_proc = None
@@ -141,7 +162,15 @@ def _create_dev_app() -> object:
 
     db_path = os.environ.get("LLM_PIPELINE_DB")
     database_url = os.environ.get("LLM_PIPELINE_DATABASE_URL")
-    return create_app(db_path=db_path, database_url=database_url)
+    model = os.environ.get("LLM_PIPELINE_MODEL")
+    pipeline_modules_raw = os.environ.get("LLM_PIPELINE_PIPELINES")
+    pipeline_modules = pipeline_modules_raw.split(",") if pipeline_modules_raw else None
+    return create_app(
+        db_path=db_path,
+        database_url=database_url,
+        default_model=model,
+        pipeline_modules=pipeline_modules,
+    )
 
 
 

@@ -1,11 +1,12 @@
 """FastAPI application factory for llm-pipeline UI."""
 from __future__ import annotations
 
+import importlib
 import importlib.metadata
 import inspect
 import logging
 import os
-from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Type
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from sqlmodel import create_engine
 
 from llm_pipeline.db import init_pipeline_db
+from llm_pipeline.naming import to_snake_case
 
 if TYPE_CHECKING:
     from sqlalchemy import Engine
@@ -102,6 +104,71 @@ def _discover_pipelines(
     return pipeline_reg, introspection_reg
 
 
+def _load_pipeline_modules(
+    module_paths: List[str],
+    default_model: Optional[str],
+    engine: Engine,
+) -> Tuple[Dict[str, Callable], Dict[str, Type[PipelineConfig]]]:
+    """Import modules by dotted path, scan for PipelineConfig subclasses, and build registries.
+
+    Raises:
+        ValueError: If a module cannot be imported or contains no
+            PipelineConfig subclasses.
+    """
+    from llm_pipeline.pipeline import PipelineConfig
+
+    pipeline_reg: Dict[str, Callable] = {}
+    introspection_reg: Dict[str, Type[PipelineConfig]] = {}
+
+    for path in module_paths:
+        try:
+            mod = importlib.import_module(path)
+        except ImportError as e:
+            raise ValueError(
+                f"Failed to import pipeline module '{path}': {e}"
+            ) from e
+
+        members = inspect.getmembers(mod, inspect.isclass)
+        found = [
+            cls
+            for _, cls in members
+            if issubclass(cls, PipelineConfig)
+            and cls is not PipelineConfig
+            and not inspect.isabstract(cls)
+            and cls.__module__ == mod.__name__
+        ]
+
+        if not found:
+            raise ValueError(
+                f"No PipelineConfig subclasses found in module '{path}'"
+            )
+
+        for cls in found:
+            key = to_snake_case(cls.__name__, strip_suffix="Pipeline")
+            pipeline_reg[key] = _make_pipeline_factory(cls, default_model)
+            introspection_reg[key] = cls
+
+            # seed_prompts is optional; failure must not unregister the pipeline
+            try:
+                if hasattr(cls, "seed_prompts") and callable(cls.seed_prompts):
+                    cls.seed_prompts(engine)
+            except Exception:
+                logger.warning(
+                    "seed_prompts failed for '%s', pipeline still registered",
+                    key,
+                    exc_info=True,
+                )
+
+    if pipeline_reg:
+        logger.info(
+            "Loaded %d pipeline(s) from modules: %s",
+            len(pipeline_reg),
+            ", ".join(sorted(pipeline_reg)),
+        )
+
+    return pipeline_reg, introspection_reg
+
+
 def create_app(
     db_path: Optional[str] = None,
     database_url: Optional[str] = None,
@@ -110,6 +177,7 @@ def create_app(
     introspection_registry: Optional[Dict[str, Type[PipelineConfig]]] = None,
     auto_discover: bool = True,
     default_model: Optional[str] = None,
+    pipeline_modules: Optional[List[str]] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -138,6 +206,14 @@ def create_app(
             ``'google-gla:gemini-2.0-flash-lite'``). Falls back to
             ``LLM_PIPELINE_MODEL`` env var. If neither is set, pipeline
             execution will fail at call time (introspection still works).
+        pipeline_modules: Optional list of Python dotted module paths to
+            import and scan for ``PipelineConfig`` subclasses. Each module
+            is loaded via ``importlib.import_module``, concrete subclasses
+            are registered with keys derived from
+            ``naming.to_snake_case(cls.__name__, strip_suffix="Pipeline")``.
+            Raises ``ValueError`` on import failure or if no subclasses
+            are found. Merge order: auto-discovered < module-loaded <
+            explicit *pipeline_registry*.
 
     Returns:
         Configured FastAPI application instance.
@@ -191,22 +267,39 @@ def create_app(
         )
     app.state.default_model = resolved_model
 
-    # Registry setup: discover then merge with explicit overrides winning
+    # Module-loaded pipelines (--pipelines flag)
+    if pipeline_modules:
+        module_pipeline, module_introspection = _load_pipeline_modules(
+            pipeline_modules, resolved_model, app.state.engine
+        )
+    else:
+        module_pipeline: Dict[str, Callable] = {}
+        module_introspection: Dict[str, Type[PipelineConfig]] = {}
+
+    # Registry setup: merge order auto-discovered < module-loaded < explicit
     if auto_discover:
         discovered_pipeline, discovered_introspection = _discover_pipelines(
             app.state.engine, resolved_model
         )
         app.state.pipeline_registry = {
             **discovered_pipeline,
+            **module_pipeline,
             **(pipeline_registry or {}),
         }
         app.state.introspection_registry = {
             **discovered_introspection,
+            **module_introspection,
             **(introspection_registry or {}),
         }
     else:
-        app.state.pipeline_registry = pipeline_registry or {}
-        app.state.introspection_registry = introspection_registry or {}
+        app.state.pipeline_registry = {
+            **module_pipeline,
+            **(pipeline_registry or {}),
+        }
+        app.state.introspection_registry = {
+            **module_introspection,
+            **(introspection_registry or {}),
+        }
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router
