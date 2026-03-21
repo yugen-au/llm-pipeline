@@ -5,10 +5,11 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
+from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.state import DraftPipeline, DraftStep, utc_now
 
@@ -22,24 +23,27 @@ router = APIRouter(prefix="/editor", tags=["editor"])
 
 
 class EditorStep(BaseModel):
-    step_ref: str
+    step_ref: str = Field(max_length=200)
     source: Literal["draft", "registered"]
-    position: int
+    position: int = Field(ge=0)
 
 
 class EditorStrategy(BaseModel):
-    strategy_name: str
-    steps: list[EditorStep]
+    strategy_name: str = Field(max_length=200)
+    steps: list[EditorStep] = Field(max_length=500)
 
 
 class CompileRequest(BaseModel):
-    strategies: list[EditorStrategy]
+    strategies: list[EditorStrategy] = Field(max_length=100)
+    draft_id: int | None = None
 
 
 class CompileError(BaseModel):
     strategy_name: str
     step_ref: str
     message: str
+    field: str | None = None
+    severity: Literal["error", "warning"] = "error"
 
 
 class CompileResponse(BaseModel):
@@ -120,6 +124,33 @@ def _collect_registered_steps(
     return step_pipelines
 
 
+def _collect_registered_prompt_keys(
+    introspection_registry: dict,
+) -> dict[str, set[str]]:
+    """Build step_name -> {prompt_keys} from introspection registry.
+
+    For each registered step, collects system_key and user_key values
+    from introspection metadata across all pipelines. Skips pipelines
+    that fail introspection.
+    """
+    step_keys: dict[str, set[str]] = {}
+    for pipeline_name, pipeline_cls in introspection_registry.items():
+        try:
+            metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+        except Exception:
+            continue
+        for strategy in metadata.get("strategies", []):
+            for step in strategy.get("steps", []):
+                sn = step.get("step_name")
+                if not sn:
+                    continue
+                for key_field in ("system_key", "user_key"):
+                    val = step.get(key_field)
+                    if val:
+                        step_keys.setdefault(sn, set()).add(val)
+    return step_keys
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -147,6 +178,8 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
     known = registered_steps | draft_names
 
     errors: list[CompileError] = []
+
+    # --- Pass 1: step-ref existence ---
     for strategy in body.strategies:
         for step in strategy.steps:
             if step.step_ref not in known:
@@ -158,7 +191,121 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
                     )
                 )
 
-    return CompileResponse(valid=len(errors) == 0, errors=errors)
+    # --- Pass 2: duplicate step_ref within each strategy ---
+    for strategy in body.strategies:
+        seen_refs: dict[str, int] = {}
+        for step in strategy.steps:
+            seen_refs[step.step_ref] = seen_refs.get(step.step_ref, 0) + 1
+        for ref, count in seen_refs.items():
+            if count > 1:
+                errors.append(
+                    CompileError(
+                        strategy_name=strategy.strategy_name,
+                        step_ref=ref,
+                        message=f"Duplicate step_ref '{ref}' appears {count} times in strategy '{strategy.strategy_name}'",
+                        field="step_ref",
+                        severity="error",
+                    )
+                )
+
+    # --- Pass 3: empty strategies (zero steps) ---
+    for strategy in body.strategies:
+        if len(strategy.steps) == 0:
+            errors.append(
+                CompileError(
+                    strategy_name=strategy.strategy_name,
+                    step_ref="",
+                    message=f"Strategy '{strategy.strategy_name}' has no steps",
+                    field="steps",
+                    severity="error",
+                )
+            )
+
+    # --- Pass 4: position gaps or duplicates within each strategy ---
+    for strategy in body.strategies:
+        if not strategy.steps:
+            continue
+        positions = [s.position for s in strategy.steps]
+        pos_counts: dict[int, int] = {}
+        for p in positions:
+            pos_counts[p] = pos_counts.get(p, 0) + 1
+        dup_positions = [p for p, c in pos_counts.items() if c > 1]
+        if dup_positions:
+            errors.append(
+                CompileError(
+                    strategy_name=strategy.strategy_name,
+                    step_ref="",
+                    message=f"Duplicate positions {sorted(dup_positions)} in strategy '{strategy.strategy_name}'",
+                    field="position",
+                    severity="error",
+                )
+            )
+        expected = list(range(len(strategy.steps)))
+        actual = sorted(positions)
+        if actual != expected and not dup_positions:
+            errors.append(
+                CompileError(
+                    strategy_name=strategy.strategy_name,
+                    step_ref="",
+                    message=f"Position gap in strategy '{strategy.strategy_name}': expected {expected}, got {actual}",
+                    field="position",
+                    severity="error",
+                )
+            )
+
+    # --- Pass 5: prompt key existence for registered steps ---
+    step_prompt_keys = _collect_registered_prompt_keys(introspection_registry)
+    # Collect all expected keys across registered steps referenced in the request
+    all_expected_keys: set[str] = set()
+    for strategy in body.strategies:
+        for step in strategy.steps:
+            if step.source == "registered" and step.step_ref in step_prompt_keys:
+                all_expected_keys.update(step_prompt_keys[step.step_ref])
+
+    if all_expected_keys:
+        with Session(engine) as session:
+            stmt = select(Prompt.prompt_key).where(
+                Prompt.prompt_key.in_(list(all_expected_keys)),
+                Prompt.is_active.is_(True),
+            )
+            found_keys = set(session.exec(stmt).all())
+
+        for strategy in body.strategies:
+            for step in strategy.steps:
+                if step.source != "registered":
+                    continue
+                expected_keys = step_prompt_keys.get(step.step_ref, set())
+                for key in expected_keys:
+                    if key not in found_keys:
+                        errors.append(
+                            CompileError(
+                                strategy_name=strategy.strategy_name,
+                                step_ref=step.step_ref,
+                                message=f"Prompt key '{key}' not found in prompts table",
+                                field="prompt_key",
+                                severity="warning",
+                            )
+                        )
+
+    has_errors = any(e.severity == "error" for e in errors)
+
+    # --- Stateful write path: persist compilation results to DraftPipeline ---
+    if body.draft_id is not None:
+        with Session(engine) as session:
+            draft = session.get(DraftPipeline, body.draft_id)
+            if draft is None:
+                raise HTTPException(
+                    status_code=404, detail="Draft pipeline not found"
+                )
+            draft.compilation_errors = {
+                "errors": [e.model_dump() for e in errors]
+            }
+            draft.status = "error" if has_errors else "draft"
+            draft.updated_at = utc_now()
+            session.add(draft)
+            session.commit()
+
+    return CompileResponse(valid=not has_errors, errors=errors)
 
 
 @router.get("/available-steps", response_model=AvailableStepsResponse)
