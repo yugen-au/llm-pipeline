@@ -1,7 +1,7 @@
 ## Task: master-52-visual-editor-api
 ## Description: REST endpoints for compiling visual pipeline definitions and validating structure
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: sam/meta-pipeline
