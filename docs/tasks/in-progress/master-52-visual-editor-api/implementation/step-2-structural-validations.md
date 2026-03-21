@@ -75,3 +75,39 @@ stmt = select(Prompt.prompt_key).where(
 [x] Python syntax check passes
 [x] Runtime import succeeds
 [x] Query now filters on `is_active` index (`ix_prompts_active`)
+
+## Review Fix Iteration 1
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] `_collect_registered_prompt_keys` uses first-wins deduplication -- if same step appears in multiple pipelines with different prompt keys, only first pipeline's keys kept
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/editor.py`
+Changed `_collect_registered_prompt_keys()` to use `set` accumulation instead of first-wins guard. Also updated fallback default in call site from `[]` to `set()`.
+```
+# Before
+step_keys: dict[str, list[str]] = {}
+...
+                keys: list[str] = []
+                for key_field in ("system_key", "user_key"):
+                    val = step.get(key_field)
+                    if val:
+                        keys.append(val)
+                if keys and sn not in step_keys:
+                    step_keys[sn] = keys
+
+# After
+step_keys: dict[str, set[str]] = {}
+...
+                for key_field in ("system_key", "user_key"):
+                    val = step.get(key_field)
+                    if val:
+                        step_keys.setdefault(sn, set()).add(val)
+```
+
+### Verification
+[x] Python syntax check passes
+[x] Runtime import succeeds
+[x] All call sites compatible with set return type (.update, iteration, .get fallback)

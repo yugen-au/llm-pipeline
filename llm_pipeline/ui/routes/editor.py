@@ -126,13 +126,14 @@ def _collect_registered_steps(
 
 def _collect_registered_prompt_keys(
     introspection_registry: dict,
-) -> dict[str, list[str]]:
-    """Build step_name -> [prompt_keys] from introspection registry.
+) -> dict[str, set[str]]:
+    """Build step_name -> {prompt_keys} from introspection registry.
 
     For each registered step, collects system_key and user_key values
-    from introspection metadata. Skips pipelines that fail introspection.
+    from introspection metadata across all pipelines. Skips pipelines
+    that fail introspection.
     """
-    step_keys: dict[str, list[str]] = {}
+    step_keys: dict[str, set[str]] = {}
     for pipeline_name, pipeline_cls in introspection_registry.items():
         try:
             metadata = PipelineIntrospector(pipeline_cls).get_metadata()
@@ -143,13 +144,10 @@ def _collect_registered_prompt_keys(
                 sn = step.get("step_name")
                 if not sn:
                     continue
-                keys: list[str] = []
                 for key_field in ("system_key", "user_key"):
                     val = step.get(key_field)
                     if val:
-                        keys.append(val)
-                if keys and sn not in step_keys:
-                    step_keys[sn] = keys
+                        step_keys.setdefault(sn, set()).add(val)
     return step_keys
 
 
@@ -276,7 +274,7 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
             for step in strategy.steps:
                 if step.source != "registered":
                     continue
-                expected_keys = step_prompt_keys.get(step.step_ref, [])
+                expected_keys = step_prompt_keys.get(step.step_ref, set())
                 for key in expected_keys:
                     if key not in found_keys:
                         errors.append(
