@@ -58,5 +58,28 @@ return CompileResponse(valid=not has_errors, errors=errors)
 [x] Stateful path only triggers when draft_id is not None (backward compatible)
 [x] 404 raised when DraftPipeline not found (matches existing CRUD pattern)
 [x] compilation_errors format matches plan: `{"errors": [<model_dump dicts>]}`
-[x] status set to "error" if any errors (including warnings), "draft" if clean
+[x] status set to "error" if has_errors (error-severity only), "draft" otherwise
 [x] updated_at set via utc_now() (matches update_draft_pipeline pattern)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Status logic uses `errors` list truthiness instead of `has_errors`, causing warning-only compiles to set status="error" while CompileResponse.valid=True
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/editor.py`
+Changed status assignment to use `has_errors` so DB state matches API response.
+```
+# Before
+draft.status = "error" if errors else "draft"
+
+# After
+draft.status = "error" if has_errors else "draft"
+```
+
+### Verification
+[x] Warning-only compile now sets status="draft" (consistent with valid=True)
+[x] Error-severity compile still sets status="error" (consistent with valid=False)
+[x] No-errors compile still sets status="draft"

@@ -302,7 +302,7 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
             draft.compilation_errors = {
                 "errors": [e.model_dump() for e in errors]
             }
-            draft.status = "error" if errors else "draft"
+            draft.status = "error" if has_errors else "draft"
             draft.updated_at = utc_now()
             session.add(draft)
             session.commit()
