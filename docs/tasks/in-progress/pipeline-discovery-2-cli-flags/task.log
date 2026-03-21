@@ -104,3 +104,5 @@
 [2026-03-21 22:10:24] [INFO] Task call: backend-development:tdd-orchestrator (phase: fixing-review)
 [2026-03-21 22:10:24] [INFO] Incremented Revisions: 0 -> 1
 [2026-03-21 22:10:24] [DEBUG] STATE.md atomic write complete
+[2026-03-21 22:12:03] [ERROR] BLOCKED: Invalid commit message format
+[2026-03-21 22:12:26] [DEBUG] STATE.md atomic write complete
