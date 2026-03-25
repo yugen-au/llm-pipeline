@@ -704,6 +704,20 @@ wheels = [
 ]
 
 [[package]]
+name = "docker"
+version = "7.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba62471211598dac5d96825bb49348fa07e906ea930394a83ce/docker-7.1.0.tar.gz", hash = "sha256:ad8c70e6e3f8926cb8a92619b832b4ea5299e2831c14284663184e200546fa6c", size = 117834, upload-time = "2024-05-23T11:13:57.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
+]
+
+[[package]]
 name = "docstring-parser"
 version = "0.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1097,6 +1111,7 @@ wheels = [
 name = "griffelib"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ad/06/eccbd311c9e2b3ca45dbc063b93134c57a1ccc7607c5e545264ad092c4a9/griffelib-2.0.0.tar.gz", hash = "sha256:e504d637a089f5cab9b5daf18f7645970509bf4f53eda8d79ed71cce8bd97934", size = 166312, upload-time = "2026-03-23T21:06:55.954Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4d/51/c936033e16d12b627ea334aaaaf42229c37620d0f15593456ab69ab48161/griffelib-2.0.0-py3-none-any.whl", hash = "sha256:01284878c966508b6d6f1dbff9b6fa607bc062d8261c5c7253cb285b06422a7f", size = 142004, upload-time = "2026-02-09T19:09:40.561Z" },
 ]
@@ -1569,8 +1584,10 @@ creator = [
     { name = "jinja2" },
 ]
 dev = [
+    { name = "docker" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "jinja2" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
     { name = "pydantic-ai" },
@@ -1584,6 +1601,9 @@ otel = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },
 ]
+sandbox = [
+    { name = "docker" },
+]
 ui = [
     { name = "fastapi" },
     { name = "python-multipart" },
@@ -1592,10 +1612,13 @@ ui = [
 
 [package.metadata]
 requires-dist = [
+    { name = "docker", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "docker", marker = "extra == 'sandbox'", specifier = ">=7.0" },
     { name = "fastapi", marker = "extra == 'dev'", specifier = ">=0.115.0" },
     { name = "fastapi", marker = "extra == 'ui'", specifier = ">=0.115.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.24" },
     { name = "jinja2", marker = "extra == 'creator'", specifier = ">=3.0" },
+    { name = "jinja2", marker = "extra == 'dev'", specifier = ">=3.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'dev'", specifier = ">=1.20.0" },
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.20.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'dev'", specifier = ">=1.20.0" },
@@ -1615,7 +1638,7 @@ requires-dist = [
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'dev'", specifier = ">=0.32.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'ui'", specifier = ">=0.32.0" },
 ]
-provides-extras = ["creator", "dev", "otel", "ui"]
+provides-extras = ["creator", "dev", "otel", "sandbox", "ui"]
 
 [[package]]
 name = "logfire"

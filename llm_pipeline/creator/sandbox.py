@@ -6,7 +6,6 @@ Layer 2 is import-check in an isolated container (network=none, read-only FS,
 512MB, no caps). Gracefully degrades when Docker is unavailable.
 """
 import ast
-import importlib.util
 import json
 import logging
 import tempfile
@@ -166,10 +165,15 @@ class StepSandbox:
     Creates a locked-down container (no network, read-only FS, limited resources)
     and runs import checks on generated Python modules. Gracefully skips container
     execution when Docker is unavailable, but always performs AST security scan.
+
+    On first use, auto-builds a sandbox image with deps derived from the
+    installed llm-pipeline package metadata (no hardcoded dep list).
     """
 
-    def __init__(self, image: str = "python:3.11-slim", timeout: int = 60) -> None:
-        self.image = image
+    SANDBOX_IMAGE = "llm-pipeline-sandbox"
+
+    def __init__(self, base_image: str = "python:3.11-slim", timeout: int = 60) -> None:
+        self.base_image = base_image
         self.timeout = timeout
 
     def _get_client(self):
@@ -196,17 +200,76 @@ class StepSandbox:
             )
             return None
 
-    def _discover_framework_path(self) -> str | None:
-        """Auto-discover llm_pipeline package location for container mount."""
+    @staticmethod
+    def _find_project_root() -> Path | None:
+        """Find llm-pipeline project root (dir containing pyproject.toml)."""
+        import importlib.util
         spec = importlib.util.find_spec("llm_pipeline")
         if spec is None or not spec.submodule_search_locations:
             return None
+        pkg_dir = Path(spec.submodule_search_locations[0])
+        root = pkg_dir.parent
+        if (root / "pyproject.toml").exists():
+            return root
+        return None
+
+    @staticmethod
+    def _source_hash(project_root: Path) -> str:
+        """Hash of pyproject.toml + package source for cache invalidation."""
+        import hashlib
+        h = hashlib.sha256()
+        # Hash pyproject.toml for dep changes
+        h.update((project_root / "pyproject.toml").read_bytes())
+        # Hash all .py files in llm_pipeline/ for code changes
+        pkg_dir = project_root / "llm_pipeline"
+        for py in sorted(pkg_dir.rglob("*.py")):
+            h.update(py.read_bytes())
+        return h.hexdigest()[:12]
+
+    def _ensure_image(self, client) -> str:
+        """Build sandbox image from local source. Returns image tag."""
+        project_root = self._find_project_root()
+        if project_root is None:
+            raise RuntimeError("Cannot find llm-pipeline project root")
+
+        tag = f"{self.SANDBOX_IMAGE}:{self._source_hash(project_root)}"
+
         try:
-            loc = spec.submodule_search_locations[0]
-            # Parent is site-packages or source root
-            return str(Path(loc).parent)
-        except (IndexError, TypeError):
-            return None
+            client.images.get(tag)
+            logger.debug("Sandbox image %s already exists", tag)
+            return tag
+        except Exception:
+            pass
+
+        # Build from project root: install core deps then copy source
+        # (avoids hatch-vcs needing .git and build hook needing npm)
+        from importlib.metadata import requires
+        reqs = requires("llm-pipeline") or []
+        core_deps = [r.split(";")[0].strip() for r in reqs if "; extra ==" not in r]
+        pip_line = " ".join(f'"{d}"' for d in sorted(core_deps))
+
+        dockerfile_content = (
+            f"FROM {self.base_image}\n"
+            f"RUN pip install --no-cache-dir {pip_line}\n"
+            "COPY llm_pipeline/ /usr/local/lib/python3.11/site-packages/llm_pipeline/\n"
+        )
+        # Write temp Dockerfile into project root for build context
+        dockerfile_path = project_root / ".sandbox.Dockerfile"
+        try:
+            dockerfile_path.write_text(dockerfile_content)
+            logger.info("Building sandbox image %s from local source ...", tag)
+            client.images.build(
+                path=str(project_root),
+                dockerfile=".sandbox.Dockerfile",
+                tag=tag,
+                rm=True,
+                quiet=True,
+            )
+            logger.info("Sandbox image %s built successfully", tag)
+        finally:
+            dockerfile_path.unlink(missing_ok=True)
+
+        return tag
 
     def _write_files(
         self,
@@ -285,25 +348,28 @@ class StepSandbox:
                 modules_found=[],
             )
 
-        framework_path = self._discover_framework_path()
-        if framework_path is None:
-            warnings.warn(
-                "Could not discover llm_pipeline package path; "
-                "framework will not be available in sandbox.",
-                category=UserWarning,
-                stacklevel=2,
-            )
-
         try:
-            import docker
             from docker.types import Mount
         except ImportError:
-            # Shouldn't happen since _get_client succeeded, but defensive
             return SandboxResult(
                 import_ok=True,
                 security_issues=[],
                 sandbox_skipped=True,
                 output="docker import failed after client init",
+                errors=[],
+                modules_found=[],
+            )
+
+        # Build sandbox image with deps (cached after first build)
+        try:
+            image_tag = self._ensure_image(client)
+        except Exception as exc:
+            logger.warning("Failed to build sandbox image: %s", exc)
+            return SandboxResult(
+                import_ok=True,
+                security_issues=[],
+                sandbox_skipped=True,
+                output=f"Sandbox image build failed: {exc}",
                 errors=[],
                 modules_found=[],
             )
@@ -324,7 +390,6 @@ class StepSandbox:
                         modules_found=[],
                     )
 
-                # Build mounts
                 mounts = [
                     Mount(
                         target="/code",
@@ -340,27 +405,11 @@ class StepSandbox:
                     ),
                 ]
 
-                python_path_parts = ["/code"]
-
-                if framework_path:
-                    mounts.append(
-                        Mount(
-                            target="/mounted-site-packages",
-                            source=framework_path,
-                            type="bind",
-                            read_only=True,
-                        )
-                    )
-                    python_path_parts.append("/mounted-site-packages")
-
-                environment = {
-                    "PYTHONPATH": ":".join(python_path_parts),
-                }
-
+                environment = {"PYTHONPATH": "/code"}
                 command = ["python", "/code/run_test.py"] + module_files
 
                 container = client.containers.create(
-                    self.image,
+                    image_tag,
                     command=command,
                     mounts=mounts,
                     network_mode="none",

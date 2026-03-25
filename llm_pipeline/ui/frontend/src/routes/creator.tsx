@@ -21,7 +21,7 @@ import type {
   DraftDetail,
 } from '@/api/creator'
 import { useEvents } from '@/api/events'
-import { useWebSocket } from '@/api/websocket'
+import { useSubscribeRun } from '@/api/websocket'
 import { useWsStore } from '@/stores/websocket'
 import { queryKeys } from '@/api/query-keys'
 import type { EventItem } from '@/api/types'
@@ -72,7 +72,7 @@ function CreatorPage() {
   const { refetch: refetchDraft } = useDraft(activeDraftId)
 
   // -- WebSocket for generation progress --
-  useWebSocket(activeRunId)
+  useSubscribeRun(activeRunId)
   const wsStatus = useWsStore((s) => s.status)
 
   // -- Events for active run --
