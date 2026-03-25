@@ -8,6 +8,7 @@ Layer 2 is import-check in an isolated container (network=none, read-only FS,
 import ast
 import json
 import logging
+import re
 import tempfile
 import warnings
 from pathlib import Path
@@ -146,7 +147,7 @@ import json
 
 results = {"import_ok": False, "errors": [], "modules_found": []}
 for module_file in sys.argv[1:]:
-    module_name = module_file.replace(".py", "")
+    module_name = "pkg." + module_file.replace(".py", "")
     try:
         __import__(module_name)
         results["modules_found"].append(module_name)
@@ -278,22 +279,114 @@ class StepSandbox:
         sample_data: dict | None,
     ) -> list[str]:
         """
-        Write artifacts and test harness to tmpdir.
+        Write artifacts into a proper Python package (pkg/) under tmpdir.
+
+        Layout:
+            tmpdir/
+              run_test.py
+              sample_data.json        (if provided)
+              pkg/
+                __init__.py           (empty)
+                {step}_step.py        (artifact)
+                {step}_instructions.py(artifact)
+                schemas.py            (alias re-exporting from _instructions)
+                models.py             (stub classes for .models imports)
 
         Returns list of Python module filenames to import-check
         (excludes non-.py and YAML prompt files).
         """
-        module_files: list[str] = []
+        pkg_dir = tmpdir / "pkg"
+        pkg_dir.mkdir()
+        (pkg_dir / "__init__.py").write_text("", encoding="utf-8")
 
+        module_files: list[str] = []
+        instructions_module: str | None = None
+
+        for filename in artifacts:
+            if filename.endswith("_instructions.py"):
+                instructions_module = filename.replace(".py", "")
+
+        # -- Build schemas.py: re-export from _instructions + stub Context --
+
+        # 1. Find class names defined in the instructions artifact
+        instructions_classes: set[str] = set()
+        if instructions_module:
+            instr_content = artifacts.get(f"{instructions_module}.py", "")
+            for m in re.finditer(r"^class\s+(\w+)", instr_content, re.MULTILINE):
+                instructions_classes.add(m.group(1))
+
+        # 2. Collect all names artifacts import from .schemas
+        schema_names: set[str] = set()
+        for content in artifacts.values():
+            for m in re.finditer(r"from\s+\.schemas\s+import\s+(.+)", content):
+                for name in m.group(1).split(","):
+                    name = name.strip()
+                    if name and name != "*":
+                        schema_names.add(name)
+
+        # 3. All names schemas.py will export
+        all_schema_exports = instructions_classes | schema_names
+
+        # 4. Write schemas.py
+        schema_lines: list[str] = []
+        if instructions_module and instructions_classes:
+            names_csv = ", ".join(sorted(instructions_classes))
+            schema_lines.append(f"from .{instructions_module} import {names_csv}")
+        stub_names = schema_names - instructions_classes
+        if stub_names:
+            schema_lines.append("from llm_pipeline.context import PipelineContext")
+            for name in sorted(stub_names):
+                schema_lines.append(f"class {name}(PipelineContext): pass")
+        (pkg_dir / "schemas.py").write_text(
+            "\n".join(schema_lines) + "\n", encoding="utf-8"
+        )
+
+        # -- Write artifacts into pkg/, patching missing schema imports --
         for filename, content in artifacts.items():
-            filepath = tmpdir / filename
-            filepath.write_text(content, encoding="utf-8")
-            # Only include actual Python code files for import checking.
-            # Files like {step}_prompts.py contain YAML, not Python -- skip them.
+            if filename.endswith(".py") and not filename.endswith("_prompts.py"):
+                # Find names used as bare identifiers that schemas.py exports
+                # but the file doesn't import from .schemas
+                already_imported: set[str] = set()
+                for m in re.finditer(r"from\s+\.schemas\s+import\s+(.+)", content):
+                    for name in m.group(1).split(","):
+                        name = name.strip()
+                        if name == "*":
+                            already_imported = all_schema_exports
+                        elif name:
+                            already_imported.add(name)
+                # Names this file defines itself (don't inject imports for those)
+                locally_defined: set[str] = set()
+                for m in re.finditer(r"^class\s+(\w+)", content, re.MULTILINE):
+                    locally_defined.add(m.group(1))
+                missing = {
+                    n for n in all_schema_exports - already_imported - locally_defined
+                    if re.search(r"\b" + re.escape(n) + r"\b", content)
+                }
+                if missing:
+                    inject = "from .schemas import " + ", ".join(sorted(missing))
+                    content = inject + "\n" + content
+
+            (pkg_dir / filename).write_text(content, encoding="utf-8")
             if filename.endswith(".py") and not filename.endswith("_prompts.py"):
                 module_files.append(filename)
 
-        # Write test harness
+        # Stub: models.py -> generate BaseModel stubs for any `from .models import X`
+        model_names: set[str] = set()
+        for content in artifacts.values():
+            for m in re.finditer(r"from\s+\.models\s+import\s+(.+)", content):
+                for name in m.group(1).split(","):
+                    name = name.strip()
+                    if name and name != "*":
+                        model_names.add(name)
+        if model_names:
+            lines = ["from pydantic import BaseModel\n"]
+            for name in sorted(model_names):
+                lines.append(f"class {name}(BaseModel): pass\n")
+            (pkg_dir / "models.py").write_text("\n".join(lines), encoding="utf-8")
+        else:
+            (pkg_dir / "models.py").write_text("", encoding="utf-8")
+
+        # Write test harness at tmpdir root (outside pkg/)
         (tmpdir / "run_test.py").write_text(_RUN_TEST_PY, encoding="utf-8")
 
         # Write sample data if provided
