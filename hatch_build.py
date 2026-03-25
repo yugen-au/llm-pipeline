@@ -16,8 +16,16 @@ class FrontendBuildHook(BuildHookInterface):
         frontend_dir = Path(self.root) / "llm_pipeline" / "ui" / "frontend"
         dist_dir = frontend_dir / "dist"
 
-        if dist_dir.exists() and (dist_dir / "index.html").exists():
-            self.app.display_info("Frontend dist/ already exists, skipping build")
+        # Rebuild if lockfile changed since last build
+        lock_file = frontend_dir / "package-lock.json"
+        stamp_file = dist_dir / ".build_hash"
+        lock_hash = ""
+        if lock_file.exists():
+            import hashlib
+            lock_hash = hashlib.sha256(lock_file.read_bytes()).hexdigest()[:16]
+        existing_hash = stamp_file.read_text().strip() if stamp_file.exists() else ""
+        if dist_dir.exists() and (dist_dir / "index.html").exists() and lock_hash == existing_hash:
+            self.app.display_info("Frontend dist/ up to date, skipping build")
             return
 
         if not (frontend_dir / "package.json").exists():
@@ -45,5 +53,8 @@ class FrontendBuildHook(BuildHookInterface):
         if not (dist_dir / "index.html").exists():
             msg = "Frontend build did not produce dist/index.html"
             raise RuntimeError(msg)
+
+        if lock_hash:
+            stamp_file.write_text(lock_hash)
 
         self.app.display_info("Frontend build complete")
