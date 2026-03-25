@@ -29,6 +29,7 @@ import type {
   ContextSnapshot,
   RunStatus,
   LLMCallCompletedData,
+  LLMCallStartingData,
   ContextUpdatedData,
   ExtractionCompletedData,
 } from '@/api/types'
@@ -101,15 +102,20 @@ function InputTab({
 }
 
 function PromptsTab({
+  events,
   prompts,
   isLoading,
   isError,
 }: {
+  events: EventItem[]
   prompts: StepPromptItem[] | undefined
   isLoading: boolean
   isError: boolean
 }) {
-  if (isLoading) {
+  const calls = filterEvents<LLMCallStartingData>(events, 'llm_call_starting')
+  const hasRendered = calls.length > 0
+
+  if (!hasRendered && isLoading) {
     return (
       <div className="space-y-3">
         <SkeletonLine width="10rem" className="h-5" />
@@ -119,12 +125,46 @@ function PromptsTab({
     )
   }
 
+  // Show rendered prompts from events when available
+  if (hasRendered) {
+    return (
+      <TabScrollArea>
+        <div className="space-y-4">
+          {calls.map(({ data }, i) => (
+            <div key={i} className="space-y-3">
+              {calls.length > 1 && (
+                <h4 className="text-sm font-semibold">
+                  Call {data.call_index + 1} of {calls.length}
+                </h4>
+              )}
+              <BadgeSection
+                badge={<Badge variant="secondary">system</Badge>}
+              >
+                <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
+                  {data.rendered_system_prompt}
+                </pre>
+              </BadgeSection>
+              <BadgeSection
+                badge={<Badge variant="secondary">user</Badge>}
+              >
+                <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
+                  {data.rendered_user_prompt}
+                </pre>
+              </BadgeSection>
+            </div>
+          ))}
+        </div>
+      </TabScrollArea>
+    )
+  }
+
+  // Fallback to templates
   if (isError) {
     return <p className="text-sm text-destructive">Failed to load prompts</p>
   }
 
   if (!prompts || prompts.length === 0) {
-    return <EmptyState message="No prompt templates registered" />
+    return <EmptyState message="No prompts recorded" />
   }
 
   return (
@@ -489,6 +529,7 @@ function StepContent({
               </TabsContent>
               <TabsContent value="prompts">
                 <PromptsTab
+                  events={events}
                   prompts={instructionsResponse?.prompts}
                   isLoading={instructionsLoading}
                   isError={instructionsError}
