@@ -118,14 +118,16 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
             print("ERROR: npx not found; install Node.js to use dev mode", file=sys.stderr)
             sys.exit(1)
 
-        # Auto-install deps if node_modules missing or package.json newer
+        # Auto-install deps if node_modules missing or lockfile changed
         node_modules = frontend_dir / "node_modules"
-        pkg_json = frontend_dir / "package.json"
-        needs_install = (
-            not node_modules.exists()
-            or (pkg_json.exists() and pkg_json.stat().st_mtime > node_modules.stat().st_mtime)
-        )
-        if needs_install:
+        lock_file = frontend_dir / "package-lock.json"
+        stamp_file = node_modules / ".install_hash"
+        lock_hash = ""
+        if lock_file.exists():
+            import hashlib
+            lock_hash = hashlib.sha256(lock_file.read_bytes()).hexdigest()[:16]
+        existing_hash = stamp_file.read_text().strip() if stamp_file.exists() else ""
+        if not node_modules.exists() or lock_hash != existing_hash:
             print("Installing frontend dependencies...", file=sys.stderr)
             subprocess.run(
                 ["npm", "install"],
@@ -133,6 +135,8 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
                 shell=(sys.platform == "win32"),
                 check=True,
             )
+            if lock_hash:
+                stamp_file.write_text(lock_hash)
 
         vite_port = args.port + 1
         vite_proc = _start_vite(frontend_dir, vite_port, args.port)
