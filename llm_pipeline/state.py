@@ -13,7 +13,7 @@ This enables:
 from datetime import datetime, timezone
 from typing import Optional
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import Index
+from sqlalchemy import Index, UniqueConstraint
 
 
 def utc_now():
@@ -196,4 +196,86 @@ class PipelineRun(SQLModel, table=True):
     )
 
 
-__all__ = ["PipelineStepState", "PipelineRunInstance", "PipelineRun"]
+class DraftStep(SQLModel, table=True):
+    """
+    Persists a draft step definition across sessions.
+
+    Stores generated code, test results, and validation state for steps
+    created by the pipeline creator UI. Status values: draft, tested,
+    accepted, error. Re-generation UPDATEs existing row (unique name).
+    """
+    __tablename__ = "draft_steps"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    name: str = Field(max_length=100, description="Unique step name")
+    description: Optional[str] = Field(default=None)
+    generated_code: dict = Field(
+        sa_column=Column(JSON),
+        description="Generated step code as structured dict"
+    )
+    test_results: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON)
+    )
+    validation_errors: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON)
+    )
+    status: str = Field(
+        default="draft", max_length=20,
+        description="draft, tested, accepted, error"
+    )
+    run_id: Optional[str] = Field(
+        default=None, max_length=36,
+        description="Traceability link to creator_generation_records.run_id (no FK)"
+    )
+
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_draft_steps_name"),
+        Index("ix_draft_steps_status", "status"),
+    )
+
+
+class DraftPipeline(SQLModel, table=True):
+    """
+    Persists a draft pipeline definition across sessions.
+
+    Stores pipeline structure (step references) and compilation state.
+    Status values: draft, tested, accepted, error.
+    Re-generation UPDATEs existing row (unique name).
+    """
+    __tablename__ = "draft_pipelines"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    name: str = Field(max_length=100, description="Unique pipeline name")
+    structure: dict = Field(
+        sa_column=Column(JSON),
+        description="Pipeline structure referencing step names"
+    )
+    compilation_errors: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON)
+    )
+    status: str = Field(
+        default="draft", max_length=20,
+        description="draft, tested, accepted, error"
+    )
+
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_draft_pipelines_name"),
+        Index("ix_draft_pipelines_status", "status"),
+    )
+
+
+__all__ = [
+    "PipelineStepState",
+    "PipelineRunInstance",
+    "PipelineRun",
+    "DraftStep",
+    "DraftPipeline",
+]

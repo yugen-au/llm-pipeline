@@ -29,7 +29,7 @@ from llm_pipeline.context import PipelineContext, PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun
+from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline
 from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.events.types import PipelineEvent
 from llm_pipeline.events.emitter import PipelineEventEmitter, CompositeEmitter
@@ -70,6 +70,8 @@ __all__ = [
     "PipelineStepState",
     "PipelineRunInstance",
     "PipelineRun",
+    "DraftStep",
+    "DraftPipeline",
     "PipelineEventRecord",
     # Events
     "PipelineEvent",

@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as PromptsRouteImport } from './routes/prompts'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
 import { Route as LiveRouteImport } from './routes/live'
+import { Route as EditorRouteImport } from './routes/editor'
+import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
 
@@ -30,6 +32,16 @@ const LiveRoute = LiveRouteImport.update({
   path: '/live',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EditorRoute = EditorRouteImport.update({
+  id: '/editor',
+  path: '/editor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CreatorRoute = CreatorRouteImport.update({
+  id: '/creator',
+  path: '/creator',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -43,6 +55,8 @@ const RunsRunIdRoute = RunsRunIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/creator': typeof CreatorRoute
+  '/editor': typeof EditorRoute
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
@@ -50,6 +64,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/creator': typeof CreatorRoute
+  '/editor': typeof EditorRoute
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
@@ -58,6 +74,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/creator': typeof CreatorRoute
+  '/editor': typeof EditorRoute
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
@@ -65,14 +83,38 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/live' | '/pipelines' | '/prompts' | '/runs/$runId'
+  fullPaths:
+    | '/'
+    | '/creator'
+    | '/editor'
+    | '/live'
+    | '/pipelines'
+    | '/prompts'
+    | '/runs/$runId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/live' | '/pipelines' | '/prompts' | '/runs/$runId'
-  id: '__root__' | '/' | '/live' | '/pipelines' | '/prompts' | '/runs/$runId'
+  to:
+    | '/'
+    | '/creator'
+    | '/editor'
+    | '/live'
+    | '/pipelines'
+    | '/prompts'
+    | '/runs/$runId'
+  id:
+    | '__root__'
+    | '/'
+    | '/creator'
+    | '/editor'
+    | '/live'
+    | '/pipelines'
+    | '/prompts'
+    | '/runs/$runId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CreatorRoute: typeof CreatorRoute
+  EditorRoute: typeof EditorRoute
   LiveRoute: typeof LiveRoute
   PipelinesRoute: typeof PipelinesRoute
   PromptsRoute: typeof PromptsRoute
@@ -102,6 +144,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LiveRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/editor': {
+      id: '/editor'
+      path: '/editor'
+      fullPath: '/editor'
+      preLoaderRoute: typeof EditorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/creator': {
+      id: '/creator'
+      path: '/creator'
+      fullPath: '/creator'
+      preLoaderRoute: typeof CreatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -121,6 +177,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CreatorRoute: CreatorRoute,
+  EditorRoute: EditorRoute,
   LiveRoute: LiveRoute,
   PipelinesRoute: PipelinesRoute,
   PromptsRoute: PromptsRoute,

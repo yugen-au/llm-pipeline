@@ -175,6 +175,9 @@ class CodeValidationContext(PipelineContext):
     llm_review_valid: bool
     issues: list[str]
     all_artifacts: dict[str, str]
+    sandbox_valid: bool = False
+    sandbox_skipped: bool = True
+    sandbox_output: str | None = None
 
 
 __all__ = [

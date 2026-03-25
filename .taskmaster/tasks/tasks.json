@@ -635,9 +635,9 @@
         "dependencies": [
           "18"
         ],
-        "status": "in-progress",
+        "status": "done",
         "subtasks": [],
-        "updatedAt": "2026-03-18T07:56:10.327Z"
+        "updatedAt": "2026-03-19T00:12:24.902Z"
       },
       {
         "id": "46",
@@ -649,8 +649,9 @@
         "dependencies": [
           "45"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-19T03:02:29.915Z"
       },
       {
         "id": "47",
@@ -663,8 +664,9 @@
           "45",
           "46"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-19T08:00:59.831Z"
       },
       {
         "id": "48",
@@ -676,8 +678,9 @@
         "dependencies": [
           "47"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-19T12:22:31.982Z"
       },
       {
         "id": "49",
@@ -690,8 +693,9 @@
           "48",
           "35"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-20T03:38:29.859Z"
       },
       {
         "id": "50",
@@ -703,8 +707,9 @@
         "dependencies": [
           "17"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-19T05:59:54.755Z"
       },
       {
         "id": "51",
@@ -717,8 +722,9 @@
           "50",
           "40"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-20T12:09:03.630Z"
       },
       {
         "id": "52",
@@ -731,8 +737,9 @@
           "50",
           "24"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-21T09:48:17.624Z"
       },
       {
         "id": "53",
@@ -809,9 +816,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-18T07:56:10.327Z",
+      "lastModified": "2026-03-21T09:48:17.624Z",
       "taskCount": 57,
-      "completedCount": 49,
+      "completedCount": 57,
       "tags": [
         "master"
       ]
@@ -941,8 +948,9 @@
         "dependencies": [
           "1"
         ],
-        "status": "pending",
-        "subtasks": []
+        "status": "done",
+        "subtasks": [],
+        "updatedAt": "2026-03-21T11:20:49.359Z"
       },
       {
         "id": "3",
@@ -961,9 +969,9 @@
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2026-03-13T00:49:45.298Z",
+      "lastModified": "2026-03-21T11:20:49.359Z",
       "taskCount": 3,
-      "completedCount": 2,
+      "completedCount": 3,
       "tags": [
         "pipeline-discovery"
       ]

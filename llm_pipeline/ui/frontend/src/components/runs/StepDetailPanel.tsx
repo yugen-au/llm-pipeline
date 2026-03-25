@@ -13,8 +13,15 @@ import {
 } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { ExtractionDetail } from '@/components/runs/ExtractionDetail'
+import {
+  EmptyState,
+  TabScrollArea,
+  LabeledPre,
+  BadgeSection,
+  SkeletonLine,
+  SkeletonBlock,
+} from '@/components/shared'
 import type {
   EventItem,
   StepDetail,
@@ -68,28 +75,28 @@ function InputTab({
   snapshotsLoading: boolean
 }) {
   if (step.step_number === 1) {
-    return <p className="text-sm text-muted-foreground">No prior context (first step)</p>
+    return <EmptyState message="No prior context (first step)" />
   }
 
   if (snapshotsLoading) {
-    return <div className="h-24 animate-pulse rounded bg-muted" />
+    return <SkeletonBlock className="h-24" />
   }
 
   const prevSnapshot = snapshots.find((s) => s.step_number === step.step_number - 1)
 
   if (!prevSnapshot) {
-    return <p className="text-sm text-muted-foreground">Previous step context not available</p>
+    return <EmptyState message="Previous step context not available" />
   }
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-2">
         <h4 className="text-sm font-medium text-muted-foreground">
           Context after step {prevSnapshot.step_number} ({prevSnapshot.step_name})
         </h4>
         <JsonViewer data={prevSnapshot.context_snapshot} />
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -105,9 +112,9 @@ function PromptsTab({
   if (isLoading) {
     return (
       <div className="space-y-3">
-        <div className="h-5 w-40 animate-pulse rounded bg-muted" />
-        <div className="h-20 animate-pulse rounded bg-muted" />
-        <div className="h-20 animate-pulse rounded bg-muted" />
+        <SkeletonLine width="10rem" className="h-5" />
+        <SkeletonBlock />
+        <SkeletonBlock />
       </div>
     )
   }
@@ -117,25 +124,29 @@ function PromptsTab({
   }
 
   if (!prompts || prompts.length === 0) {
-    return <p className="text-sm text-muted-foreground">No prompt templates registered</p>
+    return <EmptyState message="No prompt templates registered" />
   }
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-4">
         {prompts.map((item) => (
-          <div key={item.prompt_key} className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">{item.prompt_type}</Badge>
-              <span className="text-sm font-medium">{item.prompt_key}</span>
-            </div>
+          <BadgeSection
+            key={item.prompt_key}
+            badge={
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">{item.prompt_type}</Badge>
+                <span className="text-sm font-medium">{item.prompt_key}</span>
+              </div>
+            }
+          >
             <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
               {item.content}
             </pre>
-          </div>
+          </BadgeSection>
         ))}
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -144,11 +155,11 @@ function ResponseTab({ events }: { events: EventItem[] }) {
   const total = calls.length
 
   if (total === 0) {
-    return <p className="text-sm text-muted-foreground">No LLM responses recorded</p>
+    return <EmptyState message="No LLM responses recorded" />
   }
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-4">
         {calls.map(({ data }, i) => (
           <div key={i} className="space-y-2">
@@ -158,12 +169,10 @@ function ResponseTab({ events }: { events: EventItem[] }) {
               </h4>
             )}
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Raw Response</p>
-                <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                  {data.raw_response ?? '(null)'}
-                </pre>
-              </div>
+              <LabeledPre
+                label="Raw Response"
+                content={data.raw_response ?? '(null)'}
+              />
               <div className="space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">Parsed Result</p>
                 {data.parsed_result
@@ -175,7 +184,7 @@ function ResponseTab({ events }: { events: EventItem[] }) {
           </div>
         ))}
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -187,18 +196,18 @@ function InstructionsTab({
   instructionsClass: string | null
 }) {
   if (!instructionsSchema) {
-    return <p className="text-sm text-muted-foreground">No schema available</p>
+    return <EmptyState message="No schema available" />
   }
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-3">
         {instructionsClass && (
           <Badge variant="secondary">{instructionsClass}</Badge>
         )}
         <JsonViewer data={instructionsSchema} />
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -218,14 +227,14 @@ function ContextDiffTab({
   const newKeys = ctxEvents.flatMap(({ data }) => data.new_keys)
 
   if (snapshotsLoading) {
-    return <div className="h-24 animate-pulse rounded bg-muted" />
+    return <SkeletonBlock className="h-24" />
   }
 
   const beforeSnapshot = snapshots.find((s) => s.step_number === step.step_number - 1)
   const afterSnapshot = snapshots.find((s) => s.step_number === step.step_number)
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-3">
         {newKeys.length > 0 && (
           <div className="space-y-1">
@@ -243,7 +252,7 @@ function ContextDiffTab({
           maxDepth={3}
         />
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -252,11 +261,11 @@ function ExtractionsTab({ events }: { events: EventItem[] }) {
   const errors = events.filter((e) => e.event_type === 'extraction_error')
 
   if (extractions.length === 0 && errors.length === 0) {
-    return <p className="text-sm text-muted-foreground">No extractions for this step</p>
+    return <EmptyState message="No extractions for this step" />
   }
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-3">
         {extractions.map(({ data }, i) => (
           <ExtractionDetail key={i} data={data} />
@@ -272,7 +281,7 @@ function ExtractionsTab({ events }: { events: EventItem[] }) {
           </div>
         )}
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -300,7 +309,7 @@ function MetaTab({
   const hasCost = completedCalls.some(({ data }) => data.cost_usd != null)
 
   return (
-    <ScrollArea className="h-full">
+    <TabScrollArea>
       <div className="space-y-4">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
           <dt className="text-muted-foreground">Step Name</dt>
@@ -376,7 +385,7 @@ function MetaTab({
           </div>
         )}
       </div>
-    </ScrollArea>
+    </TabScrollArea>
   )
 }
 
@@ -426,9 +435,9 @@ function StepContent({
   if (isLoading) {
     return (
       <div className="space-y-3 p-4">
-        <div className="h-5 w-40 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-        <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+        <SkeletonLine width="10rem" className="h-5" />
+        <SkeletonLine width="6rem" />
+        <SkeletonLine width="8rem" />
       </div>
     )
   }
@@ -467,8 +476,8 @@ function StepContent({
         <div className="min-h-0 flex-1 overflow-auto p-4">
           {eventsLoading ? (
             <div className="space-y-2">
-              <div className="h-4 w-48 animate-pulse rounded bg-muted" />
-              <div className="h-20 animate-pulse rounded bg-muted" />
+              <SkeletonLine width="12rem" />
+              <SkeletonBlock />
             </div>
           ) : (
             <>

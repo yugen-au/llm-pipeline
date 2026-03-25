@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.step import LLMStep, step_definition
 
-from .models import GenerationRecord
+from .models import FieldDefinition, GenerationRecord
 from .schemas import (
     CodeGenerationContext,
     CodeGenerationInstructions,
@@ -25,6 +25,14 @@ from .schemas import (
     RequirementsAnalysisInstructions,
 )
 from .templates import render_template
+
+try:
+    from .sandbox import StepSandbox
+    from .sample_data import SampleDataGenerator
+
+    _SANDBOX_AVAILABLE = True
+except ImportError:
+    _SANDBOX_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +117,7 @@ class CodeGenerationStep(LLMStep):
                 "variables": {
                     "step_name": ctx.get("step_name", ""),
                     "step_class_name": ctx.get("step_class_name", ""),
+                    "description": self.pipeline.validated_input.description,
                     "instruction_fields": ctx.get("instruction_fields", []),
                     "context_fields": ctx.get("context_fields", []),
                     "input_variables": ctx.get("input_variables", []),
@@ -200,6 +209,7 @@ class PromptGenerationStep(LLMStep):
                     "step_name": ctx.get("step_name", ""),
                     "description": self.pipeline.validated_input.description,
                     "input_variables": ctx.get("input_variables", []),
+                    "instruction_fields": ctx.get("instruction_fields", []),
                 }
             }
         ]
@@ -289,8 +299,6 @@ class CodeValidationStep(LLMStep):
         extraction_syntax_ok = _syntax_check(extraction_code) if extraction_code else True
         syntax_valid = step_syntax_ok and instructions_syntax_ok and extraction_syntax_ok
 
-        is_valid = syntax_valid and inst.is_valid
-
         # Build artifact map: filename -> code string
         all_artifacts: dict[str, str] = {
             f"{step_name}_step.py": step_code,
@@ -300,12 +308,44 @@ class CodeValidationStep(LLMStep):
         if extraction_code:
             all_artifacts[f"{step_name}_extraction.py"] = extraction_code
 
+        # Sandbox validation (AST security scan + optional Docker import check)
+        sandbox_valid = False
+        sandbox_skipped = True
+        sandbox_output: str | None = None
+        issues = list(inst.issues)
+
+        if _SANDBOX_AVAILABLE:
+            # Reconstruct FieldDefinition list from context dicts
+            fields_raw = ctx.get("instruction_fields", [])
+            fields = [FieldDefinition(**f) for f in fields_raw]
+
+            sample_data = SampleDataGenerator().generate(fields) if fields else None
+            result = StepSandbox().run(
+                artifacts=all_artifacts, sample_data=sample_data
+            )
+
+            sandbox_valid = result.import_ok
+            sandbox_skipped = result.sandbox_skipped
+            sandbox_output = result.output
+            if result.security_issues:
+                issues.extend(result.security_issues)
+        else:
+            sandbox_output = "sandbox module not available"
+
+        # If sandbox was skipped, don't penalize validity
+        is_valid = syntax_valid and inst.is_valid and (
+            sandbox_valid or sandbox_skipped
+        )
+
         return CodeValidationContext(
             is_valid=is_valid,
             syntax_valid=syntax_valid,
             llm_review_valid=inst.is_valid,
-            issues=inst.issues,
+            issues=issues,
             all_artifacts=all_artifacts,
+            sandbox_valid=sandbox_valid,
+            sandbox_skipped=sandbox_skipped,
+            sandbox_output=sandbox_output,
         )
 
 

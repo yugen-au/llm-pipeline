@@ -1,6 +1,7 @@
 """Prompt constants and seeding for the StepCreator meta-pipeline."""
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,63 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Shared framework reference prepended to all system prompts
+# ---------------------------------------------------------------------------
+
+FRAMEWORK_REFERENCE = """\
+## llm-pipeline Framework Reference
+
+Architecture: a Pipeline chains Steps. Each Step makes one LLM call and produces a Context that downstream steps can read.
+
+### Instructions = Output Schema (NOT input instructions)
+An `LLMResultMixin` subclass defines the **structured data the LLM returns**. pydantic-ai automatically parses the LLM response into this model. You never describe JSON output format in the prompts -- the framework handles that.
+
+```python
+class SentimentInstructions(LLMResultMixin):
+    sentiment: str       # LLM fills this
+    confidence: float    # LLM fills this
+```
+
+### Prompts != Output Schema
+- **System prompt**: sets the LLM's role, task, and domain constraints. Must NOT describe JSON fields or output structure.
+- **User prompt**: a `{variable}` template rendered at runtime with `str.format()`. Presents the input data.
+
+### Step Class Pattern
+Method bodies are inserted into a Jinja2 template that already provides the class shell, imports, and decorator. You only write the method **bodies** (no `def` line, no class).
+
+The rendered file looks like:
+```python
+from llm_pipeline.step import LLMStep, step_definition
+from .schemas import SentimentInstructions, SentimentContext
+
+@step_definition(
+    instructions=SentimentInstructions,
+    default_system_key="sentiment_analysis",
+    default_user_key="sentiment_analysis",
+    context=SentimentContext,
+)
+class SentimentAnalysisStep(LLMStep):
+    def prepare_calls(self):
+        # --- your prepare_calls_body is inserted here ---
+        return [{"variables": {"text": self.pipeline.validated_input.text}}]
+
+    def process_instructions(self, instructions):
+        # --- your process_instructions_body is inserted here ---
+        inst = instructions[0]
+        return SentimentContext(sentiment=inst.sentiment, confidence=inst.confidence)
+```
+
+### Access Patterns
+- `self.pipeline.validated_input.<field>` -- pipeline input data
+- `self.pipeline.context["<key>"]` or `self.pipeline.context.get("<key>")` -- prior step outputs (flat dict)
+
+### Key Rules
+- `prepare_calls()` returns `list[dict]`, each dict has a `"variables"` key mapping to template variable values
+- `process_instructions(instructions)` receives `list[InstructionsClass]`, returns a Context instance
+- Imports in the generated code must reference sibling files: `from .schemas import ...`, `from .models import ...`
+"""
+
+# ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
 
@@ -24,29 +82,29 @@ REQUIREMENTS_ANALYSIS_SYSTEM: dict = {
     "category": "step_creator",
     "step_name": "requirements_analysis",
     "content": (
-        "You are an expert in the llm-pipeline framework. Your task is to parse a "
-        "natural language description of a pipeline step and produce a structured "
-        "specification.\n\n"
-        "From the description, extract:\n"
-        "- step_name: snake_case name for the step (e.g. 'sentiment_analysis')\n"
-        "- step_class_name: PascalCase class name ending in 'Step' (e.g. 'SentimentAnalysisStep')\n"
-        "- description: concise one-sentence description of what the step does\n"
-        "- instruction_fields: list of fields for the LLMResultMixin subclass, each with "
-        "name, type_annotation, description, default (if optional), and is_required\n"
-        "- context_fields: list of fields for the PipelineContext subclass that stores "
-        "outputs for downstream steps\n"
-        "- extraction_targets: list of SQLModel extraction targets if the step persists "
-        "data to DB (empty list if not needed)\n"
-        "- input_variables: list of variable names expected from pipeline.validated_input "
-        "or prior step context\n"
-        "- output_context_keys: list of keys the step will write into pipeline context\n\n"
-        "Follow llm-pipeline naming conventions: Instructions class is "
-        "'{StepPrefix}Instructions', Context class is '{StepPrefix}Context'. "
-        "Use Python type annotations (str, int, float, bool, list[str], dict[str, str], etc). "
-        "For optional fields include a sensible default value as a string representation."
+        FRAMEWORK_REFERENCE + "\n"
+        "## Your Task: Requirements Analysis\n\n"
+        "Parse a natural language description of a pipeline step into a structured specification.\n\n"
+        "Extract:\n"
+        "- step_name: snake_case (e.g. 'sentiment_analysis')\n"
+        "- step_class_name: PascalCase ending in 'Step' (e.g. 'SentimentAnalysisStep')\n"
+        "- description: one-sentence summary\n"
+        "- instruction_fields: fields the LLM will OUTPUT as structured data. "
+        "These become fields on the LLMResultMixin subclass. Each field has: "
+        "name, type_annotation, description, default (if optional), is_required\n"
+        "- context_fields: fields passed to downstream steps via PipelineContext subclass\n"
+        "- extraction_targets: SQLModel targets if persisting to DB (empty list if not)\n"
+        "- input_variables: variable names that fill {placeholders} in the user prompt template. "
+        "These come from pipeline.validated_input or prior step context\n"
+        "- output_context_keys: keys the step writes into pipeline context\n\n"
+        "IMPORTANT: instruction_fields are what the LLM RETURNS, not what it receives. "
+        "For a sentiment classifier, instruction_fields would be [sentiment, topic], "
+        "and input_variables would be [text].\n\n"
+        "Naming: Instructions class = '{Prefix}Instructions', Context = '{Prefix}Context'. "
+        "Use Python type annotations (str, int, float, bool, list[str], etc)."
     ),
     "required_variables": [],
-    "description": "System prompt for requirements analysis step - parses NL descriptions into structured step specs",
+    "description": "System prompt for requirements analysis - parses NL into structured step specs",
 }
 
 CODE_GENERATION_SYSTEM: dict = {
@@ -56,33 +114,44 @@ CODE_GENERATION_SYSTEM: dict = {
     "category": "step_creator",
     "step_name": "code_generation",
     "content": (
-        "You are an expert Python developer specialising in the llm-pipeline framework. "
-        "Your task is to generate Python method bodies for a pipeline step class.\n\n"
-        "You will receive the step specification and must output:\n"
-        "- imports: list of additional import statements needed (beyond framework defaults)\n"
-        "- prepare_calls_body: the body of the prepare_calls() method (indented 8 spaces). "
-        "This method returns a list of dicts, each with a 'variables' key containing "
-        "template variable values for the LLM prompt. Access input via "
-        "self.pipeline.validated_input.<field> and prior context via self.pipeline.context.<field>.\n"
-        "- process_instructions_body: the body of the process_instructions(self, instructions) "
-        "method (indented 8 spaces). This method receives a list of LLMResultMixin instances "
-        "and must return a PipelineContext subclass instance. Access the first result via "
-        "instructions[0]. Convert to context using .model_dump() as needed.\n"
-        "- extraction_method_body: optional body for a PipelineExtraction.default() method "
-        "if the step writes to a database table (None if not needed)\n"
-        "- should_skip_condition: optional boolean expression string for should_skip() "
-        "(None if the step should never be skipped)\n\n"
-        "Framework conventions:\n"
-        "- self.pipeline.validated_input gives access to pipeline input fields\n"
-        "- self.pipeline.context gives access to accumulated pipeline context\n"
-        "- prepare_calls() returns list[dict] where each dict has 'variables' key\n"
-        "- process_instructions() receives list[Instructions] and returns a Context instance\n"
-        "- All method bodies must be valid Python syntax\n"
-        "- Use type annotations throughout\n"
-        "- Keep method bodies concise and focused on the step's core logic"
+        FRAMEWORK_REFERENCE + "\n"
+        "## Your Task: Code Generation\n\n"
+        "Generate Python method **bodies** for a pipeline step. These bodies are inserted "
+        "into a Jinja2 template -- you do NOT write the full file, class definition, "
+        "or method signatures.\n\n"
+        "### What you output:\n"
+        "- imports: additional import statements needed BEYOND the template defaults "
+        "(the template already provides `from llm_pipeline.step import LLMStep, step_definition`). "
+        "Include cross-file imports like `from .schemas import {Prefix}Context` if referenced in method bodies.\n"
+        "- prepare_calls_body: body of prepare_calls(). Returns list[dict] with 'variables' key. "
+        "Access input via self.pipeline.validated_input.<field>, prior context via "
+        "self.pipeline.context.get('<key>'). Do NOT include the `def` line.\n"
+        "- process_instructions_body: body of process_instructions(self, instructions). "
+        "Receives list[InstructionsClass], returns a Context instance. "
+        "Access first result via instructions[0]. Do NOT include the `def` line.\n"
+        "- extraction_method_body: optional body for PipelineExtraction.default() (None if not needed)\n"
+        "- should_skip_condition: optional boolean expression for should_skip() (None if never skip)\n\n"
+        "### Template context\n"
+        "The step.py.j2 template already imports:\n"
+        "- `from llm_pipeline.step import LLMStep, step_definition`\n"
+        "- Your `imports` list items are inserted below that\n\n"
+        "The instructions.py.j2 template is a SEPARATE file. If your method bodies "
+        "reference the Context class (e.g. `return SentimentContext(...)`), you MUST include "
+        "`from .schemas import SentimentContext` in your imports list.\n\n"
+        "### Example\n"
+        "For a sentiment analysis step:\n"
+        "```\n"
+        "imports: ['from .schemas import SentimentAnalysisContext']\n"
+        "prepare_calls_body: 'return [{\"variables\": {\"text\": self.pipeline.validated_input.text}}]'\n"
+        "process_instructions_body: |\n"
+        "  inst = instructions[0]\n"
+        "  return SentimentAnalysisContext(sentiment=inst.sentiment, confidence=inst.confidence)\n"
+        "```\n\n"
+        "You have access to Context7 tools for looking up library documentation. "
+        "Use primarily for llm-pipeline framework docs, but also available for other libraries."
     ),
     "required_variables": [],
-    "description": "System prompt for code generation step - generates Python method bodies for prepare_calls/process_instructions",
+    "description": "System prompt for code generation - generates method bodies for step templates",
 }
 
 PROMPT_GENERATION_SYSTEM: dict = {
@@ -92,27 +161,43 @@ PROMPT_GENERATION_SYSTEM: dict = {
     "category": "step_creator",
     "step_name": "prompt_generation",
     "content": (
-        "You are an expert prompt engineer specialising in structured LLM outputs. "
-        "Your task is to write system and user prompts for an llm-pipeline step.\n\n"
-        "You will receive the step name, description, and input variables, and must output:\n"
-        "- system_prompt_content: the system prompt that instructs the LLM on its role and "
-        "the structure of its output. Be explicit about every field it must return, including "
-        "types and constraints. End with a reminder to return valid JSON.\n"
-        "- user_prompt_template: the user-facing prompt template using {variable_name} "
-        "placeholders for each input variable. This template is rendered with Python "
-        "str.format() so use single braces.\n"
-        "- required_variables: list of variable names used as {placeholders} in the user template\n"
-        "- prompt_category: the category string for DB storage (use the step_name prefix)\n\n"
-        "Prompt quality guidelines:\n"
-        "- System prompt must describe the output schema completely so pydantic-ai can "
-        "validate the structured response\n"
-        "- Be specific about field names, types, and valid values in the system prompt\n"
-        "- User prompt template should be concise and present all relevant context clearly\n"
-        "- Use markdown formatting (headers, bullet lists) in system prompts for clarity\n"
-        "- Avoid ambiguity - the LLM must know exactly what to return"
+        FRAMEWORK_REFERENCE + "\n"
+        "## Your Task: Prompt Generation\n\n"
+        "Write system and user prompts for an llm-pipeline step.\n\n"
+        "### CRITICAL ANTI-PATTERN\n"
+        "Do NOT describe JSON output schema, field names, types, or output structure "
+        "in the system prompt. pydantic-ai handles structured output automatically from "
+        "the Instructions class. The LLM never sees JSON formatting instructions.\n\n"
+        "BAD system prompt:\n"
+        "```\n"
+        "Analyze sentiment. Return JSON with fields: sentiment (str), confidence (float 0-1).\n"
+        "```\n\n"
+        "GOOD system prompt:\n"
+        "```\n"
+        "You are a sentiment analysis expert. Classify the sentiment of the provided text "
+        "as positive, negative, or neutral. Consider tone, word choice, and context.\n"
+        "```\n\n"
+        "### What the system prompt SHOULD contain:\n"
+        "- LLM role definition (who it is)\n"
+        "- Task description (what it does)\n"
+        "- Domain constraints and guidelines (how to do it well)\n"
+        "- Quality criteria or edge cases\n\n"
+        "### What the user prompt SHOULD contain:\n"
+        "- Concise presentation of the input data\n"
+        "- {variable_name} placeholders for each input variable\n"
+        "- Rendered with Python str.format(), so use single braces\n\n"
+        "### Your output:\n"
+        "- system_prompt_content: role + task + constraints (NO output schema)\n"
+        "- user_prompt_template: input template with {placeholders}\n"
+        "- required_variables: list of variable names used as {placeholders}\n"
+        "- prompt_category: category string (use step_name prefix)\n\n"
+        "You will receive the instruction_fields so you know what the Instructions class "
+        "already defines. Do NOT duplicate that information in the prompts.\n\n"
+        "You have access to Context7 tools for looking up library documentation. "
+        "Use primarily for llm-pipeline framework docs, but also available for other libraries."
     ),
     "required_variables": [],
-    "description": "System prompt for prompt generation step - writes system/user prompts with variable placeholders",
+    "description": "System prompt for prompt generation - writes role/task prompts without output schemas",
 }
 
 CODE_VALIDATION_SYSTEM: dict = {
@@ -122,27 +207,28 @@ CODE_VALIDATION_SYSTEM: dict = {
     "category": "step_creator",
     "step_name": "code_validation",
     "content": (
-        "You are an expert Python code reviewer specialising in the llm-pipeline framework. "
-        "Your task is to review generated code artifacts for correctness and convention compliance.\n\n"
-        "Review the provided step code, instructions code, extraction code, and prompts, then output:\n"
-        "- is_valid: true if the code is correct and ready to use, false if there are blocking issues\n"
-        "- issues: list of specific problems found (empty list if none). Focus on:\n"
-        "  * Syntax errors or invalid Python\n"
-        "  * Missing required imports\n"
-        "  * Incorrect method signatures (prepare_calls, process_instructions)\n"
-        "  * Wrong return types (prepare_calls must return list[dict], process_instructions must return Context)\n"
-        "  * Naming convention violations ({StepPrefix}Instructions, {StepPrefix}Context, {StepPrefix}Step)\n"
-        "  * Type annotation errors or missing annotations\n"
-        "  * Logic errors in method bodies\n"
-        "- suggestions: list of optional improvements (non-blocking). Empty list if none.\n"
-        "- naming_valid: true if all class names follow llm-pipeline conventions\n"
-        "- imports_valid: true if all referenced names have corresponding imports\n"
-        "- type_annotations_valid: true if all public methods and fields have type annotations\n\n"
-        "Be strict about blocking issues but reasonable about style. "
-        "A result with is_valid=false must have at least one entry in issues."
+        FRAMEWORK_REFERENCE + "\n"
+        "## Your Task: Code Validation\n\n"
+        "Review generated code artifacts for correctness and convention compliance.\n\n"
+        "Check for:\n"
+        "- Syntax errors or invalid Python\n"
+        "- Missing cross-file imports (e.g. step code references Context class but "
+        "doesn't import from .schemas)\n"
+        "- Incorrect method signatures (prepare_calls, process_instructions)\n"
+        "- Wrong return types (prepare_calls -> list[dict], process_instructions -> Context)\n"
+        "- Naming convention violations ({Prefix}Instructions, {Prefix}Context, {Prefix}Step)\n"
+        "- System prompt describing JSON output schema (anti-pattern: pydantic-ai handles this)\n"
+        "- Type annotation errors or missing annotations\n"
+        "- Logic errors in method bodies\n\n"
+        "Output:\n"
+        "- is_valid: true if ready to use, false if blocking issues\n"
+        "- issues: list of specific problems (empty if none)\n"
+        "- suggestions: optional improvements (non-blocking)\n"
+        "- naming_valid, imports_valid, type_annotations_valid: booleans\n\n"
+        "Be strict about blocking issues. is_valid=false requires at least one issue."
     ),
     "required_variables": [],
-    "description": "System prompt for code validation step - reviews generated code for correctness and convention compliance",
+    "description": "System prompt for code validation - reviews code with framework-specific checks",
 }
 
 # ---------------------------------------------------------------------------
@@ -172,15 +258,17 @@ CODE_GENERATION_USER: dict = {
     "content": (
         "Generate Python method bodies for the following pipeline step:\n\n"
         "Step name: {step_name}\n"
-        "Step class name: {step_class_name}\n\n"
-        "Instructions fields (LLMResultMixin):\n{instruction_fields}\n\n"
-        "Context fields (PipelineContext):\n{context_fields}\n\n"
-        "Input variables (from validated_input or prior context):\n{input_variables}\n\n"
+        "Step class name: {step_class_name}\n"
+        "Description: {description}\n\n"
+        "Instructions fields (what the LLM returns as structured output):\n{instruction_fields}\n\n"
+        "Context fields (passed to downstream steps):\n{context_fields}\n\n"
+        "Input variables (fill user prompt placeholders):\n{input_variables}\n\n"
         "Output context keys (written to pipeline.context):\n{output_context_keys}"
     ),
     "required_variables": [
         "step_name",
         "step_class_name",
+        "description",
         "instruction_fields",
         "context_fields",
         "input_variables",
@@ -199,9 +287,11 @@ PROMPT_GENERATION_USER: dict = {
         "Write system and user prompts for the following pipeline step:\n\n"
         "Step name: {step_name}\n"
         "Description: {description}\n"
-        "Input variables available in user prompt: {input_variables}"
+        "Input variables (for user prompt placeholders): {input_variables}\n\n"
+        "The Instructions class already defines these output fields (do NOT describe "
+        "them in the system prompt):\n{instruction_fields}"
     ),
-    "required_variables": ["step_name", "description", "input_variables"],
+    "required_variables": ["step_name", "description", "input_variables", "instruction_fields"],
     "description": "User prompt for prompt generation step",
 }
 
@@ -242,8 +332,15 @@ ALL_PROMPTS: list[dict] = [
 ]
 
 
+def _content_hash(content: str) -> str:
+    """Short hash of prompt content for change detection."""
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
 def seed_prompts(cls: type, engine: "Engine") -> None:
-    """Create GenerationRecord table and idempotently seed prompts.
+    """Create GenerationRecord table and upsert seed prompts.
+
+    Inserts new prompts and updates existing ones if content has changed.
 
     Args:
         cls: The pipeline class (used for logging context only).
@@ -253,6 +350,8 @@ def seed_prompts(cls: type, engine: "Engine") -> None:
 
     SQLModel.metadata.create_all(engine, tables=[GenerationRecord.__table__])
 
+    inserted = 0
+    updated = 0
     with Session(engine) as session:
         for prompt_data in ALL_PROMPTS:
             existing = session.exec(
@@ -263,8 +362,16 @@ def seed_prompts(cls: type, engine: "Engine") -> None:
             ).first()
             if existing is None:
                 session.add(Prompt(**prompt_data))
+                inserted += 1
+            elif _content_hash(existing.content) != _content_hash(prompt_data["content"]):
+                for key, value in prompt_data.items():
+                    setattr(existing, key, value)
+                updated += 1
         session.commit()
-    logger.info("Seeded %d prompts for %s", len(ALL_PROMPTS), cls.__name__)
+    logger.info(
+        "Seed prompts for %s: %d inserted, %d updated, %d total",
+        cls.__name__, inserted, updated, len(ALL_PROMPTS),
+    )
 
 
 __all__ = ["ALL_PROMPTS", "seed_prompts"]

@@ -9,12 +9,13 @@ from typing import Any, ClassVar
 
 from sqlalchemy import Engine
 
-from llm_pipeline.agent_registry import AgentRegistry
+from llm_pipeline.agent_registry import AgentRegistry, AgentSpec
 from llm_pipeline.context import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.registry import PipelineDatabaseRegistry
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
 
+from .context7 import query_framework_docs, resolve_library_id
 from .models import GenerationRecord
 from .schemas import (
     CodeGenerationInstructions,
@@ -54,10 +55,12 @@ class StepCreatorRegistry(PipelineDatabaseRegistry, models=[GenerationRecord]):
 # ---------------------------------------------------------------------------
 
 
+_ctx7_tools = [query_framework_docs, resolve_library_id]
+
 class StepCreatorAgentRegistry(AgentRegistry, agents={
     "requirements_analysis": RequirementsAnalysisInstructions,
-    "code_generation": CodeGenerationInstructions,
-    "prompt_generation": PromptGenerationInstructions,
+    "code_generation": AgentSpec(CodeGenerationInstructions, tools=_ctx7_tools),
+    "prompt_generation": AgentSpec(PromptGenerationInstructions, tools=_ctx7_tools),
     "code_validation": CodeValidationInstructions,
 }):
     """Agent registry mapping step names to their structured output types."""

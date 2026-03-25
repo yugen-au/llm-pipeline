@@ -526,3 +526,18 @@ export class ApiError extends Error {
     this.detail = detail
   }
 }
+
+/**
+ * Thrown on 409 rename conflicts where the backend provides a suggested
+ * alternative name. Subclass of ApiError so existing `instanceof ApiError`
+ * checks still match.
+ */
+export class RenameConflictError extends ApiError {
+  readonly suggestedName: string
+
+  constructor(detail: string, suggestedName: string) {
+    super(409, detail)
+    this.name = 'RenameConflictError'
+    this.suggestedName = suggestedName
+  }
+}
