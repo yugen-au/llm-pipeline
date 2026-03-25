@@ -118,6 +118,22 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
             print("ERROR: npx not found; install Node.js to use dev mode", file=sys.stderr)
             sys.exit(1)
 
+        # Auto-install deps if node_modules missing or package.json newer
+        node_modules = frontend_dir / "node_modules"
+        pkg_json = frontend_dir / "package.json"
+        needs_install = (
+            not node_modules.exists()
+            or (pkg_json.exists() and pkg_json.stat().st_mtime > node_modules.stat().st_mtime)
+        )
+        if needs_install:
+            print("Installing frontend dependencies...", file=sys.stderr)
+            subprocess.run(
+                ["npm", "install"],
+                cwd=str(frontend_dir),
+                shell=(sys.platform == "win32"),
+                check=True,
+            )
+
         vite_port = args.port + 1
         vite_proc = _start_vite(frontend_dir, vite_port, args.port)
         atexit.register(_cleanup_vite, vite_proc)
