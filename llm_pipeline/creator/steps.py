@@ -117,6 +117,7 @@ class CodeGenerationStep(LLMStep):
                 "variables": {
                     "step_name": ctx.get("step_name", ""),
                     "step_class_name": ctx.get("step_class_name", ""),
+                    "description": self.pipeline.validated_input.description,
                     "instruction_fields": ctx.get("instruction_fields", []),
                     "context_fields": ctx.get("context_fields", []),
                     "input_variables": ctx.get("input_variables", []),
@@ -208,6 +209,7 @@ class PromptGenerationStep(LLMStep):
                     "step_name": ctx.get("step_name", ""),
                     "description": self.pipeline.validated_input.description,
                     "input_variables": ctx.get("input_variables", []),
+                    "instruction_fields": ctx.get("instruction_fields", []),
                 }
             }
         ]
