@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _engine: Optional[Engine] = None
 _wal_registered_engines: set = set()
+_schema_registered_engines: set = set()
 
 
 def _migrate_add_columns(engine: Engine) -> None:
@@ -51,13 +52,20 @@ def _migrate_add_columns(engine: Engine) -> None:
                     result = conn.execute(text(f"PRAGMA table_info({tbl})"))
                     existing = {row[1] for row in result}
                 else:
-                    result = conn.execute(
-                        text(
+                    schema = _get_schema()
+                    if schema:
+                        query = (
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_name = :tbl AND table_schema = :schema"
+                        )
+                        params = {"tbl": tbl, "schema": schema}
+                    else:
+                        query = (
                             "SELECT column_name FROM information_schema.columns "
                             "WHERE table_name = :tbl"
-                        ),
-                        {"tbl": tbl},
-                    )
+                        )
+                        params = {"tbl": tbl}
+                    result = conn.execute(text(query), params)
                     existing = {row[0] for row in result}
                 for col_name, col_type in columns:
                     if col_name not in existing:
@@ -117,12 +125,21 @@ def get_default_db_path() -> Path:
     return db_dir / "pipeline.db"
 
 
+def _get_schema() -> Optional[str]:
+    """Read LLM_PIPELINE_DB_SCHEMA env var. Returns None for default/public."""
+    schema = os.getenv("LLM_PIPELINE_DB_SCHEMA", "").strip()
+    return schema or None
+
+
 def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     """Initialize pipeline database tables.
 
     Creates PipelineStepState, PipelineRunInstance, Prompt,
     PipelineEventRecord (pipeline_events), DraftStep (draft_steps),
     and DraftPipeline (draft_pipelines) tables.
+
+    When LLM_PIPELINE_DB_SCHEMA is set, tables are created in that schema
+    (Postgres only; SQLite ignores schemas).
 
     Args:
         engine: Optional SQLAlchemy engine. If None, creates auto-SQLite.
@@ -139,15 +156,32 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
         logger.info(f"Auto-created SQLite database at {db_path}")
 
     _engine = engine
+    is_sqlite = engine.url.drivername.startswith("sqlite")
+    schema = _get_schema()
 
     # Enable WAL mode for concurrent read/write on SQLite
-    if engine.url.drivername.startswith("sqlite") and id(engine) not in _wal_registered_engines:
+    if is_sqlite and id(engine) not in _wal_registered_engines:
         _wal_registered_engines.add(id(engine))
 
         @event.listens_for(engine, "connect")
         def set_sqlite_wal(dbapi_conn, conn_record):
             cursor = dbapi_conn.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.close()
+
+    # Set search_path for custom schema on Postgres
+    if schema and not is_sqlite and id(engine) not in _schema_registered_engines:
+        _schema_registered_engines.add(id(engine))
+
+        # Create schema if it doesn't exist
+        with engine.connect() as conn:
+            conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+            conn.commit()
+
+        @event.listens_for(engine, "connect")
+        def set_search_path(dbapi_conn, conn_record):
+            cursor = dbapi_conn.cursor()
+            cursor.execute(f"SET search_path TO {schema},public")
             cursor.close()
 
     # Create framework tables
