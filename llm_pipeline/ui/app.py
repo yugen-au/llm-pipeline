@@ -83,13 +83,13 @@ def _discover_pipelines(
             )
             continue
 
-        # seed_prompts is optional; failure must not unregister the pipeline
+        # _seed_prompts is optional; failure must not unregister the pipeline
         try:
-            if hasattr(cls, "seed_prompts") and callable(cls.seed_prompts):
-                cls.seed_prompts(engine)
+            if hasattr(cls, "_seed_prompts") and callable(cls._seed_prompts):
+                cls._seed_prompts(engine)
         except Exception:
             logger.warning(
-                "seed_prompts failed for '%s', pipeline still registered",
+                "_seed_prompts failed for '%s', pipeline still registered",
                 ep.name,
                 exc_info=True,
             )
@@ -148,13 +148,13 @@ def _load_pipeline_modules(
             pipeline_reg[key] = _make_pipeline_factory(cls, default_model)
             introspection_reg[key] = cls
 
-            # seed_prompts is optional; failure must not unregister the pipeline
+            # _seed_prompts is optional; failure must not unregister the pipeline
             try:
-                if hasattr(cls, "seed_prompts") and callable(cls.seed_prompts):
-                    cls.seed_prompts(engine)
+                if hasattr(cls, "_seed_prompts") and callable(cls._seed_prompts):
+                    cls._seed_prompts(engine)
             except Exception:
                 logger.warning(
-                    "seed_prompts failed for '%s', pipeline still registered",
+                    "_seed_prompts failed for '%s', pipeline still registered",
                     key,
                     exc_info=True,
                 )

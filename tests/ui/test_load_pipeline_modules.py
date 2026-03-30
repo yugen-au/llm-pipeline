@@ -11,7 +11,7 @@ from llm_pipeline.ui.app import _load_pipeline_modules
 
 @pytest.fixture
 def engine():
-    """In-memory SQLite engine for seed_prompts calls."""
+    """In-memory SQLite engine for _seed_prompts calls."""
     eng = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -50,9 +50,9 @@ class TestSuccessfulScan:
         assert intro_reg["alpha"] is AlphaPipeline
 
     def test_seed_prompts_called(self, engine):
-        """seed_prompts is called for registered class."""
+        """_seed_prompts is called for registered class."""
         with patch(
-            "tests.ui._fixtures.good_module.AlphaPipeline.seed_prompts"
+            "tests.ui._fixtures.good_module.AlphaPipeline._seed_prompts"
         ) as mock_seed:
             _load_pipeline_modules(
                 ["tests.ui._fixtures.good_module"], None, engine
@@ -60,9 +60,9 @@ class TestSuccessfulScan:
         mock_seed.assert_called_once_with(engine)
 
     def test_seed_prompts_failure_does_not_unregister(self, engine):
-        """Pipeline stays registered even when seed_prompts raises."""
+        """Pipeline stays registered even when _seed_prompts raises."""
         with patch(
-            "tests.ui._fixtures.good_module.AlphaPipeline.seed_prompts",
+            "tests.ui._fixtures.good_module.AlphaPipeline._seed_prompts",
             side_effect=RuntimeError("boom"),
         ):
             pipeline_reg, _ = _load_pipeline_modules(

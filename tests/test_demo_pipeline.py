@@ -78,8 +78,8 @@ class TestDemoImports:
             assert cls is not None
 
     def test_import_seed_prompts_from_prompts_module(self):
-        from llm_pipeline.demo.prompts import seed_prompts, ALL_PROMPTS
-        assert callable(seed_prompts)
+        from llm_pipeline.demo.prompts import _seed_prompts, ALL_PROMPTS
+        assert callable(_seed_prompts)
         assert isinstance(ALL_PROMPTS, list)
 
     def test_demo_init_exports_text_analyzer_pipeline(self):
@@ -397,34 +397,34 @@ class TestSeedPrompts:
         return eng
 
     def test_creates_demo_topics_table(self, seed_engine):
-        from llm_pipeline.demo.prompts import seed_prompts
+        from llm_pipeline.demo.prompts import _seed_prompts
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
         from sqlalchemy import inspect
-        seed_prompts(TextAnalyzerPipeline, seed_engine)
+        _seed_prompts(TextAnalyzerPipeline, seed_engine)
         inspector = inspect(seed_engine)
         assert "demo_topics" in inspector.get_table_names()
 
     def test_inserts_six_prompts(self, seed_engine):
-        from llm_pipeline.demo.prompts import seed_prompts
+        from llm_pipeline.demo.prompts import _seed_prompts
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        seed_prompts(TextAnalyzerPipeline, seed_engine)
+        _seed_prompts(TextAnalyzerPipeline, seed_engine)
         with Session(seed_engine) as session:
             prompts = session.exec(select(Prompt)).all()
         assert len(prompts) == 6
 
     def test_idempotent_double_seed(self, seed_engine):
-        from llm_pipeline.demo.prompts import seed_prompts
+        from llm_pipeline.demo.prompts import _seed_prompts
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        seed_prompts(TextAnalyzerPipeline, seed_engine)
-        seed_prompts(TextAnalyzerPipeline, seed_engine)
+        _seed_prompts(TextAnalyzerPipeline, seed_engine)
+        _seed_prompts(TextAnalyzerPipeline, seed_engine)
         with Session(seed_engine) as session:
             prompts = session.exec(select(Prompt)).all()
         assert len(prompts) == 6
 
     def test_seeds_system_and_user_for_each_step(self, seed_engine):
-        from llm_pipeline.demo.prompts import seed_prompts
+        from llm_pipeline.demo.prompts import _seed_prompts
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        seed_prompts(TextAnalyzerPipeline, seed_engine)
+        _seed_prompts(TextAnalyzerPipeline, seed_engine)
         with Session(seed_engine) as session:
             prompts = session.exec(select(Prompt)).all()
         keys_by_type = {
@@ -470,5 +470,5 @@ class TestTextAnalyzerPipelineConfig:
 
     def test_has_seed_prompts_classmethod(self):
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        assert callable(getattr(TextAnalyzerPipeline, "seed_prompts", None))
+        assert callable(getattr(TextAnalyzerPipeline, "_seed_prompts", None))
 

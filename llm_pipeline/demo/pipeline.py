@@ -267,8 +267,8 @@ class TextAnalyzerPipeline(
     INPUT_DATA: ClassVar[type] = TextAnalyzerInputData
 
     @classmethod
-    def seed_prompts(cls, engine: Engine) -> None:
-        """Create demo_topics table and seed prompts idempotently."""
-        from llm_pipeline.demo.prompts import seed_prompts
+    def _seed_prompts(cls, engine: Engine) -> None:
+        """Internal. Use POST /api/prompts for custom pipelines."""
+        from llm_pipeline.demo.prompts import _seed_prompts
 
-        seed_prompts(cls, engine)
+        _seed_prompts(cls, engine)

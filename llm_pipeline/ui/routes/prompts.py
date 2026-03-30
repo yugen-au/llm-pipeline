@@ -1,15 +1,19 @@
-"""Prompts route module -- list and detail endpoints."""
-from datetime import datetime
+"""Prompts route module -- list, detail, and CRUD endpoints."""
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.prompts.loader import extract_variables_from_content
-from llm_pipeline.ui.deps import DBSession
+from llm_pipeline.prompts.utils import (
+    _increment_version,
+    extract_variables_from_content,
+)
+from llm_pipeline.ui.deps import DBSession, WritableDBSession
 
 router = APIRouter(prefix="/prompts", tags=["prompts"])
 
@@ -49,6 +53,33 @@ PromptVariant = PromptItem
 class PromptDetailResponse(BaseModel):
     prompt_key: str
     variants: List[PromptVariant]
+
+
+# ---------------------------------------------------------------------------
+# Request models (CRUD)
+# ---------------------------------------------------------------------------
+
+
+class PromptCreateRequest(BaseModel):
+    prompt_key: str
+    prompt_name: str
+    prompt_type: str  # "system" or "user"
+    content: str
+    category: Optional[str] = None
+    step_name: Optional[str] = None
+    description: Optional[str] = None
+    version: str = "1.0"
+    created_by: Optional[str] = None
+
+
+class PromptUpdateRequest(BaseModel):
+    prompt_name: Optional[str] = None
+    content: Optional[str] = None
+    category: Optional[str] = None
+    step_name: Optional[str] = None
+    description: Optional[str] = None
+    version: Optional[str] = None
+    created_by: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -166,3 +197,92 @@ def get_prompt(prompt_key: str, db: DBSession) -> PromptDetailResponse:
         prompt_key=prompt_key,
         variants=[_to_prompt_item(r) for r in rows],
     )
+
+
+# ---------------------------------------------------------------------------
+# CRUD endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("", response_model=PromptItem, status_code=201)
+def create_prompt(
+    body: PromptCreateRequest,
+    db: WritableDBSession,
+) -> PromptItem:
+    """Create a new prompt."""
+    required_variables = extract_variables_from_content(body.content)
+    prompt = Prompt(
+        prompt_key=body.prompt_key,
+        prompt_name=body.prompt_name,
+        prompt_type=body.prompt_type,
+        content=body.content,
+        category=body.category,
+        step_name=body.step_name,
+        description=body.description,
+        version=body.version,
+        created_by=body.created_by,
+        required_variables=required_variables,
+    )
+    try:
+        db.add(prompt)
+        db.commit()
+        db.refresh(prompt)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Prompt already exists")
+    return _to_prompt_item(prompt)
+
+
+@router.put("/{prompt_key}/{prompt_type}", response_model=PromptItem)
+def update_prompt(
+    prompt_key: str,
+    prompt_type: str,
+    body: PromptUpdateRequest,
+    db: WritableDBSession,
+) -> PromptItem:
+    """Update an existing prompt."""
+    stmt = select(Prompt).where(
+        Prompt.prompt_key == prompt_key,
+        Prompt.prompt_type == prompt_type,
+    )
+    prompt = db.exec(stmt).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(prompt, field, value)
+
+    # Re-extract variables if content changed
+    if "content" in updates:
+        prompt.required_variables = extract_variables_from_content(prompt.content)
+
+    # Auto-increment version if not explicitly provided
+    if "version" not in updates:
+        prompt.version = _increment_version(prompt.version)
+
+    prompt.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(prompt)
+    return _to_prompt_item(prompt)
+
+
+@router.delete("/{prompt_key}/{prompt_type}")
+def delete_prompt(
+    prompt_key: str,
+    prompt_type: str,
+    db: WritableDBSession,
+) -> dict:
+    """Soft-delete (deactivate) a prompt."""
+    stmt = select(Prompt).where(
+        Prompt.prompt_key == prompt_key,
+        Prompt.prompt_type == prompt_type,
+    )
+    prompt = db.exec(stmt).first()
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+
+    prompt.is_active = False
+    prompt.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"detail": "Prompt deactivated"}

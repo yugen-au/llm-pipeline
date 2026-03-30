@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.introspection import PipelineIntrospector
+from llm_pipeline.introspection import PipelineIntrospector, enrich_with_prompt_readiness
 from llm_pipeline.ui.deps import DBSession
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,8 @@ class PipelineListResponse(BaseModel):
 
 
 class StepMetadata(BaseModel):
+    model_config = {"extra": "allow"}
+
     step_name: str
     class_name: str
     system_key: Optional[str] = None
@@ -115,7 +117,7 @@ def list_pipelines(request: Request) -> PipelineListResponse:
 
 
 @router.get("/{name}", response_model=PipelineMetadata)
-def get_pipeline(name: str, request: Request) -> PipelineMetadata:
+def get_pipeline(name: str, request: Request, db: DBSession) -> PipelineMetadata:
     """Full introspection detail for a single pipeline."""
     registry: dict = getattr(request.app.state, "introspection_registry", {})
 
@@ -130,6 +132,7 @@ def get_pipeline(name: str, request: Request) -> PipelineMetadata:
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    enrich_with_prompt_readiness(metadata, db)
     return PipelineMetadata(**metadata)
 
 

@@ -117,7 +117,7 @@ ALL_PROMPTS: list[dict] = [
 ]
 
 
-def seed_prompts(cls: type, engine: Engine) -> None:
+def _seed_prompts(cls: type, engine: Engine) -> None:
     """Create demo_topics table and idempotently seed prompts.
 
     Args:

@@ -41,6 +41,7 @@ from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.agent_registry import AgentSpec, register_agent, get_agent_tools, get_registered_agents, clear_agent_registry
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
 from llm_pipeline.validators import not_found_validator, array_length_validator, DEFAULT_NOT_FOUND_INDICATORS
+from llm_pipeline.prompts.variables import PromptVariables
 
 try:
     from llm_pipeline.creator import StepCreatorPipeline
@@ -102,6 +103,8 @@ __all__ = [
     "not_found_validator",
     "array_length_validator",
     "DEFAULT_NOT_FOUND_INDICATORS",
+    # Prompts
+    "PromptVariables",
     # Consensus
     "ConsensusStrategy",
     "ConsensusResult",

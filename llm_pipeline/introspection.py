@@ -281,4 +281,42 @@ class PipelineIntrospector:
         return metadata
 
 
-__all__ = ["PipelineIntrospector"]
+def enrich_with_prompt_readiness(metadata: dict, session) -> dict:
+    """Add prompt readiness flags to each step in introspection metadata.
+
+    Queries DB for active prompts matching each step's system_key/user_key.
+    Mutates metadata in-place and returns it.
+    """
+    from sqlmodel import select
+    from llm_pipeline.db.prompt import Prompt
+
+    all_keys = set()
+    for strategy in metadata.get("strategies", []):
+        for step in strategy.get("steps", []):
+            if step.get("system_key"):
+                all_keys.add(step["system_key"])
+            if step.get("user_key"):
+                all_keys.add(step["user_key"])
+
+    if all_keys:
+        stmt = select(Prompt.prompt_key, Prompt.prompt_type).where(
+            Prompt.prompt_key.in_(all_keys),
+            Prompt.is_active == True,
+        )
+        rows = session.exec(stmt).all()
+        existing = {(row[0], row[1]) for row in rows}
+    else:
+        existing = set()
+
+    for strategy in metadata.get("strategies", []):
+        for step in strategy.get("steps", []):
+            sys_key = step.get("system_key")
+            usr_key = step.get("user_key")
+            step["system_prompt_exists"] = (sys_key, "system") in existing if sys_key else True
+            step["user_prompt_exists"] = (usr_key, "user") in existing if usr_key else True
+            step["prompts_ready"] = step["system_prompt_exists"] and step["user_prompt_exists"]
+
+    return metadata
+
+
+__all__ = ["PipelineIntrospector", "enrich_with_prompt_readiness"]

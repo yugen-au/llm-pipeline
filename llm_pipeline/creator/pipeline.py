@@ -104,11 +104,11 @@ class StepCreatorPipeline(
     INPUT_DATA: ClassVar[type] = StepCreatorInputData
 
     @classmethod
-    def seed_prompts(cls, engine: Engine) -> None:
-        """Create creator tables and seed prompts idempotently."""
-        from llm_pipeline.creator.prompts import seed_prompts as _seed
+    def _seed_prompts(cls, engine: Engine) -> None:
+        """Internal. Use POST /api/prompts for custom pipelines."""
+        from llm_pipeline.creator.prompts import _seed_prompts
 
-        _seed(cls, engine)
+        _seed_prompts(cls, engine)
 
 
 __all__ = [

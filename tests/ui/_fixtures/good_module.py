@@ -6,5 +6,5 @@ class AlphaPipeline(PipelineConfig):
     """Concrete subclass defined locally."""
 
     @classmethod
-    def seed_prompts(cls, engine):
+    def _seed_prompts(cls, engine):
         pass

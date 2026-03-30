@@ -345,12 +345,12 @@ class TestPromptService:
 
 class TestPromptLoader:
     def test_extract_variables(self):
-        from llm_pipeline.prompts.loader import extract_variables_from_content
+        from llm_pipeline.prompts.utils import extract_variables_from_content
         vars = extract_variables_from_content("Hello {name}, your {item} is ready")
         assert vars == ["name", "item"]
 
     def test_extract_no_variables(self):
-        from llm_pipeline.prompts.loader import extract_variables_from_content
+        from llm_pipeline.prompts.utils import extract_variables_from_content
         vars = extract_variables_from_content("No variables here")
         assert vars == []
 

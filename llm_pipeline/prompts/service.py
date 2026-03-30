@@ -4,7 +4,7 @@ Prompt service for retrieving LLM prompts from database.
 from typing import Optional, Any
 from sqlmodel import Session, select
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.prompts.loader import extract_variables_from_content
+from llm_pipeline.prompts.utils import extract_variables_from_content
 
 
 class PromptService:

@@ -337,7 +337,7 @@ def _content_hash(content: str) -> str:
     return hashlib.sha256(content.encode()).hexdigest()[:16]
 
 
-def seed_prompts(cls: type, engine: "Engine") -> None:
+def _seed_prompts(cls: type, engine: "Engine") -> None:
     """Create GenerationRecord table and upsert seed prompts.
 
     Inserts new prompts and updates existing ones if content has changed.
@@ -374,4 +374,4 @@ def seed_prompts(cls: type, engine: "Engine") -> None:
     )
 
 
-__all__ = ["ALL_PROMPTS", "seed_prompts"]
+__all__ = ["ALL_PROMPTS", "_seed_prompts"]

@@ -108,11 +108,11 @@ def _ensure_seeded(engine) -> None:
     try:
         from llm_pipeline.creator.pipeline import StepCreatorPipeline
 
-        StepCreatorPipeline.seed_prompts(engine)
+        StepCreatorPipeline._seed_prompts(engine)
         _seed_done = True
     except Exception:
         logger.warning(
-            "seed_prompts failed for StepCreatorPipeline, continuing anyway",
+            "_seed_prompts failed for StepCreatorPipeline, continuing anyway",
             exc_info=True,
         )
         _seed_done = True  # don't retry on every request
