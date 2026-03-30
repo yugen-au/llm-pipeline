@@ -223,24 +223,24 @@ class LLMStep(ABC):
 
     def get_agent(self, registry: 'AgentRegistry') -> tuple[type, list]:
         """
-        Look up this step's output type and tools from the agent registry.
+        Look up this step's instructions type and tools from the agent registry.
 
         Uses agent_name override (set by StepDefinition) if available,
         otherwise falls back to the auto-derived step_name.
 
-        Returns (output_type, tools) tuple. output_type is the BaseModel class
-        reference; tools is a list of tool callables (empty if none registered).
+        Returns (instructions, tools) tuple. instructions is the LLMResultMixin
+        class reference; tools is a list of tool callables (empty if none registered).
 
         Args:
             registry: AgentRegistry subclass to look up from
 
         Returns:
-            Tuple of (output_type BaseModel class, list of tool callables)
+            Tuple of (instructions LLMResultMixin class, list of tool callables)
         """
         agent_name = getattr(self, '_agent_name', None) or self.step_name
-        output_type = registry.get_output_type(agent_name)
+        instructions = registry.get_instructions(agent_name)
         tools = registry.get_tools(agent_name)
-        return (output_type, tools)
+        return (instructions, tools)
 
     def build_user_prompt(
         self,

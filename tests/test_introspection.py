@@ -543,7 +543,7 @@ def _dummy_tool_beta(y: str) -> bool:
 
 class TooledAgentRegistry(AgentRegistry, agents={
     "widget_detection": AgentSpec(
-        output_type=WidgetDetectionInstructions,
+        instructions=WidgetDetectionInstructions,
         tools=[_dummy_tool_alpha, _dummy_tool_beta],
     ),
 }):

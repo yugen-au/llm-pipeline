@@ -112,7 +112,7 @@ class TestAgentRegistryInitSubclass:
         assert "step_b" not in RegistryA.AGENTS
 
 
-class TestAgentRegistryGetOutputType:
+class TestAgentRegistryGetInstructions:
     def setup_method(self):
         class LookupRegistry(AgentRegistry, agents={
             "extract_rates": ExtractionOutput,
@@ -122,18 +122,18 @@ class TestAgentRegistryGetOutputType:
         self.registry = LookupRegistry
 
     def test_returns_correct_type(self):
-        assert self.registry.get_output_type("extract_rates") is ExtractionOutput
+        assert self.registry.get_instructions("extract_rates") is ExtractionOutput
 
     def test_returns_correct_type_second(self):
-        assert self.registry.get_output_type("validate_lanes") is ValidationOutput
+        assert self.registry.get_instructions("validate_lanes") is ValidationOutput
 
     def test_missing_key_raises_key_error(self):
         with pytest.raises(KeyError, match="no_such_step"):
-            self.registry.get_output_type("no_such_step")
+            self.registry.get_instructions("no_such_step")
 
     def test_key_error_message_includes_available_steps(self):
         with pytest.raises(KeyError) as exc_info:
-            self.registry.get_output_type("missing")
+            self.registry.get_instructions("missing")
         assert "extract_rates" in str(exc_info.value) or "validate_lanes" in str(exc_info.value)
 
 
@@ -289,8 +289,8 @@ class TestLLMStepMethods:
         }):
             pass
         step = self._make_step()
-        output_type, tools = step.get_agent(GetAgentRegistry)
-        assert output_type is ExtractionOutput
+        instructions_type, tools = step.get_agent(GetAgentRegistry)
+        assert instructions_type is ExtractionOutput
         assert tools == []
 
     def test_get_agent_uses_override(self):
@@ -299,8 +299,8 @@ class TestLLMStepMethods:
         }):
             pass
         step = self._make_step(agent_name_override="custom_name")
-        output_type, tools = step.get_agent(OverrideRegistry)
-        assert output_type is ValidationOutput
+        instructions_type, tools = step.get_agent(OverrideRegistry)
+        assert instructions_type is ValidationOutput
         assert tools == []
 
     def test_build_user_prompt_calls_service(self):

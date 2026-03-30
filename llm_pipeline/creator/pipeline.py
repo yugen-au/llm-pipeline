@@ -63,7 +63,7 @@ class StepCreatorAgentRegistry(AgentRegistry, agents={
     "prompt_generation": AgentSpec(PromptGenerationInstructions, tools=_ctx7_tools),
     "code_validation": CodeValidationInstructions,
 }):
-    """Agent registry mapping step names to their structured output types."""
+    """Agent registry mapping step names to their instructions types."""
 
     pass
 

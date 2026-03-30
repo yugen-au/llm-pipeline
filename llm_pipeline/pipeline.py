@@ -790,7 +790,7 @@ class PipelineConfig(ABC):
                         ))
 
                     # Build agent once per step (reused across consensus iterations)
-                    output_type, step_tools = step.get_agent(self.AGENT_REGISTRY)
+                    instructions_type, step_tools = step.get_agent(self.AGENT_REGISTRY)
 
                     # Build validators: always register both, they adapt per-call via ctx.deps
                     step_validators = [
@@ -800,7 +800,7 @@ class PipelineConfig(ABC):
 
                     agent = build_step_agent(
                         step_name=step.step_name,
-                        output_type=output_type,
+                        output_type=instructions_type,
                         validators=step_validators,
                         instrument=self._instrumentation_settings,
                         tools=step_tools,
@@ -874,7 +874,7 @@ class PipelineConfig(ABC):
                             # are emitted inside _execute_with_consensus
                             instruction, _c_input, _c_output, _c_requests, _c_cost = (
                                 self._execute_with_consensus(
-                                    agent, user_prompt, step_deps, output_type,
+                                    agent, user_prompt, step_deps, instructions_type,
                                     strategy=step_def.consensus_strategy,
                                     current_step_name=current_step_name,
                                 )
@@ -905,7 +905,7 @@ class PipelineConfig(ABC):
                                     _step_output_tokens += _call_output_tokens or 0
                                 _step_total_requests += 1
                             except UnexpectedModelBehavior as exc:
-                                instruction = output_type.create_failure(str(exc))
+                                instruction = instructions_type.create_failure(str(exc))
 
                             # Non-consensus: emit single LLMCallCompleted per call
                             _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, self._model)
@@ -1286,7 +1286,7 @@ class PipelineConfig(ABC):
         SM.metadata.create_all(engine, tables=[model_class.__table__])
 
     def _execute_with_consensus(
-        self, agent, user_prompt, step_deps, output_type,
+        self, agent, user_prompt, step_deps, instructions_type,
         strategy: 'ConsensusStrategy', current_step_name: str,
     ):
         """Execute LLM calls with consensus strategy, accumulating token usage.
@@ -1336,7 +1336,7 @@ class PipelineConfig(ABC):
                     _consensus_input_tokens += _call_input_tokens or 0
                     _consensus_output_tokens += _call_output_tokens or 0
             except UnexpectedModelBehavior as exc:
-                instruction = output_type.create_failure(str(exc))
+                instruction = instructions_type.create_failure(str(exc))
             _consensus_requests += 1
 
             # Emit per-attempt LLMCallCompleted with per-call token values

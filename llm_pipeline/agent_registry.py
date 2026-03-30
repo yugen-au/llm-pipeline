@@ -1,30 +1,30 @@
 """
 Base class for agent registries.
 
-Defines the interface for declaring which output types a pipeline's agents produce.
+Defines the interface for declaring which instructions types a pipeline's agents produce.
 Mirrors PipelineDatabaseRegistry pattern: registry = WHAT, runtime factory = HOW.
 """
 from abc import ABC
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Type
 
-from pydantic import BaseModel
+from llm_pipeline.step import LLMResultMixin
 
 
 @dataclass
 class AgentSpec:
-    """Specification for a pipeline agent, bundling output type with optional tools.
+    """Specification for a pipeline agent, bundling instructions type with optional tools.
 
-    Use this instead of a bare Type[BaseModel] in AGENTS dict when tools are needed.
+    Use this instead of a bare Type[LLMResultMixin] in AGENTS dict when tools are needed.
 
     Example:
         class MyRegistry(AgentRegistry, agents={
-            "simple_step": SimpleOutput,                          # bare type (no tools)
-            "tool_step": AgentSpec(ToolOutput, tools=[my_func]),  # with tools
+            "simple_step": SimpleInstructions,                              # bare type (no tools)
+            "tool_step": AgentSpec(ToolInstructions, tools=[my_func]),      # with tools
         }):
             pass
     """
-    output_type: Type[BaseModel]
+    instructions: Type[LLMResultMixin]
     tools: list[Any] = field(default_factory=list)
 
 
@@ -33,11 +33,11 @@ class AgentRegistry(ABC):
     Base class for pipeline agent registries.
 
     Each pipeline should define its own registry class that inherits from this,
-    declaring which pydantic-ai agents it uses and their output types.
+    declaring which pydantic-ai agents it uses and their instructions types.
 
     This registry is the single source of truth for:
     1. What agent step_names the pipeline defines
-    2. What structured output type each agent produces
+    2. What instructions type each agent produces
 
     Registry must be configured at class definition time using class call syntax:
 
@@ -49,15 +49,15 @@ class AgentRegistry(ABC):
             pass
     """
 
-    AGENTS: ClassVar[dict[str, Type[BaseModel] | AgentSpec]] = {}
+    AGENTS: ClassVar[dict[str, Type[LLMResultMixin] | AgentSpec]] = {}
 
     def __init_subclass__(cls, agents=None, **kwargs):
         """
         Called when a subclass is defined. Sets AGENTS from class parameter.
 
         Args:
-            agents: Dict mapping step_name to either a bare Type[BaseModel] or an
-                AgentSpec(output_type, tools) for steps that need tool-calling support.
+            agents: Dict mapping step_name to either a bare Type[LLMResultMixin] or an
+                AgentSpec(instructions, tools) for steps that need tool-calling support.
             **kwargs: Additional keyword arguments passed to super().__init_subclass__
 
         Raises:
@@ -74,17 +74,17 @@ class AgentRegistry(ABC):
             )
 
     @classmethod
-    def get_output_type(cls, step_name: str) -> Type[BaseModel]:
+    def get_instructions(cls, step_name: str) -> Type[LLMResultMixin]:
         """
-        Get the output type for a given step name.
+        Get the instructions type for a given step name.
 
-        Normalizes both bare Type[BaseModel] and AgentSpec entries.
+        Normalizes both bare Type[LLMResultMixin] and AgentSpec entries.
 
         Args:
             step_name: The snake_case step name to look up
 
         Returns:
-            The BaseModel subclass registered for this step
+            The LLMResultMixin subclass registered for this step
 
         Raises:
             KeyError: If step_name not found in registry
@@ -96,7 +96,7 @@ class AgentRegistry(ABC):
             )
         entry = cls.AGENTS[step_name]
         if isinstance(entry, AgentSpec):
-            return entry.output_type
+            return entry.instructions
         return entry
 
     @classmethod
