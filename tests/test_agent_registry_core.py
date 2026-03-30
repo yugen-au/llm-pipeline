@@ -1,6 +1,6 @@
 """
 Tests for naming.py, agent_registry.py, agent_builders.py, step.py, strategy.py,
-and pipeline.py changes introduced in pydantic-ai-1-agent-registry-core.
+and pipeline.py -- updated for global agent registry API.
 """
 from dataclasses import fields as dc_fields
 from typing import Any
@@ -9,7 +9,13 @@ import pytest
 from pydantic import BaseModel
 
 from llm_pipeline.naming import to_snake_case
-from llm_pipeline.agent_registry import AgentRegistry
+from llm_pipeline.agent_registry import (
+    AgentSpec,
+    register_agent,
+    get_agent_tools,
+    get_registered_agents,
+    clear_agent_registry,
+)
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
 
 
@@ -59,82 +65,114 @@ class TestToSnakeCase:
 
 
 # ============================================================
-# agent_registry.py
+# agent_registry.py - global registry functions
 # ============================================================
 
-class ExtractionOutput(BaseModel):
-    value: str
+class TestAgentSpec:
+    def test_default_tools_empty(self):
+        spec = AgentSpec()
+        assert spec.tools == []
+
+    def test_tools_stored(self):
+        def my_tool(): pass
+        spec = AgentSpec(tools=[my_tool])
+        assert spec.tools == [my_tool]
+
+    def test_is_dataclass(self):
+        fields = dc_fields(AgentSpec)
+        names = [f.name for f in fields]
+        assert names == ["tools"]
 
 
-class ValidationOutput(BaseModel):
-    valid: bool
-
-
-class TestAgentRegistryInitSubclass:
-    def test_concrete_with_agents_ok(self):
-        class MyPipelineAgentRegistry(AgentRegistry, agents={
-            "extract_data": ExtractionOutput,
-        }):
-            pass
-
-        assert MyPipelineAgentRegistry.AGENTS == {"extract_data": ExtractionOutput}
-
-    def test_concrete_without_agents_raises(self):
-        with pytest.raises(ValueError, match="agents"):
-            class BadRegistry(AgentRegistry):
-                pass
-
-    def test_underscore_prefix_skip(self):
-        # classes starting with _ are skipped even without agents=
-        class _PrivateRegistry(AgentRegistry):
-            pass
-        # should not raise
-
-    def test_multiple_steps_registered(self):
-        class MultistepRegistry(AgentRegistry, agents={
-            "step_one": ExtractionOutput,
-            "step_two": ValidationOutput,
-        }):
-            pass
-
-        assert len(MultistepRegistry.AGENTS) == 2
-        assert MultistepRegistry.AGENTS["step_one"] is ExtractionOutput
-        assert MultistepRegistry.AGENTS["step_two"] is ValidationOutput
-
-    def test_agents_does_not_bleed_to_sibling(self):
-        class RegistryA(AgentRegistry, agents={"step_a": ExtractionOutput}):
-            pass
-
-        class RegistryB(AgentRegistry, agents={"step_b": ValidationOutput}):
-            pass
-
-        assert "step_a" not in RegistryB.AGENTS
-        assert "step_b" not in RegistryA.AGENTS
-
-
-class TestAgentRegistryGetInstructions:
+class TestRegisterAgent:
     def setup_method(self):
-        class LookupRegistry(AgentRegistry, agents={
-            "extract_rates": ExtractionOutput,
-            "validate_lanes": ValidationOutput,
-        }):
-            pass
-        self.registry = LookupRegistry
+        clear_agent_registry()
 
-    def test_returns_correct_type(self):
-        assert self.registry.get_instructions("extract_rates") is ExtractionOutput
+    def teardown_method(self):
+        clear_agent_registry()
 
-    def test_returns_correct_type_second(self):
-        assert self.registry.get_instructions("validate_lanes") is ValidationOutput
+    def test_register_and_retrieve(self):
+        def tool_a(): pass
+        register_agent("my_agent", tools=[tool_a])
+        assert get_agent_tools("my_agent") == [tool_a]
 
-    def test_missing_key_raises_key_error(self):
-        with pytest.raises(KeyError, match="no_such_step"):
-            self.registry.get_instructions("no_such_step")
+    def test_register_multiple_agents(self):
+        def t1(): pass
+        def t2(): pass
+        register_agent("agent_a", tools=[t1])
+        register_agent("agent_b", tools=[t2])
+        assert get_agent_tools("agent_a") == [t1]
+        assert get_agent_tools("agent_b") == [t2]
 
-    def test_key_error_message_includes_available_steps(self):
-        with pytest.raises(KeyError) as exc_info:
-            self.registry.get_instructions("missing")
-        assert "extract_rates" in str(exc_info.value) or "validate_lanes" in str(exc_info.value)
+    def test_register_overwrites_existing(self):
+        def old_tool(): pass
+        def new_tool(): pass
+        register_agent("overwrite_me", tools=[old_tool])
+        register_agent("overwrite_me", tools=[new_tool])
+        assert get_agent_tools("overwrite_me") == [new_tool]
+
+    def test_register_empty_tools(self):
+        register_agent("no_tools", tools=[])
+        assert get_agent_tools("no_tools") == []
+
+    def test_tools_list_is_copied(self):
+        """Mutating original list should not affect registry."""
+        tools = [lambda: None]
+        register_agent("copy_test", tools=tools)
+        tools.append(lambda: None)
+        assert len(get_agent_tools("copy_test")) == 1
+
+
+class TestGetAgentTools:
+    def setup_method(self):
+        clear_agent_registry()
+
+    def teardown_method(self):
+        clear_agent_registry()
+
+    def test_unknown_agent_returns_empty_list(self):
+        assert get_agent_tools("nonexistent") == []
+
+    def test_returns_correct_tools(self):
+        def my_tool(): pass
+        register_agent("lookup_test", tools=[my_tool])
+        assert get_agent_tools("lookup_test") == [my_tool]
+
+
+class TestGetRegisteredAgents:
+    def setup_method(self):
+        clear_agent_registry()
+
+    def teardown_method(self):
+        clear_agent_registry()
+
+    def test_empty_registry(self):
+        assert get_registered_agents() == {}
+
+    def test_returns_all_registered(self):
+        register_agent("a", tools=[])
+        register_agent("b", tools=[])
+        result = get_registered_agents()
+        assert set(result.keys()) == {"a", "b"}
+        assert all(isinstance(v, AgentSpec) for v in result.values())
+
+    def test_returns_copy(self):
+        """Mutating returned dict should not affect registry."""
+        register_agent("orig", tools=[])
+        copy = get_registered_agents()
+        copy["injected"] = AgentSpec(tools=[])
+        assert "injected" not in get_registered_agents()
+
+
+class TestClearAgentRegistry:
+    def teardown_method(self):
+        clear_agent_registry()
+
+    def test_clears_all(self):
+        register_agent("temp", tools=[])
+        clear_agent_registry()
+        assert get_registered_agents() == {}
+        assert get_agent_tools("temp") == []
 
 
 # ============================================================
@@ -144,7 +182,7 @@ class TestAgentRegistryGetInstructions:
 class TestStepDepsFields:
     def test_field_count(self):
         f = dc_fields(StepDeps)
-        assert len(f) == 10
+        assert len(f) == 11
 
     def test_required_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]
@@ -247,11 +285,11 @@ class TestBuildStepAgent:
 
 
 # ============================================================
-# step.py - LLMStep.get_agent(), build_user_prompt() deprecation
+# step.py - LLMStep.step_name, build_user_prompt()
 # ============================================================
 
 class TestLLMStepMethods:
-    """Test LLMStep new methods using a minimal concrete subclass."""
+    """Test LLMStep methods using a minimal concrete subclass."""
 
     def _make_step(self, agent_name_override=None):
         from llm_pipeline.step import LLMStep
@@ -282,26 +320,6 @@ class TestLLMStepMethods:
     def test_step_name_snake_case(self):
         step = self._make_step()
         assert step.step_name == "extract_data"
-
-    def test_get_agent_uses_step_name(self):
-        class GetAgentRegistry(AgentRegistry, agents={
-            "extract_data": ExtractionOutput,
-        }):
-            pass
-        step = self._make_step()
-        instructions_type, tools = step.get_agent(GetAgentRegistry)
-        assert instructions_type is ExtractionOutput
-        assert tools == []
-
-    def test_get_agent_uses_override(self):
-        class OverrideRegistry(AgentRegistry, agents={
-            "custom_name": ValidationOutput,
-        }):
-            pass
-        step = self._make_step(agent_name_override="custom_name")
-        instructions_type, tools = step.get_agent(OverrideRegistry)
-        assert instructions_type is ValidationOutput
-        assert tools == []
 
     def test_build_user_prompt_calls_service(self):
         step = self._make_step()
@@ -388,7 +406,6 @@ class TestStepDefinitionNewFields:
         from llm_pipeline.step import LLMStep
         from llm_pipeline.strategy import StepDefinition
         from pydantic import BaseModel as PB
-        from unittest.mock import MagicMock, patch
         from sqlmodel import create_engine, Session
         import llm_pipeline.db.prompt  # ensure model is registered
 
@@ -429,75 +446,6 @@ class TestStepDefinitionNewFields:
 
         session.close()
         engine.dispose()
-
-
-# ============================================================
-# pipeline.py - PipelineConfig agent_registry= param
-# Module-level SQLModel tables and registry classes to avoid SQLModel
-# table-redefinition errors when test methods run in the same process.
-# ============================================================
-
-from typing import Optional as _Opt
-from sqlmodel import SQLModel as _SQLModel, Field as _Field
-from llm_pipeline.registry import PipelineDatabaseRegistry as _PDR
-from llm_pipeline.pipeline import PipelineConfig as _PC
-
-class _NoARModel(_SQLModel, table=True):
-    __tablename__ = "test_no_ar_model"
-    id: _Opt[int] = _Field(default=None, primary_key=True)
-
-class _NoARRegistry(_PDR, models=[_NoARModel]):
-    pass
-
-class _NoARPipeline(_PC, registry=_NoARRegistry):
-    pass
-
-class _ARModel(_SQLModel, table=True):
-    __tablename__ = "test_ar_model"
-    id: _Opt[int] = _Field(default=None, primary_key=True)
-
-class _ARRegistry(_PDR, models=[_ARModel]):
-    pass
-
-class _ARAgentRegistry(AgentRegistry, agents={"step_one": ExtractionOutput}):
-    pass
-
-class _ARPipeline(_PC, registry=_ARRegistry, agent_registry=_ARAgentRegistry):
-    pass
-
-class _WrongModel(_SQLModel, table=True):
-    __tablename__ = "test_wrong_model"
-    id: _Opt[int] = _Field(default=None, primary_key=True)
-
-# Registry named to match "WrongARPipeline" -> "WrongARRegistry"
-class WrongARRegistry(_PDR, models=[_WrongModel]):
-    pass
-
-# Agent registry intentionally misnamed (should be "WrongARAgentRegistry")
-class _WrongNamedAgentReg(AgentRegistry, agents={"s": ExtractionOutput}):
-    pass
-
-
-class TestPipelineConfigAgentRegistry:
-    def test_agent_registry_none_is_ok(self):
-        """Existing pipelines with no agent_registry= must still work."""
-        assert _NoARPipeline.AGENT_REGISTRY is None
-
-    def test_agent_registry_accepted_and_stored(self):
-        assert _ARPipeline.AGENT_REGISTRY is _ARAgentRegistry
-
-    def test_wrong_agent_registry_name_raises(self):
-        with pytest.raises(ValueError, match="AgentRegistry"):
-            class WrongARPipeline(
-                _PC,
-                registry=WrongARRegistry,
-                agent_registry=_WrongNamedAgentReg,
-            ):
-                pass
-
-    def test_class_var_agent_registry_on_base_is_none(self):
-        from llm_pipeline.pipeline import PipelineConfig
-        assert PipelineConfig.AGENT_REGISTRY is None
 
 
 # ============================================================

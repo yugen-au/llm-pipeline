@@ -18,7 +18,6 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
     PipelineContext,
 )
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.db.prompt import Prompt
@@ -247,23 +246,6 @@ class SkipRegistry(PipelineDatabaseRegistry, models=[]):
     pass
 
 
-class SuccessAgentRegistry(AgentRegistry, agents={
-    "simple": SimpleInstructions,
-}):
-    pass
-
-
-class FailureAgentRegistry(AgentRegistry, agents={
-    "failing": FailingInstructions,
-}):
-    pass
-
-
-class SkipAgentRegistry(AgentRegistry, agents={
-    "skippable": SkippableInstructions,
-}):
-    pass
-
 
 class SuccessStrategies(PipelineStrategies, strategies=[SuccessStrategy]):
     pass
@@ -281,7 +263,6 @@ class SuccessPipeline(
     PipelineConfig,
     registry=SuccessRegistry,
     strategies=SuccessStrategies,
-    agent_registry=SuccessAgentRegistry,
 ):
     pass
 
@@ -290,7 +271,6 @@ class FailurePipeline(
     PipelineConfig,
     registry=FailureRegistry,
     strategies=FailureStrategies,
-    agent_registry=FailureAgentRegistry,
 ):
     pass
 
@@ -299,7 +279,6 @@ class SkipPipeline(
     PipelineConfig,
     registry=SkipRegistry,
     strategies=SkipStrategies,
-    agent_registry=SkipAgentRegistry,
 ):
     pass
 
@@ -317,12 +296,6 @@ class ExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
     pass
 
 
-class ExtractionAgentRegistry(AgentRegistry, agents={
-    "item_detection": ItemDetectionInstructions,
-}):
-    pass
-
-
 class ExtractionStrategies(PipelineStrategies, strategies=[ExtractionStrategy]):
     pass
 
@@ -331,7 +304,6 @@ class ExtractionPipeline(
     PipelineConfig,
     registry=ExtractionRegistry,
     strategies=ExtractionStrategies,
-    agent_registry=ExtractionAgentRegistry,
 ):
     pass
 
@@ -349,12 +321,6 @@ class TransformationRegistry(PipelineDatabaseRegistry, models=[]):
     pass
 
 
-class TransformationAgentRegistry(AgentRegistry, agents={
-    "transformation": TransformationInstructions,
-}):
-    pass
-
-
 class TransformationStrategies(PipelineStrategies, strategies=[TransformationStrategy]):
     pass
 
@@ -363,7 +329,6 @@ class TransformationPipeline(
     PipelineConfig,
     registry=TransformationRegistry,
     strategies=TransformationStrategies,
-    agent_registry=TransformationAgentRegistry,
 ):
     pass
 

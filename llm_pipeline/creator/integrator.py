@@ -268,9 +268,6 @@ class StepIntegrator:
         # Derive dotted module path from target_dir relative to project root.
         # e.g. /project/llm_pipeline/steps/sentiment -> llm_pipeline.steps.sentiment
         step_module = _dir_to_module_path(target_dir, generated.step_name + "_step")
-        instructions_module = _dir_to_module_path(
-            target_dir, generated.step_name + "_instructions"
-        )
 
         extraction_model: str | None = None
         extraction_module: str | None = None
@@ -284,8 +281,6 @@ class StepIntegrator:
             pipeline_file=self.pipeline_file,
             step_class=generated.step_class_name,
             step_module=step_module,
-            instructions_class=generated.instructions_class_name,
-            instructions_module=instructions_module,
             step_name=generated.step_name,
             extraction_model=extraction_model,
             extraction_module=extraction_module,

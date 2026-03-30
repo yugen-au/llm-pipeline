@@ -16,7 +16,6 @@ from llm_pipeline.events.types import (
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.step import step_definition, LLMStep, LLMResultMixin
 from llm_pipeline import PipelineConfig, PipelineStrategy, PipelineStrategies, PipelineDatabaseRegistry
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.types import StepCallParams
 from conftest import (
     ExtractionPipeline,
@@ -177,12 +176,6 @@ class FailingExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
     pass
 
 
-class FailingExtractionAgentRegistry(AgentRegistry, agents={
-    "failing_item_detection": FailingItemDetectionInstructions,
-}):
-    pass
-
-
 class FailingExtractionStrategies(PipelineStrategies, strategies=[FailingExtractionStrategy]):
     pass
 
@@ -191,7 +184,6 @@ class FailingExtractionPipeline(
     PipelineConfig,
     registry=FailingExtractionRegistry,
     strategies=FailingExtractionStrategies,
-    agent_registry=FailingExtractionAgentRegistry,
 ):
     pass
 
@@ -435,12 +427,6 @@ class UpdatingExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
     pass
 
 
-class UpdatingExtractionAgentRegistry(AgentRegistry, agents={
-    "updating_item_detection": UpdatingItemDetectionInstructions,
-}):
-    pass
-
-
 class UpdatingExtractionStrategies(PipelineStrategies, strategies=[UpdatingExtractionStrategy]):
     pass
 
@@ -449,7 +435,6 @@ class UpdatingExtractionPipeline(
     PipelineConfig,
     registry=UpdatingExtractionRegistry,
     strategies=UpdatingExtractionStrategies,
-    agent_registry=UpdatingExtractionAgentRegistry,
 ):
     pass
 

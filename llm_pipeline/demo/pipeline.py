@@ -8,7 +8,7 @@ Contains the core data structures for the TextAnalyzer demo:
 - TextAnalyzerRegistry: database registry declaring managed models
 - Instructions, Context, and Extraction classes for 3 pipeline steps
 - Step definitions: SentimentAnalysis, TopicExtraction, Summary
-- TextAnalyzerAgentRegistry, DefaultStrategy, TextAnalyzerStrategies
+- DefaultStrategy, TextAnalyzerStrategies
 - TextAnalyzerPipeline: fully wired PipelineConfig subclass
 """
 from typing import Any, ClassVar, Optional
@@ -17,7 +17,6 @@ from pydantic import BaseModel
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, Field
 
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.context import PipelineContext, PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.pipeline import PipelineConfig
@@ -226,19 +225,6 @@ class SummaryStep(LLMStep):
 
 
 # ---------------------------------------------------------------------------
-# Agent registry
-# ---------------------------------------------------------------------------
-
-class TextAnalyzerAgentRegistry(AgentRegistry, agents={
-    "sentiment_analysis": SentimentAnalysisInstructions,
-    "topic_extraction": TopicExtractionInstructions,
-    "summary": SummaryInstructions,
-}):
-    """Agent registry mapping step names to their structured output types."""
-
-    pass
-
-
 # ---------------------------------------------------------------------------
 # Strategy
 # ---------------------------------------------------------------------------
@@ -275,7 +261,6 @@ class TextAnalyzerPipeline(
     PipelineConfig,
     registry=TextAnalyzerRegistry,
     strategies=TextAnalyzerStrategies,
-    agent_registry=TextAnalyzerAgentRegistry,
 ):
     """Demo pipeline: sentiment -> topic extraction -> summary."""
 

@@ -175,122 +175,6 @@ def _expand_list_and_insert(
     return source_lines[:line_idx] + replacement + source_lines[line_idx + 1 :]
 
 
-def _splice_into_dict(
-    source_lines: list[str],
-    dict_node: ast.Dict,
-    new_key: str,
-    new_value: str,
-) -> list[str]:
-    """Splice a key-value pair into a dict literal in source.
-
-    Handles both multiline dicts (inserts before closing `}`) and single-line
-    dicts (expands to multiline first, then inserts).
-
-    Args:
-        source_lines: 1-indexed file lines (index 0 == line 1).
-        dict_node: AST Dict node.
-        new_key: string key, e.g. '"step_name"'.
-        new_value: value expression, e.g. "StepInstructions".
-
-    Returns:
-        Modified source_lines list.
-    """
-    start_line = dict_node.lineno - 1
-    end_line = dict_node.end_lineno - 1
-
-    is_multiline = end_line > start_line
-
-    if not is_multiline:
-        return _expand_dict_and_insert(source_lines, dict_node, new_key, new_value)
-
-    # Multiline: insert new entry before closing brace
-    close_line_idx = end_line
-    elem_indent = _infer_dict_element_indent(source_lines, dict_node)
-
-    new_line = f"{elem_indent}{new_key}: {new_value},\n"
-    result = source_lines[:close_line_idx] + [new_line] + source_lines[close_line_idx:]
-    return result
-
-
-def _infer_dict_element_indent(
-    source_lines: list[str],
-    dict_node: ast.Dict,
-) -> str:
-    """Infer element indentation from the first key of a multiline dict."""
-    if dict_node.keys:
-        first_key = dict_node.keys[0]
-        if first_key is not None:
-            first_line = source_lines[first_key.lineno - 1]
-            return _get_indent(first_line)
-    opening_line = source_lines[dict_node.lineno - 1]
-    return _get_indent(opening_line) + "    "
-
-
-def _expand_dict_and_insert(
-    source_lines: list[str],
-    dict_node: ast.Dict,
-    new_key: str,
-    new_value: str,
-) -> list[str]:
-    """Expand a single-line dict to multiline and append new key-value pair.
-
-    E.g.  `agents={"sentiment_analysis": SAInstructions}`  becomes:
-        agents={
-            "sentiment_analysis": SAInstructions,
-            "new_step": NewInstructions,
-        }
-    """
-    line_idx = dict_node.lineno - 1
-    line = source_lines[line_idx]
-
-    brace_pos = line.find("{")
-    close_pos = line.rfind("}")
-    if brace_pos == -1 or close_pos == -1:
-        raise ASTModificationError(
-            f"Cannot expand dict on line {dict_node.lineno}: no braces found"
-        )
-
-    base_indent = _get_indent(line)
-    elem_indent = base_indent + "    "
-
-    prefix = line[: brace_pos + 1]
-    inner = line[brace_pos + 1 : close_pos].strip()
-    suffix = line[close_pos + 1 :]
-
-    # Parse key-value pairs from inner text; split on "," but only top-level
-    pairs = _split_dict_pairs(inner)
-    pair_lines = [f"{elem_indent}{p.strip()},\n" for p in pairs if p.strip()]
-    pair_lines.append(f"{elem_indent}{new_key}: {new_value},\n")
-    close = f"{base_indent}}}{suffix}" if suffix.strip() else f"{base_indent}}}\n"
-
-    replacement = [f"{prefix}\n"] + pair_lines + [close]
-    return source_lines[:line_idx] + replacement + source_lines[line_idx + 1 :]
-
-
-def _split_dict_pairs(inner: str) -> list[str]:
-    """Split a flat dict interior into individual key: value strings."""
-    pairs: list[str] = []
-    depth = 0
-    current: list[str] = []
-    for ch in inner:
-        if ch in "([{":
-            depth += 1
-            current.append(ch)
-        elif ch in ")]}":
-            depth -= 1
-            current.append(ch)
-        elif ch == "," and depth == 0:
-            pairs.append("".join(current))
-            current = []
-        else:
-            current.append(ch)
-    if current:
-        tail = "".join(current).strip()
-        if tail:
-            pairs.append(tail)
-    return pairs
-
-
 # ---------------------------------------------------------------------------
 # Import injection
 # ---------------------------------------------------------------------------
@@ -478,31 +362,26 @@ def modify_pipeline_file(
     pipeline_file: Path,
     step_class: str,
     step_module: str,
-    instructions_class: str,
-    instructions_module: str,
     step_name: str,
     extraction_model: str | None = None,
     extraction_module: str | None = None,
 ) -> None:
-    """Modify a pipeline file to register a new step in all three targets.
+    """Modify a pipeline file to register a new step.
 
     Performs a single read/parse/splice/write cycle:
     1. Read source and create .bak backup.
     2. Parse with ast.parse().
-    3. Locate get_steps(), Registry.models keyword, AgentRegistry.agents keyword.
+    3. Locate get_steps(), Registry.models keyword.
     4. Inject step import (inline or top-level depending on get_steps pattern).
     5. Splice new step into get_steps() return list.
     6. If extraction_model provided, inject extraction import and splice models=[].
-    7. Inject instructions import and splice agents={} dict.
-    8. Write modified source back to pipeline_file.
+    7. Write modified source back to pipeline_file.
 
     Args:
         pipeline_file: Path to the target pipeline.py file.
         step_class: Name of the new step class, e.g. "SentimentAnalysisStep".
         step_module: Dotted module path for step_class import.
-        instructions_class: Name of the instructions class, e.g. "SentimentAnalysisInstructions".
-        instructions_module: Dotted module path for instructions_class import.
-        step_name: snake_case step name, e.g. "sentiment_analysis". Used as dict key.
+        step_name: snake_case step name, e.g. "sentiment_analysis".
         extraction_model: Optional SQLModel class name for registry models update.
         extraction_module: Optional dotted module path for extraction_model import.
 
@@ -587,28 +466,6 @@ def modify_pipeline_file(
                 )
             source_lines = _splice_into_list(source_lines, models_node, extraction_model)
             tree = _reparse(source_lines, pipeline_file)
-
-        # --- Inject instructions import and splice agents dict ---
-        source_lines = _detect_and_add_registry_import(
-            source_lines, tree, instructions_class, instructions_module
-        )
-        tree = _reparse(source_lines, pipeline_file)
-
-        agents_node, _ = _find_class_keyword_node(tree, "AgentRegistry", "agents")
-        if agents_node is None:
-            raise ASTModificationError(
-                f"Cannot find AgentRegistry agents={{...}} keyword in {pipeline_file}"
-            )
-        if not isinstance(agents_node, ast.Dict):
-            raise ASTModificationError(
-                f"AgentRegistry agents keyword is not a dict literal in {pipeline_file}"
-            )
-        source_lines = _splice_into_dict(
-            source_lines,
-            agents_node,
-            f'"{step_name}"',
-            instructions_class,
-        )
 
         # --- Write result ---
         pipeline_file.write_text("".join(source_lines), encoding="utf-8")

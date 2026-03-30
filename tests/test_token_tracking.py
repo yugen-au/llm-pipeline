@@ -27,7 +27,6 @@ from llm_pipeline import (
     PipelineStepState,
     MajorityVoteStrategy,
 )
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
@@ -79,10 +78,6 @@ class TokenRegistry(PipelineDatabaseRegistry, models=[TokenWidget]):
     pass
 
 
-class TokenAgentRegistry(AgentRegistry, agents={"token": TokenInstructions}):
-    pass
-
-
 class TokenStrategies(PipelineStrategies, strategies=[TokenStrategy]):
     pass
 
@@ -91,7 +86,6 @@ class TokenPipeline(
     PipelineConfig,
     registry=TokenRegistry,
     strategies=TokenStrategies,
-    agent_registry=TokenAgentRegistry,
 ):
     pass
 

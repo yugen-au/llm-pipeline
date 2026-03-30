@@ -17,7 +17,6 @@ from llm_pipeline import (
     PipelineExtraction,
     PipelineDatabaseRegistry,
 )
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.state import PipelineRun
 from llm_pipeline.types import StepCallParams
@@ -117,12 +116,6 @@ class TrackingRegistry(PipelineDatabaseRegistry, models=[Gadget]):
     pass
 
 
-class TrackingAgentRegistry(AgentRegistry, agents={
-    "gadget": GadgetInstructions,
-}):
-    pass
-
-
 class TrackingStrategies(PipelineStrategies, strategies=[GadgetStrategy]):
     pass
 
@@ -131,7 +124,6 @@ class TrackingPipeline(
     PipelineConfig,
     registry=TrackingRegistry,
     strategies=TrackingStrategies,
-    agent_registry=TrackingAgentRegistry,
 ):
     pass
 

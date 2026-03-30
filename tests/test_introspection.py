@@ -21,7 +21,7 @@ from llm_pipeline import (
 )
 from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.transformation import PipelineTransformation
-from llm_pipeline.agent_registry import AgentRegistry, AgentSpec
+from llm_pipeline.agent_registry import register_agent, clear_agent_registry
 
 
 # ---------- Domain classes (minimal WidgetPipeline pattern) ----------
@@ -541,16 +541,46 @@ def _dummy_tool_beta(y: str) -> bool:
     return bool(y)
 
 
-class TooledAgentRegistry(AgentRegistry, agents={
-    "widget_detection": AgentSpec(
-        instructions=WidgetDetectionInstructions,
-        tools=[_dummy_tool_alpha, _dummy_tool_beta],
-    ),
-}):
-    pass
+class TooledInstructions(LLMResultMixin):
+    widget_count: int
+    category: str
+
+    example: ClassVar[dict] = {
+        "widget_count": 2,
+        "category": "test",
+        "notes": "test",
+    }
 
 
-class TooledStrategies(PipelineStrategies, strategies=[PrimaryStrategy]):
+class TooledContext(PipelineContext):
+    category: str
+
+
+@step_definition(
+    instructions=TooledInstructions,
+    default_system_key="widget.system",
+    default_user_key="widget.user",
+    default_extractions=[WidgetExtraction],
+    context=TooledContext,
+    agent="tooled",
+)
+class TooledStep(LLMStep):
+    def prepare_calls(self):
+        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
+
+    def process_instructions(self, instructions):
+        return TooledContext(category=instructions[0].category)
+
+
+class TooledStrategy(PipelineStrategy):
+    def can_handle(self, context):
+        return True
+
+    def get_steps(self):
+        return [TooledStep.create_definition()]
+
+
+class TooledStrategies(PipelineStrategies, strategies=[TooledStrategy]):
     pass
 
 
@@ -560,26 +590,32 @@ class TooledRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
 
 class TooledPipeline(PipelineConfig,
                       registry=TooledRegistry,
-                      strategies=TooledStrategies,
-                      agent_registry=TooledAgentRegistry):
+                      strategies=TooledStrategies):
     pass
 
 
 class TestToolsMetadata:
+
+    def setup_method(self):
+        register_agent("tooled", [_dummy_tool_alpha, _dummy_tool_beta])
+
+    def teardown_method(self):
+        clear_agent_registry()
+
     def test_tools_key_present_in_step(self):
         """Every step_entry has a 'tools' key."""
         meta = PipelineIntrospector(WidgetPipeline).get_metadata()
         step = meta["strategies"][0]["steps"][0]
         assert "tools" in step
 
-    def test_tools_empty_when_no_agent_registry(self):
-        """Pipeline without AGENT_REGISTRY -> tools=[]."""
+    def test_tools_empty_when_no_agent_registered(self):
+        """Step without agent= -> tools=[]."""
         meta = PipelineIntrospector(WidgetPipeline).get_metadata()
         step = meta["strategies"][0]["steps"][0]
         assert step["tools"] == []
 
-    def test_tools_populated_from_agent_registry(self):
-        """Pipeline with AGENT_REGISTRY + AgentSpec -> tool names listed."""
+    def test_tools_populated_from_registered_agent(self):
+        """Step with agent= + registered tools -> tool names listed."""
         meta = PipelineIntrospector(TooledPipeline).get_metadata()
         step = meta["strategies"][0]["steps"][0]
         assert "_dummy_tool_alpha" in step["tools"]
@@ -593,51 +629,15 @@ class TestToolsMetadata:
         for name in step["tools"]:
             assert isinstance(name, str)
 
-    def test_tools_empty_for_bare_type_in_registry(self):
-        """AgentRegistry with bare Type (no AgentSpec) -> tools=[]."""
-
-        class BareAgentRegistry(AgentRegistry, agents={
-            "widget_detection": WidgetDetectionInstructions,
-        }):
-            pass
-
-        class BareRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
-            pass
-
-        class BareStrategies(PipelineStrategies, strategies=[PrimaryStrategy]):
-            pass
-
-        class BarePipeline(PipelineConfig,
-                           registry=BareRegistry,
-                           strategies=BareStrategies,
-                           agent_registry=BareAgentRegistry):
-            pass
-
-        meta = PipelineIntrospector(BarePipeline).get_metadata()
+    def test_tools_empty_when_agent_not_registered(self):
+        """Step with agent= but no matching register_agent() -> tools=[]."""
+        clear_agent_registry()
+        meta = PipelineIntrospector(TooledPipeline).get_metadata()
         step = meta["strategies"][0]["steps"][0]
         assert step["tools"] == []
 
-    def test_tools_graceful_when_step_not_in_registry(self):
-        """If step_name not in AGENT_REGISTRY.AGENTS, tools stays []."""
-
-        class MismatchAgentRegistry(AgentRegistry, agents={
-            "nonexistent_step": WidgetDetectionInstructions,
-        }):
-            pass
-
-        class MismatchRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
-            pass
-
-        class MismatchStrategies(PipelineStrategies, strategies=[PrimaryStrategy]):
-            pass
-
-        class MismatchPipeline(PipelineConfig,
-                               registry=MismatchRegistry,
-                               strategies=MismatchStrategies,
-                               agent_registry=MismatchAgentRegistry):
-            pass
-
-        meta = PipelineIntrospector(MismatchPipeline).get_metadata()
+    def test_tools_empty_when_no_agent_on_step(self):
+        """Step without agent= always has tools=[] regardless of registry."""
+        meta = PipelineIntrospector(WidgetPipeline).get_metadata()
         step = meta["strategies"][0]["steps"][0]
-        # get_tools raises KeyError for missing step; caught by try/except
         assert step["tools"] == []

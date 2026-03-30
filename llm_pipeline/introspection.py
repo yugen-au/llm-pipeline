@@ -155,16 +155,15 @@ class PipelineIntrospector:
                 "action_after": step_def.action_after,
             }
 
-            # Tools from AGENT_REGISTRY (safe: never fails introspection)
-            try:
-                agent_registry = getattr(self._pipeline_cls, 'AGENT_REGISTRY', None)
-                if agent_registry is not None and hasattr(agent_registry, 'get_tools'):
-                    tool_fns = agent_registry.get_tools(step_name)
+            # Tools from global agent registry
+            agent_name = step_def.agent_name
+            if agent_name:
+                from llm_pipeline.agent_registry import get_agent_tools
+                tool_fns = get_agent_tools(agent_name)
+                if tool_fns:
                     step_entry["tools"] = [
                         getattr(fn, '__name__', str(fn)) for fn in tool_fns
                     ]
-            except Exception:
-                pass  # keep tools=[] default
 
             # Extractions
             for ext_cls in (step_def.extractions or []):

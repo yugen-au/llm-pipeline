@@ -63,7 +63,6 @@ class TestDemoImports:
             SentimentAnalysisStep,
             TopicExtractionStep,
             SummaryStep,
-            TextAnalyzerAgentRegistry,
             DefaultStrategy,
             TextAnalyzerStrategies,
             TextAnalyzerPipeline,
@@ -73,7 +72,7 @@ class TestDemoImports:
             SentimentAnalysisInstructions, TopicExtractionInstructions, SummaryInstructions,
             SentimentAnalysisContext, TopicExtractionContext, SummaryContext,
             TopicExtraction, SentimentAnalysisStep, TopicExtractionStep, SummaryStep,
-            TextAnalyzerAgentRegistry, DefaultStrategy, TextAnalyzerStrategies,
+            DefaultStrategy, TextAnalyzerStrategies,
             TextAnalyzerPipeline,
         ]:
             assert cls is not None
@@ -473,17 +472,3 @@ class TestTextAnalyzerPipelineConfig:
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
         assert callable(getattr(TextAnalyzerPipeline, "seed_prompts", None))
 
-    def test_agent_registry_configured(self):
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline, TextAnalyzerAgentRegistry
-        assert TextAnalyzerPipeline.AGENT_REGISTRY is TextAnalyzerAgentRegistry
-
-    def test_agent_registry_has_all_steps(self):
-        from llm_pipeline.demo.pipeline import (
-            TextAnalyzerAgentRegistry,
-            SentimentAnalysisInstructions,
-            TopicExtractionInstructions,
-            SummaryInstructions,
-        )
-        assert TextAnalyzerAgentRegistry.AGENTS["sentiment_analysis"] is SentimentAnalysisInstructions
-        assert TextAnalyzerAgentRegistry.AGENTS["topic_extraction"] is TopicExtractionInstructions
-        assert TextAnalyzerAgentRegistry.AGENTS["summary"] is SummaryInstructions

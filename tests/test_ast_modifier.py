@@ -4,7 +4,6 @@ Unit tests for llm_pipeline/creator/ast_modifier.py.
 Tests cover modify_pipeline_file() for:
 - multiline and single-line get_steps() list splice
 - multiline and single-line models=[] splice
-- multiline and single-line agents={} splice
 - inline import injection (creator/pipeline.py style)
 - top-level import injection (demo/pipeline.py style)
 - .bak file creation
@@ -29,22 +28,14 @@ from llm_pipeline.creator.ast_modifier import ASTModificationError, modify_pipel
 # - imports at module level
 # - get_steps() returns list directly (no inline imports)
 _TOPLEVEL_IMPORT_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
     'from llm_pipeline.pipeline import PipelineConfig\n'
     'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
     'from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies\n'
     'from myapp.steps import ExistingStep\n'
-    'from myapp.schemas import ExistingInstructions\n'
     'from myapp.models import ExistingModel\n'
     '\n'
     '\n'
     'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={\n'
-    '    "existing_step": ExistingInstructions,\n'
-    '}):\n'
     '    pass\n'
     '\n'
     '\n'
@@ -62,21 +53,13 @@ _TOPLEVEL_IMPORT_TEMPLATE = (
 # - no step imports at module level
 # - get_steps() has inline ImportFrom inside body
 _INLINE_IMPORT_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
     'from llm_pipeline.pipeline import PipelineConfig\n'
     'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
     'from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies\n'
-    'from myapp.schemas import ExistingInstructions\n'
     'from myapp.models import ExistingModel\n'
     '\n'
     '\n'
     'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={\n'
-    '    "existing_step": ExistingInstructions,\n'
-    '}):\n'
     '    pass\n'
     '\n'
     '\n'
@@ -95,19 +78,13 @@ _INLINE_IMPORT_TEMPLATE = (
 
 # Singleline get_steps list
 _SINGLELINE_STEPS_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
     'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
     'from llm_pipeline.strategy import PipelineStrategy\n'
     'from myapp.steps import ExistingStep\n'
-    'from myapp.schemas import ExistingInstructions\n'
     'from myapp.models import ExistingModel\n'
     '\n'
     '\n'
     'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={"existing_step": ExistingInstructions}):\n'
     '    pass\n'
     '\n'
     '\n'
@@ -121,23 +98,15 @@ _SINGLELINE_STEPS_TEMPLATE = (
 
 # Multiline models keyword
 _MULTILINE_MODELS_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
     'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
     'from llm_pipeline.strategy import PipelineStrategy\n'
     'from myapp.steps import ExistingStep\n'
-    'from myapp.schemas import ExistingInstructions\n'
     'from myapp.models import ExistingModel\n'
     '\n'
     '\n'
     'class MyRegistry(PipelineDatabaseRegistry, models=[\n'
     '    ExistingModel,\n'
     ']):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={\n'
-    '    "existing_step": ExistingInstructions,\n'
-    '}):\n'
     '    pass\n'
     '\n'
     '\n'
@@ -153,79 +122,13 @@ _MULTILINE_MODELS_TEMPLATE = (
 
 # Singleline models keyword
 _SINGLELINE_MODELS_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
     'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
     'from llm_pipeline.strategy import PipelineStrategy\n'
     'from myapp.steps import ExistingStep\n'
-    'from myapp.schemas import ExistingInstructions\n'
     'from myapp.models import ExistingModel\n'
     '\n'
     '\n'
     'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={\n'
-    '    "existing_step": ExistingInstructions,\n'
-    '}):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class DefaultStrategy(PipelineStrategy):\n'
-    '    def can_handle(self, context):\n'
-    '        return True\n'
-    '\n'
-    '    def get_steps(self):\n'
-    '        return [\n'
-    '            ExistingStep.create_definition(),\n'
-    '        ]\n'
-)
-
-# Multiline agents dict
-_MULTILINE_AGENTS_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
-    'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
-    'from llm_pipeline.strategy import PipelineStrategy\n'
-    'from myapp.steps import ExistingStep\n'
-    'from myapp.schemas import ExistingInstructions\n'
-    'from myapp.models import ExistingModel\n'
-    '\n'
-    '\n'
-    'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={\n'
-    '    "existing_step": ExistingInstructions,\n'
-    '}):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class DefaultStrategy(PipelineStrategy):\n'
-    '    def can_handle(self, context):\n'
-    '        return True\n'
-    '\n'
-    '    def get_steps(self):\n'
-    '        return [\n'
-    '            ExistingStep.create_definition(),\n'
-    '        ]\n'
-)
-
-# Singleline agents dict
-_SINGLELINE_AGENTS_TEMPLATE = (
-    'from llm_pipeline.agent_registry import AgentRegistry\n'
-    'from llm_pipeline.registry import PipelineDatabaseRegistry\n'
-    'from llm_pipeline.strategy import PipelineStrategy\n'
-    'from myapp.steps import ExistingStep\n'
-    'from myapp.schemas import ExistingInstructions\n'
-    'from myapp.models import ExistingModel\n'
-    '\n'
-    '\n'
-    'class MyRegistry(PipelineDatabaseRegistry, models=[ExistingModel]):\n'
-    '    pass\n'
-    '\n'
-    '\n'
-    'class MyAgentRegistry(AgentRegistry, agents={"existing_step": ExistingInstructions}):\n'
     '    pass\n'
     '\n'
     '\n'
@@ -266,8 +169,6 @@ def _call_modify(
     *,
     step_class: str = "NewStep",
     step_module: str = "myapp.steps",
-    instructions_class: str = "NewInstructions",
-    instructions_module: str = "myapp.schemas",
     step_name: str = "new_step",
     extraction_model: str | None = None,
     extraction_module: str | None = None,
@@ -276,8 +177,6 @@ def _call_modify(
         pipeline_file=pipeline_file,
         step_class=step_class,
         step_module=step_module,
-        instructions_class=instructions_class,
-        instructions_module=instructions_module,
         step_name=step_name,
         extraction_model=extraction_model,
         extraction_module=extraction_module,
@@ -409,48 +308,6 @@ class TestASTModifier:
         content = _read(p)
         ast.parse(content)
 
-    # -- agents={} keyword splice -----------------------------------------------
-
-    def test_splice_agents_multiline(self, tmp_path):
-        """Multiline agents={} keyword: new entry appended before closing brace."""
-        p = _write_pipeline(tmp_path, _MULTILINE_AGENTS_TEMPLATE)
-        _call_modify(p, step_class="NewStep", instructions_class="NewInstructions", step_name="new_step")
-        content = _read(p)
-        assert '"new_step"' in content
-        assert "NewInstructions" in content
-
-    def test_splice_agents_multiline_preserves_existing(self, tmp_path):
-        """Multiline agents splice preserves existing entry."""
-        p = _write_pipeline(tmp_path, _MULTILINE_AGENTS_TEMPLATE)
-        _call_modify(p, step_class="NewStep", instructions_class="NewInstructions", step_name="new_step")
-        content = _read(p)
-        assert "existing_step" in content
-        assert "ExistingInstructions" in content
-
-    def test_splice_agents_singleline(self, tmp_path):
-        """Single-line agents={} is expanded to multiline; new entry included."""
-        p = _write_pipeline(tmp_path, _SINGLELINE_AGENTS_TEMPLATE)
-        _call_modify(p, step_class="NewStep", instructions_class="NewInstructions", step_name="new_step")
-        content = _read(p)
-        assert '"new_step"' in content
-        assert "NewInstructions" in content
-
-    def test_splice_agents_singleline_preserves_existing(self, tmp_path):
-        """After single-line expansion, existing agents entry still present."""
-        p = _write_pipeline(tmp_path, _SINGLELINE_AGENTS_TEMPLATE)
-        _call_modify(p, step_class="NewStep", instructions_class="NewInstructions", step_name="new_step")
-        content = _read(p)
-        assert "existing_step" in content
-        assert "ExistingInstructions" in content
-
-    def test_splice_agents_result_is_valid_python(self, tmp_path):
-        """Modified file remains valid Python after agents splice."""
-        import ast
-        p = _write_pipeline(tmp_path, _MULTILINE_AGENTS_TEMPLATE)
-        _call_modify(p, step_class="NewStep", instructions_class="NewInstructions", step_name="new_step")
-        content = _read(p)
-        ast.parse(content)
-
     # -- Import injection -------------------------------------------------------
 
     def test_inline_import_injection(self, tmp_path):
@@ -503,8 +360,6 @@ class TestASTModifier:
             step_class="BrandNewStep",
             step_module="myapp.new_steps",
             step_name="brand_new_step",
-            instructions_class="BrandNewInstructions",
-            instructions_module="myapp.new_schemas",
         )
         content = _read(p)
         # Top-level import for step class should appear
@@ -536,20 +391,6 @@ class TestASTModifier:
         import_lines = [l for l in content_after_first.splitlines()
                         if "import" in l and "NewStep" in l]
         assert len(import_lines) == 1
-
-    def test_instructions_import_added(self, tmp_path):
-        """modify_pipeline_file() injects top-level import for instructions class."""
-        p = _write_pipeline(tmp_path, _TOPLEVEL_IMPORT_TEMPLATE)
-        _call_modify(
-            p,
-            step_class="NewStep",
-            step_module="myapp.steps",
-            instructions_class="UniqueNewInstructions",
-            instructions_module="myapp.new_schemas",
-            step_name="new_step",
-        )
-        content = _read(p)
-        assert "UniqueNewInstructions" in content
 
     # -- .bak file creation ----------------------------------------------------
 
@@ -586,43 +427,11 @@ class TestASTModifier:
     def test_missing_get_steps_raises(self, tmp_path):
         """Pipeline file without get_steps() function raises ASTModificationError."""
         source = """\
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.registry import PipelineDatabaseRegistry
 
 
 class MyRegistry(PipelineDatabaseRegistry, models=[]):
     pass
-
-
-class MyAgentRegistry(AgentRegistry, agents={}):
-    pass
-"""
-        p = _write_pipeline(tmp_path, source)
-        with pytest.raises(ASTModificationError):
-            _call_modify(p, step_class="NewStep", step_name="new_step")
-
-    def test_missing_agents_keyword_raises(self, tmp_path):
-        """Pipeline file without AgentRegistry.agents keyword raises ASTModificationError."""
-        source = """\
-from llm_pipeline.agent_registry import AgentRegistry
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.strategy import PipelineStrategy
-
-
-class MyRegistry(PipelineDatabaseRegistry, models=[]):
-    pass
-
-
-class MyAgentRegistry(AgentRegistry):
-    pass
-
-
-class DefaultStrategy(PipelineStrategy):
-    def can_handle(self, context):
-        return True
-
-    def get_steps(self):
-        return []
 """
         p = _write_pipeline(tmp_path, source)
         with pytest.raises(ASTModificationError):
@@ -631,16 +440,11 @@ class DefaultStrategy(PipelineStrategy):
     def test_missing_registry_models_raises_when_extraction_provided(self, tmp_path):
         """Pipeline file without Registry.models keyword raises when extraction_model given."""
         source = """\
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.registry import PipelineDatabaseRegistry
 from llm_pipeline.strategy import PipelineStrategy
 
 
 class MyRegistry(PipelineDatabaseRegistry):
-    pass
-
-
-class MyAgentRegistry(AgentRegistry, agents={}):
     pass
 
 
@@ -685,15 +489,13 @@ class DefaultStrategy(PipelineStrategy):
         bak_files = list(tmp_path.glob("*.bak"))
         assert len(bak_files) == 1
 
-    def test_all_three_splices_in_one_cycle(self, tmp_path):
-        """After modify, get_steps, models, and agents are all updated in one file."""
+    def test_both_splices_in_one_cycle(self, tmp_path):
+        """After modify, get_steps and models are both updated in one file."""
         p = _write_pipeline(tmp_path, _MULTILINE_MODELS_TEMPLATE)
         _call_modify(
             p,
             step_class="NewStep",
             step_module="myapp.steps",
-            instructions_class="NewInstructions",
-            instructions_module="myapp.schemas",
             step_name="new_step",
             extraction_model="NewModel",
             extraction_module="myapp.models",
@@ -701,5 +503,3 @@ class DefaultStrategy(PipelineStrategy):
         content = _read(p)
         assert "NewStep.create_definition()" in content  # get_steps splice
         assert "NewModel" in content                      # models splice
-        assert '"new_step"' in content                    # agents splice
-        assert "NewInstructions" in content               # agents splice value

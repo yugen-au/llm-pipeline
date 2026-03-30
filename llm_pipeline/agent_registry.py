@@ -1,129 +1,51 @@
 """
-Base class for agent registries.
+Global agent registry.
 
-Defines the interface for declaring which instructions types a pipeline's agents produce.
-Mirrors PipelineDatabaseRegistry pattern: registry = WHAT, runtime factory = HOW.
+Agents are defined by their tools. Steps declare which agent they use via
+@step_definition(agent="agent_name"). The registry maps agent names to tool lists.
+
+Convention: define agents in an agents/ directory, but register_agent() works
+from anywhere.
 """
-from abc import ABC
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Type
-
-from llm_pipeline.step import LLMResultMixin
+from typing import Any
 
 
 @dataclass
 class AgentSpec:
-    """Specification for a pipeline agent, bundling instructions type with optional tools.
-
-    Use this instead of a bare Type[LLMResultMixin] in AGENTS dict when tools are needed.
+    """Specification for a named agent's tools.
 
     Example:
-        class MyRegistry(AgentRegistry, agents={
-            "simple_step": SimpleInstructions,                              # bare type (no tools)
-            "tool_step": AgentSpec(ToolInstructions, tools=[my_func]),      # with tools
-        }):
-            pass
+        register_agent("code_gen", tools=[query_docs, resolve_lib])
     """
-    instructions: Type[LLMResultMixin]
     tools: list[Any] = field(default_factory=list)
 
 
-class AgentRegistry(ABC):
+_AGENT_REGISTRY: dict[str, AgentSpec] = {}
+
+
+def register_agent(name: str, tools: list[Any]) -> None:
+    """Register an agent by name with its tools.
+
+    Overwrites if name already registered.
     """
-    Base class for pipeline agent registries.
-
-    Each pipeline should define its own registry class that inherits from this,
-    declaring which pydantic-ai agents it uses and their instructions types.
-
-    This registry is the single source of truth for:
-    1. What agent step_names the pipeline defines
-    2. What instructions type each agent produces
-
-    Registry must be configured at class definition time using class call syntax:
-
-    Example:
-        class MyPipelineAgentRegistry(AgentRegistry, agents={
-            "extract_rates": RateExtraction,
-            "validate_lanes": LaneValidation,
-        }):
-            pass
-    """
-
-    AGENTS: ClassVar[dict[str, Type[LLMResultMixin] | AgentSpec]] = {}
-
-    def __init_subclass__(cls, agents=None, **kwargs):
-        """
-        Called when a subclass is defined. Sets AGENTS from class parameter.
-
-        Args:
-            agents: Dict mapping step_name to either a bare Type[LLMResultMixin] or an
-                AgentSpec(instructions, tools) for steps that need tool-calling support.
-            **kwargs: Additional keyword arguments passed to super().__init_subclass__
-
-        Raises:
-            ValueError: If agents not provided for concrete registry
-        """
-        super().__init_subclass__(**kwargs)
-
-        if agents is not None:
-            cls.AGENTS = agents
-        elif not cls.__name__.startswith('_') and cls.__bases__[0] is AgentRegistry:
-            raise ValueError(
-                f"{cls.__name__} must specify agents parameter when defining the class:\n"
-                f'class {cls.__name__}(AgentRegistry, agents={{"step_name": OutputModel, ...}})'
-            )
-
-    @classmethod
-    def get_instructions(cls, step_name: str) -> Type[LLMResultMixin]:
-        """
-        Get the instructions type for a given step name.
-
-        Normalizes both bare Type[LLMResultMixin] and AgentSpec entries.
-
-        Args:
-            step_name: The snake_case step name to look up
-
-        Returns:
-            The LLMResultMixin subclass registered for this step
-
-        Raises:
-            KeyError: If step_name not found in registry
-        """
-        if step_name not in cls.AGENTS:
-            raise KeyError(
-                f"No agent registered for step '{step_name}' in {cls.__name__}. "
-                f"Available steps: {list(cls.AGENTS.keys())}"
-            )
-        entry = cls.AGENTS[step_name]
-        if isinstance(entry, AgentSpec):
-            return entry.instructions
-        return entry
-
-    @classmethod
-    def get_tools(cls, step_name: str) -> list[Any]:
-        """
-        Get the tools list for a given step name.
-
-        Returns the tools from an AgentSpec entry, or an empty list for bare types.
-
-        Args:
-            step_name: The snake_case step name to look up
-
-        Returns:
-            List of tool callables registered for this step, or []
-
-        Raises:
-            KeyError: If step_name not found in registry
-        """
-        if step_name not in cls.AGENTS:
-            raise KeyError(
-                f"No agent registered for step '{step_name}' in {cls.__name__}. "
-                f"Available steps: {list(cls.AGENTS.keys())}"
-            )
-        entry = cls.AGENTS[step_name]
-        if isinstance(entry, AgentSpec):
-            return entry.tools
-        return []
+    _AGENT_REGISTRY[name] = AgentSpec(tools=list(tools))
 
 
-__all__ = ["AgentRegistry", "AgentSpec"]
+def get_agent_tools(name: str) -> list[Any]:
+    """Get tools for a named agent. Returns [] if not registered."""
+    spec = _AGENT_REGISTRY.get(name)
+    return spec.tools if spec else []
+
+
+def get_registered_agents() -> dict[str, AgentSpec]:
+    """Return a copy of all registered agents (for introspection)."""
+    return dict(_AGENT_REGISTRY)
+
+
+def clear_agent_registry() -> None:
+    """Clear all registered agents. Use in test teardown."""
+    _AGENT_REGISTRY.clear()
+
+
+__all__ = ["AgentSpec", "register_agent", "get_agent_tools", "get_registered_agents", "clear_agent_registry"]

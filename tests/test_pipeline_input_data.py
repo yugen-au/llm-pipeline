@@ -12,7 +12,6 @@ from llm_pipeline.context import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
 from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.agent_registry import AgentRegistry
 
 
 class TestPipelineInputDataBase:
@@ -217,10 +216,6 @@ class ValidateRegistry(PipelineDatabaseRegistry, models=[_DummyModel]):
     pass
 
 
-class ValidateAgentRegistry(AgentRegistry, agents={}):
-    pass
-
-
 class ValidateStrategies(PipelineStrategies, strategies=[EmptyStrategy]):
     pass
 
@@ -229,16 +224,11 @@ class ValidatePipeline(
     PipelineConfig,
     registry=ValidateRegistry,
     strategies=ValidateStrategies,
-    agent_registry=ValidateAgentRegistry,
 ):
     INPUT_DATA: ClassVar[Optional[Type[PipelineInputData]]] = OrderInput
 
 
 class NoInputRegistry(PipelineDatabaseRegistry, models=[_DummyModel]):
-    pass
-
-
-class NoInputAgentRegistry(AgentRegistry, agents={}):
     pass
 
 
@@ -250,7 +240,6 @@ class NoInputPipeline(
     PipelineConfig,
     registry=NoInputRegistry,
     strategies=NoInputStrategies,
-    agent_registry=NoInputAgentRegistry,
 ):
     """Pipeline without INPUT_DATA -- no validation enforced."""
     pass

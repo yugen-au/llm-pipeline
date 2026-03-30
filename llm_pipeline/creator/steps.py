@@ -106,6 +106,7 @@ class RequirementsAnalysisStep(LLMStep):
     default_system_key="code_generation",
     default_user_key="code_generation",
     context=CodeGenerationContext,
+    agent="code_gen",
 )
 class CodeGenerationStep(LLMStep):
     """Generate Python method bodies for prepare_calls and process_instructions."""
@@ -197,6 +198,7 @@ class CodeGenerationStep(LLMStep):
     default_system_key="prompt_generation",
     default_user_key="prompt_generation",
     context=PromptGenerationContext,
+    agent="prompt_gen",
 )
 class PromptGenerationStep(LLMStep):
     """Generate system and user prompts for the new step."""

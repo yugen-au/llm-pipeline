@@ -23,7 +23,6 @@ from llm_pipeline import (
     ValidationContext,
     init_pipeline_db,
 )
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.types import StepCallParams
@@ -101,12 +100,6 @@ class TestRegistry(PipelineDatabaseRegistry, models=[Widget]):
     pass
 
 
-class TestAgentRegistry(AgentRegistry, agents={
-    "widget_detection": WidgetDetectionInstructions,
-}):
-    pass
-
-
 class TestStrategies(PipelineStrategies, strategies=[DefaultStrategy]):
     pass
 
@@ -115,7 +108,6 @@ class TestPipeline(
     PipelineConfig,
     registry=TestRegistry,
     strategies=TestStrategies,
-    agent_registry=TestAgentRegistry,
 ):
     pass
 
@@ -270,21 +262,6 @@ class TestPipelineInit:
         pipeline = TestPipeline(engine=engine, model="test-model")
         assert pipeline._owns_session is True
         pipeline.close()
-
-    def test_requires_agent_registry_for_execute(self, session):
-        """Pipeline without AGENT_REGISTRY raises on execute."""
-        class NoAgentRegistry(PipelineDatabaseRegistry, models=[Widget]):
-            pass
-
-        class NoAgentStrategies(PipelineStrategies, strategies=[DefaultStrategy]):
-            pass
-
-        class NoAgentPipeline(PipelineConfig, registry=NoAgentRegistry, strategies=NoAgentStrategies):
-            pass
-
-        pipeline = NoAgentPipeline(session=session, model="test-model")
-        with pytest.raises(ValueError, match="agent_registry"):
-            pipeline.execute(data="test", initial_context={})
 
 
 class TestPipelineExecution:

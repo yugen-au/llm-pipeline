@@ -1,7 +1,7 @@
 """
 Pipeline wiring for the meta-pipeline step generator.
 
-Declares StepCreatorInputData, StepCreatorRegistry, StepCreatorAgentRegistry,
+Declares StepCreatorInputData, StepCreatorRegistry,
 DefaultCreatorStrategy, StepCreatorStrategies, and StepCreatorPipeline --
 the fully wired PipelineConfig subclass for the creator pipeline.
 """
@@ -9,7 +9,7 @@ from typing import Any, ClassVar
 
 from sqlalchemy import Engine
 
-from llm_pipeline.agent_registry import AgentRegistry, AgentSpec
+from llm_pipeline.agent_registry import register_agent
 from llm_pipeline.context import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.registry import PipelineDatabaseRegistry
@@ -17,12 +17,6 @@ from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
 
 from .context7 import query_framework_docs, resolve_library_id
 from .models import GenerationRecord
-from .schemas import (
-    CodeGenerationInstructions,
-    CodeValidationInstructions,
-    PromptGenerationInstructions,
-    RequirementsAnalysisInstructions,
-)
 
 
 # ---------------------------------------------------------------------------
@@ -51,21 +45,14 @@ class StepCreatorRegistry(PipelineDatabaseRegistry, models=[GenerationRecord]):
 
 
 # ---------------------------------------------------------------------------
-# Agent registry
+# Agents
 # ---------------------------------------------------------------------------
 
 
 _ctx7_tools = [query_framework_docs, resolve_library_id]
 
-class StepCreatorAgentRegistry(AgentRegistry, agents={
-    "requirements_analysis": RequirementsAnalysisInstructions,
-    "code_generation": AgentSpec(CodeGenerationInstructions, tools=_ctx7_tools),
-    "prompt_generation": AgentSpec(PromptGenerationInstructions, tools=_ctx7_tools),
-    "code_validation": CodeValidationInstructions,
-}):
-    """Agent registry mapping step names to their instructions types."""
-
-    pass
+register_agent("code_gen", tools=_ctx7_tools)
+register_agent("prompt_gen", tools=_ctx7_tools)
 
 
 # ---------------------------------------------------------------------------
@@ -111,7 +98,6 @@ class StepCreatorPipeline(
     PipelineConfig,
     registry=StepCreatorRegistry,
     strategies=StepCreatorStrategies,
-    agent_registry=StepCreatorAgentRegistry,
 ):
     """Meta-pipeline: generates scaffold code for new pipeline steps from descriptions."""
 
@@ -128,7 +114,6 @@ class StepCreatorPipeline(
 __all__ = [
     "StepCreatorInputData",
     "StepCreatorRegistry",
-    "StepCreatorAgentRegistry",
     "DefaultCreatorStrategy",
     "StepCreatorStrategies",
     "StepCreatorPipeline",

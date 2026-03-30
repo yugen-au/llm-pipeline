@@ -33,7 +33,6 @@ def _safe_dump(instance: SQLModel) -> dict:
 
 if TYPE_CHECKING:
     from pydantic_ai import Agent
-    from llm_pipeline.agent_registry import AgentRegistry
     from llm_pipeline.pipeline import PipelineConfig
     from llm_pipeline.context import PipelineContext
 
@@ -45,6 +44,7 @@ def step_definition(
     default_extractions: Optional[List] = None,
     default_transformation=None,
     context: Optional[Type] = None,
+    agent: Optional[str] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -58,6 +58,7 @@ def step_definition(
         default_extractions: Default extraction classes
         default_transformation: Default transformation class
         context: Context class this step produces
+        agent: Optional agent name for tool lookup from global agent registry
     """
     def decorator(step_class):
         if not step_class.__name__.endswith('Step'):
@@ -96,6 +97,7 @@ def step_definition(
         step_class.DEFAULT_EXTRACTIONS = default_extractions or []
         step_class.DEFAULT_TRANSFORMATION = default_transformation
         step_class.CONTEXT = context
+        step_class.AGENT = agent
 
         @classmethod
         def create_definition(
@@ -112,6 +114,10 @@ def step_definition(
                 extractions = cls.DEFAULT_EXTRACTIONS
             if 'transformation' not in kwargs and transformation is None:
                 transformation = cls.DEFAULT_TRANSFORMATION
+
+            # Default agent_name from decorator if not overridden in kwargs
+            if 'agent_name' not in kwargs and cls.AGENT is not None:
+                kwargs['agent_name'] = cls.AGENT
 
             return StepDefinition(
                 step_class=cls,
@@ -220,27 +226,6 @@ class LLMStep(ABC):
                 f"Step class '{class_name}' must end with 'Step' suffix."
             )
         return to_snake_case(class_name, strip_suffix='Step')
-
-    def get_agent(self, registry: 'AgentRegistry') -> tuple[type, list]:
-        """
-        Look up this step's instructions type and tools from the agent registry.
-
-        Uses agent_name override (set by StepDefinition) if available,
-        otherwise falls back to the auto-derived step_name.
-
-        Returns (instructions, tools) tuple. instructions is the LLMResultMixin
-        class reference; tools is a list of tool callables (empty if none registered).
-
-        Args:
-            registry: AgentRegistry subclass to look up from
-
-        Returns:
-            Tuple of (instructions LLMResultMixin class, list of tool callables)
-        """
-        agent_name = getattr(self, '_agent_name', None) or self.step_name
-        instructions = registry.get_instructions(agent_name)
-        tools = registry.get_tools(agent_name)
-        return (instructions, tools)
 
     def build_user_prompt(
         self,

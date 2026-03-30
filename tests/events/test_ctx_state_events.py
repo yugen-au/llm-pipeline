@@ -29,7 +29,6 @@ from llm_pipeline import (
     PipelineDatabaseRegistry,
     PipelineContext,
 )
-from llm_pipeline.agent_registry import AgentRegistry
 from llm_pipeline.types import StepCallParams
 from conftest import SuccessPipeline, make_simple_run_result
 
@@ -75,12 +74,6 @@ class EmptyContextRegistry(PipelineDatabaseRegistry, models=[]):
     pass
 
 
-class EmptyContextAgentRegistry(AgentRegistry, agents={
-    "empty_context": EmptyContextInstructions,
-}):
-    pass
-
-
 class EmptyContextStrategies(PipelineStrategies, strategies=[EmptyContextStrategy]):
     pass
 
@@ -89,7 +82,6 @@ class EmptyContextPipeline(
     PipelineConfig,
     registry=EmptyContextRegistry,
     strategies=EmptyContextStrategies,
-    agent_registry=EmptyContextAgentRegistry,
 ):
     pass
 
