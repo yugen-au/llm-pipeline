@@ -19,8 +19,16 @@ Pipeline + Strategy + Step pattern:
 - `PipelineExtraction` / `PipelineTransformation` - data extraction and transformation
 - `PipelineDatabaseRegistry` - DB-backed registry for pipeline state
 - `PipelineStepState` / `PipelineRunInstance` - execution state tracking
-- pydantic-ai Agent system via AgentRegistry and agent_builders.py
+- pydantic-ai Agent system via global `register_agent()` and agent_builders.py
 - `ReadOnlySession` - safe DB session wrapper
+
+## Running the UI
+- Dev mode (backend + frontend hot reload): `uv run llm-pipeline ui --dev`
+- Prod mode (serves built frontend): `uv run llm-pipeline ui`
+- Default port: 8642 (backend), 8643 (Vite dev)
+- SQLite auto-creates, no DB setup needed
+- Custom DB: `uv run llm-pipeline ui --dev --db path/to/db.sqlite`
+- Load custom pipelines: `uv run llm-pipeline ui --dev --pipelines my_project.pipelines`
 
 ## MCP Servers
 
