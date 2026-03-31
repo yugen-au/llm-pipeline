@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { Plus } from 'lucide-react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { useQueries } from '@tanstack/react-query'
@@ -8,6 +9,7 @@ import { usePipelines } from '@/api/pipelines'
 import { apiClient } from '@/api/client'
 import { queryKeys } from '@/api/query-keys'
 import type { PipelineMetadata } from '@/api/types'
+import { Button } from '@/components/ui/button'
 import { PromptFilterBar } from '@/components/prompts/PromptFilterBar'
 import { PromptList } from '@/components/prompts/PromptList'
 import { PromptViewer } from '@/components/prompts/PromptViewer'
@@ -32,6 +34,7 @@ export const Route = createFileRoute('/prompts')({
 function PromptsPage() {
   const { key } = Route.useSearch()
   const navigate = useNavigate({ from: '/prompts' })
+  const [isCreating, setIsCreating] = useState(false)
 
   // Data fetching
   const prompts = usePrompts({ limit: 200 })
@@ -128,12 +131,29 @@ function PromptsPage() {
 
   // Selection handler -- update URL search param
   function handleSelect(promptKey: string) {
+    setIsCreating(false)
     navigate({ search: { key: promptKey } })
+  }
+
+  function handleNewPrompt() {
+    setIsCreating(true)
+    navigate({ search: { key: '' } })
+  }
+
+  function handleCreated(newKey: string) {
+    setIsCreating(false)
+    navigate({ search: { key: newKey } })
   }
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
-      <h1 className="text-2xl font-semibold text-card-foreground">Prompts</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-card-foreground">Prompts</h1>
+        <Button size="sm" variant="outline" onClick={handleNewPrompt}>
+          <Plus className="size-4" />
+          New Prompt
+        </Button>
+      </div>
 
       <div className="flex min-h-0 flex-1 gap-4">
         {/* Left panel: filter bar + prompt list */}
@@ -159,7 +179,11 @@ function PromptsPage() {
 
         {/* Right panel: prompt detail viewer */}
         <div className="flex-1 overflow-auto rounded-xl border">
-          <PromptViewer promptKey={key || null} />
+          <PromptViewer
+            promptKey={key || null}
+            isCreating={isCreating}
+            onCreated={handleCreated}
+          />
         </div>
       </div>
     </div>

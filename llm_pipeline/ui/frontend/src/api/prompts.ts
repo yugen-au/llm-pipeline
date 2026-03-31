@@ -5,11 +5,36 @@
  * They will return 404 until that task is complete.
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
 import { toSearchParams } from './types'
-import type { PromptDetail, PromptListParams, PromptListResponse } from './types'
+import type { PromptDetail, PromptListParams, PromptListResponse, PromptVariant } from './types'
+
+/** Request body for POST /api/prompts */
+export interface PromptCreateRequest {
+  prompt_key: string
+  prompt_name: string
+  prompt_type: string
+  content: string
+  category?: string | null
+  step_name?: string | null
+  description?: string | null
+  version?: string
+  created_by?: string | null
+}
+
+/** Request body for PUT /api/prompts/{key}/{type} */
+export interface PromptUpdateRequest {
+  prompt_name?: string | null
+  content?: string | null
+  category?: string | null
+  step_name?: string | null
+  description?: string | null
+  version?: string | null
+  created_by?: string | null
+}
 
 /**
  * Fetch a paginated list of prompts with optional filtering.
@@ -46,5 +71,54 @@ export function usePromptDetail(promptKey: string) {
     queryKey: queryKeys.prompts.detail(promptKey),
     queryFn: () => apiClient<PromptDetail>('/prompts/' + promptKey),
     enabled: Boolean(promptKey),
+  })
+}
+
+/** Create a new prompt. */
+export function useCreatePrompt() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: PromptCreateRequest) =>
+      apiClient<PromptVariant>('/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: (created) => {
+      toast.success(`Prompt "${created.prompt_key}" created`)
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.all })
+    },
+  })
+}
+
+/** Update an existing prompt variant. */
+export function useUpdatePrompt(promptKey: string, promptType: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: PromptUpdateRequest) =>
+      apiClient<PromptVariant>(`/prompts/${promptKey}/${promptType}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      toast.success('Prompt saved')
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.detail(promptKey) })
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.all })
+    },
+  })
+}
+
+/** Soft-delete a prompt variant. */
+export function useDeletePrompt(promptKey: string, promptType: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiClient(`/prompts/${promptKey}/${promptType}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast.success('Prompt deactivated')
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.all })
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.detail(promptKey) })
+    },
   })
 }
