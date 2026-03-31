@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { useWsStore } from '../stores/websocket'
 import { queryKeys } from './query-keys'
 import type {
@@ -210,8 +211,14 @@ function writeRunDetailFromComplete(
     }
   })
 
-  // Also invalidate run list so it picks up the new status
+  // Force refetch from DB to ensure status is accurate (fixes race condition)
+  qc.invalidateQueries({ queryKey: queryKeys.runs.detail(msg.run_id) })
   qc.invalidateQueries({ queryKey: queryKeys.runs.all })
+
+  // Toast on failure
+  if (msg.status === 'failed') {
+    toast.error(`Pipeline run failed (${msg.run_id.slice(0, 8)})`)
+  }
 }
 
 // ---------------------------------------------------------------------------

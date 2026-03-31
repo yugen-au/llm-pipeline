@@ -1,3 +1,4 @@
+import { toast } from 'sonner'
 import { ApiError } from './types'
 
 /**
@@ -6,9 +7,14 @@ import { ApiError } from './types'
  * Prepends `/api` to the given path so Vite's dev proxy (and
  * same-origin prod serving) resolves the backend automatically.
  * Throws a typed {@link ApiError} on non-OK responses.
+ * Shows a toast notification on errors by default.
  */
-export async function apiClient<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, options)
+export async function apiClient<T>(
+  path: string,
+  options?: RequestInit & { silent?: boolean },
+): Promise<T> {
+  const { silent, ...fetchOptions } = options ?? {}
+  const response = await fetch(`/api${path}`, fetchOptions)
 
   if (!response.ok) {
     let detail: string = response.statusText
@@ -23,7 +29,11 @@ export async function apiClient<T>(path: string, options?: RequestInit): Promise
     } catch {
       // body not parseable as JSON, keep statusText
     }
-    throw new ApiError(response.status, detail)
+    const error = new ApiError(response.status, detail)
+    if (!silent) {
+      toast.error(`${response.status}: ${detail}`)
+    }
+    throw error
   }
 
   return response.json() as Promise<T>
