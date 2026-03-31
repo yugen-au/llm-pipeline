@@ -43,26 +43,28 @@ def session(engine):
 class TestDemoImports:
     """All public classes importable from llm_pipeline.demo and submodules."""
 
-    def test_import_text_analyzer_pipeline_from_demo(self):
-        from llm_pipeline.demo import TextAnalyzerPipeline
+    def test_import_text_analyzer_pipeline(self):
+        from llm_pipelines.pipelines.text_analyzer import TextAnalyzerPipeline
         assert TextAnalyzerPipeline is not None
 
-    def test_import_all_classes_from_pipeline_module(self):
-        from llm_pipeline.demo.pipeline import (
+    def test_import_all_classes_from_convention_modules(self):
+        from llm_pipelines.schemas.text_analyzer import (
             TextAnalyzerInputData,
             TopicItem,
             Topic,
-            TextAnalyzerRegistry,
             SentimentAnalysisInstructions,
             TopicExtractionInstructions,
             SummaryInstructions,
             SentimentAnalysisContext,
             TopicExtractionContext,
             SummaryContext,
-            TopicExtraction,
-            SentimentAnalysisStep,
-            TopicExtractionStep,
-            SummaryStep,
+        )
+        from llm_pipelines.extractions.text_analyzer import TopicExtraction
+        from llm_pipelines.steps.sentiment_analysis import SentimentAnalysisStep
+        from llm_pipelines.steps.topic_extraction import TopicExtractionStep
+        from llm_pipelines.steps.summary import SummaryStep
+        from llm_pipelines.pipelines.text_analyzer import (
+            TextAnalyzerRegistry,
             DefaultStrategy,
             TextAnalyzerStrategies,
             TextAnalyzerPipeline,
@@ -77,15 +79,9 @@ class TestDemoImports:
         ]:
             assert cls is not None
 
-    def test_prompts_module_is_deprecated_shim(self):
-        import llm_pipeline.demo.prompts
-        assert not hasattr(llm_pipeline.demo.prompts, "_seed_prompts")
-
-    def test_demo_init_exports_text_analyzer_pipeline(self):
-        import llm_pipeline.demo as demo_pkg
-        assert hasattr(demo_pkg, "TextAnalyzerPipeline")
-        assert hasattr(demo_pkg, "__all__")
-        assert "TextAnalyzerPipeline" in demo_pkg.__all__
+    def test_pipeline_importable_from_convention_dir(self):
+        from llm_pipelines.pipelines.text_analyzer import TextAnalyzerPipeline
+        assert TextAnalyzerPipeline is not None
 
 
 # ---------------------------------------------------------------------------
@@ -94,16 +90,16 @@ class TestDemoImports:
 
 class TestTextAnalyzerInputData:
     def test_is_pipeline_input_data_subclass(self):
-        from llm_pipeline.demo.pipeline import TextAnalyzerInputData
+        from llm_pipelines.schemas.text_analyzer import TextAnalyzerInputData
         assert issubclass(TextAnalyzerInputData, PipelineInputData)
 
     def test_has_text_field(self):
-        from llm_pipeline.demo.pipeline import TextAnalyzerInputData
+        from llm_pipelines.schemas.text_analyzer import TextAnalyzerInputData
         obj = TextAnalyzerInputData(text="hello world")
         assert obj.text == "hello world"
 
     def test_missing_text_raises(self):
-        from llm_pipeline.demo.pipeline import TextAnalyzerInputData
+        from llm_pipelines.schemas.text_analyzer import TextAnalyzerInputData
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
             TextAnalyzerInputData()
@@ -115,18 +111,18 @@ class TestTextAnalyzerInputData:
 
 class TestTopicItem:
     def test_has_name_and_relevance(self):
-        from llm_pipeline.demo.pipeline import TopicItem
+        from llm_pipelines.schemas.text_analyzer import TopicItem
         ti = TopicItem(name="machine learning", relevance=0.95)
         assert ti.name == "machine learning"
         assert ti.relevance == 0.95
 
     def test_relevance_is_float(self):
-        from llm_pipeline.demo.pipeline import TopicItem
+        from llm_pipelines.schemas.text_analyzer import TopicItem
         ti = TopicItem(name="ai", relevance=0.5)
         assert isinstance(ti.relevance, float)
 
     def test_missing_fields_raises(self):
-        from llm_pipeline.demo.pipeline import TopicItem
+        from llm_pipelines.schemas.text_analyzer import TopicItem
         from pydantic import ValidationError
         with pytest.raises(ValidationError):
             TopicItem(name="topic_only")
@@ -138,26 +134,26 @@ class TestTopicItem:
 
 class TestTopicModel:
     def test_tablename(self):
-        from llm_pipeline.demo.pipeline import Topic
+        from llm_pipelines.schemas.text_analyzer import Topic
         assert Topic.__tablename__ == "demo_topics"
 
     def test_columns(self):
-        from llm_pipeline.demo.pipeline import Topic
+        from llm_pipelines.schemas.text_analyzer import Topic
         cols = {c.name for c in Topic.__table__.columns}
         assert cols == {"id", "name", "relevance", "run_id"}
 
     def test_id_is_primary_key(self):
-        from llm_pipeline.demo.pipeline import Topic
+        from llm_pipelines.schemas.text_analyzer import Topic
         id_col = Topic.__table__.c["id"]
         assert id_col.primary_key
 
     def test_id_default_none(self):
-        from llm_pipeline.demo.pipeline import Topic
+        from llm_pipelines.schemas.text_analyzer import Topic
         t = Topic(name="ml", relevance=0.8, run_id="run-1")
         assert t.id is None
 
     def test_instantiation(self):
-        from llm_pipeline.demo.pipeline import Topic
+        from llm_pipelines.schemas.text_analyzer import Topic
         t = Topic(name="data science", relevance=0.75, run_id="abc-123")
         assert t.name == "data science"
         assert t.relevance == 0.75
@@ -170,66 +166,66 @@ class TestTopicModel:
 
 class TestSentimentAnalysisInstructions:
     def test_inherits_llm_result_mixin(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisInstructions
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisInstructions
         assert issubclass(SentimentAnalysisInstructions, LLMResultMixin)
 
     def test_safe_defaults(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisInstructions
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisInstructions
         obj = SentimentAnalysisInstructions()
         assert obj.sentiment == ""
         assert obj.explanation == ""
 
     def test_has_example(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisInstructions
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisInstructions
         ex = SentimentAnalysisInstructions.get_example()
         assert ex is not None
         assert ex.sentiment == "positive"
 
     def test_class_name_matches_convention(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisInstructions
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisInstructions
         assert SentimentAnalysisInstructions.__name__ == "SentimentAnalysisInstructions"
 
 
 class TestTopicExtractionInstructions:
     def test_inherits_llm_result_mixin(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionInstructions
+        from llm_pipelines.extractions.text_analyzer import TopicExtractionInstructions
         assert issubclass(TopicExtractionInstructions, LLMResultMixin)
 
     def test_safe_defaults(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionInstructions
+        from llm_pipelines.extractions.text_analyzer import TopicExtractionInstructions
         obj = TopicExtractionInstructions()
         assert obj.topics == []
         assert obj.primary_topic == ""
 
     def test_has_example(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionInstructions
+        from llm_pipelines.extractions.text_analyzer import TopicExtractionInstructions
         ex = TopicExtractionInstructions.get_example()
         assert ex is not None
         assert ex.primary_topic == "machine learning"
 
     def test_class_name_matches_convention(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionInstructions
+        from llm_pipelines.extractions.text_analyzer import TopicExtractionInstructions
         assert TopicExtractionInstructions.__name__ == "TopicExtractionInstructions"
 
 
 class TestSummaryInstructions:
     def test_inherits_llm_result_mixin(self):
-        from llm_pipeline.demo.pipeline import SummaryInstructions
+        from llm_pipelines.schemas.text_analyzer import SummaryInstructions
         assert issubclass(SummaryInstructions, LLMResultMixin)
 
     def test_safe_defaults(self):
-        from llm_pipeline.demo.pipeline import SummaryInstructions
+        from llm_pipelines.schemas.text_analyzer import SummaryInstructions
         obj = SummaryInstructions()
         assert obj.summary == ""
 
     def test_has_example(self):
-        from llm_pipeline.demo.pipeline import SummaryInstructions
+        from llm_pipelines.schemas.text_analyzer import SummaryInstructions
         ex = SummaryInstructions.get_example()
         assert ex is not None
         assert "summary" in ex.model_dump()
 
     def test_class_name_matches_convention(self):
-        from llm_pipeline.demo.pipeline import SummaryInstructions
+        from llm_pipelines.schemas.text_analyzer import SummaryInstructions
         assert SummaryInstructions.__name__ == "SummaryInstructions"
 
 
@@ -239,43 +235,43 @@ class TestSummaryInstructions:
 
 class TestSentimentAnalysisContext:
     def test_is_pipeline_context_subclass(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisContext
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisContext
         assert issubclass(SentimentAnalysisContext, PipelineContext)
 
     def test_instantiation(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisContext
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisContext
         ctx = SentimentAnalysisContext(sentiment="positive")
         assert ctx.sentiment == "positive"
 
     def test_class_name_matches_convention(self):
-        from llm_pipeline.demo.pipeline import SentimentAnalysisContext
+        from llm_pipelines.schemas.text_analyzer import SentimentAnalysisContext
         assert SentimentAnalysisContext.__name__ == "SentimentAnalysisContext"
 
 
 class TestTopicExtractionContext:
     def test_is_pipeline_context_subclass(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionContext
+        from llm_pipelines.schemas.text_analyzer import TopicExtractionContext
         assert issubclass(TopicExtractionContext, PipelineContext)
 
     def test_instantiation(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionContext
+        from llm_pipelines.schemas.text_analyzer import TopicExtractionContext
         ctx = TopicExtractionContext(primary_topic="ml", topics=["ml", "ai"])
         assert ctx.primary_topic == "ml"
         assert ctx.topics == ["ml", "ai"]
 
     def test_topics_is_list_of_strings(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionContext
+        from llm_pipelines.schemas.text_analyzer import TopicExtractionContext
         ctx = TopicExtractionContext(primary_topic="x", topics=["a", "b", "c"])
         assert all(isinstance(t, str) for t in ctx.topics)
 
 
 class TestSummaryContext:
     def test_is_pipeline_context_subclass(self):
-        from llm_pipeline.demo.pipeline import SummaryContext
+        from llm_pipelines.schemas.text_analyzer import SummaryContext
         assert issubclass(SummaryContext, PipelineContext)
 
     def test_instantiation(self):
-        from llm_pipeline.demo.pipeline import SummaryContext
+        from llm_pipelines.schemas.text_analyzer import SummaryContext
         ctx = SummaryContext(summary="A concise summary.")
         assert ctx.summary == "A concise summary."
 
@@ -286,31 +282,31 @@ class TestSummaryContext:
 
 class TestDefaultStrategy:
     def test_name_is_default(self):
-        from llm_pipeline.demo.pipeline import DefaultStrategy
+        from llm_pipelines.pipelines.text_analyzer import DefaultStrategy
         assert DefaultStrategy.NAME == "default"
 
     def test_can_handle_always_returns_true(self):
-        from llm_pipeline.demo.pipeline import DefaultStrategy
+        from llm_pipelines.pipelines.text_analyzer import DefaultStrategy
         s = DefaultStrategy()
         assert s.can_handle({}) is True
         assert s.can_handle({"sentiment": "positive"}) is True
         assert s.can_handle({"any": "value"}) is True
 
     def test_get_steps_returns_three_steps(self):
-        from llm_pipeline.demo.pipeline import DefaultStrategy
+        from llm_pipelines.pipelines.text_analyzer import DefaultStrategy
         s = DefaultStrategy()
         steps = s.get_steps()
         assert len(steps) == 3
 
     def test_step_names_ordered(self):
-        from llm_pipeline.demo.pipeline import DefaultStrategy
+        from llm_pipelines.pipelines.text_analyzer import DefaultStrategy
         s = DefaultStrategy()
         steps = s.get_steps()
         names = [st.step_name for st in steps]
         assert names == ["sentiment_analysis", "topic_extraction", "summary"]
 
     def test_steps_are_step_definitions(self):
-        from llm_pipeline.demo.pipeline import DefaultStrategy
+        from llm_pipelines.pipelines.text_analyzer import DefaultStrategy
         from llm_pipeline.strategy import StepDefinition
         s = DefaultStrategy()
         steps = s.get_steps()
@@ -324,7 +320,7 @@ class TestDefaultStrategy:
 
 class TestTopicExtraction:
     def _make_extraction(self, run_id="test-run"):
-        from llm_pipeline.demo.pipeline import TopicExtraction
+        from llm_pipelines.extractions.text_analyzer import TopicExtraction
 
         mock = type("MockPipeline", (), {"run_id": run_id})()
         extraction = object.__new__(TopicExtraction)
@@ -332,7 +328,7 @@ class TestTopicExtraction:
         return extraction
 
     def test_converts_topic_items_to_topics(self):
-        from llm_pipeline.demo.pipeline import TopicItem, TopicExtractionInstructions, Topic
+        from llm_pipelines.schemas.text_analyzer import TopicItem, TopicExtractionInstructions, Topic
         extraction = self._make_extraction()
         instructions = [TopicExtractionInstructions(
             topics=[TopicItem(name="ml", relevance=0.9)],
@@ -343,7 +339,7 @@ class TestTopicExtraction:
         assert isinstance(result[0], Topic)
 
     def test_sets_run_id(self):
-        from llm_pipeline.demo.pipeline import TopicItem, TopicExtractionInstructions
+        from llm_pipelines.schemas.text_analyzer import TopicItem, TopicExtractionInstructions
         extraction = self._make_extraction(run_id="run-abc-123")
         instructions = [TopicExtractionInstructions(
             topics=[TopicItem(name="ai", relevance=0.8)],
@@ -353,7 +349,7 @@ class TestTopicExtraction:
         assert result[0].run_id == "run-abc-123"
 
     def test_preserves_name_and_relevance(self):
-        from llm_pipeline.demo.pipeline import TopicItem, TopicExtractionInstructions
+        from llm_pipelines.schemas.text_analyzer import TopicItem, TopicExtractionInstructions
         extraction = self._make_extraction()
         instructions = [TopicExtractionInstructions(
             topics=[
@@ -370,14 +366,14 @@ class TestTopicExtraction:
         assert result[1].relevance == 0.6
 
     def test_empty_topics_returns_empty_list(self):
-        from llm_pipeline.demo.pipeline import TopicExtractionInstructions
+        from llm_pipelines.extractions.text_analyzer import TopicExtractionInstructions
         extraction = self._make_extraction()
         instructions = [TopicExtractionInstructions(topics=[], primary_topic="")]
         result = extraction.default(instructions)
         assert result == []
 
     def test_does_not_override_extract(self):
-        from llm_pipeline.demo.pipeline import TopicExtraction
+        from llm_pipelines.extractions.text_analyzer import TopicExtraction
         from llm_pipeline.extraction import PipelineExtraction
         # default() must be defined; extract() must not be overridden
         assert "default" in TopicExtraction.__dict__
@@ -436,7 +432,7 @@ class TestEntryPoint:
 
     def test_entry_point_loads_text_analyzer_pipeline(self):
         import importlib.metadata
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
+        from llm_pipelines.pipelines.text_analyzer import TextAnalyzerPipeline
         eps = {ep.name: ep for ep in importlib.metadata.entry_points(group="llm_pipeline.pipelines")}
         loaded = eps["text_analyzer"].load()
         assert loaded is TextAnalyzerPipeline
@@ -448,11 +444,12 @@ class TestEntryPoint:
 
 class TestTextAnalyzerPipelineConfig:
     def test_has_input_data_class_var(self):
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline, TextAnalyzerInputData
+        from llm_pipelines.pipelines.text_analyzer import TextAnalyzerPipeline
+        from llm_pipelines.schemas.text_analyzer import TextAnalyzerInputData
         assert TextAnalyzerPipeline.INPUT_DATA is TextAnalyzerInputData
 
     def test_no_seed_prompts_classmethod(self):
         """Demo prompts come from YAML now, no _seed_prompts needed."""
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
+        from llm_pipelines.pipelines.text_analyzer import TextAnalyzerPipeline
         assert not hasattr(TextAnalyzerPipeline, "_seed_prompts")
 

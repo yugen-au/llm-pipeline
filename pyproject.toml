@@ -22,7 +22,7 @@ dependencies = [
 llm-pipeline = "llm_pipeline.ui.cli:main"
 
 [project.entry-points."llm_pipeline.pipelines"]
-text_analyzer = "llm_pipeline.demo:TextAnalyzerPipeline"
+text_analyzer = "llm_pipelines.pipelines.text_analyzer:TextAnalyzerPipeline"
 step_creator = "llm_pipeline.creator:StepCreatorPipeline"
 
 [project.optional-dependencies]
