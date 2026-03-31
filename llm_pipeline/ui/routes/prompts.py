@@ -286,3 +286,26 @@ def delete_prompt(
     prompt.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"detail": "Prompt deactivated"}
+
+
+@router.get("/{prompt_key}/{prompt_type}/variables")
+def get_prompt_variable_schema(prompt_key: str, prompt_type: str) -> dict:
+    """Return typed variable schema if a PromptVariables class is registered."""
+    from llm_pipeline.prompts.variables import get_prompt_variables
+
+    cls = get_prompt_variables(prompt_key, prompt_type)
+    if cls is None:
+        return {"registered": False, "fields": []}
+
+    fields = []
+    for name, field_info in cls.model_fields.items():
+        annotation = field_info.annotation
+        type_name = getattr(annotation, '__name__', str(annotation))
+        fields.append({
+            "name": name,
+            "type": type_name,
+            "description": field_info.description,
+            "required": field_info.is_required(),
+            "has_default": field_info.default is not None or field_info.default_factory is not None,
+        })
+    return {"registered": True, "class_name": cls.__name__, "fields": fields}

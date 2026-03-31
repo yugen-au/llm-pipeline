@@ -122,3 +122,30 @@ export function useDeletePrompt(promptKey: string, promptType: string) {
     },
   })
 }
+
+// ---------------------------------------------------------------------------
+// Variable schema
+// ---------------------------------------------------------------------------
+
+interface VariableField {
+  name: string
+  type: string
+  description: string
+  required: boolean
+  has_default: boolean
+}
+
+interface VariableSchemaResponse {
+  registered: boolean
+  class_name?: string
+  fields: VariableField[]
+}
+
+export function usePromptVariableSchema(promptKey: string, promptType: string) {
+  return useQuery({
+    queryKey: ['prompts', promptKey, promptType, 'variables'] as const,
+    queryFn: () => apiClient<VariableSchemaResponse>(`/prompts/${promptKey}/${promptType}/variables`),
+    enabled: Boolean(promptKey && promptType),
+    staleTime: Infinity,
+  })
+}

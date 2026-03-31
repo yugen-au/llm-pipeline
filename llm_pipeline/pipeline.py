@@ -221,6 +221,9 @@ class PipelineConfig(ABC):
         from llm_pipeline.session import ReadOnlySession
 
         self._model = model
+        if variable_resolver is None:
+            from llm_pipeline.prompts.variables import RegistryVariableResolver
+            variable_resolver = RegistryVariableResolver()
         self._variable_resolver = variable_resolver
         self._event_emitter = event_emitter
         self._instrumentation_settings = instrumentation_settings

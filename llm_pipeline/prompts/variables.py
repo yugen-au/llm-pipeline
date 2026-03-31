@@ -1,8 +1,10 @@
 """
-Variable resolver protocol for prompt variable resolution.
+Prompt variable resolution: registry, protocol, and base class.
 
-Allows host projects to provide custom variable resolution logic
-without coupling the pipeline to specific variable class implementations.
+PromptVariables -- base class enforcing Field(description=...) on all fields.
+register_prompt_variables() -- register a class for a (prompt_key, prompt_type) pair.
+RegistryVariableResolver -- built-in resolver backed by the global registry.
+VariableResolver -- protocol for custom resolvers (backward compat).
 """
 from typing import Optional, Protocol, Type, runtime_checkable
 from pydantic import BaseModel, ConfigDict
@@ -42,40 +44,82 @@ class PromptVariables(BaseModel):
                     )
 
 
+# ---------------------------------------------------------------------------
+# Global prompt variables registry
+# ---------------------------------------------------------------------------
+
+_VARIABLE_REGISTRY: dict[tuple[str, str], Type[PromptVariables]] = {}
+
+
+def register_prompt_variables(
+    prompt_key: str, prompt_type: str, cls: Type[PromptVariables]
+) -> None:
+    """Register a PromptVariables class for a prompt key + type.
+
+    Overwrites if already registered.
+    """
+    _VARIABLE_REGISTRY[(prompt_key, prompt_type)] = cls
+
+
+def get_prompt_variables(
+    prompt_key: str, prompt_type: str
+) -> Type[PromptVariables] | None:
+    """Look up registered variables class. Returns None if not registered."""
+    return _VARIABLE_REGISTRY.get((prompt_key, prompt_type))
+
+
+def get_all_prompt_variables() -> dict[tuple[str, str], Type[PromptVariables]]:
+    """Return copy of all registered variable classes (for introspection)."""
+    return dict(_VARIABLE_REGISTRY)
+
+
+def clear_prompt_variables_registry() -> None:
+    """Clear registry. Use in test teardown."""
+    _VARIABLE_REGISTRY.clear()
+
+
+# ---------------------------------------------------------------------------
+# Built-in resolver backed by registry
+# ---------------------------------------------------------------------------
+
+
+class RegistryVariableResolver:
+    """Built-in VariableResolver backed by the global prompt variables registry.
+
+    Used as default when no custom resolver is passed to PipelineConfig.
+    """
+
+    def resolve(
+        self, prompt_key: str, prompt_type: str
+    ) -> Type[BaseModel] | None:
+        return get_prompt_variables(prompt_key, prompt_type)
+
+
+# ---------------------------------------------------------------------------
+# Protocol (backward compat for custom resolvers)
+# ---------------------------------------------------------------------------
+
+
 @runtime_checkable
 class VariableResolver(Protocol):
-    """
-    Protocol for resolving prompt variable classes.
+    """Protocol for resolving prompt variable classes.
 
-    Host projects implement this to provide their specific prompt variable
-    classes (e.g., get_variable_class from logistics-intelligence).
-
-    Example:
-        class MyVariableResolver:
-            def resolve(self, prompt_key: str, prompt_type: str) -> Type[BaseModel] | None:
-                # Look up variable class for this prompt
-                return my_variable_registry.get(prompt_key, prompt_type)
-
-        pipeline = MyPipeline(
-            model='google-gla:gemini-2.0-flash-lite',
-            variable_resolver=MyVariableResolver()
-        )
+    The built-in RegistryVariableResolver handles most cases. Implement
+    this protocol only if you need custom resolution logic.
     """
 
     def resolve(
         self, prompt_key: str, prompt_type: str
     ) -> Optional[Type[BaseModel]]:
-        """
-        Resolve a prompt key and type to a variable class.
-
-        Args:
-            prompt_key: The prompt key (e.g., 'semantic_mapping.system_instruction')
-            prompt_type: The prompt type ('system' or 'user')
-
-        Returns:
-            A Pydantic BaseModel subclass for the variables, or None if not found
-        """
         ...
 
 
-__all__ = ["PromptVariables", "VariableResolver"]
+__all__ = [
+    "PromptVariables",
+    "VariableResolver",
+    "RegistryVariableResolver",
+    "register_prompt_variables",
+    "get_prompt_variables",
+    "get_all_prompt_variables",
+    "clear_prompt_variables_registry",
+]

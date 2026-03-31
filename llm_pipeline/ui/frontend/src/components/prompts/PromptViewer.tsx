@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
 import { Save, Undo2, Trash2 } from 'lucide-react'
-import { usePromptDetail, useCreatePrompt, useUpdatePrompt, useDeletePrompt } from '@/api/prompts'
+import { usePromptDetail, useCreatePrompt, useUpdatePrompt, useDeletePrompt, usePromptVariableSchema } from '@/api/prompts'
 import type { PromptCreateRequest, PromptUpdateRequest } from '@/api/prompts'
 import type { PromptVariant } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
+} from '@/components/ui/table'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -164,8 +167,58 @@ function MetadataGrid({
 // Variable preview
 // ---------------------------------------------------------------------------
 
-function VariablePreview({ content }: { content: string }) {
+function VariablePreview({
+  content,
+  promptKey,
+  promptType,
+}: {
+  content: string
+  promptKey?: string
+  promptType?: string
+}) {
   const vars = useMemo(() => extractVariables(content), [content])
+  const { data: schema } = usePromptVariableSchema(promptKey ?? '', promptType ?? '')
+
+  if (vars.length === 0 && !schema?.fields?.length) return null
+
+  // Show schema table when registered
+  if (schema?.registered && schema.fields.length > 0) {
+    return (
+      <div className="space-y-1">
+        <span className="text-xs text-muted-foreground">
+          Variables ({schema.class_name})
+        </span>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="h-8 text-xs">Variable</TableHead>
+              <TableHead className="h-8 text-xs">Type</TableHead>
+              <TableHead className="h-8 text-xs">Description</TableHead>
+              <TableHead className="h-8 text-xs">Required</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {schema.fields.map((f) => (
+              <TableRow key={f.name}>
+                <TableCell className="py-1 font-mono text-xs">{f.name}</TableCell>
+                <TableCell className="py-1 text-xs">{f.type}</TableCell>
+                <TableCell className="py-1 text-xs text-muted-foreground">{f.description || '-'}</TableCell>
+                <TableCell className="py-1 text-xs">
+                  {f.required ? (
+                    <Badge variant="default" className="text-[10px] px-1.5 py-0">yes</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">no</Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    )
+  }
+
+  // Fallback: badge display from regex extraction
   if (vars.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1">
@@ -252,7 +305,7 @@ function VariantEditor({
         />
       </div>
 
-      <VariablePreview content={form.content} />
+      <VariablePreview content={form.content} promptKey={promptKey} promptType={variant.prompt_type} />
 
       <div className="flex items-center gap-2 border-t pt-3">
         <Button size="sm" disabled={!dirty || updateMutation.isPending} onClick={handleSave}>
