@@ -296,12 +296,28 @@ class TestWritePromptToYaml:
         assert "user" in doc
         assert doc["user"]["version"] == "1.0"
 
-    def test_no_file_returns_false(self, tmp_path):
-        result = write_prompt_to_yaml(tmp_path, "nonexistent", "system", {
+    def test_creates_new_file(self, tmp_path):
+        result = write_prompt_to_yaml(tmp_path, "new_prompt", "system", {
+            "content": "hello\n",
+            "version": "1.0",
+            "prompt_name": "New Prompt",
+            "category": "test",
+            "step_name": "test_step",
+        })
+        assert result is True
+        with open(tmp_path / "new_prompt.yaml", "r") as f:
+            doc = yaml.safe_load(f)
+        assert doc["prompt_key"] == "new_prompt"
+        assert doc["system"]["version"] == "1.0"
+
+    def test_creates_dir_if_missing(self, tmp_path):
+        new_dir = tmp_path / "subdir"
+        result = write_prompt_to_yaml(new_dir, "test", "system", {
             "content": "hello",
             "version": "1.0",
         })
-        assert result is False
+        assert result is True
+        assert (new_dir / "test.yaml").exists()
 
     def test_preserves_shared_fields(self, tmp_path):
         _write_yaml(tmp_path, "test_prompt.yaml", VALID_YAML_BOTH)

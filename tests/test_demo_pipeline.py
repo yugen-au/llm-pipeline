@@ -77,10 +77,9 @@ class TestDemoImports:
         ]:
             assert cls is not None
 
-    def test_import_seed_prompts_from_prompts_module(self):
-        from llm_pipeline.demo.prompts import _seed_prompts, ALL_PROMPTS
-        assert callable(_seed_prompts)
-        assert isinstance(ALL_PROMPTS, list)
+    def test_prompts_module_is_deprecated_shim(self):
+        import llm_pipeline.demo.prompts
+        assert not hasattr(llm_pipeline.demo.prompts, "_seed_prompts")
 
     def test_demo_init_exports_text_analyzer_pipeline(self):
         import llm_pipeline.demo as demo_pkg
@@ -389,55 +388,39 @@ class TestTopicExtraction:
 # seed_prompts idempotency and table creation
 # ---------------------------------------------------------------------------
 
-class TestSeedPrompts:
-    @pytest.fixture
-    def seed_engine(self):
-        eng = create_engine("sqlite:///:memory:", echo=False)
-        SQLModel.metadata.create_all(eng)
-        return eng
+class TestYamlPrompts:
+    """Demo prompts now live in llm-pipeline-prompts/*.yaml."""
 
-    def test_creates_demo_topics_table(self, seed_engine):
-        from llm_pipeline.demo.prompts import _seed_prompts
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        from sqlalchemy import inspect
-        _seed_prompts(TextAnalyzerPipeline, seed_engine)
-        inspector = inspect(seed_engine)
-        assert "demo_topics" in inspector.get_table_names()
+    def test_yaml_files_exist(self):
+        from pathlib import Path
+        prompts_dir = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
+        assert (prompts_dir / "sentiment_analysis.yaml").exists()
+        assert (prompts_dir / "topic_extraction.yaml").exists()
+        assert (prompts_dir / "summary.yaml").exists()
 
-    def test_inserts_six_prompts(self, seed_engine):
-        from llm_pipeline.demo.prompts import _seed_prompts
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        _seed_prompts(TextAnalyzerPipeline, seed_engine)
-        with Session(seed_engine) as session:
+    def test_yaml_prompts_parse(self):
+        from pathlib import Path
+        from llm_pipeline.prompts.yaml_sync import discover_yaml_prompts
+        prompts_dir = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
+        variants = discover_yaml_prompts(prompts_dir)
+        assert len(variants) == 6  # 3 keys x 2 variants (system + user)
+        keys = {v["prompt_key"] for v in variants}
+        assert keys == {"sentiment_analysis", "topic_extraction", "summary"}
+
+    def test_yaml_sync_to_db(self):
+        from pathlib import Path
+        from sqlalchemy.pool import StaticPool
+        from llm_pipeline.db import init_pipeline_db
+        from llm_pipeline.prompts.yaml_sync import sync_yaml_to_db
+        engine = init_pipeline_db(create_engine(
+            "sqlite://", connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        ))
+        prompts_dir = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
+        sync_yaml_to_db(engine, prompts_dir)
+        with Session(engine) as session:
             prompts = session.exec(select(Prompt)).all()
         assert len(prompts) == 6
-
-    def test_idempotent_double_seed(self, seed_engine):
-        from llm_pipeline.demo.prompts import _seed_prompts
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        _seed_prompts(TextAnalyzerPipeline, seed_engine)
-        _seed_prompts(TextAnalyzerPipeline, seed_engine)
-        with Session(seed_engine) as session:
-            prompts = session.exec(select(Prompt)).all()
-        assert len(prompts) == 6
-
-    def test_seeds_system_and_user_for_each_step(self, seed_engine):
-        from llm_pipeline.demo.prompts import _seed_prompts
-        from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        _seed_prompts(TextAnalyzerPipeline, seed_engine)
-        with Session(seed_engine) as session:
-            prompts = session.exec(select(Prompt)).all()
-        keys_by_type = {
-            "system": {p.prompt_key for p in prompts if p.prompt_type == "system"},
-            "user": {p.prompt_key for p in prompts if p.prompt_type == "user"},
-        }
-        expected_keys = {"sentiment_analysis", "topic_extraction", "summary"}
-        assert keys_by_type["system"] == expected_keys
-        assert keys_by_type["user"] == expected_keys
-
-    def test_all_prompts_constant_has_six_entries(self):
-        from llm_pipeline.demo.prompts import ALL_PROMPTS
-        assert len(ALL_PROMPTS) == 6
 
 
 # ---------------------------------------------------------------------------
@@ -468,7 +451,8 @@ class TestTextAnalyzerPipelineConfig:
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline, TextAnalyzerInputData
         assert TextAnalyzerPipeline.INPUT_DATA is TextAnalyzerInputData
 
-    def test_has_seed_prompts_classmethod(self):
+    def test_no_seed_prompts_classmethod(self):
+        """Demo prompts come from YAML now, no _seed_prompts needed."""
         from llm_pipeline.demo.pipeline import TextAnalyzerPipeline
-        assert callable(getattr(TextAnalyzerPipeline, "_seed_prompts", None))
+        assert not hasattr(TextAnalyzerPipeline, "_seed_prompts")
 

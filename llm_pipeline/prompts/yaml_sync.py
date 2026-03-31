@@ -143,17 +143,23 @@ def discover_yaml_prompts(prompts_dir: Path) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def sync_yaml_to_db(engine: "Engine", prompts_dir: Path) -> None:  # noqa: F821
+def sync_yaml_to_db(engine: "Engine", prompts_dirs: "Path | list[Path]") -> None:  # noqa: F821
     """Sync YAML prompt files into the database.
 
-    For each variant: insert if missing, update if YAML version is newer,
-    skip if DB version is same or newer.
+    Accepts a single Path or list of Paths. For each variant: insert if
+    missing, update if YAML version is newer, skip if same or older.
     """
     from sqlmodel import Session, select
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.prompts.variables import rebuild_from_db
 
-    variants = discover_yaml_prompts(prompts_dir)
+    if isinstance(prompts_dirs, Path):
+        prompts_dirs = [prompts_dirs]
+
+    variants: list[dict] = []
+    for d in prompts_dirs:
+        if d.is_dir():
+            variants.extend(discover_yaml_prompts(d))
     if not variants:
         return
 
@@ -199,8 +205,8 @@ def sync_yaml_to_db(engine: "Engine", prompts_dir: Path) -> None:  # noqa: F821
 
     if inserted or updated:
         logger.info(
-            "YAML prompt sync: %d inserted, %d updated from %s",
-            inserted, updated, prompts_dir,
+            "YAML prompt sync: %d inserted, %d updated from %d dir(s)",
+            inserted, updated, len(prompts_dirs),
         )
 
 
@@ -224,15 +230,17 @@ def write_prompt_to_yaml(
 ) -> bool:
     """Write updated prompt data back to its YAML file.
 
-    Only updates existing files — does not create new ones.
-    Returns True if file was updated, False if no file exists.
+    Creates new files if they don't exist. Creates the directory if needed.
+    Returns True if file was written.
     """
+    prompts_dir.mkdir(parents=True, exist_ok=True)
     yaml_path = prompts_dir / f"{prompt_key}.yaml"
-    if not yaml_path.exists():
-        return False
 
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        doc = yaml.safe_load(f) or {}
+    if yaml_path.exists():
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            doc = yaml.safe_load(f) or {}
+    else:
+        doc = {"prompt_key": prompt_key}
 
     # Update shared top-level fields
     if "prompt_name" in data and data["prompt_name"]:

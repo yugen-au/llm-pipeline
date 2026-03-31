@@ -55,8 +55,8 @@ source = "vcs"
 path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm_pipeline"]
-artifacts = ["llm_pipeline/ui/frontend/dist/**"]
+packages = ["llm_pipeline", "llm_pipelines"]
+artifacts = ["llm_pipeline/ui/frontend/dist/**", "llm-pipeline-prompts/**"]
 exclude = [
     "llm_pipeline/ui/frontend/node_modules/**",
     "llm_pipeline/ui/frontend/.vite/**",

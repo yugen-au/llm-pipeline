@@ -297,27 +297,37 @@ def create_app(
         module_pipeline: Dict[str, Callable] = {}
         module_introspection: Dict[str, Type[PipelineConfig]] = {}
 
-    # Registry setup: merge order auto-discovered < module-loaded < explicit
+    # Convention-based discovery (llm_pipelines/ directories)
+    from llm_pipeline.discovery import discover_from_convention
+    convention_pipeline, convention_introspection = discover_from_convention(
+        app.state.engine, resolved_model
+    )
+
+    # Registry setup: merge order entry-points < convention < module-loaded < explicit
     if auto_discover:
         discovered_pipeline, discovered_introspection = _discover_pipelines(
             app.state.engine, resolved_model
         )
         app.state.pipeline_registry = {
             **discovered_pipeline,
+            **convention_pipeline,
             **module_pipeline,
             **(pipeline_registry or {}),
         }
         app.state.introspection_registry = {
             **discovered_introspection,
+            **convention_introspection,
             **module_introspection,
             **(introspection_registry or {}),
         }
     else:
         app.state.pipeline_registry = {
+            **convention_pipeline,
             **module_pipeline,
             **(pipeline_registry or {}),
         }
         app.state.introspection_registry = {
+            **convention_introspection,
             **module_introspection,
             **(introspection_registry or {}),
         }
@@ -330,21 +340,29 @@ def create_app(
     if resolved_base:
         set_auto_generate_base_path(resolved_base)
 
-    # YAML prompt sync: param > env > default dir
+    # YAML prompt sync: scan package-level + project-level dirs
     from pathlib import Path
     from llm_pipeline.prompts.yaml_sync import sync_yaml_to_db
-    resolved_prompts_dir = Path(
+
+    prompt_scan_dirs: list[Path] = []
+    # Package-level prompts (ships with package)
+    pkg_prompts = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
+    if pkg_prompts.is_dir():
+        prompt_scan_dirs.append(pkg_prompts)
+    # Project-level prompts (CWD or env/param override)
+    project_prompts = Path(
         prompts_dir
         or os.environ.get("LLM_PIPELINE_PROMPTS_DIR", "llm-pipeline-prompts")
     )
-    if not resolved_prompts_dir.is_absolute():
-        resolved_prompts_dir = Path.cwd() / resolved_prompts_dir
-    if resolved_prompts_dir.is_dir():
-        sync_yaml_to_db(app.state.engine, resolved_prompts_dir)
-        app.state.prompts_dir = resolved_prompts_dir
-    else:
-        app.state.prompts_dir = None
-        logger.debug("Prompts dir %s not found, YAML sync skipped", resolved_prompts_dir)
+    if not project_prompts.is_absolute():
+        project_prompts = Path.cwd() / project_prompts
+    if project_prompts.is_dir() and project_prompts.resolve() != pkg_prompts.resolve():
+        prompt_scan_dirs.append(project_prompts)
+
+    if prompt_scan_dirs:
+        sync_yaml_to_db(app.state.engine, prompt_scan_dirs)
+    # Write-back always targets project-level dir (creates if needed)
+    app.state.prompts_dir = project_prompts
 
     # Sync DB-stored variable_definitions into runtime registry
     _sync_variable_definitions(app.state.engine)

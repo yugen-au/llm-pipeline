@@ -1,0 +1,29 @@
+prompt_key: topic_extraction
+prompt_name: Topic Extraction
+category: text_analyzer
+step_name: topic_extraction
+
+system:
+  content: >-
+    You are a topic extraction specialist. Identify the key topics discussed
+    in the provided text. For each topic, assign a relevance score between 0
+    and 1. Determine the single primary topic. Consider the sentiment context
+    when evaluating topic importance.
+  description: System prompt for topic extraction step
+  version: "1.0"
+
+user:
+  content: |
+    Extract topics from the following text. The text has been analyzed as having a {sentiment} sentiment.
+
+    Text:
+    {text}
+  description: User prompt for topic extraction step
+  version: "1.0"
+  variable_definitions:
+    text:
+      type: str
+      description: Input text to extract topics from
+    sentiment:
+      type: str
+      description: Previously detected sentiment
