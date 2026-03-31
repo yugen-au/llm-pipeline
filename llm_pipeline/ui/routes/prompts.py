@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Annotated, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -261,6 +261,7 @@ def update_prompt(
     prompt_type: str,
     body: PromptUpdateRequest,
     db: WritableDBSession,
+    request: Request,
 ) -> PromptItem:
     """Update an existing prompt."""
     stmt = select(Prompt).where(
@@ -306,6 +307,20 @@ def update_prompt(
 
     if var_defs_changed and prompt.variable_definitions:
         rebuild_from_db(prompt.prompt_key, prompt.prompt_type, prompt.variable_definitions)
+
+    # Write back to YAML if managed
+    prompts_dir = getattr(request.app.state, "prompts_dir", None)
+    if prompts_dir:
+        from llm_pipeline.prompts.yaml_sync import write_prompt_to_yaml
+        write_prompt_to_yaml(prompts_dir, prompt_key, prompt_type, {
+            "content": prompt.content,
+            "description": prompt.description,
+            "version": prompt.version,
+            "variable_definitions": prompt.variable_definitions,
+            "prompt_name": prompt.prompt_name,
+            "category": prompt.category,
+            "step_name": prompt.step_name,
+        })
 
     return _to_prompt_item(prompt)
 

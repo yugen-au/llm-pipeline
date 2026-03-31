@@ -16,6 +16,13 @@ from llm_pipeline.prompts.variables import (
     set_auto_generate_base_path,
     clear_auto_generate_registry,
 )
+from llm_pipeline.prompts.yaml_sync import (
+    compare_versions,
+    parse_prompt_yaml,
+    discover_yaml_prompts,
+    sync_yaml_to_db,
+    write_prompt_to_yaml,
+)
 
 __all__ = [
     "PromptService",
@@ -30,4 +37,9 @@ __all__ = [
     "register_auto_generate",
     "set_auto_generate_base_path",
     "clear_auto_generate_registry",
+    "compare_versions",
+    "parse_prompt_yaml",
+    "discover_yaml_prompts",
+    "sync_yaml_to_db",
+    "write_prompt_to_yaml",
 ]

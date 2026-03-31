@@ -38,6 +38,12 @@ def main() -> None:
         metavar="MODULE",
         help="Python module path to scan for PipelineConfig subclasses (repeatable)",
     )
+    ui_parser.add_argument(
+        "--prompts-dir",
+        type=str,
+        default=None,
+        help="Directory containing prompt YAML files",
+    )
 
     args = parser.parse_args()
 
@@ -60,6 +66,7 @@ def _run_ui(args: argparse.Namespace) -> None:
                 db_path=args.db,
                 default_model=args.model,
                 pipeline_modules=args.pipelines,
+                prompts_dir=args.prompts_dir,
             )
             _run_prod_mode(app, args.port)
     except ImportError as e:
@@ -102,6 +109,8 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         os.environ["LLM_PIPELINE_MODEL"] = args.model
     if args.pipelines:
         os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
+    if getattr(args, "prompts_dir", None) and isinstance(args.prompts_dir, str):
+        os.environ["LLM_PIPELINE_PROMPTS_DIR"] = args.prompts_dir
 
     frontend_dir = Path(__file__).resolve().parent / "frontend"
     vite_proc = None

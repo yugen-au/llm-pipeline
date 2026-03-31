@@ -198,6 +198,7 @@ def create_app(
     default_model: Optional[str] = None,
     pipeline_modules: Optional[List[str]] = None,
     auto_generate_base_path: Optional[str] = None,
+    prompts_dir: Optional[str] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -328,6 +329,22 @@ def create_app(
     )
     if resolved_base:
         set_auto_generate_base_path(resolved_base)
+
+    # YAML prompt sync: param > env > default dir
+    from pathlib import Path
+    from llm_pipeline.prompts.yaml_sync import sync_yaml_to_db
+    resolved_prompts_dir = Path(
+        prompts_dir
+        or os.environ.get("LLM_PIPELINE_PROMPTS_DIR", "llm-pipeline-prompts")
+    )
+    if not resolved_prompts_dir.is_absolute():
+        resolved_prompts_dir = Path.cwd() / resolved_prompts_dir
+    if resolved_prompts_dir.is_dir():
+        sync_yaml_to_db(app.state.engine, resolved_prompts_dir)
+        app.state.prompts_dir = resolved_prompts_dir
+    else:
+        app.state.prompts_dir = None
+        logger.debug("Prompts dir %s not found, YAML sync skipped", resolved_prompts_dir)
 
     # Sync DB-stored variable_definitions into runtime registry
     _sync_variable_definitions(app.state.engine)
