@@ -37,6 +37,7 @@ class StepDefinition:
     transformation: Optional[Type['PipelineTransformation']] = None
     context: Optional[Type] = None  # Type is PipelineContext but avoid circular import
     agent_name: str | None = None
+    model: str | None = None
     not_found_indicators: list[str] | None = None
     consensus_strategy: 'ConsensusStrategy | None' = None
 
@@ -140,6 +141,7 @@ class StepDefinition:
         step._transformation = self.transformation
         step._context = self.context
         step._agent_name = self.agent_name
+        step._step_model = self.model
         return step
 
 

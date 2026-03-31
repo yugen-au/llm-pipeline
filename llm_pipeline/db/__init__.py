@@ -13,6 +13,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline
 from llm_pipeline.events.models import PipelineEventRecord
 
@@ -195,6 +196,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineEventRecord.__table__,
             DraftStep.__table__,
             DraftPipeline.__table__,
+            StepModelConfig.__table__,
         ],
     )
 

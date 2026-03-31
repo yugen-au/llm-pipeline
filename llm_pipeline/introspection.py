@@ -153,6 +153,7 @@ class PipelineIntrospector:
                 "transformation": None,
                 "tools": [],
                 "action_after": step_def.action_after,
+                "model": step_def.model,
             }
 
             # Tools from global agent registry

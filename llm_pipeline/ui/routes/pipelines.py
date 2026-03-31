@@ -7,8 +7,9 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.introspection import PipelineIntrospector, enrich_with_prompt_readiness
-from llm_pipeline.ui.deps import DBSession
+from llm_pipeline.ui.deps import DBSession, WritableDBSession
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,10 @@ class PipelineMetadata(BaseModel):
     strategies: List[StrategyMetadata] = []
     execution_order: List[str] = []
     pipeline_input_schema: Optional[Any] = None
+
+
+class StepModelRequest(BaseModel):
+    model: str
 
 
 class StepPromptItem(BaseModel):
@@ -186,3 +191,107 @@ def get_step_prompts(
             for p in prompts
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# Step model config endpoints
+# ---------------------------------------------------------------------------
+
+
+def _find_step_model_from_introspection(
+    registry: dict, pipeline_name: str, step_name: str,
+) -> Optional[str]:
+    """Return step-level model from introspection metadata, or None."""
+    pipeline_cls = registry.get(pipeline_name)
+    if pipeline_cls is None:
+        return None
+    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+    for strategy in metadata.get("strategies", []):
+        for step in strategy.get("steps", []):
+            if step.get("step_name") == step_name:
+                return step.get("model")
+    return None
+
+
+@router.get("/{name}/steps/{step_name}/model")
+def get_step_model(
+    name: str,
+    step_name: str,
+    request: Request,
+    db: DBSession,
+):
+    """Get the effective model for a pipeline step."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+    if name not in registry:
+        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
+
+    stmt = select(StepModelConfig).where(
+        StepModelConfig.pipeline_name == name,
+        StepModelConfig.step_name == step_name,
+    )
+    row = db.exec(stmt).first()
+    if row is not None:
+        return {"model": row.model, "source": "db"}
+
+    introspected_model = _find_step_model_from_introspection(registry, name, step_name)
+    if introspected_model is not None:
+        return {"model": introspected_model, "source": "step_definition"}
+
+    return {"model": None, "source": "pipeline_default"}
+
+
+@router.put("/{name}/steps/{step_name}/model")
+def put_step_model(
+    name: str,
+    step_name: str,
+    body: StepModelRequest,
+    request: Request,
+    db: WritableDBSession,
+):
+    """Set or update the model override for a pipeline step."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+    if name not in registry:
+        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
+
+    stmt = select(StepModelConfig).where(
+        StepModelConfig.pipeline_name == name,
+        StepModelConfig.step_name == step_name,
+    )
+    row = db.exec(stmt).first()
+    if row is not None:
+        row.model = body.model
+    else:
+        row = StepModelConfig(
+            pipeline_name=name,
+            step_name=step_name,
+            model=body.model,
+        )
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "pipeline_name": row.pipeline_name, "step_name": row.step_name, "model": row.model}
+
+
+@router.delete("/{name}/steps/{step_name}/model")
+def delete_step_model(
+    name: str,
+    step_name: str,
+    request: Request,
+    db: WritableDBSession,
+):
+    """Remove a model override for a pipeline step."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+    if name not in registry:
+        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
+
+    stmt = select(StepModelConfig).where(
+        StepModelConfig.pipeline_name == name,
+        StepModelConfig.step_name == step_name,
+    )
+    row = db.exec(stmt).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Model override not found")
+
+    db.delete(row)
+    db.commit()
+    return {"detail": "Model override removed"}

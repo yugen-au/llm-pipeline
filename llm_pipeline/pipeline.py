@@ -777,6 +777,7 @@ class PipelineConfig(ABC):
                     instructions_type = step.instructions
                     agent_name = getattr(step, '_agent_name', None)
                     step_tools = get_agent_tools(agent_name) if agent_name else []
+                    step_model = self._resolve_step_model(step)
 
                     # Build validators: always register both, they adapt per-call via ctx.deps
                     step_validators = [
@@ -863,6 +864,7 @@ class PipelineConfig(ABC):
                                     agent, user_prompt, step_deps, instructions_type,
                                     strategy=step_def.consensus_strategy,
                                     current_step_name=current_step_name,
+                                    step_model=step_model,
                                 )
                             )
                             # Merge consensus token totals into step-level accumulators
@@ -876,7 +878,7 @@ class PipelineConfig(ABC):
                                 run_result = agent.run_sync(
                                     user_prompt,
                                     deps=step_deps,
-                                    model=self._model,
+                                    model=step_model,
                                 )
                                 instruction = run_result.output
                                 # Capture per-call token usage
@@ -894,7 +896,7 @@ class PipelineConfig(ABC):
                                 instruction = instructions_type.create_failure(str(exc))
 
                             # Non-consensus: emit single LLMCallCompleted per call
-                            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, self._model)
+                            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, step_model)
                             _step_cost_usd += _cost_total or 0.0
                             if self._event_emitter:
                                 self._emit(LLMCallCompleted(
@@ -908,7 +910,7 @@ class PipelineConfig(ABC):
                                         if hasattr(instruction, 'model_dump')
                                         else None
                                     ),
-                                    model_name=self._model,
+                                    model_name=step_model,
                                     attempt_count=1,
                                     validation_errors=[],
                                     input_tokens=_call_input_tokens,
@@ -964,7 +966,7 @@ class PipelineConfig(ABC):
                     )
                     _step_total_tokens = _step_input_tokens + _step_output_tokens if _step_total_requests > 0 else None
                     self._save_step_state(
-                        step, step_num, instructions, input_hash, execution_time_ms, self._model,
+                        step, step_num, instructions, input_hash, execution_time_ms, step_model,
                         input_tokens=_step_input_tokens if _step_total_requests > 0 else None,
                         output_tokens=_step_output_tokens if _step_total_requests > 0 else None,
                         total_tokens=_step_total_tokens,
@@ -1075,6 +1077,28 @@ class PipelineConfig(ABC):
                 extraction_step, f"model '{model_class.__name__}'", model_class
             )
         return self.extractions.get(model_class, [])
+
+    def _resolve_step_model(self, step) -> str:
+        """Resolve model for a step. Priority: DB config > step definition > pipeline default."""
+        # 1. DB-backed (UI-configured)
+        from sqlmodel import select
+        from llm_pipeline.db.step_config import StepModelConfig
+        config = self._real_session.exec(
+            select(StepModelConfig).where(
+                StepModelConfig.pipeline_name == self.pipeline_name,
+                StepModelConfig.step_name == step.step_name,
+            )
+        ).first()
+        if config:
+            return config.model
+
+        # 2. Step definition default
+        step_model = getattr(step, '_step_model', None)
+        if step_model:
+            return step_model
+
+        # 3. Pipeline default
+        return self._model
 
     def _hash_step_inputs(self, step, step_number: int) -> str:
         try:
@@ -1274,6 +1298,7 @@ class PipelineConfig(ABC):
     def _execute_with_consensus(
         self, agent, user_prompt, step_deps, instructions_type,
         strategy: 'ConsensusStrategy', current_step_name: str,
+        step_model: str | None = None,
     ):
         """Execute LLM calls with consensus strategy, accumulating token usage.
 
@@ -1308,7 +1333,7 @@ class PipelineConfig(ABC):
             _call_total_tokens = None
             run_result = None
             try:
-                run_result = agent.run_sync(user_prompt, deps=step_deps, model=self._model)
+                run_result = agent.run_sync(user_prompt, deps=step_deps, model=step_model or self._model)
                 instruction = run_result.output
                 # Capture per-call token usage defensively
                 _usage = run_result.usage()
@@ -1326,7 +1351,8 @@ class PipelineConfig(ABC):
             _consensus_requests += 1
 
             # Emit per-attempt LLMCallCompleted with per-call token values
-            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, self._model)
+            _resolved_model = step_model or self._model
+            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, _resolved_model)
             _consensus_cost_usd += _cost_total or 0.0
             if self._event_emitter:
                 self._emit(LLMCallCompleted(
@@ -1340,7 +1366,7 @@ class PipelineConfig(ABC):
                         if hasattr(instruction, 'model_dump')
                         else None
                     ),
-                    model_name=self._model,
+                    model_name=_resolved_model,
                     attempt_count=attempt + 1,
                     validation_errors=[],
                     input_tokens=_call_input_tokens,

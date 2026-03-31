@@ -45,6 +45,7 @@ def step_definition(
     default_transformation=None,
     context: Optional[Type] = None,
     agent: Optional[str] = None,
+    model: Optional[str] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -59,6 +60,7 @@ def step_definition(
         default_transformation: Default transformation class
         context: Context class this step produces
         agent: Optional agent name for tool lookup from global agent registry
+        model: Optional default model for this step (overrides pipeline default)
     """
     def decorator(step_class):
         if not step_class.__name__.endswith('Step'):
@@ -98,6 +100,7 @@ def step_definition(
         step_class.DEFAULT_TRANSFORMATION = default_transformation
         step_class.CONTEXT = context
         step_class.AGENT = agent
+        step_class.MODEL = model
 
         @classmethod
         def create_definition(
@@ -118,6 +121,10 @@ def step_definition(
             # Default agent_name from decorator if not overridden in kwargs
             if 'agent_name' not in kwargs and cls.AGENT is not None:
                 kwargs['agent_name'] = cls.AGENT
+
+            # Default model from decorator if not overridden in kwargs
+            if 'model' not in kwargs and cls.MODEL is not None:
+                kwargs['model'] = cls.MODEL
 
             return StepDefinition(
                 step_class=cls,
