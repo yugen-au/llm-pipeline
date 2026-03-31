@@ -267,6 +267,7 @@ export interface Prompt {
   step_name: string | null
   content: string
   required_variables: string[] | null
+  variable_definitions: Record<string, { type: string; description: string }> | null
   description: string | null
   version: string
   is_active: boolean
@@ -293,6 +294,7 @@ export interface PromptVariant {
   step_name: string | null
   content: string
   required_variables: string[] | null
+  variable_definitions: Record<string, { type: string; description: string }> | null
   description: string | null
   version: string
   is_active: boolean

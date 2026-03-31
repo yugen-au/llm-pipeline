@@ -1,6 +1,6 @@
 """Prompts route module -- list, detail, and CRUD endpoints."""
 from datetime import datetime, timezone
-from typing import Annotated, List, Optional
+from typing import Annotated, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -12,6 +12,10 @@ from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.prompts.utils import (
     _increment_version,
     extract_variables_from_content,
+)
+from llm_pipeline.prompts.variables import (
+    get_code_prompt_variables,
+    rebuild_from_db,
 )
 from llm_pipeline.ui.deps import DBSession, WritableDBSession
 
@@ -31,6 +35,7 @@ class PromptItem(BaseModel):
     step_name: Optional[str]
     content: str
     required_variables: Optional[List[str]]
+    variable_definitions: Optional[Dict] = None
     description: Optional[str]
     version: str
     is_active: bool
@@ -70,6 +75,7 @@ class PromptCreateRequest(BaseModel):
     description: Optional[str] = None
     version: str = "1.0"
     created_by: Optional[str] = None
+    variable_definitions: Optional[Dict] = None
 
 
 class PromptUpdateRequest(BaseModel):
@@ -80,6 +86,7 @@ class PromptUpdateRequest(BaseModel):
     description: Optional[str] = None
     version: Optional[str] = None
     created_by: Optional[str] = None
+    variable_definitions: Optional[Dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -119,6 +126,7 @@ def _to_prompt_item(prompt: Prompt) -> PromptItem:
         step_name=prompt.step_name,
         content=prompt.content,
         required_variables=_resolve_variables(prompt),
+        variable_definitions=prompt.variable_definitions,
         description=prompt.description,
         version=prompt.version,
         is_active=prompt.is_active,
@@ -211,6 +219,15 @@ def create_prompt(
 ) -> PromptItem:
     """Create a new prompt."""
     required_variables = extract_variables_from_content(body.content)
+
+    # Resolve variable_definitions: use provided or auto-generate from content
+    var_defs = body.variable_definitions
+    if var_defs is None and required_variables:
+        var_defs = {
+            v: {"type": "str", "description": ""}
+            for v in required_variables
+        }
+
     prompt = Prompt(
         prompt_key=body.prompt_key,
         prompt_name=body.prompt_name,
@@ -222,6 +239,7 @@ def create_prompt(
         version=body.version,
         created_by=body.created_by,
         required_variables=required_variables,
+        variable_definitions=var_defs,
     )
     try:
         db.add(prompt)
@@ -230,6 +248,10 @@ def create_prompt(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Prompt already exists")
+
+    if prompt.variable_definitions:
+        rebuild_from_db(prompt.prompt_key, prompt.prompt_type, prompt.variable_definitions)
+
     return _to_prompt_item(prompt)
 
 
@@ -250,12 +272,29 @@ def update_prompt(
         raise HTTPException(status_code=404, detail="Prompt not found")
 
     updates = body.model_dump(exclude_unset=True)
+
+    # Track whether variable_definitions changed
+    var_defs_changed = "variable_definitions" in updates
+
     for field, value in updates.items():
         setattr(prompt, field, value)
 
     # Re-extract variables if content changed
     if "content" in updates:
         prompt.required_variables = extract_variables_from_content(prompt.content)
+
+        # Sync variable_definitions if not explicitly provided
+        if not var_defs_changed:
+            new_vars = set(prompt.required_variables or [])
+            existing_defs = dict(prompt.variable_definitions or {})
+            # Add new variables with defaults
+            for v in new_vars:
+                if v not in existing_defs:
+                    existing_defs[v] = {"type": "str", "description": ""}
+            # Remove variables no longer in content
+            existing_defs = {k: v for k, v in existing_defs.items() if k in new_vars}
+            prompt.variable_definitions = existing_defs or None
+            var_defs_changed = True
 
     # Auto-increment version if not explicitly provided
     if "version" not in updates:
@@ -264,6 +303,10 @@ def update_prompt(
     prompt.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(prompt)
+
+    if var_defs_changed and prompt.variable_definitions:
+        rebuild_from_db(prompt.prompt_key, prompt.prompt_type, prompt.variable_definitions)
+
     return _to_prompt_item(prompt)
 
 
@@ -289,23 +332,68 @@ def delete_prompt(
 
 
 @router.get("/{prompt_key}/{prompt_type}/variables")
-def get_prompt_variable_schema(prompt_key: str, prompt_type: str) -> dict:
-    """Return typed variable schema if a PromptVariables class is registered."""
-    from llm_pipeline.prompts.variables import get_prompt_variables
+def get_prompt_variable_schema(
+    prompt_key: str, prompt_type: str, db: DBSession,
+) -> dict:
+    """Return merged variable schema from DB definitions and code class."""
+    # 1. DB variable_definitions
+    stmt = select(Prompt).where(
+        Prompt.prompt_key == prompt_key,
+        Prompt.prompt_type == prompt_type,
+    )
+    prompt = db.exec(stmt).first()
+    db_defs: dict = (prompt.variable_definitions or {}) if prompt else {}
 
-    cls = get_prompt_variables(prompt_key, prompt_type)
-    if cls is None:
-        return {"registered": False, "fields": []}
+    # 2. Code-registered class
+    code_cls = get_code_prompt_variables(prompt_key, prompt_type)
+    code_fields: dict[str, dict] = {}
+    if code_cls:
+        for name, field_info in code_cls.model_fields.items():
+            annotation = field_info.annotation
+            type_name = getattr(annotation, '__name__', str(annotation))
+            code_fields[name] = {
+                "type": type_name,
+                "description": field_info.description or "",
+                "required": field_info.is_required(),
+                "has_default": field_info.default is not None or field_info.default_factory is not None,
+            }
 
+    # 3. Merge: all unique field names
+    all_names = set(db_defs.keys()) | set(code_fields.keys())
     fields = []
-    for name, field_info in cls.model_fields.items():
-        annotation = field_info.annotation
-        type_name = getattr(annotation, '__name__', str(annotation))
+    for name in sorted(all_names):
+        in_db = name in db_defs
+        in_code = name in code_fields
+
+        if in_db and in_code:
+            source = "both"
+        elif in_db:
+            source = "db"
+        else:
+            source = "code"
+
+        # Prefer DB values when available, fall back to code
+        if in_db:
+            f_type = db_defs[name].get("type", "str")
+            f_desc = db_defs[name].get("description", "")
+        else:
+            f_type = code_fields[name]["type"]
+            f_desc = code_fields[name]["description"]
+
+        f_required = code_fields[name]["required"] if in_code else True
+        f_has_default = code_fields[name]["has_default"] if in_code else False
+
         fields.append({
             "name": name,
-            "type": type_name,
-            "description": field_info.description,
-            "required": field_info.is_required(),
-            "has_default": field_info.default is not None or field_info.default_factory is not None,
+            "type": f_type,
+            "description": f_desc,
+            "required": f_required,
+            "has_default": f_has_default,
+            "source": source,
         })
-    return {"registered": True, "class_name": cls.__name__, "fields": fields}
+
+    return {
+        "fields": fields,
+        "has_code_class": code_cls is not None,
+        "code_class_name": code_cls.__name__ if code_cls else None,
+    }

@@ -169,6 +169,24 @@ def _load_pipeline_modules(
     return pipeline_reg, introspection_reg
 
 
+def _sync_variable_definitions(engine: Engine) -> None:
+    """Rebuild runtime PromptVariables classes from DB-stored variable_definitions."""
+    from sqlmodel import Session, select
+    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.prompts.variables import rebuild_from_db
+
+    try:
+        with Session(engine) as session:
+            stmt = select(Prompt).where(Prompt.variable_definitions.isnot(None))
+            prompts = session.exec(stmt).all()
+            for p in prompts:
+                rebuild_from_db(p.prompt_key, p.prompt_type, p.variable_definitions)
+            if prompts:
+                logger.info("Synced variable_definitions for %d prompt(s)", len(prompts))
+    except Exception:
+        logger.warning("Failed to sync variable_definitions at startup", exc_info=True)
+
+
 def create_app(
     db_path: Optional[str] = None,
     database_url: Optional[str] = None,
@@ -300,6 +318,9 @@ def create_app(
             **module_introspection,
             **(introspection_registry or {}),
         }
+
+    # Sync DB-stored variable_definitions into runtime registry
+    _sync_variable_definitions(app.state.engine)
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router

@@ -28,6 +28,10 @@ class Prompt(SQLModel, table=True):
     # Template variables (automatically extracted from {variable_name} in content)
     required_variables: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
 
+    # Rich variable definitions: {name: {type, description, required, auto_generate}}
+    # Editable via UI, merged with code-registered PromptVariables at runtime
+    variable_definitions: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+
     # Metadata
     description: Optional[str] = None
     version: str = Field(default="1.0", max_length=20)

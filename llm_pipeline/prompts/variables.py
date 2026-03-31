@@ -1,13 +1,15 @@
 """
 Prompt variable resolution: registry, protocol, and base class.
 
-PromptVariables -- base class enforcing Field(description=...) on all fields.
-register_prompt_variables() -- register a class for a (prompt_key, prompt_type) pair.
-RegistryVariableResolver -- built-in resolver backed by the global registry.
-VariableResolver -- protocol for custom resolvers (backward compat).
+Two registries:
+- _CODE_REGISTRY: classes registered via register_prompt_variables() (code-defined)
+- _VARIABLE_REGISTRY: active classes used at runtime (may be merged from code + DB)
+
+rebuild_from_db() merges DB variable_definitions with code-defined classes
+using pydantic's create_model, preserving default_factory fields from code.
 """
 from typing import Optional, Protocol, Type, runtime_checkable
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
 
 
@@ -45,37 +47,100 @@ class PromptVariables(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Global prompt variables registry
+# Dual registry: code-defined + active (possibly merged)
 # ---------------------------------------------------------------------------
 
+_CODE_REGISTRY: dict[tuple[str, str], Type[PromptVariables]] = {}
 _VARIABLE_REGISTRY: dict[tuple[str, str], Type[PromptVariables]] = {}
+
+TYPE_MAP: dict[str, type] = {
+    "str": str,
+    "int": int,
+    "float": float,
+    "bool": bool,
+    "list": list,
+    "dict": dict,
+}
 
 
 def register_prompt_variables(
     prompt_key: str, prompt_type: str, cls: Type[PromptVariables]
 ) -> None:
-    """Register a PromptVariables class for a prompt key + type.
+    """Register a code-defined PromptVariables class.
 
-    Overwrites if already registered.
+    Stored in both code registry (immutable source) and active registry.
     """
+    _CODE_REGISTRY[(prompt_key, prompt_type)] = cls
     _VARIABLE_REGISTRY[(prompt_key, prompt_type)] = cls
 
 
 def get_prompt_variables(
     prompt_key: str, prompt_type: str
 ) -> Type[PromptVariables] | None:
-    """Look up registered variables class. Returns None if not registered."""
+    """Get the active (possibly merged) variables class."""
     return _VARIABLE_REGISTRY.get((prompt_key, prompt_type))
 
 
+def get_code_prompt_variables(
+    prompt_key: str, prompt_type: str
+) -> Type[PromptVariables] | None:
+    """Get the original code-defined class (before any DB merge)."""
+    return _CODE_REGISTRY.get((prompt_key, prompt_type))
+
+
 def get_all_prompt_variables() -> dict[tuple[str, str], Type[PromptVariables]]:
-    """Return copy of all registered variable classes (for introspection)."""
+    """Return copy of all active variable classes (for introspection)."""
     return dict(_VARIABLE_REGISTRY)
 
 
 def clear_prompt_variables_registry() -> None:
-    """Clear registry. Use in test teardown."""
+    """Clear both registries. Use in test teardown."""
+    _CODE_REGISTRY.clear()
     _VARIABLE_REGISTRY.clear()
+
+
+def rebuild_from_db(
+    prompt_key: str, prompt_type: str, variable_definitions: dict
+) -> Type[PromptVariables]:
+    """Create/update a PromptVariables class from DB definitions.
+
+    Merges with code-registered class (if any) to preserve default_factory
+    fields. DB definitions override type/description for matching fields
+    and add new simple fields.
+
+    Registers the merged class as active in _VARIABLE_REGISTRY.
+    """
+    code_cls = _CODE_REGISTRY.get((prompt_key, prompt_type))
+
+    # Collect fields: start with code, override/extend from DB
+    fields: dict[str, tuple[type, FieldInfo]] = {}
+
+    if code_cls:
+        for name, field_info in code_cls.model_fields.items():
+            fields[name] = (field_info.annotation, field_info)
+
+    for name, defn in variable_definitions.items():
+        py_type = TYPE_MAP.get(defn.get("type", "str"), str)
+        # If code already defines this field with a default_factory, preserve it
+        if name in fields and code_cls:
+            code_field = code_cls.model_fields.get(name)
+            if code_field and code_field.default_factory is not None:
+                # Keep default_factory, update description only
+                fields[name] = (
+                    py_type,
+                    Field(
+                        description=defn.get("description", code_field.description or ""),
+                        default_factory=code_field.default_factory,
+                    ),
+                )
+                continue
+        fields[name] = (py_type, Field(description=defn.get("description", "")))
+
+    safe_name = f"{prompt_key}_{prompt_type}_vars".replace(".", "_")
+    merged = create_model(safe_name, **fields)  # type: ignore[call-overload]
+
+    _VARIABLE_REGISTRY[(prompt_key, prompt_type)] = merged  # type: ignore[assignment]
+    return merged  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +185,8 @@ __all__ = [
     "RegistryVariableResolver",
     "register_prompt_variables",
     "get_prompt_variables",
+    "get_code_prompt_variables",
     "get_all_prompt_variables",
     "clear_prompt_variables_registry",
+    "rebuild_from_db",
 ]

@@ -164,70 +164,164 @@ function MetadataGrid({
 }
 
 // ---------------------------------------------------------------------------
-// Variable preview
+// Variable definitions type
 // ---------------------------------------------------------------------------
 
-function VariablePreview({
+type VarDefs = Record<string, { type: string; description: string }>
+
+const VAR_TYPES = ['str', 'int', 'float', 'bool', 'list'] as const
+
+// ---------------------------------------------------------------------------
+// Variable definitions editor
+// ---------------------------------------------------------------------------
+
+function VariableDefinitionsEditor({
   content,
   promptKey,
   promptType,
+  value,
+  onChange,
 }: {
   content: string
   promptKey?: string
   promptType?: string
+  value: VarDefs
+  onChange: (defs: VarDefs) => void
 }) {
   const vars = useMemo(() => extractVariables(content), [content])
   const { data: schema } = usePromptVariableSchema(promptKey ?? '', promptType ?? '')
 
-  if (vars.length === 0 && !schema?.fields?.length) return null
+  // Build merged rows: content-detected vars + schema fields
+  const rows = useMemo(() => {
+    const names = new Set<string>()
+    // Content variables (strip braces)
+    for (const v of vars) {
+      names.add(v.replace(/[{}]/g, ''))
+    }
+    // Schema fields
+    if (schema?.fields) {
+      for (const f of schema.fields) {
+        names.add(f.name)
+      }
+    }
+    return [...names].sort()
+  }, [vars, schema])
 
-  // Show schema table when registered
-  if (schema?.registered && schema.fields.length > 0) {
-    return (
-      <div className="space-y-1">
-        <span className="text-xs text-muted-foreground">
-          Variables ({schema.class_name})
-        </span>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="h-8 text-xs">Variable</TableHead>
-              <TableHead className="h-8 text-xs">Type</TableHead>
-              <TableHead className="h-8 text-xs">Description</TableHead>
-              <TableHead className="h-8 text-xs">Required</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {schema.fields.map((f) => (
-              <TableRow key={f.name}>
-                <TableCell className="py-1 font-mono text-xs">{f.name}</TableCell>
-                <TableCell className="py-1 text-xs">{f.type}</TableCell>
-                <TableCell className="py-1 text-xs text-muted-foreground">{f.description || '-'}</TableCell>
-                <TableCell className="py-1 text-xs">
-                  {f.required ? (
-                    <Badge variant="default" className="text-[10px] px-1.5 py-0">yes</Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">no</Badge>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    )
+  // Determine source per field
+  const sourceMap = useMemo(() => {
+    const m: Record<string, string> = {}
+    if (schema?.fields) {
+      for (const f of schema.fields) {
+        m[f.name] = f.source
+      }
+    }
+    // Auto-detected vars not in schema are "auto"
+    for (const v of vars) {
+      const name = v.replace(/[{}]/g, '')
+      if (!m[name]) m[name] = 'auto'
+    }
+    return m
+  }, [vars, schema])
+
+  // Initialize value from schema if empty
+  useEffect(() => {
+    if (rows.length === 0) return
+    if (Object.keys(value).length > 0) return
+    const init: VarDefs = {}
+    for (const name of rows) {
+      const schemaField = schema?.fields?.find((f) => f.name === name)
+      init[name] = {
+        type: schemaField?.type ?? 'str',
+        description: schemaField?.description ?? '',
+      }
+    }
+    onChange(init)
+  }, [rows, schema]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sync when content variables change: add new, remove gone
+  useEffect(() => {
+    const contentNames = new Set(vars.map((v) => v.replace(/[{}]/g, '')))
+    if (contentNames.size === 0 && Object.keys(value).length === 0) return
+    const updated = { ...value }
+    let changed = false
+    // Add new
+    for (const name of contentNames) {
+      if (!(name in updated)) {
+        updated[name] = { type: 'str', description: '' }
+        changed = true
+      }
+    }
+    // Remove gone (only auto/db, not code)
+    for (const name of Object.keys(updated)) {
+      if (!contentNames.has(name) && sourceMap[name] !== 'code' && sourceMap[name] !== 'both') {
+        delete updated[name]
+        changed = true
+      }
+    }
+    if (changed) onChange(updated)
+  }, [vars]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (rows.length === 0) return null
+
+  function updateField(name: string, patch: Partial<{ type: string; description: string }>) {
+    const current = value[name] ?? { type: 'str', description: '' }
+    onChange({ ...value, [name]: { ...current, ...patch } })
   }
 
-  // Fallback: badge display from regex extraction
-  if (vars.length === 0) return null
   return (
-    <div className="flex flex-wrap gap-1">
-      <span className="text-xs text-muted-foreground">Variables:</span>
-      {vars.map((v) => (
-        <Badge key={v} variant="outline" className="text-xs">
-          {v}
-        </Badge>
-      ))}
+    <div className="space-y-1">
+      <span className="text-xs text-muted-foreground">
+        Variables{schema?.code_class_name ? ` (${schema.code_class_name})` : ''}
+      </span>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="h-8 text-xs">Name</TableHead>
+            <TableHead className="h-8 text-xs w-28">Type</TableHead>
+            <TableHead className="h-8 text-xs">Description</TableHead>
+            <TableHead className="h-8 text-xs w-16">Source</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((name) => {
+            const def = value[name] ?? { type: 'str', description: '' }
+            const source = sourceMap[name] ?? 'auto'
+            return (
+              <TableRow key={name}>
+                <TableCell className="py-1 font-mono text-xs">{name}</TableCell>
+                <TableCell className="py-1 text-xs">
+                  <Select value={def.type} onValueChange={(v) => updateField(name, { type: v })}>
+                    <SelectTrigger className="h-7 w-24 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VAR_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell className="py-1 text-xs">
+                  <Input
+                    value={def.description}
+                    onChange={(e) => updateField(name, { description: e.target.value })}
+                    placeholder="description"
+                    className="h-7 text-xs"
+                  />
+                </TableCell>
+                <TableCell className="py-1 text-xs">
+                  <Badge
+                    variant={source === 'code' || source === 'both' ? 'default' : 'secondary'}
+                    className="text-[10px] px-1.5 py-0"
+                  >
+                    {source}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -249,13 +343,16 @@ function VariantEditor({
 
   const original = useMemo(() => formFromVariant(variant), [variant])
   const [form, setForm] = useState<VariantFormState>(original)
+  const [varDefs, setVarDefs] = useState<VarDefs>(variant.variable_definitions ?? {})
 
   // Reset when upstream data changes (e.g. after save)
   useEffect(() => {
     setForm(formFromVariant(variant))
+    setVarDefs(variant.variable_definitions ?? {})
   }, [variant])
 
-  const dirty = formDirty(form, original)
+  const dirty = formDirty(form, original) ||
+    JSON.stringify(varDefs) !== JSON.stringify(variant.variable_definitions ?? {})
 
   const updateMutation = useUpdatePrompt(promptKey, variant.prompt_type)
   const deleteMutation = useDeletePrompt(promptKey, variant.prompt_type)
@@ -271,12 +368,14 @@ function VariantEditor({
       category: form.category || null,
       step_name: form.step_name || null,
       description: form.description || null,
+      variable_definitions: Object.keys(varDefs).length > 0 ? varDefs : null,
     }
     updateMutation.mutate(body)
   }
 
   function handleDiscard() {
     setForm(original)
+    setVarDefs(variant.variable_definitions ?? {})
   }
 
   function handleDelete() {
@@ -305,7 +404,13 @@ function VariantEditor({
         />
       </div>
 
-      <VariablePreview content={form.content} promptKey={promptKey} promptType={variant.prompt_type} />
+      <VariableDefinitionsEditor
+        content={form.content}
+        promptKey={promptKey}
+        promptType={variant.prompt_type}
+        value={varDefs}
+        onChange={setVarDefs}
+      />
 
       <div className="flex items-center gap-2 border-t pt-3">
         <Button size="sm" disabled={!dirty || updateMutation.isPending} onClick={handleSave}>
@@ -340,6 +445,7 @@ function CreateForm({ onCreated }: { onCreated?: (key: string) => void }) {
   const [promptKey, setPromptKey] = useState('')
   const [promptType, setPromptType] = useState('system')
   const [form, setForm] = useState<VariantFormState>(emptyForm())
+  const [varDefs, setVarDefs] = useState<VarDefs>({})
 
   const createMutation = useCreatePrompt()
 
@@ -357,6 +463,7 @@ function CreateForm({ onCreated }: { onCreated?: (key: string) => void }) {
       category: form.category || undefined,
       step_name: form.step_name || undefined,
       description: form.description || undefined,
+      variable_definitions: Object.keys(varDefs).length > 0 ? varDefs : undefined,
     }
     createMutation.mutate(body, {
       onSuccess: () => onCreated?.(promptKey.trim()),
@@ -417,7 +524,11 @@ function CreateForm({ onCreated }: { onCreated?: (key: string) => void }) {
           />
         </div>
 
-        <VariablePreview content={form.content} />
+        <VariableDefinitionsEditor
+          content={form.content}
+          value={varDefs}
+          onChange={setVarDefs}
+        />
 
         <div className="flex items-center gap-2 border-t pt-3">
           <Button
