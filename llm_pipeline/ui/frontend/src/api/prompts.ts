@@ -23,7 +23,7 @@ export interface PromptCreateRequest {
   description?: string | null
   version?: string
   created_by?: string | null
-  variable_definitions?: Record<string, { type: string; description: string }> | null
+  variable_definitions?: Record<string, { type: string; description: string; auto_generate?: string }> | null
 }
 
 /** Request body for PUT /api/prompts/{key}/{type} */
@@ -35,7 +35,7 @@ export interface PromptUpdateRequest {
   description?: string | null
   version?: string | null
   created_by?: string | null
-  variable_definitions?: Record<string, { type: string; description: string }> | null
+  variable_definitions?: Record<string, { type: string; description: string; auto_generate?: string }> | null
 }
 
 /**
@@ -136,6 +136,7 @@ interface VariableField {
   required: boolean
   has_default: boolean
   source: 'db' | 'code' | 'both'
+  auto_generate: string
 }
 
 interface VariableSchemaResponse {

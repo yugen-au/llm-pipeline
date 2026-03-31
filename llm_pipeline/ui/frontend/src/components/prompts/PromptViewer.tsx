@@ -167,7 +167,7 @@ function MetadataGrid({
 // Variable definitions type
 // ---------------------------------------------------------------------------
 
-type VarDefs = Record<string, { type: string; description: string }>
+type VarDefs = Record<string, { type: string; description: string; auto_generate?: string }>
 
 const VAR_TYPES = ['str', 'int', 'float', 'bool', 'list'] as const
 
@@ -233,6 +233,7 @@ function VariableDefinitionsEditor({
       init[name] = {
         type: schemaField?.type ?? 'str',
         description: schemaField?.description ?? '',
+        auto_generate: schemaField?.auto_generate ?? '',
       }
     }
     onChange(init)
@@ -263,8 +264,8 @@ function VariableDefinitionsEditor({
 
   if (rows.length === 0) return null
 
-  function updateField(name: string, patch: Partial<{ type: string; description: string }>) {
-    const current = value[name] ?? { type: 'str', description: '' }
+  function updateField(name: string, patch: Partial<{ type: string; description: string; auto_generate: string }>) {
+    const current = value[name] ?? { type: 'str', description: '', auto_generate: '' }
     onChange({ ...value, [name]: { ...current, ...patch } })
   }
 
@@ -279,6 +280,7 @@ function VariableDefinitionsEditor({
             <TableHead className="h-8 text-xs">Name</TableHead>
             <TableHead className="h-8 text-xs w-28">Type</TableHead>
             <TableHead className="h-8 text-xs">Description</TableHead>
+            <TableHead className="h-8 text-xs">Auto Generate</TableHead>
             <TableHead className="h-8 text-xs w-16">Source</TableHead>
           </TableRow>
         </TableHeader>
@@ -307,6 +309,14 @@ function VariableDefinitionsEditor({
                     onChange={(e) => updateField(name, { description: e.target.value })}
                     placeholder="description"
                     className="h-7 text-xs"
+                  />
+                </TableCell>
+                <TableCell className="py-1 text-xs">
+                  <Input
+                    value={def.auto_generate ?? ''}
+                    onChange={(e) => updateField(name, { auto_generate: e.target.value })}
+                    placeholder="e.g. enum_values(MyEnum)"
+                    className="h-7 text-xs font-mono"
                   />
                 </TableCell>
                 <TableCell className="py-1 text-xs">

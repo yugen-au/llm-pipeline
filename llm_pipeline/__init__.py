@@ -48,6 +48,8 @@ from llm_pipeline.prompts.variables import (
     get_all_prompt_variables,
     clear_prompt_variables_registry,
     RegistryVariableResolver,
+    register_auto_generate,
+    set_auto_generate_base_path,
 )
 
 try:
@@ -117,6 +119,8 @@ __all__ = [
     "get_all_prompt_variables",
     "clear_prompt_variables_registry",
     "RegistryVariableResolver",
+    "register_auto_generate",
+    "set_auto_generate_base_path",
     # Consensus
     "ConsensusStrategy",
     "ConsensusResult",

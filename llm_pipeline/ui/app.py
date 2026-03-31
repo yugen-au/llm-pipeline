@@ -180,7 +180,8 @@ def _sync_variable_definitions(engine: Engine) -> None:
             stmt = select(Prompt).where(Prompt.variable_definitions.isnot(None))
             prompts = session.exec(stmt).all()
             for p in prompts:
-                rebuild_from_db(p.prompt_key, p.prompt_type, p.variable_definitions)
+                if p.variable_definitions:
+                    rebuild_from_db(p.prompt_key, p.prompt_type, p.variable_definitions)
             if prompts:
                 logger.info("Synced variable_definitions for %d prompt(s)", len(prompts))
     except Exception:
@@ -196,6 +197,7 @@ def create_app(
     auto_discover: bool = True,
     default_model: Optional[str] = None,
     pipeline_modules: Optional[List[str]] = None,
+    auto_generate_base_path: Optional[str] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -318,6 +320,14 @@ def create_app(
             **module_introspection,
             **(introspection_registry or {}),
         }
+
+    # auto_generate base path: param > env > None
+    from llm_pipeline.prompts.variables import set_auto_generate_base_path
+    resolved_base = auto_generate_base_path or os.environ.get(
+        "LLM_PIPELINE_AUTO_GENERATE_BASE_PATH"
+    )
+    if resolved_base:
+        set_auto_generate_base_path(resolved_base)
 
     # Sync DB-stored variable_definitions into runtime registry
     _sync_variable_definitions(app.state.engine)

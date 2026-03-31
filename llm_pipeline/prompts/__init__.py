@@ -12,6 +12,9 @@ from llm_pipeline.prompts.variables import (
     get_all_prompt_variables,
     clear_prompt_variables_registry,
     rebuild_from_db,
+    register_auto_generate,
+    set_auto_generate_base_path,
+    clear_auto_generate_registry,
 )
 
 __all__ = [
@@ -24,4 +27,7 @@ __all__ = [
     "get_all_prompt_variables",
     "clear_prompt_variables_registry",
     "extract_variables_from_content",
+    "register_auto_generate",
+    "set_auto_generate_base_path",
+    "clear_auto_generate_registry",
 ]

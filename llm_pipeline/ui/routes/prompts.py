@@ -376,9 +376,11 @@ def get_prompt_variable_schema(
         if in_db:
             f_type = db_defs[name].get("type", "str")
             f_desc = db_defs[name].get("description", "")
+            f_auto_gen = db_defs[name].get("auto_generate", "")
         else:
             f_type = code_fields[name]["type"]
             f_desc = code_fields[name]["description"]
+            f_auto_gen = ""
 
         f_required = code_fields[name]["required"] if in_code else True
         f_has_default = code_fields[name]["has_default"] if in_code else False
@@ -390,6 +392,7 @@ def get_prompt_variable_schema(
             "required": f_required,
             "has_default": f_has_default,
             "source": source,
+            "auto_generate": f_auto_gen,
         })
 
     return {
