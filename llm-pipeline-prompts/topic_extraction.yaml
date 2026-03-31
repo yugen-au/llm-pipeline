@@ -19,11 +19,12 @@ user:
     Text:
     {text}
   description: User prompt for topic extraction step
-  version: "1.0"
+  version: "1.1"
   variable_definitions:
     text:
       type: str
       description: Input text to extract topics from
     sentiment:
-      type: str
+      type: enum
       description: Previously detected sentiment
+      auto_generate: enum_names(Sentiment)

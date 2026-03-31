@@ -18,14 +18,15 @@ user:
     Text:
     {text}
   description: User prompt for summary step
-  version: "1.0"
+  version: "1.1"
   variable_definitions:
     text:
       type: str
       description: Input text to summarize
     sentiment:
-      type: str
+      type: enum
       description: Previously detected sentiment
+      auto_generate: enum_names(Sentiment)
     primary_topic:
       type: str
       description: Primary topic extracted from text

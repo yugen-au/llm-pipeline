@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import Editor from '@monaco-editor/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Editor, { type OnMount } from '@monaco-editor/react'
+import type * as Monaco from 'monaco-editor'
 import { Save, Undo2, Trash2, X, ChevronsUpDown } from 'lucide-react'
 import { usePromptDetail, useCreatePrompt, useUpdatePrompt, useDeletePrompt, usePromptVariableSchema, useAutoGenerateObjects } from '@/api/prompts'
 import type { AutoGenerateObject } from '@/api/prompts'
@@ -233,6 +234,108 @@ function expressionToLabel(expr: string, objects: AutoGenerateObject[]): string 
   const constMatch = expr.match(/^constant\((.+)\)$/)
   if (constMatch) return `Constant: ${constMatch[1]}`
   return expr
+}
+
+// ---------------------------------------------------------------------------
+// Prompt content editor with variable hover + autocomplete
+// ---------------------------------------------------------------------------
+
+function PromptContentEditor({
+  value,
+  onChange,
+  varDefs,
+  isDark,
+}: {
+  value: string
+  onChange: (v: string) => void
+  varDefs: VarDefs
+  isDark: boolean
+}) {
+  const varDefsRef = useRef(varDefs)
+  varDefsRef.current = varDefs
+
+  const handleMount: OnMount = (editor, monaco) => {
+    // Hover provider: show variable info on {variable}
+    monaco.languages.registerHoverProvider('markdown', {
+      provideHover(model, position) {
+        const word = model.getWordAtPosition(position)
+        if (!word) return null
+        const line = model.getLineContent(position.lineNumber)
+        // Check if word is inside {braces}
+        const before = line.substring(0, word.startColumn - 1)
+        const after = line.substring(word.endColumn - 1)
+        if (!before.endsWith('{') || !after.startsWith('}')) return null
+
+        const name = word.word
+        const def = varDefsRef.current[name]
+        if (!def) return null
+
+        const parts = [`**\`{${name}}\`**  \nType: \`${def.type}\``]
+        if (def.description) parts.push(`Description: ${def.description}`)
+        if (def.auto_generate) parts.push(`Auto-generate: \`${def.auto_generate}\``)
+
+        return {
+          range: new monaco.Range(
+            position.lineNumber, word.startColumn - 1,
+            position.lineNumber, word.endColumn + 1,
+          ),
+          contents: [{ value: parts.join('  \n') }],
+        }
+      },
+    })
+
+    // Completion provider: suggest variables after {
+    monaco.languages.registerCompletionItemProvider('markdown', {
+      triggerCharacters: ['{'],
+      provideCompletionItems(model, position) {
+        const textBefore = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: Math.max(1, position.column - 1),
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        })
+        if (textBefore !== '{') return { suggestions: [] }
+
+        const range = {
+          startLineNumber: position.lineNumber,
+          startColumn: position.column,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        }
+
+        const suggestions = Object.entries(varDefsRef.current).map(([name, def]) => ({
+          label: name,
+          kind: monaco.languages.CompletionItemKind.Variable,
+          insertText: name + '}',
+          range,
+          detail: def.type + (def.auto_generate ? ` (${def.auto_generate})` : ''),
+          documentation: def.description || undefined,
+        }))
+
+        return { suggestions }
+      },
+    })
+  }
+
+  return (
+    <div className="min-h-[300px] overflow-hidden rounded-md border">
+      <Editor
+        height="300px"
+        language="markdown"
+        theme={isDark ? 'vs-dark' : 'light'}
+        value={value}
+        onChange={(v) => onChange(v ?? '')}
+        onMount={handleMount}
+        options={{
+          minimap: { enabled: false },
+          lineNumbers: 'on',
+          wordWrap: 'on',
+          fontSize: 13,
+          scrollBeyondLastLine: false,
+        }}
+      />
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -535,22 +638,12 @@ function VariantEditor({
     <div className="flex flex-col gap-3">
       <MetadataGrid form={form} onChange={patch} version={variant.version} />
 
-      <div className="min-h-[300px] overflow-hidden rounded-md border">
-        <Editor
-          height="300px"
-          language="markdown"
-          theme={isDark ? 'vs-dark' : 'light'}
-          value={form.content}
-          onChange={(v) => patch({ content: v ?? '' })}
-          options={{
-            minimap: { enabled: false },
-            lineNumbers: 'on',
-            wordWrap: 'on',
-            fontSize: 13,
-            scrollBeyondLastLine: false,
-          }}
-        />
-      </div>
+      <PromptContentEditor
+        value={form.content}
+        onChange={(v) => patch({ content: v })}
+        varDefs={varDefs}
+        isDark={isDark}
+      />
 
       <VariableDefinitionsEditor
         content={form.content}
@@ -655,22 +748,12 @@ function CreateForm({ onCreated }: { onCreated?: (key: string) => void }) {
 
         <MetadataGrid form={form} onChange={patch} />
 
-        <div className="min-h-[300px] overflow-hidden rounded-md border">
-          <Editor
-            height="300px"
-            language="markdown"
-            theme={isDark ? 'vs-dark' : 'light'}
-            value={form.content}
-            onChange={(v) => patch({ content: v ?? '' })}
-            options={{
-              minimap: { enabled: false },
-              lineNumbers: 'on',
-              wordWrap: 'on',
-              fontSize: 13,
-              scrollBeyondLastLine: false,
-            }}
-          />
-        </div>
+        <PromptContentEditor
+          value={form.content}
+          onChange={(v) => patch({ content: v })}
+          varDefs={varDefs}
+          isDark={isDark}
+        />
 
         <VariableDefinitionsEditor
           content={form.content}
