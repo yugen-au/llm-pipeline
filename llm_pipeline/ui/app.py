@@ -377,6 +377,7 @@ def create_app(
     from llm_pipeline.ui.routes.creator import router as creator_router
     from llm_pipeline.ui.routes.editor import router as editor_router
     from llm_pipeline.ui.routes.models import router as models_router
+    from llm_pipeline.ui.routes.auto_generate import router as auto_generate_router
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
@@ -386,6 +387,7 @@ def create_app(
     app.include_router(creator_router, prefix="/api")
     app.include_router(editor_router, prefix="/api")
     app.include_router(models_router, prefix="/api")
+    app.include_router(auto_generate_router, prefix="/api")
     app.include_router(ws_router)  # no /api prefix for websocket
 
     return app

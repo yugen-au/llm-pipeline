@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import Editor from '@monaco-editor/react'
-import { Save, Undo2, Trash2 } from 'lucide-react'
-import { usePromptDetail, useCreatePrompt, useUpdatePrompt, useDeletePrompt, usePromptVariableSchema } from '@/api/prompts'
+import { Save, Undo2, Trash2, X, ChevronsUpDown } from 'lucide-react'
+import { usePromptDetail, useCreatePrompt, useUpdatePrompt, useDeletePrompt, usePromptVariableSchema, useAutoGenerateObjects } from '@/api/prompts'
+import type { AutoGenerateObject } from '@/api/prompts'
 import type { PromptCreateRequest, PromptUpdateRequest } from '@/api/prompts'
 import type { PromptVariant } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +18,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -169,7 +174,137 @@ function MetadataGrid({
 
 type VarDefs = Record<string, { type: string; description: string; auto_generate?: string }>
 
-const VAR_TYPES = ['str', 'int', 'float', 'bool', 'list'] as const
+const VAR_TYPES = ['enum', 'str', 'int', 'float', 'bool', 'list'] as const
+
+// ---------------------------------------------------------------------------
+// Auto-generate helpers
+// ---------------------------------------------------------------------------
+
+interface AutoGenOption {
+  label: string
+  expression: string
+  /** If true, needs a second pick (enum member) */
+  needsMember?: boolean
+  enumName?: string
+}
+
+function getAutoGenOptions(type: string, objects: AutoGenerateObject[]): AutoGenOption[] {
+  if (type === 'enum') {
+    return objects
+      .filter((o) => o.kind === 'enum')
+      .map((o) => ({ label: o.name, expression: `enum_names(${o.name})` }))
+  }
+  if (type === 'str') {
+    const opts: AutoGenOption[] = []
+    for (const o of objects) {
+      if (o.kind === 'enum') {
+        opts.push({ label: `All values of ${o.name}`, expression: `enum_values(${o.name})` })
+        for (const m of o.members ?? []) {
+          opts.push({ label: `${o.name}.${m.name}`, expression: `enum_value(${o.name}, ${m.name})` })
+        }
+      }
+      if (o.kind === 'constant' && o.value_type === 'str') {
+        opts.push({ label: `Constant: ${o.name}`, expression: `constant(${o.name})` })
+      }
+    }
+    return opts
+  }
+  if (type === 'int') {
+    return objects
+      .filter((o) => o.kind === 'constant' && o.value_type === 'int')
+      .map((o) => ({ label: `Constant: ${o.name}`, expression: `constant(${o.name})` }))
+  }
+  if (type === 'float') {
+    return objects
+      .filter((o) => o.kind === 'constant' && o.value_type === 'float')
+      .map((o) => ({ label: `Constant: ${o.name}`, expression: `constant(${o.name})` }))
+  }
+  return []
+}
+
+function expressionToLabel(expr: string, objects: AutoGenerateObject[]): string {
+  if (!expr) return ''
+  const namesMatch = expr.match(/^enum_names\((\w+)\)$/)
+  if (namesMatch) return namesMatch[1]
+  const valuesMatch = expr.match(/^enum_values\((\w+)\)$/)
+  if (valuesMatch) return `All values of ${valuesMatch[1]}`
+  const valueMatch = expr.match(/^enum_value\((\w+),\s*(\w+)\)$/)
+  if (valueMatch) return `${valueMatch[1]}.${valueMatch[2]}`
+  const constMatch = expr.match(/^constant\((.+)\)$/)
+  if (constMatch) return `Constant: ${constMatch[1]}`
+  return expr
+}
+
+// ---------------------------------------------------------------------------
+// Auto-generate selector (per variable row)
+// ---------------------------------------------------------------------------
+
+function AutoGenerateSelector({
+  type,
+  value,
+  objects,
+  onChange,
+  onClear,
+}: {
+  type: string
+  value: string
+  objects: AutoGenerateObject[]
+  onChange: (expr: string) => void
+  onClear: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const options = useMemo(() => getAutoGenOptions(type, objects), [type, objects])
+
+  if (options.length === 0) {
+    return <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">N/A</Badge>
+  }
+
+  if (value) {
+    // Show current selection with clear button
+    const label = expressionToLabel(value, objects)
+    return (
+      <div className="flex items-center gap-1">
+        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono truncate max-w-[160px]">
+          {label}
+        </Badge>
+        <Button variant="ghost" size="icon" className="h-5 w-5" onClick={onClear}>
+          <X className="h-3 w-3" />
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="h-7 text-xs gap-1 font-normal text-muted-foreground">
+          Select...
+          <ChevronsUpDown className="h-3 w-3" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[260px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search..." className="h-8 text-xs" />
+          <CommandList className="max-h-[200px]">
+            <CommandEmpty className="text-xs py-2">No options.</CommandEmpty>
+            <CommandGroup>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt.expression}
+                  value={opt.label}
+                  className="text-xs"
+                  onSelect={() => { onChange(opt.expression); setOpen(false) }}
+                >
+                  {opt.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Variable definitions editor
@@ -190,15 +325,15 @@ function VariableDefinitionsEditor({
 }) {
   const vars = useMemo(() => extractVariables(content), [content])
   const { data: schema } = usePromptVariableSchema(promptKey ?? '', promptType ?? '')
+  const { data: autoGenData } = useAutoGenerateObjects()
+  const autoGenObjects = autoGenData?.objects ?? []
 
   // Build merged rows: content-detected vars + schema fields
   const rows = useMemo(() => {
     const names = new Set<string>()
-    // Content variables (strip braces)
     for (const v of vars) {
       names.add(v.replace(/[{}]/g, ''))
     }
-    // Schema fields
     if (schema?.fields) {
       for (const f of schema.fields) {
         names.add(f.name)
@@ -215,7 +350,6 @@ function VariableDefinitionsEditor({
         m[f.name] = f.source
       }
     }
-    // Auto-detected vars not in schema are "auto"
     for (const v of vars) {
       const name = v.replace(/[{}]/g, '')
       if (!m[name]) m[name] = 'auto'
@@ -245,14 +379,12 @@ function VariableDefinitionsEditor({
     if (contentNames.size === 0 && Object.keys(value).length === 0) return
     const updated = { ...value }
     let changed = false
-    // Add new
     for (const name of contentNames) {
       if (!(name in updated)) {
         updated[name] = { type: 'str', description: '' }
         changed = true
       }
     }
-    // Remove gone (only auto/db, not code)
     for (const name of Object.keys(updated)) {
       if (!contentNames.has(name) && sourceMap[name] !== 'code' && sourceMap[name] !== 'both') {
         delete updated[name]
@@ -288,11 +420,16 @@ function VariableDefinitionsEditor({
           {rows.map((name) => {
             const def = value[name] ?? { type: 'str', description: '' }
             const source = sourceMap[name] ?? 'auto'
+            const hasAutoGen = Boolean(def.auto_generate)
             return (
               <TableRow key={name}>
                 <TableCell className="py-1 font-mono text-xs">{name}</TableCell>
                 <TableCell className="py-1 text-xs">
-                  <Select value={def.type} onValueChange={(v) => updateField(name, { type: v })}>
+                  <Select
+                    value={def.type}
+                    onValueChange={(v) => updateField(name, { type: v, auto_generate: '' })}
+                    disabled={hasAutoGen}
+                  >
                     <SelectTrigger className="h-7 w-24 text-xs">
                       <SelectValue />
                     </SelectTrigger>
@@ -312,11 +449,12 @@ function VariableDefinitionsEditor({
                   />
                 </TableCell>
                 <TableCell className="py-1 text-xs">
-                  <Input
+                  <AutoGenerateSelector
+                    type={def.type}
                     value={def.auto_generate ?? ''}
-                    onChange={(e) => updateField(name, { auto_generate: e.target.value })}
-                    placeholder="e.g. enum_values(MyEnum)"
-                    className="h-7 text-xs font-mono"
+                    objects={autoGenObjects}
+                    onChange={(expr) => updateField(name, { auto_generate: expr })}
+                    onClear={() => updateField(name, { auto_generate: '' })}
                   />
                 </TableCell>
                 <TableCell className="py-1 text-xs">

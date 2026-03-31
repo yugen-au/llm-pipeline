@@ -153,3 +153,25 @@ export function usePromptVariableSchema(promptKey: string, promptType: string) {
     staleTime: Infinity,
   })
 }
+
+// ---------------------------------------------------------------------------
+// Auto-generate registry
+// ---------------------------------------------------------------------------
+
+export interface EnumMember { name: string; value: string }
+
+export interface AutoGenerateObject {
+  name: string
+  kind: 'enum' | 'constant'
+  members?: EnumMember[]
+  value_type?: string
+  value?: unknown
+}
+
+export function useAutoGenerateObjects() {
+  return useQuery({
+    queryKey: ['auto-generate'] as const,
+    queryFn: () => apiClient<{ objects: AutoGenerateObject[] }>('/auto-generate'),
+    staleTime: Infinity,
+  })
+}

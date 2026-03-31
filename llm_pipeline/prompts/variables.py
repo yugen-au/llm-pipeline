@@ -202,6 +202,7 @@ TYPE_MAP: dict[str, type] = {
     "bool": bool,
     "list": list,
     "dict": dict,
+    "enum": str,  # enum variables resolve to str for prompt substitution
 }
 
 
