@@ -8,10 +8,16 @@
  * Tasks 37 (Live Execution) and 40 (Pipeline Structure) import from this file.
  */
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
 import type { PipelineListItem, PipelineMetadata, StepPromptsResponse } from './types'
+
+/** Response from GET /api/pipelines/{name}/steps/{step}/model */
+export interface StepModelResponse {
+  model: string | null
+  source: 'db' | 'step_definition' | 'pipeline_default'
+}
 
 /**
  * Fetch all registered pipelines.
@@ -67,6 +73,57 @@ export function useStepInstructions(pipelineName: string, stepName: string) {
         '/pipelines/' + pipelineName + '/steps/' + stepName + '/prompts',
       ),
     enabled: Boolean(pipelineName && stepName),
+    staleTime: Infinity,
+  })
+}
+
+/** Fetch current model config for a step (DB override, step default, or pipeline default). */
+export function useStepModel(pipelineName: string, stepName: string) {
+  return useQuery({
+    queryKey: queryKeys.pipelines.stepModel(pipelineName, stepName),
+    queryFn: () =>
+      apiClient<StepModelResponse>(
+        '/pipelines/' + pipelineName + '/steps/' + stepName + '/model',
+      ),
+    enabled: Boolean(pipelineName && stepName),
+  })
+}
+
+/** Set model override for a step. */
+export function useSetStepModel(pipelineName: string, stepName: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (model: string) =>
+      apiClient('/pipelines/' + pipelineName + '/steps/' + stepName + '/model', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.pipelines.stepModel(pipelineName, stepName) })
+    },
+  })
+}
+
+/** Remove model override for a step. */
+export function useRemoveStepModel(pipelineName: string, stepName: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () =>
+      apiClient('/pipelines/' + pipelineName + '/steps/' + stepName + '/model', {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.pipelines.stepModel(pipelineName, stepName) })
+    },
+  })
+}
+
+/** Fetch available LLM models grouped by provider. */
+export function useAvailableModels() {
+  return useQuery({
+    queryKey: ['models'] as const,
+    queryFn: () => apiClient<Record<string, string[]>>('/models'),
     staleTime: Infinity,
   })
 }

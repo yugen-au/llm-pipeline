@@ -31,6 +31,8 @@ export const queryKeys = {
     detail: (name: string) => ['pipelines', name] as const,
     stepPrompts: (name: string, stepName: string) =>
       ['pipelines', name, 'steps', stepName, 'prompts'] as const,
+    stepModel: (name: string, stepName: string) =>
+      ['pipelines', name, 'steps', stepName, 'model'] as const,
   },
   creator: {
     all: ['creator'] as const,

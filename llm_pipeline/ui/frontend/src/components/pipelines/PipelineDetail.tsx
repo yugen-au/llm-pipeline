@@ -68,7 +68,7 @@ export function PipelineDetail({ pipelineName }: PipelineDetailProps) {
           {/* Registry models */}
           {data.registry_models.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Models:</span>
+              <span className="text-xs text-muted-foreground">Tables:</span>
               {data.registry_models.map((model) => (
                 <Badge key={model} variant="secondary">
                   {model}

@@ -359,6 +359,8 @@ export interface PipelineStepMetadata {
   transformation: TransformationMetadata | null
   action_after: string | null
   tools?: string[]
+  model: string | null
+  agent_name: string | null
 }
 
 /**
