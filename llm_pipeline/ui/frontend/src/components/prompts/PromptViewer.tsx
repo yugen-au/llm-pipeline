@@ -318,7 +318,7 @@ function PromptContentEditor({
   }
 
   return (
-    <div className="min-h-[300px] overflow-hidden rounded-md border">
+    <div className="min-h-[300px] rounded-md border" style={{ overflow: 'visible' }}>
       <Editor
         height="300px"
         language="markdown"
