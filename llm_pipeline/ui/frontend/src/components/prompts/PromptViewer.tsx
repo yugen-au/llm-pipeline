@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
-import type * as Monaco from 'monaco-editor'
+import type { editor, Position } from 'monaco-editor'
 import { Save, Undo2, Trash2, X, ChevronsUpDown } from 'lucide-react'
 import { usePromptDetail, useCreatePrompt, useUpdatePrompt, useDeletePrompt, usePromptVariableSchema, useAutoGenerateObjects } from '@/api/prompts'
 import type { AutoGenerateObject } from '@/api/prompts'
@@ -223,7 +223,7 @@ function getAutoGenOptions(type: string, objects: AutoGenerateObject[]): AutoGen
   return []
 }
 
-function expressionToLabel(expr: string, objects: AutoGenerateObject[]): string {
+function expressionToLabel(expr: string): string {
   if (!expr) return ''
   const namesMatch = expr.match(/^enum_names\((\w+)\)$/)
   if (namesMatch) return namesMatch[1]
@@ -254,10 +254,10 @@ function PromptContentEditor({
   const varDefsRef = useRef(varDefs)
   varDefsRef.current = varDefs
 
-  const handleMount: OnMount = (editor, monaco) => {
+  const handleMount: OnMount = (_editor, monaco) => {
     // Hover provider: show variable info on {variable}
     monaco.languages.registerHoverProvider('markdown', {
-      provideHover(model, position) {
+      provideHover(model: editor.ITextModel, position: Position) {
         const word = model.getWordAtPosition(position)
         if (!word) return null
         const line = model.getLineContent(position.lineNumber)
@@ -287,7 +287,7 @@ function PromptContentEditor({
     // Completion provider: suggest variables after {
     monaco.languages.registerCompletionItemProvider('markdown', {
       triggerCharacters: ['{'],
-      provideCompletionItems(model, position) {
+      provideCompletionItems(model: editor.ITextModel, position: Position) {
         const textBefore = model.getValueInRange({
           startLineNumber: position.lineNumber,
           startColumn: Math.max(1, position.column - 1),
@@ -364,7 +364,7 @@ function AutoGenerateSelector({
 
   if (value) {
     // Show current selection with clear button
-    const label = expressionToLabel(value, objects)
+    const label = expressionToLabel(value)
     return (
       <div className="flex items-center gap-1">
         <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-mono truncate max-w-[160px]">
