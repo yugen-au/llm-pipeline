@@ -126,17 +126,16 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
 
     if frontend_dir.exists():
         # Check npx availability
+        npx = _resolve_npx()
         try:
-            subprocess.run(
-                ["npx", "--version"],
-                capture_output=True,
-                shell=(sys.platform == "win32"),
-            )
+            subprocess.run([npx, "--version"], capture_output=True)
         except FileNotFoundError:
             print("ERROR: npx not found; install Node.js to use dev mode", file=sys.stderr)
             sys.exit(1)
 
         # Auto-install deps if node_modules missing or lockfile changed
+        import shutil
+        npm = shutil.which("npm") or shutil.which("npm.cmd") or "npm"
         node_modules = frontend_dir / "node_modules"
         lock_file = frontend_dir / "package-lock.json"
         stamp_file = node_modules / ".install_hash"
@@ -148,9 +147,8 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         if not node_modules.exists() or lock_hash != existing_hash:
             print("Installing frontend dependencies...", file=sys.stderr)
             subprocess.run(
-                ["npm", "install"],
+                [npm, "install"],
                 cwd=str(frontend_dir),
-                shell=(sys.platform == "win32"),
                 check=True,
             )
             if lock_hash:
@@ -212,40 +210,43 @@ def _create_dev_app() -> object:
 
 
 
+def _resolve_npx() -> str:
+    """Return full path to npx to avoid needing shell=True."""
+    import shutil
+    npx = shutil.which("npx")
+    if npx:
+        return npx
+    # Windows: npx.cmd is on PATH but shutil.which may need the extension
+    if sys.platform == "win32":
+        npx = shutil.which("npx.cmd")
+        if npx:
+            return npx
+    return "npx"
+
+
 def _start_vite(
     frontend_dir: Path, vite_port: int, api_port: int
 ) -> subprocess.Popen:  # type: ignore[type-arg]
-    """Launch vite dev server as a subprocess."""
+    """Launch vite dev server as a subprocess.
+
+    Avoids shell=True so proc.terminate() kills node directly
+    (no wrapper sh/cmd.exe process to orphan children).
+    """
     env = {**os.environ, "VITE_PORT": str(vite_port), "VITE_API_PORT": str(api_port)}
-    cmd = ["npx", "vite", "--host", "127.0.0.1", "--port", str(vite_port)]
-    return subprocess.Popen(
-        cmd, cwd=str(frontend_dir), env=env, shell=(sys.platform == "win32")
-    )
+    npx = _resolve_npx()
+    cmd = [npx, "vite", "--host", "127.0.0.1", "--port", str(vite_port)]
+    return subprocess.Popen(cmd, cwd=str(frontend_dir), env=env)
 
 
 def _cleanup_vite(proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
-    """Terminate vite subprocess if still running.
-
-    On Windows with shell=True, proc.terminate() only kills cmd.exe,
-    leaving node.exe orphaned. Use taskkill /T to kill the entire
-    process tree instead.
-    """
+    """Terminate vite subprocess if still running."""
     if proc.poll() is not None:
         return
-    if sys.platform == "win32":
-        try:
-            subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
-                capture_output=True,
-            )
-        except Exception:
-            proc.kill()
-    else:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
+    proc.terminate()
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
 
 
 if __name__ == "__main__":
