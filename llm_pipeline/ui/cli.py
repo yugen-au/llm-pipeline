@@ -12,6 +12,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+_PID_FILE = Path(".llm_pipeline") / "ui.pid"
+
+
 def main() -> None:
     load_dotenv()
     """Parse arguments and dispatch to the appropriate subcommand."""
@@ -51,13 +54,98 @@ def main() -> None:
         help="Enable demo mode (load built-in demo pipelines and prompts)",
     )
 
+    sub.add_parser("stop", help="Stop a running UI server")
+
     args = parser.parse_args()
 
     if args.command == "ui":
         _run_ui(args)
+    elif args.command == "stop":
+        _stop_ui()
     else:
         parser.print_help()
         sys.exit(1)
+
+
+def _write_pid_file(vite_pid: int | None = None) -> None:
+    """Write main + vite PIDs to file for stop command."""
+    _PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    pids = {"main": os.getpid()}
+    if vite_pid:
+        pids["vite"] = vite_pid
+    _PID_FILE.write_text(
+        "\n".join(f"{k}={v}" for k, v in pids.items()) + "\n"
+    )
+    atexit.register(_remove_pid_file)
+
+
+def _remove_pid_file() -> None:
+    """Clean up PID file on exit."""
+    try:
+        _PID_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _stop_ui() -> None:
+    """Stop a running UI server by reading the PID file."""
+    if not _PID_FILE.exists():
+        print("No running UI server found (no PID file)", file=sys.stderr)
+        sys.exit(1)
+
+    pids = {}
+    for line in _PID_FILE.read_text().strip().splitlines():
+        key, _, val = line.partition("=")
+        if val:
+            pids[key] = int(val)
+
+    main_pid = pids.get("main")
+    if not main_pid:
+        print("Invalid PID file", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"Stopping UI server (PID {main_pid})...")
+
+    if sys.platform == "win32":
+        # Graceful kill on Windows — sends WM_CLOSE, allows atexit to run
+        import ctypes
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        # Attach to the process's console and send CTRL_BREAK
+        # Fall back to taskkill if that fails
+        try:
+            os.kill(main_pid, signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            pass
+        # Also try taskkill without /F for graceful shutdown
+        subprocess.run(
+            ["taskkill", "/PID", str(main_pid)],
+            capture_output=True,
+        )
+    else:
+        try:
+            os.kill(main_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+
+    # Wait briefly then verify
+    import time
+    time.sleep(2)
+
+    # Force-kill any stragglers (vite)
+    vite_pid = pids.get("vite")
+    if vite_pid:
+        try:
+            os.kill(vite_pid, signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            pass
+
+    # Clean up PID file
+    try:
+        _PID_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    print("Stopped.")
 
 
 def _run_ui(args: argparse.Namespace) -> None:
@@ -75,6 +163,7 @@ def _run_ui(args: argparse.Namespace) -> None:
                 prompts_dir=args.prompts_dir,
                 demo_mode=args.demo,
             )
+            _write_pid_file()
             _run_prod_mode(app, args.port)
     except ImportError as e:
         _ui_deps = {"fastapi", "uvicorn", "starlette", "multipart", "python_multipart"}
@@ -156,6 +245,7 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
 
         vite_port = args.port + 1
         vite_proc = _start_vite(frontend_dir, vite_port, args.port)
+        _write_pid_file(vite_pid=vite_proc.pid)
         atexit.register(_cleanup_vite, vite_proc)
 
         if hasattr(signal, "SIGTERM"):
