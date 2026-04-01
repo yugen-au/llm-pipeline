@@ -249,7 +249,7 @@ def create_prompt(
         db.rollback()
         raise HTTPException(status_code=409, detail="Prompt already exists")
 
-    if prompt.variable_definitions:
+    if isinstance(prompt.variable_definitions, dict):
         rebuild_from_db(prompt.prompt_key, prompt.prompt_type, prompt.variable_definitions)
 
     return _to_prompt_item(prompt)
@@ -287,7 +287,7 @@ def update_prompt(
         # Sync variable_definitions if not explicitly provided
         if not var_defs_changed:
             new_vars = set(prompt.required_variables or [])
-            existing_defs = dict(prompt.variable_definitions or {})
+            existing_defs = dict(prompt.variable_definitions) if isinstance(prompt.variable_definitions, dict) else {}
             # Add new variables with defaults
             for v in new_vars:
                 if v not in existing_defs:
@@ -305,7 +305,7 @@ def update_prompt(
     db.commit()
     db.refresh(prompt)
 
-    if var_defs_changed and prompt.variable_definitions:
+    if var_defs_changed and isinstance(prompt.variable_definitions, dict):
         rebuild_from_db(prompt.prompt_key, prompt.prompt_type, prompt.variable_definitions)
 
     # Write back to YAML if managed
@@ -357,7 +357,8 @@ def get_prompt_variable_schema(
         Prompt.prompt_type == prompt_type,
     )
     prompt = db.exec(stmt).first()
-    db_defs: dict = (prompt.variable_definitions or {}) if prompt else {}
+    raw_defs = prompt.variable_definitions if prompt else None
+    db_defs: dict = raw_defs if isinstance(raw_defs, dict) else {}
 
     # 2. Code-registered class
     code_cls = get_code_prompt_variables(prompt_key, prompt_type)
