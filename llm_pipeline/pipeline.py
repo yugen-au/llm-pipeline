@@ -781,6 +781,7 @@ class PipelineConfig(ABC):
                     agent_name = getattr(step, '_agent_name', None)
                     step_tools = get_agent_tools(agent_name) if agent_name else []
                     step_model = self._resolve_step_model(step)
+                    step_usage_limits = self._resolve_step_usage_limits(step)
 
                     # Build validators: always register both, they adapt per-call via ctx.deps
                     step_validators = [
@@ -868,6 +869,7 @@ class PipelineConfig(ABC):
                                     strategy=step_def.consensus_strategy,
                                     current_step_name=current_step_name,
                                     step_model=step_model,
+                                    step_usage_limits=step_usage_limits,
                                 )
                             )
                             # Merge consensus token totals into step-level accumulators
@@ -878,10 +880,15 @@ class PipelineConfig(ABC):
                         else:
                             run_result = None
                             try:
-                                run_result = agent.run_sync(
-                                    user_prompt,
+                                run_kwargs = dict(
                                     deps=step_deps,
                                     model=step_model,
+                                )
+                                if step_usage_limits is not None:
+                                    run_kwargs["usage_limits"] = step_usage_limits
+                                run_result = agent.run_sync(
+                                    user_prompt,
+                                    **run_kwargs,
                                 )
                                 instruction = run_result.output
                                 # Capture per-call token usage
@@ -1103,6 +1110,21 @@ class PipelineConfig(ABC):
         # 3. Pipeline default
         return self._model
 
+    def _resolve_step_usage_limits(self, step):
+        """Resolve usage limits for a step from DB config."""
+        from sqlmodel import select
+        from llm_pipeline.db.step_config import StepModelConfig
+        from pydantic_ai.usage import UsageLimits
+        config = self._real_session.exec(
+            select(StepModelConfig).where(
+                StepModelConfig.pipeline_name == self.pipeline_name,
+                StepModelConfig.step_name == step.step_name,
+            )
+        ).first()
+        if config and config.request_limit is not None:
+            return UsageLimits(request_limit=config.request_limit)
+        return None
+
     def _hash_step_inputs(self, step, step_number: int) -> str:
         try:
             calls = step.prepare_calls()
@@ -1302,6 +1324,7 @@ class PipelineConfig(ABC):
         self, agent, user_prompt, step_deps, instructions_type,
         strategy: 'ConsensusStrategy', current_step_name: str,
         step_model: str | None = None,
+        step_usage_limits=None,
     ):
         """Execute LLM calls with consensus strategy, accumulating token usage.
 
@@ -1336,7 +1359,10 @@ class PipelineConfig(ABC):
             _call_total_tokens = None
             run_result = None
             try:
-                run_result = agent.run_sync(user_prompt, deps=step_deps, model=step_model or self._model)
+                _consensus_kwargs = dict(deps=step_deps, model=step_model or self._model)
+                if step_usage_limits is not None:
+                    _consensus_kwargs["usage_limits"] = step_usage_limits
+                run_result = agent.run_sync(user_prompt, **_consensus_kwargs)
                 instruction = run_result.output
                 # Capture per-call token usage defensively
                 _usage = run_result.usage()

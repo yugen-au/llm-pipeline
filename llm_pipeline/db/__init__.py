@@ -41,6 +41,7 @@ def _migrate_add_columns(engine: Engine) -> None:
         ("pipeline_step_states", "total_requests", "INTEGER"),
         ("pipeline_events", "step_name", "VARCHAR(100)"),
         ("prompts", "variable_definitions", "TEXT"),
+        ("step_model_configs", "request_limit", "INTEGER"),
     ]
 
     # Group by table to minimise lookups

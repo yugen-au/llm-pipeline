@@ -18,6 +18,7 @@ class StepModelConfig(SQLModel, table=True):
     pipeline_name: str = Field(max_length=100)
     step_name: str = Field(max_length=100)
     model: str = Field(max_length=100)
+    request_limit: Optional[int] = Field(default=None, description="Max LLM requests per step run (None = pydantic-ai default)")
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
     )

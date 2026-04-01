@@ -72,6 +72,7 @@ class PipelineMetadata(BaseModel):
 
 class StepModelRequest(BaseModel):
     model: str
+    request_limit: Optional[int] = None
 
 
 class StepPromptItem(BaseModel):
@@ -295,13 +296,13 @@ def get_step_model(
     )
     row = db.exec(stmt).first()
     if row is not None:
-        return {"model": row.model, "source": "db"}
+        return {"model": row.model, "request_limit": row.request_limit, "source": "db"}
 
     introspected_model = _find_step_model_from_introspection(registry, name, step_name)
     if introspected_model is not None:
-        return {"model": introspected_model, "source": "step_definition"}
+        return {"model": introspected_model, "request_limit": None, "source": "step_definition"}
 
-    return {"model": None, "source": "pipeline_default"}
+    return {"model": None, "request_limit": None, "source": "pipeline_default"}
 
 
 @router.put("/{name}/steps/{step_name}/model")
@@ -324,16 +325,18 @@ def put_step_model(
     row = db.exec(stmt).first()
     if row is not None:
         row.model = body.model
+        row.request_limit = body.request_limit
     else:
         row = StepModelConfig(
             pipeline_name=name,
             step_name=step_name,
             model=body.model,
+            request_limit=body.request_limit,
         )
         db.add(row)
     db.commit()
     db.refresh(row)
-    return {"id": row.id, "pipeline_name": row.pipeline_name, "step_name": row.step_name, "model": row.model}
+    return {"id": row.id, "pipeline_name": row.pipeline_name, "step_name": row.step_name, "model": row.model, "request_limit": row.request_limit}
 
 
 @router.delete("/{name}/steps/{step_name}/model")
