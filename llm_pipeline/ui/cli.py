@@ -224,8 +224,23 @@ def _start_vite(
 
 
 def _cleanup_vite(proc: subprocess.Popen) -> None:  # type: ignore[type-arg]
-    """Terminate vite subprocess if still running."""
-    if proc.poll() is None:
+    """Terminate vite subprocess if still running.
+
+    On Windows with shell=True, proc.terminate() only kills cmd.exe,
+    leaving node.exe orphaned. Use taskkill /T to kill the entire
+    process tree instead.
+    """
+    if proc.poll() is not None:
+        return
+    if sys.platform == "win32":
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                capture_output=True,
+            )
+        except Exception:
+            proc.kill()
+    else:
         proc.terminate()
         try:
             proc.wait(timeout=5)
