@@ -395,6 +395,7 @@ export interface PipelineMetadata {
 /** Simplified pipeline list item for GET /api/pipelines. */
 export interface PipelineListItem {
   name: string
+  status: string | null
   strategy_count: number | null
   step_count: number | null
   has_input_schema: boolean

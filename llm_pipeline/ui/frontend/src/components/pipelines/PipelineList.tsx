@@ -81,6 +81,15 @@ export function PipelineList({
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
                 {pipeline.name}
               </span>
+              <Badge
+                variant={pipeline.status === 'published' ? 'default' : 'outline'}
+                className={cn(
+                  'text-[10px] px-1.5 py-0',
+                  pipeline.status === 'draft' && 'text-muted-foreground',
+                )}
+              >
+                {pipeline.status ?? 'draft'}
+              </Badge>
               {pipeline.error != null ? (
                 <Badge variant="destructive">error</Badge>
               ) : (

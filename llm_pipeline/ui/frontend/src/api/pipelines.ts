@@ -127,3 +127,22 @@ export function useAvailableModels() {
     staleTime: Infinity,
   })
 }
+
+/** Toggle pipeline visibility status (draft/published). */
+export function useSetPipelineStatus(pipelineName: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (status: 'draft' | 'published') =>
+      apiClient<{ pipeline_name: string; status: string }>(
+        '/pipelines/' + pipelineName + '/status',
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status }),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.pipelines.all })
+    },
+  })
+}

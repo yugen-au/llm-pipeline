@@ -1,5 +1,6 @@
-import { usePipeline } from '@/api/pipelines'
+import { usePipeline, usePipelines, useSetPipelineStatus } from '@/api/pipelines'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { JsonViewer } from '@/components/JsonViewer'
 import { StrategySection } from '@/components/pipelines/StrategySection'
@@ -32,6 +33,9 @@ function DetailSkeleton() {
 
 export function PipelineDetail({ pipelineName }: PipelineDetailProps) {
   const { data, isLoading, error } = usePipeline(pipelineName ?? '')
+  const { data: listData } = usePipelines()
+  const currentStatus = listData?.pipelines?.find((p) => p.name === pipelineName)?.status ?? 'draft'
+  const statusMutation = useSetPipelineStatus(pipelineName ?? '')
 
   // Empty state -- no pipeline selected
   if (!pipelineName) {
@@ -63,7 +67,20 @@ export function PipelineDetail({ pipelineName }: PipelineDetailProps) {
       <div className="space-y-6 p-4">
         {/* Header */}
         <div className="space-y-3">
-          <h2 className="text-xl font-semibold">{data.pipeline_name}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold">{data.pipeline_name}</h2>
+            <Button
+              size="sm"
+              variant={currentStatus === 'published' ? 'default' : 'outline'}
+              className="h-6 text-xs px-2"
+              disabled={statusMutation.isPending}
+              onClick={() =>
+                statusMutation.mutate(currentStatus === 'published' ? 'draft' : 'published')
+              }
+            >
+              {currentStatus === 'published' ? 'Published' : 'Draft'}
+            </Button>
+          </div>
 
           {/* Registry models */}
           {data.registry_models.length > 0 && (
