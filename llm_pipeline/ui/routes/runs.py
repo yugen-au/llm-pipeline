@@ -33,6 +33,7 @@ class RunListItem(BaseModel):
     completed_at: Optional[datetime] = None
     step_count: Optional[int] = None
     total_time_ms: Optional[int] = None
+    error_message: Optional[str] = None
 
 
 class RunListResponse(BaseModel):
@@ -57,6 +58,7 @@ class RunDetail(BaseModel):
     completed_at: Optional[datetime] = None
     step_count: Optional[int] = None
     total_time_ms: Optional[int] = None
+    error_message: Optional[str] = None
     steps: List[StepSummary]
 
 
@@ -261,8 +263,9 @@ def trigger_run(
             pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter, input_data=body.input_data or {})
             pipeline.execute(data=None, input_data=body.input_data)
             pipeline.save()
-        except Exception:
+        except Exception as exc:
             logger.exception("Background pipeline execution failed for run_id=%s", run_id)
+            error_msg = f"{type(exc).__name__}: {exc}"
             # Release pipeline session lock BEFORE opening err_session.
             # pipeline._real_session holds an open transaction with a row
             # lock on pipeline_runs.  If we open err_session and try to
@@ -281,6 +284,7 @@ def trigger_run(
                     if run:
                         run.status = "failed"
                         run.completed_at = datetime.now(timezone.utc)
+                        run.error_message = error_msg[:2000]
                         err_session.add(run)
                         err_session.commit()
             except Exception:

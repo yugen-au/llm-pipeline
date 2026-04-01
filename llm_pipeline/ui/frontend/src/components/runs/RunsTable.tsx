@@ -109,7 +109,16 @@ export function RunsTable({ runs, isLoading, isError }: RunsTableProps) {
                   </Tooltip>
                 </TableCell>
                 <TableCell>
-                  <StatusBadge status={run.status} />
+                  {run.status === 'failed' && run.error_message ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span><StatusBadge status={run.status} /></span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm break-words">{run.error_message}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <StatusBadge status={run.status} />
+                  )}
                 </TableCell>
                 <TableCell>{run.step_count ?? '\u2014'}</TableCell>
                 <TableCell>{formatDuration(run.total_time_ms)}</TableCell>

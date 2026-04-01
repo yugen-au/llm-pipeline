@@ -23,6 +23,7 @@ export interface RunListItem {
   completed_at: string | null
   step_count: number | null
   total_time_ms: number | null
+  error_message: string | null
 }
 
 /** GET /api/runs response body. */
@@ -50,6 +51,7 @@ export interface RunDetail {
   completed_at: string | null
   step_count: number | null
   total_time_ms: number | null
+  error_message: string | null
   steps: StepSummary[]
 }
 

@@ -189,6 +189,7 @@ class PipelineRun(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(default=None)
     step_count: Optional[int] = Field(default=None)
     total_time_ms: Optional[int] = Field(default=None)
+    error_message: Optional[str] = Field(default=None, description="Error details when status=failed")
 
     __table_args__ = (
         Index("ix_pipeline_runs_name_started", "pipeline_name", "started_at"),

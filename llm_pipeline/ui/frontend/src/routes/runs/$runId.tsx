@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
-import { ArrowLeft } from 'lucide-react'
+import { AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useRun, useRunContext } from '@/api/runs'
 import { useSteps } from '@/api/steps'
 import { useEvents } from '@/api/events'
@@ -173,6 +173,17 @@ function RunDetailPage() {
             </div>
           </CardHeader>
         </Card>
+
+        {/* Error banner */}
+        {run.status === 'failed' && run.error_message && (
+          <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-destructive">Pipeline failed</p>
+              <p className="mt-1 text-sm text-destructive/80 break-words">{run.error_message}</p>
+            </div>
+          </div>
+        )}
 
         {/* Page body: StepTimeline + ContextEvolution */}
         <div className="flex min-h-0 flex-1 gap-4">
