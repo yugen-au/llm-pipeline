@@ -113,7 +113,10 @@ uv run llm-pipeline ui [flags]
   --model MODEL      Default LLM model (pydantic-ai model string)
   --pipelines MODULE Python module to scan for PipelineConfig subclasses
   --prompts-dir DIR  Directory with prompt YAML files
+  --demo             Load built-in demo pipelines and prompts
 ```
+
+By default, only project-level `llm_pipelines/` and `llm-pipeline-prompts/` are loaded. Use `--demo` (or `LLM_PIPELINE_DEMO_MODE=true`) to include the built-in demo pipeline for testing.
 
 ## Prompts
 

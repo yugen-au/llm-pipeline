@@ -48,6 +48,8 @@ Standard layout for pipeline artifacts, auto-discovered on startup:
 - Custom DB: `uv run llm-pipeline ui --dev --db path/to/db.sqlite`
 - Custom pipelines: `uv run llm-pipeline ui --dev --pipelines my_project.pipelines`
 - Custom prompts dir: `uv run llm-pipeline ui --dev --prompts-dir path/to/prompts`
+- Demo mode: `uv run llm-pipeline ui --dev --demo` (loads built-in demo pipeline)
+- Default: demo_mode=false, only project-level llm_pipelines/ and prompts loaded
 
 ## MCP Servers
 
