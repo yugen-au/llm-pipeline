@@ -89,32 +89,26 @@ def _remove_pid_file() -> None:
 
 def _kill_process_tree(pid: int) -> None:
     """Kill a process and all its children using psutil (cross-platform)."""
+    import psutil
     try:
-        import psutil
         proc = psutil.Process(pid)
-        children = proc.children(recursive=True)
-        # Terminate children first, then parent
-        for child in children:
-            try:
-                child.terminate()
-            except psutil.NoSuchProcess:
-                pass
+    except psutil.NoSuchProcess:
+        return
+    children = proc.children(recursive=True)
+    for child in children:
         try:
-            proc.terminate()
+            child.terminate()
         except psutil.NoSuchProcess:
             pass
-        # Wait briefly, then force-kill survivors
-        _, alive = psutil.wait_procs(children + [proc], timeout=3)
-        for p in alive:
-            try:
-                p.kill()
-            except psutil.NoSuchProcess:
-                pass
-    except ImportError:
-        # Fallback without psutil
+    try:
+        proc.terminate()
+    except psutil.NoSuchProcess:
+        pass
+    _, alive = psutil.wait_procs(children + [proc], timeout=3)
+    for p in alive:
         try:
-            os.kill(pid, signal.SIGTERM)
-        except (OSError, ProcessLookupError):
+            p.kill()
+        except psutil.NoSuchProcess:
             pass
 
 

@@ -62,13 +62,11 @@ exclude = [
     "llm_pipeline/ui/frontend/node_modules/**",
     "llm_pipeline/ui/frontend/.vite/**",
     "llm_pipeline/ui/frontend/tsconfig*",
-    "llm_pipeline/ui/frontend/vite.config*",
     "llm_pipeline/ui/frontend/components.json",
     "llm_pipeline/ui/frontend/eslint*",
     "llm_pipeline/ui/frontend/.eslint*",
     "llm_pipeline/ui/frontend/.prettierrc",
     "llm_pipeline/ui/frontend/.prettierignore",
-    "llm_pipeline/ui/frontend/index.html",
     "llm_pipeline/ui/frontend/README.md",
     "llm_pipeline/ui/frontend/.gitignore",
 ]
