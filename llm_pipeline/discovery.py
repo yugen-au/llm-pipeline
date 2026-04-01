@@ -25,18 +25,21 @@ _LOAD_ORDER = [
 ]
 
 
-def find_convention_dirs() -> list[Path]:
+def find_convention_dirs(include_package: bool = True) -> list[Path]:
     """Find all llm_pipelines/ directories to scan.
 
+    Args:
+        include_package: If False, skip the package-internal dir (demo).
+
     Returns directories in priority order (later overrides earlier):
-    1. Package-internal: sibling to llm_pipeline/ package
+    1. Package-internal: sibling to llm_pipeline/ package (if include_package)
     2. CWD: ./llm_pipelines/
     """
     dirs: list[Path] = []
 
     # 1. Package-internal (sibling to this package)
     pkg_dir = Path(__file__).resolve().parent.parent / "llm_pipelines"
-    if pkg_dir.is_dir():
+    if include_package and pkg_dir.is_dir():
         dirs.append(pkg_dir)
 
     # 2. CWD
@@ -150,9 +153,10 @@ def _discover_pipelines_from_modules(
 def discover_from_convention(
     engine: Any,
     default_model: Optional[str],
+    include_package: bool = True,
 ) -> Tuple[Dict[str, Callable], Dict[str, Type]]:
     """Find all convention dirs, load modules in order, return merged registries."""
-    dirs = find_convention_dirs()
+    dirs = find_convention_dirs(include_package=include_package)
     if not dirs:
         return {}, {}
 

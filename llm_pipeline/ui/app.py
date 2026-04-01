@@ -236,6 +236,7 @@ def create_app(
     pipeline_modules: Optional[List[str]] = None,
     auto_generate_base_path: Optional[str] = None,
     prompts_dir: Optional[str] = None,
+    demo_mode: bool = False,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -334,40 +335,37 @@ def create_app(
         module_pipeline: Dict[str, Callable] = {}
         module_introspection: Dict[str, Type[PipelineConfig]] = {}
 
+    # Demo mode: param > env > False
+    resolved_demo = demo_mode or os.environ.get("LLM_PIPELINE_DEMO_MODE", "").lower() in ("1", "true")
+
     # Convention-based discovery (llm_pipelines/ directories)
     from llm_pipeline.discovery import discover_from_convention
     convention_pipeline, convention_introspection = discover_from_convention(
-        app.state.engine, resolved_model
+        app.state.engine, resolved_model, include_package=resolved_demo,
     )
 
-    # Registry setup: merge order entry-points < convention < module-loaded < explicit
-    if auto_discover:
+    # Entry-point discovery (demo pipelines registered here)
+    if auto_discover and resolved_demo:
         discovered_pipeline, discovered_introspection = _discover_pipelines(
             app.state.engine, resolved_model
         )
-        app.state.pipeline_registry = {
-            **discovered_pipeline,
-            **convention_pipeline,
-            **module_pipeline,
-            **(pipeline_registry or {}),
-        }
-        app.state.introspection_registry = {
-            **discovered_introspection,
-            **convention_introspection,
-            **module_introspection,
-            **(introspection_registry or {}),
-        }
     else:
-        app.state.pipeline_registry = {
-            **convention_pipeline,
-            **module_pipeline,
-            **(pipeline_registry or {}),
-        }
-        app.state.introspection_registry = {
-            **convention_introspection,
-            **module_introspection,
-            **(introspection_registry or {}),
-        }
+        discovered_pipeline: Dict[str, Callable] = {}
+        discovered_introspection: Dict[str, Type[PipelineConfig]] = {}
+
+    # Registry setup: merge order entry-points < convention < module-loaded < explicit
+    app.state.pipeline_registry = {
+        **discovered_pipeline,
+        **convention_pipeline,
+        **module_pipeline,
+        **(pipeline_registry or {}),
+    }
+    app.state.introspection_registry = {
+        **discovered_introspection,
+        **convention_introspection,
+        **module_introspection,
+        **(introspection_registry or {}),
+    }
 
     # Sync pipeline visibility (draft/published) to DB
     _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))
@@ -385,9 +383,9 @@ def create_app(
     from llm_pipeline.prompts.yaml_sync import sync_yaml_to_db
 
     prompt_scan_dirs: list[Path] = []
-    # Package-level prompts (ships with package)
+    # Package-level prompts (ships with package, demo_mode only)
     pkg_prompts = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
-    if pkg_prompts.is_dir():
+    if resolved_demo and pkg_prompts.is_dir():
         prompt_scan_dirs.append(pkg_prompts)
     # Project-level prompts (CWD or env/param override)
     project_prompts = Path(

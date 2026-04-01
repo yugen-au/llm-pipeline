@@ -44,6 +44,12 @@ def main() -> None:
         default=None,
         help="Directory containing prompt YAML files",
     )
+    ui_parser.add_argument(
+        "--demo",
+        action="store_true",
+        default=False,
+        help="Enable demo mode (load built-in demo pipelines and prompts)",
+    )
 
     args = parser.parse_args()
 
@@ -67,6 +73,7 @@ def _run_ui(args: argparse.Namespace) -> None:
                 default_model=args.model,
                 pipeline_modules=args.pipelines,
                 prompts_dir=args.prompts_dir,
+                demo_mode=args.demo,
             )
             _run_prod_mode(app, args.port)
     except ImportError as e:
@@ -111,6 +118,8 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
     if getattr(args, "prompts_dir", None) and isinstance(args.prompts_dir, str):
         os.environ["LLM_PIPELINE_PROMPTS_DIR"] = args.prompts_dir
+    if getattr(args, "demo", False):
+        os.environ["LLM_PIPELINE_DEMO_MODE"] = "true"
 
     frontend_dir = Path(__file__).resolve().parent / "frontend"
     vite_proc = None
