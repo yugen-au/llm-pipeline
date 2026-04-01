@@ -167,6 +167,37 @@ uv run llm-pipeline ui --dev --db path/to/db.sqlite --pipelines my_project.pipel
 
 Features: Monaco editor, template variable hover/autocomplete, structured `auto_generate` selector, bidirectional YAML sync.
 
+### Pipeline Visibility
+
+Pipelines have **draft** or **published** status (DB-driven). Only published pipelines are callable via `POST /api/runs`. New pipelines default to draft.
+
+```bash
+# Publish a pipeline
+curl -X PUT http://localhost:8642/api/pipelines/my_pipeline/status \
+  -H "Content-Type: application/json" -d '{"status": "published"}'
+```
+
+Toggle via the UI button in the pipeline detail view, or use the REST API.
+
+### REST API for External Apps
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/pipelines` | List pipelines (`?status=published` to filter) |
+| `PUT` | `/api/pipelines/{name}/status` | Set draft/published |
+| `POST` | `/api/runs` | Trigger run (published only) |
+| `GET` | `/api/runs/{run_id}` | Run status and results |
+
+Full interactive docs at `http://localhost:8642/docs`.
+
+### Demo Mode
+
+By default, only project-level `llm_pipelines/` and `llm-pipeline-prompts/` are loaded. Use `--demo` to include the built-in demo pipeline:
+
+```bash
+uv run llm-pipeline ui --dev --demo
+```
+
 ## Key Concepts at a Glance
 
 ### Pipeline + Strategy + Step Pattern
