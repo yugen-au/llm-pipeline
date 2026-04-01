@@ -60,18 +60,10 @@ class PipelineDatabaseRegistry(ABC):
     def get_models(cls) -> List[Type[SQLModel]]:
         """
         Get all managed models in insertion order.
-        
+
         Returns:
-            List of model classes ordered by FK dependencies
-        
-        Raises:
-            ValueError: If MODELS not defined
+            List of model classes ordered by FK dependencies (may be empty)
         """
-        if not cls.MODELS:
-            raise ValueError(
-                f"{cls.__name__} has no models configured. "
-                f"Use: class {cls.__name__}(PipelineDatabaseRegistry, models=[...])"
-            )
         return cls.MODELS
 
 
