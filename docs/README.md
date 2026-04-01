@@ -12,6 +12,8 @@ llm-pipeline is a Python framework for building declarative, production-ready LL
 - **Database Persistence**: Automatic foreign key ordering and transaction management
 - **LLM Integration**: Multi-provider support via pydantic-ai model strings
 - **Three-Tier Data Model**: Clear separation between context, data, and database extractions
+- **Convention Directory**: Auto-discovered `llm_pipelines/` layout with pipelines, steps, prompts, and more
+- **Web UI**: Monaco-based prompt editor with variable hover/autocomplete and bidirectional YAML sync
 
 Transform unstructured or semi-structured data into validated database records through LLM-powered steps—with zero boilerplate.
 
@@ -20,6 +22,10 @@ Transform unstructured or semi-structured data into validated database records t
 ### Installation
 
 ```bash
+# Recommended: use uv
+uv add llm-pipeline
+
+# Or pip
 pip install llm-pipeline
 ```
 
@@ -129,6 +135,38 @@ Learn by example:
 | [Multi-Strategy Pipeline](guides/multi-strategy.md) | Context-based strategy selection |
 | [Prompt Management](guides/prompts.md) | YAML prompts, versioning, variable resolution |
 
+## Convention Directory
+
+Projects place pipeline artifacts in an `llm_pipelines/` directory (package-internal and/or CWD), auto-discovered on startup in dependency order:
+
+```
+llm_pipelines/
+├── pipelines/      # PipelineConfig subclasses
+├── steps/          # LLMStep definitions
+├── schemas/        # Pydantic schemas
+├── extractions/    # PipelineExtraction subclasses
+├── tools/          # Agent tool functions (manual register_agent())
+├── enums/          # Auto-registered for auto_generate expressions
+└── constants/      # Auto-registered for auto_generate expressions
+```
+
+## Web UI
+
+Start the prompt editor UI:
+
+```bash
+# Dev mode (Vite hot-reload on port 8643, API on 8642)
+uv run llm-pipeline ui --dev
+
+# Production
+uv run llm-pipeline ui
+
+# With overrides
+uv run llm-pipeline ui --dev --db path/to/db.sqlite --pipelines my_project.pipelines --prompts-dir path/to/prompts
+```
+
+Features: Monaco editor, template variable hover/autocomplete, structured `auto_generate` selector, bidirectional YAML sync.
+
 ## Key Concepts at a Glance
 
 ### Pipeline + Strategy + Step Pattern
@@ -177,12 +215,14 @@ init_pipeline_db()  # Uses default location
 
 ### Sync Prompts from YAML
 
+YAML files in `llm-pipeline-prompts/` sync bidirectionally: YAML→DB on startup (version wins), DB→YAML on UI save.
+
 ```python
-from llm_pipeline.prompts import sync_prompts
+from llm_pipeline.prompts import sync_yaml_to_db
 from sqlmodel import create_engine
 
 engine = create_engine('sqlite:///pipeline.db')
-sync_prompts(bind=engine)  # Pass engine as bind parameter
+sync_yaml_to_db(engine)
 ```
 
 ### Query Results
@@ -207,7 +247,7 @@ with Session(engine) as session:
 - **State Tracking**: `PipelineStepState` caches results
 - **Database Access**: `PipelineDatabaseRegistry` manages FK ordering
 - **Prompt Management**: `PromptService` loads versioned prompts
-- **LLM Integration**: pydantic-ai Agent system via AgentRegistry and agent_builders.py
+- **LLM Integration**: pydantic-ai Agent system via `register_agent()` and agent_builders.py
 
 ### Data Flow
 
@@ -266,9 +306,38 @@ Persisted Results
 
 **LLM Providers**: [API](api/llm.md) | [Getting Started](guides/getting-started.md)
 
+## Prompt auto_generate Expressions
+
+`variable_definitions` in YAML prompts support `auto_generate` expressions that evaluate at runtime:
+
+| Expression | Description |
+|---|---|
+| `enum_values(X)` | All values of enum X |
+| `enum_names(X)` | All names of enum X |
+| `enum_value(X, Y)` | Single value Y from enum X |
+| `constant(X)` | Value of constant X |
+
+Enums/constants must be registered via `register_auto_generate(name, obj)` or placed in `enums/`/`constants/` convention dirs (auto-registered).
+
+## Registries
+
+```python
+from llm_pipeline import register_agent, register_auto_generate, register_prompt_variables
+
+# Register agent tools for a step
+register_agent('my_step', tools=[my_tool_fn])
+
+# Register enum/constant for auto_generate expressions
+register_auto_generate('MyEnum', MyEnum)
+
+# Register prompt variable class (optional, DB-driven preferred)
+register_prompt_variables('my_key', 'string', MyVariableClass)
+```
+
 ## Tech Stack
 
 - **Python**: 3.11+
+- **Package Manager**: uv
 - **Data Validation**: Pydantic v2
 - **Database**: SQLModel / SQLAlchemy 2.0
 - **Configuration**: PyYAML
@@ -293,16 +362,16 @@ See [API Reference](api/index.md) for complete dependency information.
 
 ## Key Features
 
-✓ **Declarative Configuration** - Define pipelines as Python classes
-✓ **Strategy Pattern** - Context-dependent execution paths
-✓ **Caching & State Tracking** - Built-in efficiency and reproducibility
-✓ **Database Persistence** - Automatic FK validation and transaction management
-✓ **Three-Tier Data Model** - Clear separation of concerns
-✓ **LLM Integration** - Multi-provider support via pydantic-ai
-✓ **Prompt Management** - Versioned YAML-based prompts
-✓ **Read-Only Sessions** - Prevent accidental writes
-✓ **Consensus Polling** - Support for multi-model decisions
-✓ **Zero Boilerplate** - Automatic configuration and validation
+- Declarative configuration - define pipelines as Python classes
+- Strategy pattern - context-dependent execution paths
+- Caching & state tracking - built-in efficiency and reproducibility
+- Database persistence - automatic FK validation and transaction management
+- Three-tier data model - clear separation of concerns
+- LLM integration - multi-provider support via pydantic-ai, per-step model override
+- Prompt management - YAML prompts with bidirectional DB sync and `auto_generate` expressions
+- Convention directory - auto-discovered `llm_pipelines/` layout
+- Web UI - Monaco prompt editor with variable hover/autocomplete
+- Read-only sessions - prevent accidental writes during execution
 
 ## Known Limitations
 
@@ -315,7 +384,7 @@ Common ones:
 ## Version & Updates
 
 **Current Version**: 0.1.0
-**Documentation Updated**: 2026-02
+**Documentation Updated**: 2026-04
 **Python Support**: 3.11+
 
 ## Support & Contributions

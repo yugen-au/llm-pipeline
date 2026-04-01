@@ -45,6 +45,11 @@ Comprehensive API documentation organized by module:
 
 **[API Reference Index](api/index.md)** - Complete import reference and installation details
 
+### Convention Directory & UI
+
+- **Convention Directory** - `llm_pipelines/` layout: `pipelines/`, `steps/`, `schemas/`, `extractions/`, `tools/`, `enums/`, `constants/`. Auto-discovered from package-internal and CWD on startup.
+- **Web UI** - `uv run llm-pipeline ui --dev` (port 8642 API, 8643 Vite). Flags: `--db`, `--model`, `--pipelines`, `--prompts-dir`.
+
 ## Usage Guides
 
 ### Learn by Example
@@ -52,7 +57,7 @@ Comprehensive API documentation organized by module:
 - **[Getting Started](guides/getting-started.md)** - Introduction and setup
 - **[Basic Pipeline Example](guides/basic-pipeline.md)** - Complete working pipeline with domain models, steps, and strategies
 - **[Multi-Strategy Pipeline](guides/multi-strategy.md)** - Context-dependent execution paths (lane-based vs zone-based example)
-- **[Prompt Management](guides/prompts.md)** - YAML prompt structure, versioning, and variable resolution
+- **[Prompt Management](guides/prompts.md)** - YAML prompt structure, versioning, variable resolution, and auto_generate expressions
 
 ## Cross-Reference Map
 
@@ -69,6 +74,9 @@ Comprehensive API documentation organized by module:
 | Extract data from LLM results | [Extraction API Reference](api/extraction.md) |
 | Transform data between steps | [Transformation API Reference](api/transformation.md) |
 | Manage prompts | [Prompt Management Guide](guides/prompts.md) + [Prompts API](api/prompts.md) |
+| Use auto_generate in prompts | [Prompt Management Guide](guides/prompts.md) |
+| Register agents/enums/constants | `register_agent()`, `register_auto_generate()` (see [README](README.md)) |
+| Run the web UI | `uv run llm-pipeline ui --dev` |
 | Query saved results | [State API Reference](api/state.md) |
 | Configure database | [Getting Started](guides/getting-started.md) + [Registry API](api/registry.md) |
 | Understand the architecture | [Architecture Overview](architecture/overview.md) + [Core Concepts](architecture/concepts.md) |
@@ -145,6 +153,11 @@ Comprehensive API documentation organized by module:
 - [Core Concepts](architecture/concepts.md)
 - [State API Reference](api/state.md)
 - [Basic Pipeline Example](guides/basic-pipeline.md)
+
+#### auto_generate Expressions
+- [Prompt Management Guide](guides/prompts.md)
+- [Prompts API Reference](api/prompts.md)
+- Enums/constants in `enums/`/`constants/` convention dirs auto-register; manual: `register_auto_generate(name, obj)`
 
 #### LLM Integration
 - [Pipeline API Reference](api/pipeline.md)
@@ -266,7 +279,10 @@ from llm_pipeline import InMemoryEventHandler, CompositeEmitter, LoggingEventHan
 from llm_pipeline.events import PipelineStarted, LLMCallStarting  # concrete events
 
 # Prompts
-from llm_pipeline.prompts import PromptService, sync_prompts
+from llm_pipeline.prompts import PromptService, sync_yaml_to_db
+
+# Registries
+from llm_pipeline import register_agent, register_auto_generate, register_prompt_variables
 
 # LLM model configuration (via pydantic-ai model strings)
 # e.g., model='google-gla:gemini-2.0-flash-lite'
@@ -304,7 +320,7 @@ For issues, questions, or improvements to the documentation, please see the proj
 ## Version Information
 
 **Framework Version**: 0.1.0
-**Documentation Last Updated**: 2026-02
+**Documentation Last Updated**: 2026-04
 **Python Version**: 3.11+
 
 ## License
