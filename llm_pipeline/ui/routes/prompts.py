@@ -126,7 +126,7 @@ def _to_prompt_item(prompt: Prompt) -> PromptItem:
         step_name=prompt.step_name,
         content=prompt.content,
         required_variables=_resolve_variables(prompt),
-        variable_definitions=prompt.variable_definitions,
+        variable_definitions=prompt.variable_definitions if isinstance(prompt.variable_definitions, dict) else None,
         description=prompt.description,
         version=prompt.version,
         is_active=prompt.is_active,

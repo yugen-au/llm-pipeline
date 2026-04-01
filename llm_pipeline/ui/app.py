@@ -180,7 +180,7 @@ def _sync_variable_definitions(engine: Engine) -> None:
             stmt = select(Prompt).where(Prompt.variable_definitions.isnot(None))
             prompts = session.exec(stmt).all()
             for p in prompts:
-                if p.variable_definitions:
+                if isinstance(p.variable_definitions, dict):
                     rebuild_from_db(p.prompt_key, p.prompt_type, p.variable_definitions)
             if prompts:
                 logger.info("Synced variable_definitions for %d prompt(s)", len(prompts))
