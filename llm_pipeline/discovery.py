@@ -7,6 +7,7 @@ and registers discovered PipelineConfig subclasses.
 import importlib.util
 import inspect
 import logging
+import os
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, Dict, Optional, Tuple, Type
@@ -25,6 +26,10 @@ _LOAD_ORDER = [
 ]
 
 
+_SKIP_PREFIXES = (".", "_", "node_modules")
+_SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "site-packages", "dist", "build"}
+
+
 def find_convention_dirs(include_package: bool = True) -> list[Path]:
     """Find all llm_pipelines/ directories to scan.
 
@@ -33,7 +38,8 @@ def find_convention_dirs(include_package: bool = True) -> list[Path]:
 
     Returns directories in priority order (later overrides earlier):
     1. Package-internal: sibling to llm_pipeline/ package (if include_package)
-    2. CWD: ./llm_pipelines/
+    2. All llm_pipelines/ dirs found under CWD (any depth), excluding
+       dot-prefixed, underscore-prefixed, and common non-source dirs.
     """
     dirs: list[Path] = []
 
@@ -41,11 +47,22 @@ def find_convention_dirs(include_package: bool = True) -> list[Path]:
     pkg_dir = Path(__file__).resolve().parent.parent / "llm_pipelines"
     if include_package and pkg_dir.is_dir():
         dirs.append(pkg_dir)
+    pkg_resolved = pkg_dir.resolve() if pkg_dir.is_dir() else None
 
-    # 2. CWD
-    cwd_dir = Path.cwd() / "llm_pipelines"
-    if cwd_dir.is_dir() and cwd_dir.resolve() != pkg_dir.resolve():
-        dirs.append(cwd_dir)
+    # 2. Recursive scan from CWD
+    cwd = Path.cwd()
+    for root, subdirs, _files in os.walk(cwd):
+        # Prune dirs we shouldn't descend into
+        subdirs[:] = [
+            d for d in subdirs
+            if not any(d.startswith(p) for p in _SKIP_PREFIXES)
+            and d not in _SKIP_DIRS
+        ]
+        root_path = Path(root)
+        if root_path.name == "llm_pipelines" and (root_path / "__init__.py").exists():
+            resolved = root_path.resolve()
+            if resolved != pkg_resolved:
+                dirs.append(root_path)
 
     return dirs
 
