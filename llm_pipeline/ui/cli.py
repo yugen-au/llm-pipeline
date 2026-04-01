@@ -87,6 +87,37 @@ def _remove_pid_file() -> None:
         pass
 
 
+def _kill_process_tree(pid: int) -> None:
+    """Kill a process and all its children using psutil (cross-platform)."""
+    try:
+        import psutil
+        proc = psutil.Process(pid)
+        children = proc.children(recursive=True)
+        # Terminate children first, then parent
+        for child in children:
+            try:
+                child.terminate()
+            except psutil.NoSuchProcess:
+                pass
+        try:
+            proc.terminate()
+        except psutil.NoSuchProcess:
+            pass
+        # Wait briefly, then force-kill survivors
+        _, alive = psutil.wait_procs(children + [proc], timeout=3)
+        for p in alive:
+            try:
+                p.kill()
+            except psutil.NoSuchProcess:
+                pass
+    except ImportError:
+        # Fallback without psutil
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except (OSError, ProcessLookupError):
+            pass
+
+
 def _stop_ui() -> None:
     """Stop a running UI server by reading the PID file."""
     if not _PID_FILE.exists():
@@ -106,38 +137,13 @@ def _stop_ui() -> None:
 
     print(f"Stopping UI server (PID {main_pid})...")
 
-    if sys.platform == "win32":
-        # Graceful kill on Windows — sends WM_CLOSE, allows atexit to run
-        import ctypes
-        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-        # Attach to the process's console and send CTRL_BREAK
-        # Fall back to taskkill if that fails
-        try:
-            os.kill(main_pid, signal.SIGTERM)
-        except (OSError, ProcessLookupError):
-            pass
-        # Also try taskkill without /F for graceful shutdown
-        subprocess.run(
-            ["taskkill", "/PID", str(main_pid)],
-            capture_output=True,
-        )
-    else:
-        try:
-            os.kill(main_pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+    # Kill main process tree (uvicorn reloader + worker)
+    _kill_process_tree(main_pid)
 
-    # Wait briefly then verify
-    import time
-    time.sleep(2)
-
-    # Force-kill any stragglers (vite)
+    # Kill vite process tree
     vite_pid = pids.get("vite")
     if vite_pid:
-        try:
-            os.kill(vite_pid, signal.SIGTERM)
-        except (OSError, ProcessLookupError):
-            pass
+        _kill_process_tree(vite_pid)
 
     # Clean up PID file
     try:
