@@ -698,6 +698,42 @@ class TestCleanupVite:
 
 
 # ---------------------------------------------------------------------------
+# _resolve_npx
+# ---------------------------------------------------------------------------
+
+class TestResolveNpx:
+    def test_returns_string(self):
+        from llm_pipeline.ui.cli import _resolve_npx
+        result = _resolve_npx()
+        assert isinstance(result, str)
+        assert "npx" in result.lower()
+
+    def test_fallback_when_not_found(self):
+        from llm_pipeline.ui.cli import _resolve_npx
+        with patch("shutil.which", return_value=None):
+            result = _resolve_npx()
+        assert result == "npx"
+
+
+# ---------------------------------------------------------------------------
+# Popen called without shell=True
+# ---------------------------------------------------------------------------
+
+class TestNoShellTrue:
+    """Verify subprocess calls avoid shell=True to prevent ghost processes."""
+
+    def test_popen_no_shell_kwarg(self):
+        """_start_vite Popen call must not use shell=True."""
+        from llm_pipeline.ui.cli import _start_vite
+        with patch("llm_pipeline.ui.cli.subprocess.Popen") as mock_popen, \
+             patch("llm_pipeline.ui.cli._resolve_npx", return_value="/usr/bin/npx"):
+            mock_popen.return_value = MagicMock()
+            _start_vite(Path("/tmp/frontend"), 8643, 8642)
+        _, kwargs = mock_popen.call_args
+        assert kwargs.get("shell") is not True
+
+
+# ---------------------------------------------------------------------------
 # Import guard - _run_ui catches ImportError for missing [ui] deps
 # ---------------------------------------------------------------------------
 
