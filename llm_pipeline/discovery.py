@@ -134,7 +134,8 @@ def _load_subfolder(
 
 
 def _register_enums_constants(modules: list[ModuleType]) -> None:
-    """Auto-register top-level classes/objects from enums/ and constants/."""
+    """Auto-register Enum subclasses from enums/ and top-level objects from constants/."""
+    from enum import Enum
     from llm_pipeline.prompts.variables import register_auto_generate
 
     for mod in modules:
@@ -142,6 +143,10 @@ def _register_enums_constants(modules: list[ModuleType]) -> None:
             if name.startswith("_"):
                 continue
             if inspect.isclass(obj) and obj.__module__ == mod.__name__:
+                if issubclass(obj, Enum):
+                    register_auto_generate(name, obj)
+            elif not inspect.isclass(obj) and not inspect.isfunction(obj) and not inspect.ismodule(obj):
+                # Non-class, non-function top-level objects (constants)
                 register_auto_generate(name, obj)
 
 
