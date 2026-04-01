@@ -26,6 +26,21 @@ _LOAD_ORDER = [
 ]
 
 
+def _resolve_package_name(directory: Path) -> str:
+    """Walk up from directory to find the full dotted package name.
+
+    e.g. /project/logistics_intelligence/llm_pipelines/ -> "logistics_intelligence.llm_pipelines"
+    Stops when a parent no longer has __init__.py.
+    """
+    parts = [directory.name]
+    current = directory.parent
+    while (current / "__init__.py").exists() and current != current.parent:
+        parts.append(current.name)
+        current = current.parent
+    parts.reverse()
+    return ".".join(parts)
+
+
 _SKIP_PREFIXES = (".", "_", "node_modules")
 _SKIP_DIRS = {"__pycache__", ".git", ".venv", "venv", "site-packages", "dist", "build"}
 
@@ -183,7 +198,7 @@ def discover_from_convention(
     for base in dirs:
         namespace = f"_llm_pipelines_{base.name}"
         # Detect if this is an importable package (has __init__.py)
-        pkg_name = base.name if (base / "__init__.py").exists() else None
+        pkg_name = _resolve_package_name(base) if (base / "__init__.py").exists() else None
         logger.debug("Scanning convention dir: %s (pkg=%s)", base, pkg_name)
 
         # Load in dependency order
