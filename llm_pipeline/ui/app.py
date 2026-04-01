@@ -188,6 +188,43 @@ def _sync_variable_definitions(engine: Engine) -> None:
         logger.warning("Failed to sync variable_definitions at startup", exc_info=True)
 
 
+def _sync_pipeline_visibility(engine: Engine, pipeline_names: list[str]) -> None:
+    """Ensure each discovered pipeline has a PipelineVisibility row in DB."""
+    from datetime import datetime, timezone
+    from sqlmodel import Session, select
+    from llm_pipeline.db.pipeline_visibility import PipelineVisibility
+
+    try:
+        with Session(engine) as session:
+            existing = {
+                row.pipeline_name: row
+                for row in session.exec(select(PipelineVisibility)).all()
+            }
+            inserted = 0
+            for name in pipeline_names:
+                if name not in existing:
+                    session.add(PipelineVisibility(
+                        pipeline_name=name,
+                        status="draft",
+                    ))
+                    inserted += 1
+            if inserted:
+                session.commit()
+                logger.info("Created %d pipeline visibility row(s) (default: draft)", inserted)
+            all_draft = all(
+                (existing.get(n) or PipelineVisibility(status="draft")).status == "draft"
+                for n in pipeline_names
+            )
+            if pipeline_names and all_draft:
+                logger.warning(
+                    "All %d pipeline(s) are in draft status. "
+                    "Use PUT /api/pipelines/{name}/status to publish.",
+                    len(pipeline_names),
+                )
+    except Exception:
+        logger.warning("Failed to sync pipeline visibility at startup", exc_info=True)
+
+
 def create_app(
     db_path: Optional[str] = None,
     database_url: Optional[str] = None,
@@ -331,6 +368,9 @@ def create_app(
             **module_introspection,
             **(introspection_registry or {}),
         }
+
+    # Sync pipeline visibility (draft/published) to DB
+    _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))
 
     # auto_generate base path: param > env > None
     from llm_pipeline.prompts.variables import set_auto_generate_base_path

@@ -208,6 +208,21 @@ def trigger_run(
             detail=f"Pipeline '{body.pipeline_name}' not found in registry",
         )
 
+    # Guard: pipeline must be published
+    from sqlmodel import select as sql_select
+    from llm_pipeline.db.pipeline_visibility import PipelineVisibility
+    with Session(request.app.state.engine) as vis_session:
+        vis = vis_session.exec(
+            sql_select(PipelineVisibility).where(
+                PipelineVisibility.pipeline_name == body.pipeline_name,
+            )
+        ).first()
+    if not vis or vis.status != "published":
+        raise HTTPException(
+            status_code=404,
+            detail=f"Pipeline '{body.pipeline_name}' is not published",
+        )
+
     # Guard: model must be configured before pipeline execution
     default_model = getattr(request.app.state, "default_model", None)
     if default_model is None:

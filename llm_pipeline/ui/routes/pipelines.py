@@ -2,12 +2,16 @@
 import logging
 from typing import Any, List, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from datetime import datetime, timezone
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.db.step_config import StepModelConfig
+from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.introspection import PipelineIntrospector, enrich_with_prompt_readiness
 from llm_pipeline.ui.deps import DBSession, WritableDBSession
 
@@ -22,6 +26,7 @@ router = APIRouter(prefix="/pipelines", tags=["pipelines"])
 
 class PipelineListItem(BaseModel):
     name: str
+    status: Optional[str] = None  # draft | published
     strategy_count: Optional[int] = None
     step_count: Optional[int] = None
     has_input_schema: bool = False
@@ -89,12 +94,24 @@ class StepPromptsResponse(BaseModel):
 
 
 @router.get("", response_model=PipelineListResponse)
-def list_pipelines(request: Request) -> PipelineListResponse:
+def list_pipelines(
+    request: Request,
+    db: DBSession,
+    status: Optional[str] = Query(None, description="Filter by status: draft or published"),
+) -> PipelineListResponse:
     """List all registered pipelines with summary metadata."""
     registry: dict = getattr(request.app.state, "introspection_registry", {})
 
+    # Load visibility status from DB
+    vis_map: dict[str, str] = {}
+    for row in db.exec(select(PipelineVisibility)).all():
+        vis_map[row.pipeline_name] = row.status
+
     items: List[PipelineListItem] = []
     for name, pipeline_cls in sorted(registry.items(), key=lambda x: x[0]):
+        pipeline_status = vis_map.get(name, "draft")
+        if status and pipeline_status != status:
+            continue
         try:
             metadata = PipelineIntrospector(pipeline_cls).get_metadata()
             strategies = metadata.get("strategies", [])
@@ -106,6 +123,7 @@ def list_pipelines(request: Request) -> PipelineListResponse:
 
             items.append(PipelineListItem(
                 name=name,
+                status=pipeline_status,
                 strategy_count=strategy_count,
                 step_count=step_count,
                 has_input_schema=has_input_schema,
@@ -115,6 +133,7 @@ def list_pipelines(request: Request) -> PipelineListResponse:
             logger.warning("Failed to introspect pipeline '%s': %s", name, exc)
             items.append(PipelineListItem(
                 name=name,
+                status=pipeline_status,
                 error=str(exc),
             ))
 
@@ -191,6 +210,51 @@ def get_step_prompts(
             for p in prompts
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# Pipeline visibility endpoints
+# ---------------------------------------------------------------------------
+
+
+class PipelineStatusRequest(BaseModel):
+    status: Literal["draft", "published"]
+
+
+@router.get("/{name}/status")
+def get_pipeline_status(name: str, request: Request, db: DBSession):
+    """Get the visibility status of a pipeline."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+    if name not in registry:
+        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
+    row = db.exec(
+        select(PipelineVisibility).where(PipelineVisibility.pipeline_name == name)
+    ).first()
+    return {"pipeline_name": name, "status": row.status if row else "draft"}
+
+
+@router.put("/{name}/status")
+def put_pipeline_status(
+    name: str,
+    body: PipelineStatusRequest,
+    request: Request,
+    db: WritableDBSession,
+):
+    """Set pipeline visibility status (draft or published)."""
+    registry: dict = getattr(request.app.state, "introspection_registry", {})
+    if name not in registry:
+        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
+
+    row = db.exec(
+        select(PipelineVisibility).where(PipelineVisibility.pipeline_name == name)
+    ).first()
+    if row:
+        row.status = body.status
+        row.updated_at = datetime.now(timezone.utc)
+    else:
+        db.add(PipelineVisibility(pipeline_name=name, status=body.status))
+    db.commit()
+    return {"pipeline_name": name, "status": body.status}
 
 
 # ---------------------------------------------------------------------------

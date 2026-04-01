@@ -23,7 +23,7 @@ from llm_pipeline.state import PipelineRun
 from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.routes.websocket import manager
 
-from tests.ui.conftest import _make_app
+from tests.ui.conftest import _make_app, _publish_all
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +165,16 @@ class TestE2ETriggerWebSocket:
 
     def _setup(self):
         """Create app + client + gate event. Returns (app, client, gate)."""
+        from llm_pipeline.db.pipeline_visibility import PipelineVisibility
         gate = threading.Event()
         app = _make_app()
         app.state._test_gate = gate
         app.state.pipeline_registry = {
             "integration_test_pipeline": _make_no_op_factory(gate)
         }
+        with Session(app.state.engine) as s:
+            s.add(PipelineVisibility(pipeline_name="integration_test_pipeline", status="published"))
+            s.commit()
         return app, TestClient(app), gate
 
     def _collect_events(self, client, run_id):
@@ -258,10 +262,14 @@ class TestTriggerRunErrorHandling:
     """Failing pipeline execute() -> runs.py except block sets DB status=failed."""
 
     def _make_failing_client(self):
+        from llm_pipeline.db.pipeline_visibility import PipelineVisibility
         app = _make_app()
         app.state.pipeline_registry = {
             "failing_test_pipeline": _make_failing_pipeline_factory()
         }
+        with Session(app.state.engine) as s:
+            s.add(PipelineVisibility(pipeline_name="failing_test_pipeline", status="published"))
+            s.commit()
         return app, TestClient(app)
 
     def test_trigger_failing_pipeline_sets_status_failed(self):

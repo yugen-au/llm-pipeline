@@ -140,8 +140,10 @@ class TestGetRun:
 
 class TestTriggerRun:
     def _make_client_with_registry(self, factory):
+        from tests.ui.conftest import _publish_all
         registry = {"test_pipeline": factory}
         app = create_app(db_path=":memory:", pipeline_registry=registry, default_model="test-model")
+        _publish_all(app.state.engine)
         return TestClient(app)
 
     def test_returns_202_with_run_id_and_accepted(self):
@@ -168,11 +170,13 @@ class TestTriggerRun:
         assert uuid.UUID(body["run_id"])  # valid UUID, no exception
 
     def test_run_id_is_valid_uuid(self):
+        from tests.ui.conftest import _publish_all
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"p": lambda run_id, engine, **kw: type("P", (), {"execute": lambda s, **kw: None, "save": lambda s: None})()},
             default_model="test-model",
         )
+        _publish_all(app.state.engine)
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "p"})
         run_id = resp.json()["run_id"]
@@ -196,12 +200,14 @@ class TestTriggerRun:
 
     def test_returns_422_when_no_model_configured(self):
         """Registered pipeline but no default_model -> 422 with actionable message."""
+        from tests.ui.conftest import _publish_all
         noop = lambda run_id, engine, **kw: None
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"p": noop},
             default_model=None,
         )
+        _publish_all(app.state.engine)
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "p"})
         assert resp.status_code == 422
@@ -222,11 +228,13 @@ class TestTriggerRun:
             def save(self):
                 pass
 
+        from tests.ui.conftest import _publish_all
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"tracked": lambda run_id, engine, **kw: _TrackedPipeline(run_id, engine)},
             default_model="test-model",
         )
+        _publish_all(app.state.engine)
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "tracked"})
             assert resp.status_code == 202
@@ -252,11 +260,13 @@ class TestTriggerRun:
         def _spy_factory(run_id, engine, **kw):
             return _SpyPipeline(run_id=run_id, engine=engine, **kw)
 
+        from tests.ui.conftest import _publish_all
         app = create_app(
             db_path=":memory:",
             pipeline_registry={"spy": _spy_factory},
             default_model="test-model",
         )
+        _publish_all(app.state.engine)
         payload = {"foo": "bar", "count": 42}
         with TestClient(app) as client:
             resp = client.post("/api/runs", json={"pipeline_name": "spy", "input_data": payload})

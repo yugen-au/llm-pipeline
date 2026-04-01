@@ -7,6 +7,7 @@ from sqlmodel import Session
 from starlette.testclient import TestClient
 
 from llm_pipeline.db import init_pipeline_db
+from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.ui.app import create_app
 from llm_pipeline.state import PipelineRun, PipelineStepState
 from llm_pipeline.events.models import PipelineEventRecord
@@ -14,6 +15,15 @@ from llm_pipeline.events.models import PipelineEventRecord
 
 def _utc(offset_seconds: int = 0) -> datetime:
     return datetime.now(timezone.utc) + timedelta(seconds=offset_seconds)
+
+
+def _publish_all(engine):
+    """Set all pipeline_configs rows to published. For tests that need to trigger runs."""
+    with Session(engine) as session:
+        from sqlmodel import select
+        for row in session.exec(select(PipelineVisibility)).all():
+            row.status = "published"
+        session.commit()
 
 
 def _make_app():
