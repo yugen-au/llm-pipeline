@@ -43,6 +43,7 @@ from llm_pipeline.events.types import (
     ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
     TransformationStarting, TransformationCompleted,
     InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
+    ReviewRequested,
 )
 
 if TYPE_CHECKING:
@@ -1013,6 +1014,20 @@ class PipelineConfig(ABC):
                     if action_method and callable(action_method):
                         action_method(self.context)
 
+                # Review gate: pause if step has review configured
+                if step_def.review is not None:
+                    review_cls = step_def.review
+                    review_config = review_cls() if isinstance(review_cls, type) else review_cls
+                    should_review = review_config.enabled
+                    if should_review and review_config.condition is not None:
+                        should_review = review_config.condition(self._context, instructions)
+                    if should_review:
+                        review_data = step.prepare_review(instructions)
+                        self._pause_for_review(
+                            pipeline_run, step, step_num, review_config, review_data,
+                        )
+                        return self
+
             pipeline_execution_time_ms = (
                 datetime.now(timezone.utc) - start_time
             ).total_seconds() * 1000
@@ -1263,6 +1278,76 @@ class PipelineConfig(ABC):
                 input_hash=input_hash,
                 execution_time_ms=float(execution_time_ms) if execution_time_ms is not None else 0.0,
             ))
+
+    def _pause_for_review(self, pipeline_run, step, step_number, review_config, review_data):
+        """Pause pipeline execution for human review.
+
+        Creates a PipelineReview record, updates run status to awaiting_review,
+        emits ReviewRequested event, and optionally sends a webhook notification.
+        The caller should return from execute() after this call.
+        """
+        import os as _os
+        from llm_pipeline.state import PipelineReview
+
+        token = str(uuid.uuid4())
+
+        review_record = PipelineReview(
+            token=token,
+            run_id=self.run_id,
+            pipeline_name=self.pipeline_name,
+            step_name=step.step_name,
+            step_number=step_number,
+            status="pending",
+            review_data=review_data.model_dump(mode="json"),
+        )
+        self._real_session.add(review_record)
+
+        pipeline_run.status = "awaiting_review"
+        self._real_session.add(pipeline_run)
+        self._real_session.flush()
+
+        if self._event_emitter:
+            self._emit(ReviewRequested(
+                run_id=self.run_id,
+                pipeline_name=self.pipeline_name,
+                step_name=step.step_name,
+                step_number=step_number,
+                token=token,
+                review_data=review_data.model_dump(mode="json"),
+            ))
+
+        # Webhook notification (fire-and-forget)
+        webhook_url = (
+            review_config.webhook_url
+            or _os.environ.get("LLM_PIPELINE_REVIEW_WEBHOOK")
+        )
+        if webhook_url:
+            self._send_review_webhook(webhook_url, token, step, review_data)
+
+        logger.info(
+            "Pipeline paused for review at step '%s' (run=%s, token=%s)",
+            step.step_name, self.run_id, token,
+        )
+
+    def _send_review_webhook(self, url, token, step, review_data):
+        """POST review notification to webhook URL."""
+        import os as _os
+        try:
+            import httpx
+            base_url = _os.environ.get("LLM_PIPELINE_BASE_URL", "http://localhost:8642")
+            httpx.post(url, json={
+                "event": "review_requested",
+                "run_id": self.run_id,
+                "pipeline_name": self.pipeline_name,
+                "step_name": step.step_name,
+                "token": token,
+                "review_link": f"{base_url}/review/{token}",
+                "review_data": review_data.model_dump(mode="json"),
+            }, timeout=10)
+        except ImportError:
+            logger.warning("httpx not installed, skipping review webhook")
+        except Exception:
+            logger.warning("Failed to send review webhook to %s", url, exc_info=True)
 
     def save(
         self,
