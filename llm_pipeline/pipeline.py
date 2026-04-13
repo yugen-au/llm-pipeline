@@ -44,6 +44,7 @@ from llm_pipeline.events.types import (
     TransformationStarting, TransformationCompleted,
     InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
     ReviewRequested,
+    PipelineResumed,
 )
 
 if TYPE_CHECKING:
@@ -657,10 +658,20 @@ class PipelineConfig(ABC):
         self._real_session.flush()
 
         if self._event_emitter:
-            self._emit(PipelineStarted(
-                run_id=self.run_id,
-                pipeline_name=self.pipeline_name,
-            ))
+            _resume_from = getattr(self, '_resume_from_step', 0)
+            if _resume_from > 0:
+                review_ctx = self._context.get("_review_context", {})
+                self._emit(PipelineResumed(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                    resume_from_step=_resume_from,
+                    review_decision=review_ctx.get("decision", ""),
+                ))
+            else:
+                self._emit(PipelineStarted(
+                    run_id=self.run_id,
+                    pipeline_name=self.pipeline_name,
+                ))
 
         try:
             max_steps = max(len(s.get_steps()) for s in self._strategies)

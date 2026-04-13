@@ -175,6 +175,16 @@ class PipelineStarted(PipelineEvent):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class PipelineResumed(PipelineEvent):
+    """Emitted when a pipeline run resumes after human review."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_PIPELINE_LIFECYCLE
+
+    resume_from_step: int
+    review_decision: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PipelineCompleted(PipelineEvent):
     """Emitted when a pipeline run completes successfully."""
 
@@ -637,6 +647,7 @@ __all__ = [
     # -- use PipelineEvent.resolve_event() for registry access
     # Pipeline Lifecycle
     "PipelineStarted",
+    "PipelineResumed",
     "PipelineCompleted",
     "PipelineError",
     # Step Lifecycle
