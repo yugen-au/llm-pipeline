@@ -34,6 +34,7 @@ CATEGORY_TRANSFORMATION = "transformation"
 CATEGORY_EXTRACTION = "extraction"
 CATEGORY_STATE = "state"
 CATEGORY_TOOL_CALL = "tool_call"
+CATEGORY_REVIEW = "review"
 
 
 # -- Registry & helpers -------------------------------------------------------
@@ -588,6 +589,32 @@ class ToolCallCompleted(StepScopedEvent):
     error: str | None = None
 
 
+# -- Review Events -------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewRequested(StepScopedEvent):
+    """Emitted when a step requires human review before proceeding."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_REVIEW
+
+    step_number: int = 0
+    token: str = ""
+    review_data: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewCompleted(StepScopedEvent):
+    """Emitted when a human review decision is submitted."""
+
+    EVENT_CATEGORY: ClassVar[str] = CATEGORY_REVIEW
+
+    step_number: int = 0
+    decision: str = ""
+    notes: str | None = None
+    resume_from: str | None = None
+
+
 # -- Exports -------------------------------------------------------------------
 
 __all__ = [
@@ -605,6 +632,7 @@ __all__ = [
     "CATEGORY_EXTRACTION",
     "CATEGORY_STATE",
     "CATEGORY_TOOL_CALL",
+    "CATEGORY_REVIEW",
     # Helpers (public only; _EVENT_REGISTRY and _derive_event_type are internal)
     # -- use PipelineEvent.resolve_event() for registry access
     # Pipeline Lifecycle
@@ -650,4 +678,7 @@ __all__ = [
     # Tool Call
     "ToolCallStarting",
     "ToolCallCompleted",
+    # Review
+    "ReviewRequested",
+    "ReviewCompleted",
 ]

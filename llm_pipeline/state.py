@@ -273,10 +273,37 @@ class DraftPipeline(SQLModel, table=True):
     )
 
 
+class PipelineReview(SQLModel, table=True):
+    """Human review record for pipeline step review points."""
+    __tablename__ = "pipeline_reviews"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    token: str = Field(max_length=36, sa_column_kwargs={"unique": True})
+    run_id: str = Field(max_length=36)
+    pipeline_name: str = Field(max_length=100)
+    step_name: str = Field(max_length=100)
+    step_number: int
+    status: str = Field(default="pending", max_length=20)  # pending, completed, expired
+    review_data: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    decision: Optional[str] = Field(default=None, max_length=20)
+    notes: Optional[str] = Field(default=None)
+    resume_from: Optional[str] = Field(default=None, max_length=100)
+    user_id: Optional[str] = Field(default=None, max_length=100)
+    created_at: datetime = Field(default_factory=utc_now)
+    completed_at: Optional[datetime] = Field(default=None)
+
+    __table_args__ = (
+        Index("ix_pipeline_reviews_run", "run_id"),
+        Index("ix_pipeline_reviews_token", "token"),
+        Index("ix_pipeline_reviews_status", "status"),
+    )
+
+
 __all__ = [
     "PipelineStepState",
     "PipelineRunInstance",
     "PipelineRun",
     "DraftStep",
     "DraftPipeline",
+    "PipelineReview",
 ]

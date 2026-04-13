@@ -46,6 +46,7 @@ def step_definition(
     context: Optional[Type] = None,
     agent: Optional[str] = None,
     model: Optional[str] = None,
+    review: Optional[Type] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -61,6 +62,7 @@ def step_definition(
         context: Context class this step produces
         agent: Optional agent name for tool lookup from global agent registry
         model: Optional default model for this step (overrides pipeline default)
+        review: Optional StepReview subclass for human-in-the-loop review
     """
     def decorator(step_class):
         if not step_class.__name__.endswith('Step'):
@@ -93,6 +95,14 @@ def step_definition(
                     f"'{expected_context_name}', got '{context.__name__}'"
                 )
 
+        if review:
+            expected_review_name = f"{step_name_prefix}Review"
+            if review.__name__ != expected_review_name:
+                raise ValueError(
+                    f"Review class for {step_class.__name__} must be named "
+                    f"'{expected_review_name}', got '{review.__name__}'"
+                )
+
         step_class.INSTRUCTIONS = instructions
         step_class.DEFAULT_SYSTEM_KEY = default_system_key
         step_class.DEFAULT_USER_KEY = default_user_key
@@ -101,6 +111,7 @@ def step_definition(
         step_class.CONTEXT = context
         step_class.AGENT = agent
         step_class.MODEL = model
+        step_class.REVIEW = review
 
         @classmethod
         def create_definition(
@@ -125,6 +136,10 @@ def step_definition(
             # Default model from decorator if not overridden in kwargs
             if 'model' not in kwargs and cls.MODEL is not None:
                 kwargs['model'] = cls.MODEL
+
+            # Default review from decorator if not overridden in kwargs
+            if 'review' not in kwargs and cls.REVIEW is not None:
+                kwargs['review'] = cls.REVIEW
 
             return StepDefinition(
                 step_class=cls,
@@ -355,6 +370,19 @@ class LLMStep(ABC):
                 raise
             finally:
                 self.pipeline._current_extraction = None
+
+
+    def prepare_review(self, instructions: List[Any]) -> 'ReviewData':
+        """Prepare review data for human review. Override for custom display.
+
+        Default: shows raw instruction data with no display_data fields.
+        Override to provide human-friendly DisplayField items.
+        """
+        from llm_pipeline.review import ReviewData
+        raw = None
+        if instructions and hasattr(instructions[0], 'model_dump'):
+            raw = instructions[0].model_dump(mode="json")
+        return ReviewData(display_data=[], raw_data=raw)
 
 
 __all__ = ["LLMStep", "LLMResultMixin", "step_definition"]

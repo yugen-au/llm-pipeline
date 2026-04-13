@@ -40,6 +40,7 @@ class StepDefinition:
     model: str | None = None
     not_found_indicators: list[str] | None = None
     consensus_strategy: 'ConsensusStrategy | None' = None
+    review: 'StepReview | None' = None
 
     @property
     def step_name(self) -> str:

@@ -148,8 +148,8 @@ class TestDeriveEventType:
 class TestEventRegistry:
     """Verify _EVENT_REGISTRY contents and lookup behavior."""
 
-    def test_registry_has_33_event_types(self):
-        assert len(_EVENT_REGISTRY) == 33
+    def test_registry_has_35_event_types(self):
+        assert len(_EVENT_REGISTRY) == 35
 
     def test_step_scoped_event_not_in_registry(self):
         assert "step_scoped_event" not in _EVENT_REGISTRY
