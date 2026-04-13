@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as PromptsRouteImport } from './routes/prompts'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
 import { Route as LiveRouteImport } from './routes/live'
@@ -16,7 +17,13 @@ import { Route as EditorRouteImport } from './routes/editor'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
+import { Route as ReviewTokenRouteImport } from './routes/review/$token'
 
+const ReviewsRoute = ReviewsRouteImport.update({
+  id: '/reviews',
+  path: '/reviews',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PromptsRoute = PromptsRouteImport.update({
   id: '/prompts',
   path: '/prompts',
@@ -52,6 +59,11 @@ const RunsRunIdRoute = RunsRunIdRouteImport.update({
   path: '/runs/$runId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReviewTokenRoute = ReviewTokenRouteImport.update({
+  id: '/review/$token',
+  path: '/review/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -60,6 +72,8 @@ export interface FileRoutesByFullPath {
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
+  '/reviews': typeof ReviewsRoute
+  '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +83,8 @@ export interface FileRoutesByTo {
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
+  '/reviews': typeof ReviewsRoute
+  '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
 export interface FileRoutesById {
@@ -79,6 +95,8 @@ export interface FileRoutesById {
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
+  '/reviews': typeof ReviewsRoute
+  '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +108,8 @@ export interface FileRouteTypes {
     | '/live'
     | '/pipelines'
     | '/prompts'
+    | '/reviews'
+    | '/review/$token'
     | '/runs/$runId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +119,8 @@ export interface FileRouteTypes {
     | '/live'
     | '/pipelines'
     | '/prompts'
+    | '/reviews'
+    | '/review/$token'
     | '/runs/$runId'
   id:
     | '__root__'
@@ -108,6 +130,8 @@ export interface FileRouteTypes {
     | '/live'
     | '/pipelines'
     | '/prompts'
+    | '/reviews'
+    | '/review/$token'
     | '/runs/$runId'
   fileRoutesById: FileRoutesById
 }
@@ -118,11 +142,20 @@ export interface RootRouteChildren {
   LiveRoute: typeof LiveRoute
   PipelinesRoute: typeof PipelinesRoute
   PromptsRoute: typeof PromptsRoute
+  ReviewsRoute: typeof ReviewsRoute
+  ReviewTokenRoute: typeof ReviewTokenRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reviews': {
+      id: '/reviews'
+      path: '/reviews'
+      fullPath: '/reviews'
+      preLoaderRoute: typeof ReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/prompts': {
       id: '/prompts'
       path: '/prompts'
@@ -172,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RunsRunIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/review/$token': {
+      id: '/review/$token'
+      path: '/review/$token'
+      fullPath: '/review/$token'
+      preLoaderRoute: typeof ReviewTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -182,6 +222,8 @@ const rootRouteChildren: RootRouteChildren = {
   LiveRoute: LiveRoute,
   PipelinesRoute: PipelinesRoute,
   PromptsRoute: PromptsRoute,
+  ReviewsRoute: ReviewsRoute,
+  ReviewTokenRoute: ReviewTokenRoute,
   RunsRunIdRoute: RunsRunIdRoute,
 }
 export const routeTree = rootRouteImport
