@@ -13,6 +13,8 @@ import logging
 import threading
 from typing import TYPE_CHECKING
 
+logger = logging.getLogger(__name__)
+
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel

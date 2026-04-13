@@ -1357,7 +1357,7 @@ class PipelineConfig(ABC):
 
         pipeline_run.status = "awaiting_review"
         self._real_session.add(pipeline_run)
-        self._real_session.flush()
+        self._real_session.commit()  # commit, not flush — releases DB lock for event flush
 
         if self._event_emitter:
             self._emit(ReviewRequested(
