@@ -263,11 +263,7 @@ def trigger_run(
             pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter, input_data=body.input_data or {})
             pipeline.execute(data=None, input_data=body.input_data)
             # Only save extractions if pipeline completed (not paused for review)
-            with Session(engine) as check_session:
-                run_row = check_session.exec(
-                    select(PipelineRun).where(PipelineRun.run_id == run_id)
-                ).first()
-            if run_row and run_row.status != "awaiting_review":
+            if not getattr(pipeline, '_awaiting_review', False):
                 pipeline.save()
         except Exception as exc:
             logger.exception("Background pipeline execution failed for run_id=%s", run_id)

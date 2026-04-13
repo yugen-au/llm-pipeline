@@ -1377,6 +1377,8 @@ class PipelineConfig(ABC):
         if webhook_url:
             self._send_review_webhook(webhook_url, token, step, review_data)
 
+        self._awaiting_review = True
+
         logger.info(
             "Pipeline paused for review at step '%s' (run=%s, token=%s)",
             step.step_name, self.run_id, token,
