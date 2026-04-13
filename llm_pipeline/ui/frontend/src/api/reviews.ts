@@ -7,6 +7,31 @@ import { toast } from 'sonner'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
 
+export interface ReviewListItem {
+  token: string
+  run_id: string
+  pipeline_name: string
+  step_name: string
+  step_number: number
+  status: string
+  decision: string | null
+  notes: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+export interface ReviewListResponse {
+  items: ReviewListItem[]
+  total: number
+}
+
+export interface ReviewListParams {
+  status?: string
+  pipeline_name?: string
+  limit?: number
+  offset?: number
+}
+
 export interface ReviewDetail {
   token: string
   run_id: string
@@ -21,6 +46,7 @@ export interface ReviewDetail {
   decision: string | null
   notes: string | null
   created_at: string
+  completed_at: string | null
 }
 
 export interface ReviewSubmitRequest {
@@ -33,6 +59,19 @@ export interface ReviewSubmitResponse {
   run_id: string
   decision: string
   status: string
+}
+
+function toSearchParams(params: Record<string, unknown>): string {
+  const entries = Object.entries(params).filter(([, v]) => v != null && v !== '')
+  if (entries.length === 0) return ''
+  return '?' + new URLSearchParams(entries.map(([k, v]) => [k, String(v)])).toString()
+}
+
+export function useReviews(filters: Partial<ReviewListParams> = {}) {
+  return useQuery({
+    queryKey: ['reviews', filters] as const,
+    queryFn: () => apiClient<ReviewListResponse>('/reviews' + toSearchParams(filters)),
+  })
 }
 
 export function useReview(token: string) {
