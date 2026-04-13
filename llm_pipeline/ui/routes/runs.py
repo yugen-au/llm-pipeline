@@ -470,6 +470,7 @@ def submit_review(
             pipeline.execute_from_step(
                 resume_step_index=resume_index,
                 review_notes=body.notes,
+                review_decision=body.decision,
                 input_data=original_input_data,
             )
             # Check if paused again for another review

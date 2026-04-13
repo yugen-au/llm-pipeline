@@ -59,6 +59,45 @@ if TYPE_CHECKING:
 TModel = TypeVar("TModel", bound=SQLModel)
 
 
+def _append_review_to_prompt(user_prompt: str, review_ctx: dict) -> str:
+    """Append human review feedback to the rendered user prompt.
+
+    Automatically injected when _review_context is in pipeline context.
+    Cleared after the step runs so it doesn't leak to subsequent steps.
+    """
+    decision = review_ctx.get("decision", "")
+    notes = review_ctx.get("notes", "")
+    original = review_ctx.get("original_output", "")
+
+    if not notes:
+        return user_prompt
+
+    if decision == "minor_revision":
+        appendix = (
+            "\n\n---\n"
+            "Your previous output requires minor revision.\n\n"
+            f"Reviewer feedback:\n{notes}\n\n"
+            f"Previous output:\n{original}\n\n"
+            "Please consider this feedback and make a revision to the previous output accordingly."
+        )
+    elif decision == "major_revision":
+        appendix = (
+            "\n\n---\n"
+            "A previous attempt at this step was rejected. "
+            f"The reviewer left the following feedback:\n{notes}"
+        )
+    elif decision == "approved":
+        appendix = (
+            "\n\n---\n"
+            "A reviewer approved the previous step and left these notes for context:\n"
+            f"{notes}"
+        )
+    else:
+        return user_prompt
+
+    return user_prompt + appendix
+
+
 def _calc_llm_cost(usage: object, model: str | None) -> tuple[float | None, float | None, float | None]:
     """Best-effort cost calculation via genai_prices. Returns (total, input, output) or (None,None,None)."""
     if not usage or not model:
@@ -503,17 +542,13 @@ class PipelineConfig(ABC):
         self,
         resume_step_index: int,
         review_notes: Optional[str] = None,
+        review_decision: Optional[str] = None,
         input_data: Optional[Dict[str, Any]] = None,
     ) -> "PipelineConfig":
         """Resume pipeline execution from a specific step index.
 
         Hydrates context and instructions from persisted PipelineStepState
         rows, then continues the normal step loop from resume_step_index.
-
-        Args:
-            resume_step_index: 0-based step index to resume from
-            review_notes: Optional reviewer feedback, set as _review_notes in context
-            input_data: Original input data (for validated_input reconstruction)
         """
         from sqlmodel import select
         from llm_pipeline.state import PipelineStepState
@@ -525,17 +560,26 @@ class PipelineConfig(ABC):
             .order_by(PipelineStepState.step_number)
         ).all()
 
+        # For minor revision, capture original output before hydrating
+        original_output = ""
         for state in states:
             if state.step_number <= resume_step_index:
-                # Hydrate context from the step before our resume point
                 if state.context_snapshot:
                     self._context.update(state.context_snapshot)
-                # Hydrate instructions
                 if state.result_data:
                     self._instructions[state.step_name] = state.result_data
+            # Grab the reviewed step's output for minor revision prompt
+            if state.step_number == resume_step_index + 1 and state.result_data:
+                import json as _json
+                original_output = _json.dumps(state.result_data, default=str, indent=2) if state.result_data else ""
 
-        if review_notes:
-            self._context["_review_notes"] = review_notes
+        # Set review context for prompt injection (cleared after step runs)
+        if review_notes and review_decision:
+            self._context["_review_context"] = {
+                "decision": review_decision,
+                "notes": review_notes,
+                "original_output": original_output,
+            }
 
         # Set resume point and delegate to execute()
         self._resume_from_step = resume_step_index
@@ -878,6 +922,13 @@ class PipelineConfig(ABC):
                             prompt_service=prompt_service,
                         )
 
+                        # Auto-inject review feedback into prompt
+                        review_ctx = self._context.get("_review_context")
+                        if review_ctx and isinstance(review_ctx, dict):
+                            user_prompt = _append_review_to_prompt(
+                                user_prompt, review_ctx,
+                            )
+
                         # Resolve system prompt for LLMCallStarting event
                         if self._event_emitter:
                             sys_key = step.system_instruction_key
@@ -1062,6 +1113,10 @@ class PipelineConfig(ABC):
                     ))
 
                 self._executed_steps.add(step_class)
+
+                # Clear review context after step runs (don't leak to subsequent steps)
+                self._context.pop("_review_context", None)
+
                 if step_def.action_after:
                     action_method = getattr(self, f"_{step_def.action_after}", None)
                     if action_method and callable(action_method):
