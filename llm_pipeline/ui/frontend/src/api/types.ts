@@ -475,6 +475,16 @@ export interface WsReviewRequested {
   token: string
 }
 
+export interface WsReviewCompleted {
+  type: 'review_completed'
+  run_id: string
+  pipeline_name: string
+  step_name: string
+  step_number: number
+  decision: string
+  notes: string | null
+}
+
 /**
  * Discriminated union of all WebSocket message types.
  *
@@ -490,6 +500,7 @@ export type WsMessage =
   | WsPipelineEvent
   | WsRunCreated
   | WsReviewRequested
+  | WsReviewCompleted
 
 /** Client -> server subscription message. */
 export interface WsSubscribe {

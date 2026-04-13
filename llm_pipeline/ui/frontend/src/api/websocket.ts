@@ -336,6 +336,15 @@ export function useGlobalWebSocket(): void {
           })
           break
 
+        case 'review_completed':
+          useWsStore.getState().updateSubscriptionStatus(msg.run_id, 'running')
+          queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(msg.run_id) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.runs.all })
+          toast.success('Review completed', {
+            description: `${msg.pipeline_name} "${msg.step_name}": ${msg.decision.replace('_', ' ')}`,
+          })
+          break
+
         case 'error':
           // Per-run errors (e.g. "Run not found" on subscribe)
           break

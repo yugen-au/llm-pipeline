@@ -389,6 +389,17 @@ def submit_review(
 
         session.commit()
 
+    # Broadcast review_completed via WebSocket
+    ws_manager.broadcast_to_run(run_id, {
+        "type": "review_completed",
+        "run_id": run_id,
+        "pipeline_name": pipeline_name,
+        "step_name": reviewed_step_name,
+        "step_number": reviewed_step_number,
+        "decision": body.decision,
+        "notes": body.notes,
+    })
+
     # Determine resume behavior
     if body.decision == "restart":
         # New run — trigger fresh execution
