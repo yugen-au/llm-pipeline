@@ -389,16 +389,29 @@ def submit_review(
 
         session.commit()
 
-    # Broadcast review_completed via WebSocket
-    ws_manager.broadcast_to_run(run_id, {
-        "type": "review_completed",
+    # Persist + broadcast review_completed
+    from llm_pipeline.events.models import PipelineEventRecord
+    event_data = {
+        "event_type": "review_completed",
         "run_id": run_id,
         "pipeline_name": pipeline_name,
         "step_name": reviewed_step_name,
         "step_number": reviewed_step_number,
         "decision": body.decision,
         "notes": body.notes,
-    })
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    with Session(engine) as ev_session:
+        ev_session.add(PipelineEventRecord(
+            run_id=run_id,
+            event_type="review_completed",
+            pipeline_name=pipeline_name,
+            step_name=reviewed_step_name,
+            timestamp=datetime.now(timezone.utc),
+            event_data=event_data,
+        ))
+        ev_session.commit()
+    ws_manager.broadcast_to_run(run_id, event_data)
 
     # Determine resume behavior
     if body.decision == "restart":
