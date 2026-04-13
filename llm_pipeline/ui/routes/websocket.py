@@ -150,7 +150,7 @@ async def _build_stream_complete(engine, run_id: str) -> dict:
 
 
 async def _handle_subscribe(ws: WebSocket, run_id: str, engine) -> None:
-    """Handle a subscribe request: replay if completed/failed, else just register."""
+    """Handle a subscribe request: replay persisted events, then stream live."""
     manager.subscribe(ws, run_id)
 
     run = await _get_run(engine, run_id)
@@ -160,6 +160,11 @@ async def _handle_subscribe(ws: WebSocket, run_id: str, engine) -> None:
         return
 
     if run.status in ("completed", "failed"):
+        # Replay persisted events for finished runs.
+        # Running runs get live events only (replay would race with
+        # active DB writes from the pipeline thread).
+        # TODO: add catch-up replay for running runs once we have
+        # a non-blocking event buffer (e.g. in-memory ring buffer).
         events = await _get_persisted_events(engine, run_id)
         for event_data in events:
             await ws.send_json(event_data)

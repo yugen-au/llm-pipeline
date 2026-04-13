@@ -41,6 +41,8 @@ const BASE_RECONNECT_DELAY = 1_000
 
 let globalWs: WebSocket | null = null
 let pendingMessages: WsClientMessage[] = []
+/** Cached QueryClient reference for imperative subscribeToRun calls. */
+let cachedQueryClient: QueryClient | null = null
 
 /** Tracks active subscriptions so they can be re-sent on reconnect. */
 const activeSubscriptions = new Set<string>()
@@ -238,6 +240,8 @@ export function useGlobalWebSocket(): void {
 
   const { setStatus, setError, setLatestRun, incrementReconnect } = useWsStore()
 
+  cachedQueryClient = queryClient
+
   const connect = useCallback(() => {
     if (!mountedRef.current) return
 
@@ -278,16 +282,30 @@ export function useGlobalWebSocket(): void {
 
         case 'run_created':
           setLatestRun(msg)
-          // Invalidate run list so new run appears
           queryClient.invalidateQueries({ queryKey: queryKeys.runs.all })
+          // Toast for runs not triggered by this client
+          if (!activeSubscriptions.has(msg.run_id)) {
+            toast('New run started', {
+              description: `${msg.pipeline_name} (${msg.run_id.slice(0, 8)})`,
+              action: {
+                label: 'Monitor',
+                onClick: () => {
+                  subscribeToRun(msg.run_id, msg.pipeline_name, queryClient)
+                  useWsStore.getState().setFocusedRun(msg.run_id)
+                },
+              },
+              duration: 8000,
+            })
+          }
           break
 
         case 'pipeline_event':
           appendEventToCache(queryClient, msg.run_id, msg)
+          // Update subscription status to running
+          useWsStore.getState().updateSubscriptionStatus(msg.run_id, 'running')
           if (msg.event_type === 'step_completed') {
             upsertStepFromEvent(queryClient, msg.run_id, msg)
           }
-          // Invalidate steps on any step-scoped event (step_started, step_failed, etc.)
           if (msg.event_type.includes('step') && msg.event_type !== 'step_completed') {
             queryClient.invalidateQueries({
               queryKey: queryKeys.runs.steps(msg.run_id),
@@ -297,10 +315,11 @@ export function useGlobalWebSocket(): void {
 
         case 'stream_complete':
           writeRunDetailFromComplete(queryClient, msg)
+          useWsStore.getState().updateSubscriptionStatus(msg.run_id, msg.status ?? 'completed')
           break
 
         case 'replay_complete':
-          // Replay done; no special action needed, events already in cache
+          useWsStore.getState().setReplayComplete(msg.run_id)
           break
 
         case 'error':
@@ -367,35 +386,59 @@ export function useGlobalWebSocket(): void {
 }
 
 // ---------------------------------------------------------------------------
-// useSubscribeRun
+// Imperative subscription management
 // ---------------------------------------------------------------------------
 
 /**
- * Subscribe to events for a specific run over the global WS.
- *
- * On mount: sends subscribe message and seeds empty event cache.
- * On unmount or runId change: sends unsubscribe for the old run_id.
- *
- * @param runId - Pipeline run ID to subscribe to, or null to stay idle
+ * Subscribe to a run's events. Can be called from event handlers, toast
+ * callbacks, etc. Seeds event cache, updates store, sends WS message.
  */
-export function useSubscribeRun(runId: string | null): void {
+export function subscribeToRun(
+  runId: string,
+  pipelineName: string,
+  qc?: QueryClient,
+): void {
+  if (activeSubscriptions.has(runId)) return
+
+  // Seed event cache
+  const queryClient = qc ?? cachedQueryClient
+  if (queryClient) {
+    queryClient.setQueryData(
+      queryKeys.runs.events(runId, {}),
+      (old: EventListResponse | undefined) =>
+        old ?? { items: [], total: 0, offset: 0, limit: 50 },
+    )
+  }
+
+  activeSubscriptions.add(runId)
+  useWsStore.getState().addSubscription(runId, pipelineName)
+  sendWsMessage({ action: 'subscribe', run_id: runId })
+}
+
+/**
+ * Unsubscribe from a run. Sends WS message, removes from store.
+ */
+export function unsubscribeFromRun(runId: string): void {
+  if (!activeSubscriptions.has(runId)) return
+  activeSubscriptions.delete(runId)
+  useWsStore.getState().removeSubscription(runId)
+  sendWsMessage({ action: 'unsubscribe', run_id: runId })
+}
+
+// ---------------------------------------------------------------------------
+// useSubscribeRun (hook wrapper for component lifecycle)
+// ---------------------------------------------------------------------------
+
+/**
+ * Hook wrapper around subscribeToRun for use in components.
+ * Does NOT auto-unsubscribe on unmount — subscriptions persist
+ * until explicitly removed via unsubscribeFromRun.
+ */
+export function useSubscribeRun(runId: string | null, pipelineName?: string): void {
   const queryClient = useQueryClient()
 
   useEffect(() => {
     if (!runId) return
-
-    // Seed event cache so WS events arriving before REST fetch aren't dropped
-    queryClient.setQueryData(queryKeys.runs.events(runId, {}), (old: EventListResponse | undefined) =>
-      old ?? { items: [], total: 0, offset: 0, limit: 50 },
-    )
-
-    // Track this subscription so flushPending() re-subscribes on reconnect
-    activeSubscriptions.add(runId)
-    sendWsMessage({ action: 'subscribe', run_id: runId })
-
-    return () => {
-      activeSubscriptions.delete(runId)
-      sendWsMessage({ action: 'unsubscribe', run_id: runId })
-    }
-  }, [runId, queryClient])
+    subscribeToRun(runId, pipelineName ?? 'unknown', queryClient)
+  }, [runId, pipelineName, queryClient])
 }

@@ -17,6 +17,7 @@ export interface EventStreamProps {
   events: EventItem[]
   wsStatus: WsConnectionStatus
   runId: string | null
+  isReplaying?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +195,7 @@ const SCROLL_THRESHOLD = 40
 // EventStream component
 // ---------------------------------------------------------------------------
 
-export function EventStream({ events, wsStatus, runId }: EventStreamProps) {
+export function EventStream({ events, wsStatus, runId, isReplaying }: EventStreamProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
   /** Ref on the inner content wrapper; its parentElement is the scrollable viewport. */
   const contentRef = useRef<HTMLDivElement>(null)
@@ -260,6 +261,12 @@ export function EventStream({ events, wsStatus, runId }: EventStreamProps) {
   return (
     <div className="flex h-full flex-col">
       <ConnectionIndicator status={wsStatus} />
+      {isReplaying && (
+        <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+          Catching up on earlier events...
+        </div>
+      )}
       <ScrollArea className="min-h-0 flex-1">
         <TooltipProvider>
           <div ref={contentRef} className="space-y-0.5 p-2">
