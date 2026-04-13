@@ -1344,6 +1344,11 @@ class PipelineConfig(ABC):
 
         token = str(uuid.uuid4())
 
+        # Capture input_data for resume
+        input_data = None
+        if self._validated_input is not None:
+            input_data = self._validated_input.model_dump(mode="json") if hasattr(self._validated_input, 'model_dump') else dict(self._validated_input)
+
         review_record = PipelineReview(
             token=token,
             run_id=self.run_id,
@@ -1352,6 +1357,7 @@ class PipelineConfig(ABC):
             step_number=step_number,
             status="pending",
             review_data=review_data.model_dump(mode="json"),
+            input_data=input_data,
         )
         self._real_session.add(review_record)
 

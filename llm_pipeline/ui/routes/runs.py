@@ -377,6 +377,7 @@ def submit_review(
         reviewed_step_number = review.step_number
         reviewed_step_name = review.step_name
         pipeline_name = review.pipeline_name
+        original_input_data = review.input_data
 
         if body.decision == "restart":
             run.status = "restarted"
@@ -469,6 +470,7 @@ def submit_review(
             pipeline.execute_from_step(
                 resume_step_index=resume_index,
                 review_notes=body.notes,
+                input_data=original_input_data,
             )
             # Check if paused again for another review
             with Session(engine) as check_session:

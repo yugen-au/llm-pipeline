@@ -285,6 +285,7 @@ class PipelineReview(SQLModel, table=True):
     step_number: int
     status: str = Field(default="pending", max_length=20)  # pending, completed, expired
     review_data: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    input_data: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     decision: Optional[str] = Field(default=None, max_length=20)
     notes: Optional[str] = Field(default=None)
     resume_from: Optional[str] = Field(default=None, max_length=100)
