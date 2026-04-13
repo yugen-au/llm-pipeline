@@ -322,6 +322,20 @@ export function useGlobalWebSocket(): void {
           useWsStore.getState().setReplayComplete(msg.run_id)
           break
 
+        case 'review_requested':
+          useWsStore.getState().updateSubscriptionStatus(msg.run_id, 'awaiting_review')
+          queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(msg.run_id) })
+          queryClient.invalidateQueries({ queryKey: queryKeys.runs.all })
+          toast.info('Review requested', {
+            description: `${msg.pipeline_name} step "${msg.step_name}" needs review`,
+            action: {
+              label: 'Review',
+              onClick: () => { window.location.href = `/review/${msg.token}` },
+            },
+            duration: 15000,
+          })
+          break
+
         case 'error':
           // Per-run errors (e.g. "Run not found" on subscribe)
           break

@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 /** Pipeline run status values observed in the backend. */
-export type RunStatus = 'running' | 'completed' | 'failed'
+export type RunStatus = 'running' | 'completed' | 'failed' | 'awaiting_review' | 'restarted'
 
 /** Single item in GET /api/runs response list. */
 export interface RunListItem {
@@ -466,6 +466,15 @@ export interface WsRunCreated {
   started_at: string
 }
 
+export interface WsReviewRequested {
+  type: 'review_requested'
+  run_id: string
+  pipeline_name: string
+  step_name: string
+  step_number: number
+  token: string
+}
+
 /**
  * Discriminated union of all WebSocket message types.
  *
@@ -480,6 +489,7 @@ export type WsMessage =
   | WsError
   | WsPipelineEvent
   | WsRunCreated
+  | WsReviewRequested
 
 /** Client -> server subscription message. */
 export interface WsSubscribe {

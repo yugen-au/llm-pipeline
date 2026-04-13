@@ -55,4 +55,4 @@ export const queryKeys = {
  * avoiding unnecessary network requests.
  */
 export const isTerminalStatus = (status: RunStatus | string): boolean =>
-  status === 'completed' || status === 'failed'
+  status === 'completed' || status === 'failed' || status === 'restarted'

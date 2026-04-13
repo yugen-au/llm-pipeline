@@ -25,6 +25,14 @@ const statusConfig: Record<string, BadgeConfig> = {
     variant: 'outline',
     className: 'border-status-pending text-status-pending',
   },
+  awaiting_review: {
+    variant: 'outline',
+    className: 'border-amber-500 text-amber-500',
+  },
+  restarted: {
+    variant: 'outline',
+    className: 'border-muted-foreground text-muted-foreground',
+  },
 }
 
 interface StatusBadgeProps {
