@@ -38,6 +38,7 @@ def _make_app():
     from llm_pipeline.ui.routes.websocket import router as ws_router
     from llm_pipeline.ui.routes.creator import router as creator_router
     from llm_pipeline.ui.routes.auto_generate import router as auto_generate_router
+    from llm_pipeline.ui.routes.reviews import router as reviews_router
 
     # Use connect_args check_same_thread=False + StaticPool so all connections
     # (including threadpool workers) share the same in-memory database.
@@ -68,6 +69,7 @@ def _make_app():
     app.include_router(pipelines_router, prefix="/api")
     app.include_router(creator_router, prefix="/api")
     app.include_router(auto_generate_router, prefix="/api")
+    app.include_router(reviews_router, prefix="/api")
     app.include_router(ws_router)
     return app
 

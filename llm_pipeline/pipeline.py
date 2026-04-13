@@ -499,6 +499,53 @@ class PipelineConfig(ABC):
         self.data[step_name] = data
         self.data["sanitized"] = self.sanitize(data)
 
+    def execute_from_step(
+        self,
+        resume_step_index: int,
+        review_notes: Optional[str] = None,
+        input_data: Optional[Dict[str, Any]] = None,
+    ) -> "PipelineConfig":
+        """Resume pipeline execution from a specific step index.
+
+        Hydrates context and instructions from persisted PipelineStepState
+        rows, then continues the normal step loop from resume_step_index.
+
+        Args:
+            resume_step_index: 0-based step index to resume from
+            review_notes: Optional reviewer feedback, set as _review_notes in context
+            input_data: Original input data (for validated_input reconstruction)
+        """
+        from sqlmodel import select
+        from llm_pipeline.state import PipelineStepState
+
+        # Reconstruct state from persisted step states
+        states = self._real_session.exec(
+            select(PipelineStepState)
+            .where(PipelineStepState.run_id == self.run_id)
+            .order_by(PipelineStepState.step_number)
+        ).all()
+
+        for state in states:
+            if state.step_number <= resume_step_index:
+                # Hydrate context from the step before our resume point
+                if state.context_snapshot:
+                    self._context.update(state.context_snapshot)
+                # Hydrate instructions
+                if state.result_data:
+                    self._instructions[state.step_name] = state.result_data
+
+        if review_notes:
+            self._context["_review_notes"] = review_notes
+
+        # Set resume point and delegate to execute()
+        self._resume_from_step = resume_step_index
+        return self.execute(
+            data=None,
+            initial_context=dict(self._context),
+            input_data=input_data,
+            use_cache=False,
+        )
+
     def execute(
         self,
         data: Any = None,
@@ -574,7 +621,13 @@ class PipelineConfig(ABC):
         try:
             max_steps = max(len(s.get_steps()) for s in self._strategies)
 
+            _resume_from = getattr(self, '_resume_from_step', 0)
+
             for step_index in range(max_steps):
+                # Skip steps before resume point (already executed)
+                if step_index < _resume_from:
+                    continue
+
                 if self._event_emitter:
                     self._emit(StepSelecting(
                         run_id=self.run_id,
