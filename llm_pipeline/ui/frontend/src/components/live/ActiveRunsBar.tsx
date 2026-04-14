@@ -1,5 +1,4 @@
 import { X, Plus, Loader2 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useWsStore } from '@/stores/websocket'
 import { unsubscribeFromRun } from '@/api/websocket'

@@ -145,7 +145,7 @@ function ReviewPage() {
         resume_from: decision === 'major_revision' && resumeFrom ? resumeFrom : null,
       },
       {
-        onSuccess: (data) => {
+        onSuccess: () => {
           navigate({ to: '/live' })
         },
       },
