@@ -82,19 +82,20 @@ export function useReview(token: string) {
   })
 }
 
-export function useSubmitReview(runId: string) {
+export function useSubmitReview(token: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (req: ReviewSubmitRequest) =>
-      apiClient<ReviewSubmitResponse>(`/runs/${runId}/review`, {
+      apiClient<ReviewSubmitResponse>(`/reviews/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(req),
       }),
     onSuccess: (data) => {
       toast.success(`Review submitted: ${data.decision}`)
-      qc.invalidateQueries({ queryKey: queryKeys.runs.detail(runId) })
+      qc.invalidateQueries({ queryKey: queryKeys.runs.detail(data.run_id) })
       qc.invalidateQueries({ queryKey: queryKeys.runs.all })
+      qc.invalidateQueries({ queryKey: ['reviews', token] })
     },
   })
 }

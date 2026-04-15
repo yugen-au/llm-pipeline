@@ -1469,6 +1469,13 @@ class PipelineConfig(ABC):
                 "step_name": step.step_name,
                 "token": token,
                 "review_link": f"{base_url}/review/{token}",
+                "callback_url": f"{base_url}/reviews/{token}",
+                "callback_method": "POST",
+                "callback_schema": {
+                    "decision": "approved | minor_revision | major_revision | restart",
+                    "notes": "string | null",
+                    "resume_from": "string | null  (step name, only for major_revision)",
+                },
                 "review_data": review_data.model_dump(mode="json"),
             }, timeout=10)
         except ImportError:

@@ -1,13 +1,19 @@
 """Review endpoints for human-in-the-loop review system."""
 import logging
+import uuid
+from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import Session, select
 
-from llm_pipeline.state import PipelineReview
+from llm_pipeline.events.emitter import CompositeEmitter
+from llm_pipeline.events.handlers import BufferedEventHandler
+from llm_pipeline.state import PipelineRun, PipelineReview
+from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
+from llm_pipeline.ui.routes.websocket import manager as ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +52,18 @@ class ReviewDetailResponse(BaseModel):
     completed_at: Optional[str] = None
 
 
+class ReviewSubmitRequest(BaseModel):
+    decision: str  # approved, minor_revision, major_revision, restart
+    notes: Optional[str] = None
+    resume_from: Optional[str] = None
+
+
+class ReviewSubmitResponse(BaseModel):
+    run_id: str
+    decision: str
+    status: str  # resumed, restarted
+
+
 @router.get("", response_model=ReviewListResponse)
 def list_reviews(
     db: DBSession,
@@ -61,7 +79,6 @@ def list_reviews(
     if pipeline_name:
         stmt = stmt.where(PipelineReview.pipeline_name == pipeline_name)
 
-    # Count
     from sqlalchemy import func
     count_stmt = select(func.count()).select_from(PipelineReview)
     if status:
@@ -113,3 +130,222 @@ def get_review(token: str, db: DBSession) -> ReviewDetailResponse:
         created_at=review.created_at.isoformat(),
         completed_at=review.completed_at.isoformat() if review.completed_at else None,
     )
+
+
+@router.post("/{token}", response_model=ReviewSubmitResponse)
+def submit_review(
+    token: str,
+    body: ReviewSubmitRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> ReviewSubmitResponse:
+    """Submit a review decision. Token-keyed for webhook callbacks + UI."""
+    from llm_pipeline.review import ReviewDecision
+
+    engine = request.app.state.engine
+
+    valid_decisions = {d.value for d in ReviewDecision}
+    if body.decision not in valid_decisions:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid decision. Must be one of: {', '.join(valid_decisions)}",
+        )
+
+    with Session(engine) as session:
+        review = session.exec(
+            select(PipelineReview).where(PipelineReview.token == token)
+        ).first()
+        if not review:
+            raise HTTPException(status_code=404, detail="Review not found")
+        if review.status != "pending":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Review is not pending (status: {review.status})",
+            )
+
+        run_id = review.run_id
+        run = session.exec(
+            select(PipelineRun).where(PipelineRun.run_id == run_id)
+        ).first()
+        if not run:
+            raise HTTPException(status_code=404, detail="Run not found")
+        if run.status != "awaiting_review":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Run is not awaiting review (status: {run.status})",
+            )
+
+        review.status = "completed"
+        review.decision = body.decision
+        review.notes = body.notes
+        review.resume_from = body.resume_from
+        review.completed_at = datetime.now(timezone.utc)
+        session.add(review)
+
+        reviewed_step_number = review.step_number
+        reviewed_step_name = review.step_name
+        pipeline_name = review.pipeline_name
+        original_input_data = review.input_data
+
+        if body.decision == "restart":
+            run.status = "restarted"
+            run.completed_at = datetime.now(timezone.utc)
+            session.add(run)
+        else:
+            run.status = "running"
+            session.add(run)
+
+        session.commit()
+
+    from llm_pipeline.events.models import PipelineEventRecord
+    event_data = {
+        "event_type": "review_completed",
+        "run_id": run_id,
+        "pipeline_name": pipeline_name,
+        "step_name": reviewed_step_name,
+        "step_number": reviewed_step_number,
+        "decision": body.decision,
+        "notes": body.notes,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    with Session(engine) as ev_session:
+        ev_session.add(PipelineEventRecord(
+            run_id=run_id,
+            event_type="review_completed",
+            pipeline_name=pipeline_name,
+            step_name=reviewed_step_name,
+            timestamp=datetime.now(timezone.utc),
+            event_data=event_data,
+        ))
+        ev_session.commit()
+    ws_manager.broadcast_to_run(run_id, event_data)
+
+    if body.decision == "restart":
+        new_run_id = str(uuid.uuid4())
+        registry = getattr(request.app.state, "pipeline_registry", {})
+        factory = registry.get(pipeline_name)
+        if factory is None:
+            raise HTTPException(status_code=404, detail="Pipeline not found in registry")
+
+        with Session(engine) as pre_session:
+            pre_session.add(PipelineRun(
+                run_id=new_run_id,
+                pipeline_name=pipeline_name,
+                status="running",
+                started_at=datetime.now(timezone.utc),
+            ))
+            pre_session.commit()
+
+        def run_restart():
+            bridge = UIBridge(run_id=new_run_id)
+            db_buffer = BufferedEventHandler(engine)
+            emitter = CompositeEmitter([bridge, db_buffer])
+            pipeline = None
+            try:
+                pipeline = factory(run_id=new_run_id, engine=engine, event_emitter=emitter)
+                pipeline.execute(data=None)
+                pipeline.save()
+            except Exception:
+                logger.exception("Restart pipeline failed for run_id=%s", new_run_id)
+                if pipeline is not None:
+                    try:
+                        pipeline.close()
+                    except Exception:
+                        pass
+                try:
+                    with Session(engine) as err_session:
+                        r = err_session.exec(
+                            select(PipelineRun).where(PipelineRun.run_id == new_run_id)
+                        ).first()
+                        if r:
+                            r.status = "failed"
+                            r.completed_at = datetime.now(timezone.utc)
+                            err_session.add(r)
+                            err_session.commit()
+                except Exception:
+                    pass
+            finally:
+                bridge.complete()
+                try:
+                    db_buffer.flush()
+                except Exception:
+                    pass
+
+        background_tasks.add_task(run_restart)
+        return ReviewSubmitResponse(run_id=new_run_id, decision=body.decision, status="restarted")
+
+    registry = getattr(request.app.state, "pipeline_registry", {})
+    factory = registry.get(pipeline_name)
+    if factory is None:
+        raise HTTPException(status_code=404, detail="Pipeline not found in registry")
+
+    if body.decision == "approved":
+        resume_index = reviewed_step_number
+    elif body.decision == "minor_revision":
+        resume_index = reviewed_step_number - 1
+    else:  # major_revision
+        resume_step_name = body.resume_from or reviewed_step_name
+        resume_index = _resolve_step_index(request, pipeline_name, resume_step_name)
+
+    def run_resume():
+        bridge = UIBridge(run_id=run_id)
+        db_buffer = BufferedEventHandler(engine)
+        emitter = CompositeEmitter([bridge, db_buffer])
+        pipeline = None
+        try:
+            pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter)
+            pipeline.execute_from_step(
+                resume_step_index=resume_index,
+                review_notes=body.notes,
+                review_decision=body.decision,
+                input_data=original_input_data,
+            )
+            with Session(engine) as check_session:
+                run_row = check_session.exec(
+                    select(PipelineRun).where(PipelineRun.run_id == run_id)
+                ).first()
+            if run_row and run_row.status != "awaiting_review":
+                pipeline.save()
+        except Exception:
+            logger.exception("Resume pipeline failed for run_id=%s", run_id)
+            if pipeline is not None:
+                try:
+                    pipeline.close()
+                except Exception:
+                    pass
+            try:
+                with Session(engine) as err_session:
+                    r = err_session.exec(
+                        select(PipelineRun).where(PipelineRun.run_id == run_id)
+                    ).first()
+                    if r:
+                        r.status = "failed"
+                        r.completed_at = datetime.now(timezone.utc)
+                        err_session.add(r)
+                        err_session.commit()
+            except Exception:
+                pass
+        finally:
+            bridge.complete()
+            try:
+                db_buffer.flush()
+            except Exception:
+                pass
+
+    background_tasks.add_task(run_resume)
+    return ReviewSubmitResponse(run_id=run_id, decision=body.decision, status="resumed")
+
+
+def _resolve_step_index(request: Request, pipeline_name: str, step_name: str) -> int:
+    """Find the 0-based step index for a step name within a pipeline."""
+    from llm_pipeline.introspection import PipelineIntrospector
+    registry = getattr(request.app.state, "introspection_registry", {})
+    pipeline_cls = registry.get(pipeline_name)
+    if not pipeline_cls:
+        return 0
+    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
+    for strategy in metadata.get("strategies", []):
+        for i, step in enumerate(strategy.get("steps", [])):
+            if step.get("step_name") == step_name:
+                return i
+    return 0

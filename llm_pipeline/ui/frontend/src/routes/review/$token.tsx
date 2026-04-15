@@ -110,7 +110,7 @@ function ReviewPage() {
   const { token } = Route.useParams()
   const navigate = useNavigate()
   const { data: review, isLoading, error } = useReview(token)
-  const submitMutation = useSubmitReview(review?.run_id ?? '')
+  const submitMutation = useSubmitReview(token)
 
   const [notes, setNotes] = useState('')
   const [resumeFrom, setResumeFrom] = useState('')
