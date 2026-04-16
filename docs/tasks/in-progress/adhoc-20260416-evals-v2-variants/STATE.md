@@ -19,4 +19,4 @@
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
 | Existing evals + sandbox arch | backend-development:backend-architect | research | 1 | - | A | complete | 0 | af832eb75a95bf8cf | pending | - |
 | Frontend evals patterns | frontend-mobile-development:frontend-developer | research | 2 | - | A | complete | 0 | a2059e21e65a9fc3b | pending | - |
-| Pydantic create_model + delta | python-development:python-pro | research | 3 | - | A | in-progress | 0 | - | pending | - |
+| Pydantic create_model + delta | python-development:python-pro | research | 3 | - | A | complete | 0 | ad5d2087663677746 | pending | - |
