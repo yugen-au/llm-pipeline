@@ -40,7 +40,7 @@ class SandboxPipeline(PipelineConfig, registry=SandboxRegistry):
 def create_sandbox_engine(prod_engine: Engine) -> Engine:
     """Create an in-memory SQLite engine seeded with prompts from prod DB."""
     from llm_pipeline.db import init_pipeline_db
-    from llm_pipeline.state import Prompt
+    from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.db.step_config import StepModelConfig
 
     sandbox_engine = create_engine("sqlite:///:memory:")
