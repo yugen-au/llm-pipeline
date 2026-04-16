@@ -138,3 +138,8 @@
 [2026-04-16 13:46:17] [INFO] Auto-updated agent statuses: Backend routes datasets+cases: complete -> in-progress, Backend routes runs+introspection: complete -> in-progress, Architecture review: complete -> pending
 [2026-04-16 13:46:17] [INFO] Deleted 1 old contract file(s)
 [2026-04-16 13:46:17] [DEBUG] STATE.md atomic write complete
+[2026-04-16 13:46:37] [ERROR] BLOCKED: Invalid Task description format
+[2026-04-16 13:46:54] [ERROR] BLOCKED: Invalid Task description format
+[2026-04-16 13:47:09] [INFO] Task call: backend-development:backend-architect (phase: fixing-review)
+[2026-04-16 13:47:09] [INFO] Incremented Revisions: 0 -> 1
+[2026-04-16 13:47:09] [DEBUG] STATE.md atomic write complete
