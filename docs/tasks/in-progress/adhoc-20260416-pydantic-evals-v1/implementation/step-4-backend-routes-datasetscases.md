@@ -36,3 +36,41 @@ New file with:
 [x] All 7 endpoints match SCOPE spec
 [x] Step 5 sentinel comment present at EOF
 [x] No imports from uninstalled packages
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH - N+1 query in list_datasets: _last_run_pass_rate called per dataset in loop
+[x] MEDIUM - target_type not validated on create (DatasetCreateRequest)
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/evals.py`
+**N+1 fix:** Replaced per-row `_last_run_pass_rate(db, ds.id)` call with two subqueries joined into main query: `latest_run_sq` gets max run id per dataset (completed only), `pass_rate_sq` computes `passed/total_cases` from that run. Pass rate now loaded in single query alongside case_count.
+
+```
+# Before
+last_run_pass_rate=_last_run_pass_rate(db, ds.id),
+
+# After
+# pass_rate_sq subquery joined into main select
+pr = row[2] if isinstance(row, tuple) else None
+last_run_pass_rate=round(pr, 4) if pr is not None else None,
+```
+
+**target_type validation:** Changed `DatasetCreateRequest.target_type` from `str` to `Literal["step", "pipeline"]`. Added `Literal` import from typing, `Float` import from sqlalchemy.
+
+```
+# Before
+target_type: str
+
+# After
+target_type: Literal["step", "pipeline"]
+```
+
+### Verification
+[x] Both fixes applied as targeted edits, no rewrite
+[x] Float import added for cast in pass_rate subquery
+[x] Literal import added for target_type validation
+[x] _last_run_pass_rate helper retained for single-dataset endpoints (get_dataset, update_dataset)
