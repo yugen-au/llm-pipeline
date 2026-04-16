@@ -136,6 +136,8 @@ class SchemaResponse(BaseModel):
     target_type: str
     target_name: str
     json_schema: dict
+    input_schema: Optional[dict] = None
+    output_schema: Optional[dict] = None
 
 
 # ---------------------------------------------------------------------------
@@ -703,7 +705,7 @@ def _pipeline_schema(
 def _step_schema(
     step_name: str, introspection_registry: dict
 ) -> SchemaResponse:
-    """Resolve input schema for a step by searching all registered pipelines."""
+    """Resolve input + output schemas for a step by searching all registered pipelines."""
     for _pipeline_name, pipeline_cls in introspection_registry.items():
         strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
         if strategies_cls is None:
@@ -715,28 +717,30 @@ def _step_schema(
                 for sd in instance.get_steps():
                     if sd.step_name != step_name:
                         continue
-                    # Found -- resolve its input schema
+
+                    input_schema = None
+                    output_schema = None
+
+                    input_cls = getattr(pipeline_cls, "INPUT_DATA", None)
+                    if input_cls is not None and hasattr(input_cls, "model_json_schema"):
+                        input_schema = input_cls.model_json_schema()
+
                     instr_cls = sd.instructions
-                    if instr_cls is not None and hasattr(
-                        instr_cls, "model_json_schema"
-                    ):
-                        return SchemaResponse(
-                            target_type="step",
-                            target_name=step_name,
-                            json_schema=instr_cls.model_json_schema(),
+                    if instr_cls is not None and hasattr(instr_cls, "model_json_schema"):
+                        output_schema = instr_cls.model_json_schema()
+
+                    if input_schema is None and output_schema is None:
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Step '{step_name}' has no typed schema",
                         )
-                    ctx_cls = sd.context
-                    if ctx_cls is not None and hasattr(
-                        ctx_cls, "model_json_schema"
-                    ):
-                        return SchemaResponse(
-                            target_type="step",
-                            target_name=step_name,
-                            json_schema=ctx_cls.model_json_schema(),
-                        )
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"Step '{step_name}' has no typed input schema",
+
+                    return SchemaResponse(
+                        target_type="step",
+                        target_name=step_name,
+                        json_schema=output_schema or input_schema or {},
+                        input_schema=input_schema,
+                        output_schema=output_schema,
                     )
             except HTTPException:
                 raise

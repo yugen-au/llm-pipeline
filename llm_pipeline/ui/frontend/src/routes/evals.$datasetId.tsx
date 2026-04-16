@@ -39,9 +39,9 @@ interface FieldDef {
   title?: string
 }
 
-function extractFields(schema: SchemaResponse | undefined): FieldDef[] | null {
-  if (!schema) return null
-  const jsonSchema = schema.json_schema as Record<string, unknown> | undefined
+function extractFieldsFromJsonSchema(
+  jsonSchema: Record<string, unknown> | null | undefined,
+): FieldDef[] | null {
   if (!jsonSchema) return null
   const props = jsonSchema.properties as
     | Record<string, { type?: string; title?: string }>
@@ -52,6 +52,16 @@ function extractFields(schema: SchemaResponse | undefined): FieldDef[] | null {
     type: typeof p.type === 'string' ? p.type : 'string',
     title: p.title,
   }))
+}
+
+function extractInputFields(schema: SchemaResponse | undefined): FieldDef[] | null {
+  if (!schema) return null
+  return extractFieldsFromJsonSchema(schema.input_schema)
+}
+
+function extractOutputFields(schema: SchemaResponse | undefined): FieldDef[] | null {
+  if (!schema) return null
+  return extractFieldsFromJsonSchema(schema.output_schema)
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +274,8 @@ function CasesTab({
     targetType,
     targetName,
   )
-  const fields = extractFields(schema)
+  const inputFields = extractInputFields(schema)
+  const outputFields = extractOutputFields(schema)
   const createCaseMut = useCreateCase(datasetId)
   const updateCaseMut = useUpdateCase(datasetId)
   const deleteCaseMut = useDeleteCase(datasetId)
@@ -310,9 +321,12 @@ function CasesTab({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {fields
-            ? `${fields.length} input fields from schema`
-            : 'Raw JSON mode (schema unavailable)'}
+          {inputFields
+            ? `${inputFields.length} input field${inputFields.length !== 1 ? 's' : ''}`
+            : 'Inputs: raw JSON'}
+          {outputFields
+            ? ` · ${outputFields.length} output field${outputFields.length !== 1 ? 's' : ''}`
+            : ' · Expected: raw JSON'}
         </p>
         <Button
           size="sm"
@@ -325,17 +339,27 @@ function CasesTab({
       </div>
 
       <ScrollArea className="max-h-[60vh]">
-        {fields ? (
+        {(inputFields || outputFields) ? (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="text-xs w-32">Name</TableHead>
-                {fields.map((f) => (
-                  <TableHead key={f.name} className="text-xs">
-                    {f.title ?? f.name}
-                  </TableHead>
-                ))}
-                <TableHead className="text-xs">Expected Output</TableHead>
+                {inputFields
+                  ? inputFields.map((f) => (
+                      <TableHead key={`in-${f.name}`} className="text-xs">
+                        {f.title ?? f.name}
+                      </TableHead>
+                    ))
+                  : <TableHead className="text-xs">Inputs</TableHead>
+                }
+                {outputFields
+                  ? outputFields.map((f) => (
+                      <TableHead key={`out-${f.name}`} className="text-xs bg-muted/30">
+                        {f.title ?? f.name}
+                      </TableHead>
+                    ))
+                  : <TableHead className="text-xs bg-muted/30">Expected Output</TableHead>
+                }
                 <TableHead className="text-xs w-24" />
               </TableRow>
             </TableHeader>
@@ -351,38 +375,67 @@ function CasesTab({
                       }
                     />
                   </TableCell>
-                  {fields.map((f) => (
-                    <TableCell key={f.name}>
-                      <FieldInput
-                        field={f}
-                        value={row.inputs[f.name]}
-                        onChange={(v) =>
-                          updateRow(id, {
-                            inputs: { ...row.inputs, [f.name]: v },
-                          })
-                        }
-                      />
-                    </TableCell>
-                  ))}
-                  <TableCell>
-                    <Textarea
-                      className="min-h-[40px] text-xs font-mono"
-                      value={
-                        row.expected_output
-                          ? JSON.stringify(row.expected_output, null, 2)
-                          : ''
-                      }
-                      onChange={(e) => {
-                        try {
-                          updateRow(id, {
-                            expected_output: JSON.parse(e.target.value),
-                          })
-                        } catch {
-                          /* ignore invalid JSON while typing */
-                        }
-                      }}
-                    />
-                  </TableCell>
+                  {inputFields
+                    ? inputFields.map((f) => (
+                        <TableCell key={`in-${f.name}`}>
+                          <FieldInput
+                            field={f}
+                            value={row.inputs[f.name]}
+                            onChange={(v) =>
+                              updateRow(id, {
+                                inputs: { ...row.inputs, [f.name]: v },
+                              })
+                            }
+                          />
+                        </TableCell>
+                      ))
+                    : <TableCell>
+                        <Textarea
+                          className="min-h-[40px] text-xs font-mono"
+                          value={JSON.stringify(row.inputs, null, 2)}
+                          onChange={(e) => {
+                            try {
+                              updateRow(id, { inputs: JSON.parse(e.target.value) })
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                      </TableCell>
+                  }
+                  {outputFields
+                    ? outputFields.map((f) => (
+                        <TableCell key={`out-${f.name}`} className="bg-muted/10">
+                          <FieldInput
+                            field={f}
+                            value={row.expected_output?.[f.name]}
+                            onChange={(v) =>
+                              updateRow(id, {
+                                expected_output: {
+                                  ...(row.expected_output ?? {}),
+                                  [f.name]: v,
+                                },
+                              })
+                            }
+                          />
+                        </TableCell>
+                      ))
+                    : <TableCell className="bg-muted/10">
+                        <Textarea
+                          className="min-h-[40px] text-xs font-mono"
+                          value={
+                            row.expected_output
+                              ? JSON.stringify(row.expected_output, null, 2)
+                              : ''
+                          }
+                          onChange={(e) => {
+                            try {
+                              updateRow(id, {
+                                expected_output: JSON.parse(e.target.value),
+                              })
+                            } catch { /* ignore */ }
+                          }}
+                        />
+                      </TableCell>
+                  }
                   <TableCell>
                     <div className="flex gap-1">
                       {row.dirty && (

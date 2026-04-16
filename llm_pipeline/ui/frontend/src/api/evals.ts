@@ -69,6 +69,8 @@ export interface SchemaResponse {
   target_type: string
   target_name: string
   json_schema: Record<string, unknown>
+  input_schema: Record<string, unknown> | null
+  output_schema: Record<string, unknown> | null
 }
 
 export interface DatasetCreateRequest {
