@@ -81,8 +81,8 @@ def create_sandbox_engine(prod_engine: Engine) -> Engine:
 # Single-step strategy
 # ---------------------------------------------------------------------------
 
-class _SingleStepStrategy(PipelineStrategy):
-    """Strategy wrapping a single StepDefinition."""
+class SandboxSingleStepStrategy(PipelineStrategy):
+    """Strategy wrapping a single StepDefinition for sandboxed execution."""
 
     def __init__(self, step_def: StepDefinition):
         self._step_def = step_def
@@ -128,7 +128,7 @@ def create_single_step_pipeline(
 
     SandboxPipeline.INPUT_DATA = input_data_cls
 
-    strategy = _SingleStepStrategy(step_def)
+    strategy = SandboxSingleStepStrategy(step_def)
 
     return SandboxPipeline(
         model=model,
