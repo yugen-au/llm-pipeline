@@ -215,9 +215,7 @@ def list_datasets(
 
     items = []
     for row in rows:
-        ds = row[0] if isinstance(row, tuple) else row
-        cc = row[1] if isinstance(row, tuple) else 0
-        pr = row[2] if isinstance(row, tuple) else None
+        ds, cc, pr = row[0], row[1], row[2]
         items.append(
             DatasetListItem(
                 id=ds.id,
