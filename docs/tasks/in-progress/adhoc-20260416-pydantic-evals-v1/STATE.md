@@ -22,3 +22,13 @@
 | Frontend patterns research | frontend-mobile-development:frontend-developer | research | 3 | - | A | complete | 0 | a9ae5be52dbebc037 | 1a236556 | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a14671863eb362f54 | f7730fd7 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | ad6008c323d225293 | pending | - |
+| Core dep + DB models + table reg | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | pending | pending | - |
+| evaluators= param + auto FieldMatch | backend-development:backend-architect | implementation | 2 | - | A | pending | 0 | pending | pending | - |
+| YAML sync + eval runner + CLI | llm-application-dev:ai-engineer | implementation | 3 | - | A | pending | 0 | pending | pending | - |
+| Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | pending | 0 | pending | pending | - |
+| Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | pending | 0 | pending | pending | - |
+| Wire evals router + startup sync | backend-development:backend-architect | implementation | 6 | - | B | pending | 0 | pending | pending | - |
+| Frontend API hooks + routes | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | pending | 0 | pending | pending | /tanstack/router |
+| Frontend dataset list + detail | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | pending | 0 | pending | pending | /tanstack/router |
+| Frontend run detail + sidebar | frontend-mobile-development:frontend-developer | implementation | 9 | - | C | pending | 0 | pending | pending | /tanstack/router |
+| Worked example sentiment eval | llm-application-dev:ai-engineer | implementation | 10 | llm-application-dev:llm-evaluation | D | pending | 0 | pending | pending | - |
