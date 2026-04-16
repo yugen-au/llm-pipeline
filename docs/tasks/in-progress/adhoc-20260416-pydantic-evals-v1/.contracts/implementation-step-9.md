@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-pydantic-evals-v1
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-6-wire-evals-router-startup-sync.md (if already exists, APPEND to file)
+- Output Files: implementation\step-9-frontend-run-detail-sidebar.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 6 - implement ONLY this step, not others
+- Step: 9 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /tanstack/router
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-6-wire-evals-router-startup-sync.md
+4. Document decisions in implementation\step-9-frontend-run-detail-sidebar.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 6: WIRE EVALS ROUTER + STARTUP SYNC
+# IMPLEMENTATION - STEP 9: FRONTEND RUN DETAIL + SIDEBAR
 **Status:** [completed/failed/blocked]
 
 ## Summary

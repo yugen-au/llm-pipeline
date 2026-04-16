@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-pydantic-evals-v1
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-5-backend-routes-runsintrospection.md (if already exists, APPEND to file)
+- Output Files: implementation\step-8-frontend-dataset-list-detail.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 5 - implement ONLY this step, not others
+- Step: 8 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /tanstack/router
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-5-backend-routes-runsintrospection.md
+4. Document decisions in implementation\step-8-frontend-dataset-list-detail.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 5: BACKEND ROUTES RUNS+INTROSPECTION
+# IMPLEMENTATION - STEP 8: FRONTEND DATASET LIST + DETAIL
 **Status:** [completed/failed/blocked]
 
 ## Summary
