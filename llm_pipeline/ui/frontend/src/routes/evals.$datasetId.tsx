@@ -510,7 +510,7 @@ function RunHistoryTab({ datasetId }: { datasetId: number }) {
 
   const items: RunListItem[] = Array.isArray(runs)
     ? runs
-    : (runs as { items?: RunListItem[] })?.items ?? []
+    : ((runs as unknown) as { items?: RunListItem[] })?.items ?? []
 
   return (
     <div className="space-y-3">
