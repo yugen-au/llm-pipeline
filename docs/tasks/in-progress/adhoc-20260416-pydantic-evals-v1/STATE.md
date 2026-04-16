@@ -32,5 +32,5 @@
 | Frontend dataset list + detail | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | ac557c08e614fd3a4 | bb4b604c | /tanstack/router |
 | Frontend run detail + sidebar | frontend-mobile-development:frontend-developer | implementation | 9 | - | C | complete | 0 | a67a6b99bff887b05 | 9c07d16e,bb4b604c | /tanstack/router |
 | Worked example sentiment eval | llm-application-dev:ai-engineer | implementation | 10 | llm-application-dev:llm-evaluation | D | complete | 0 | a25b1d92630002ffb | 365732ca | - |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | af48f774ca861c507 | 2726fb2a | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 1 | af48f774ca861c507 | 2726fb2a | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | ac5d9c686dcce2eb7 | 7426e072 | - |
