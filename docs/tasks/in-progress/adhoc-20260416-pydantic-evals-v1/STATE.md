@@ -1,7 +1,7 @@
 ## Task: adhoc-20260416-pydantic-evals-v1
 ## Description: Integrate pydantic-evals into llm-pipeline: YAML datasets (llm-pipeline-evals/) with bidirectional DB sync, step/pipeline-level evaluation, auto field-match evaluators from instructions schema, custom evaluators on step_definition, live eval runner, new DB tables (EvaluationDataset/Case/Run/CaseResult), backend routes, frontend Evals tab (dataset list, case editor, run history, run detail), CLI command, worked sentiment_analysis example.
 
-## Phase: summary
+## Phase: pending-merge
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -12,7 +12,7 @@
 ## Steps to Fix: [4]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-16 14:55
+## Last Updated: 2026-04-16 14:59
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -34,4 +34,4 @@
 | Worked example sentiment eval | llm-application-dev:ai-engineer | implementation | 10 | llm-application-dev:llm-evaluation | D | complete | 0 | a25b1d92630002ffb | 365732ca | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 2 | aae3aad3d2d63372d | 2726fb2a,d7ea715d,04ed6123 | - |
 | Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 2 | aeafe414fedb9c79f | 7426e072,dfe627bd,747d8c4f | - |
-| Create summary | code-documentation:docs-architect | summary | 1 | - | A | complete | 0 | a2c37ba6e550fc50c | pending | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | complete | 0 | a2c37ba6e550fc50c | f56fd4ce | - |
