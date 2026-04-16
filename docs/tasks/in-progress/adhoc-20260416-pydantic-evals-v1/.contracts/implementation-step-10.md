@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-pydantic-evals-v1
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-9-frontend-run-detail-sidebar.md (if already exists, APPEND to file)
+- Output Files: implementation\step-10-worked-example-sentiment-eval.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 9 - implement ONLY this step, not others
-- [custom.skills_to_invoke]
+- Step: 10 - implement ONLY this step, not others
+- Skills to invoke: llm-application-dev:llm-evaluation
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /tanstack/router
+3. [custom.context7_docs]
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-9-frontend-run-detail-sidebar.md
+4. Document decisions in implementation\step-10-worked-example-sentiment-eval.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 9: FRONTEND RUN DETAIL + SIDEBAR
+# IMPLEMENTATION - STEP 10: WORKED EXAMPLE SENTIMENT EVAL
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -72,7 +72,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-10-worked-example-sentiment-eval.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
