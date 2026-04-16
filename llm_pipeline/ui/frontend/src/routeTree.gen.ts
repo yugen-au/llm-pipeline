@@ -21,6 +21,7 @@ import { Route as EvalsIndexRouteImport } from './routes/evals.index'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
 import { Route as ReviewTokenRouteImport } from './routes/review/$token'
 import { Route as EvalsDatasetIdRouteImport } from './routes/evals.$datasetId'
+import { Route as EvalsDatasetIdIndexRouteImport } from './routes/evals.$datasetId.index'
 import { Route as EvalsDatasetIdRunsRunIdRouteImport } from './routes/evals.$datasetId.runs.$runId'
 
 const ReviewsRoute = ReviewsRouteImport.update({
@@ -83,6 +84,11 @@ const EvalsDatasetIdRoute = EvalsDatasetIdRouteImport.update({
   path: '/$datasetId',
   getParentRoute: () => EvalsRoute,
 } as any)
+const EvalsDatasetIdIndexRoute = EvalsDatasetIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => EvalsDatasetIdRoute,
+} as any)
 const EvalsDatasetIdRunsRunIdRoute = EvalsDatasetIdRunsRunIdRouteImport.update({
   id: '/runs/$runId',
   path: '/runs/$runId',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/evals/': typeof EvalsIndexRoute
+  '/evals/$datasetId/': typeof EvalsDatasetIdIndexRoute
   '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
 }
 export interface FileRoutesByTo {
@@ -112,10 +119,10 @@ export interface FileRoutesByTo {
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
   '/reviews': typeof ReviewsRoute
-  '/evals/$datasetId': typeof EvalsDatasetIdRouteWithChildren
   '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/evals': typeof EvalsIndexRoute
+  '/evals/$datasetId': typeof EvalsDatasetIdIndexRoute
   '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
 }
 export interface FileRoutesById {
@@ -132,6 +139,7 @@ export interface FileRoutesById {
   '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/evals/': typeof EvalsIndexRoute
+  '/evals/$datasetId/': typeof EvalsDatasetIdIndexRoute
   '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
 }
 export interface FileRouteTypes {
@@ -149,6 +157,7 @@ export interface FileRouteTypes {
     | '/review/$token'
     | '/runs/$runId'
     | '/evals/'
+    | '/evals/$datasetId/'
     | '/evals/$datasetId/runs/$runId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -159,10 +168,10 @@ export interface FileRouteTypes {
     | '/pipelines'
     | '/prompts'
     | '/reviews'
-    | '/evals/$datasetId'
     | '/review/$token'
     | '/runs/$runId'
     | '/evals'
+    | '/evals/$datasetId'
     | '/evals/$datasetId/runs/$runId'
   id:
     | '__root__'
@@ -178,6 +187,7 @@ export interface FileRouteTypes {
     | '/review/$token'
     | '/runs/$runId'
     | '/evals/'
+    | '/evals/$datasetId/'
     | '/evals/$datasetId/runs/$runId'
   fileRoutesById: FileRoutesById
 }
@@ -280,6 +290,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EvalsDatasetIdRouteImport
       parentRoute: typeof EvalsRoute
     }
+    '/evals/$datasetId/': {
+      id: '/evals/$datasetId/'
+      path: '/'
+      fullPath: '/evals/$datasetId/'
+      preLoaderRoute: typeof EvalsDatasetIdIndexRouteImport
+      parentRoute: typeof EvalsDatasetIdRoute
+    }
     '/evals/$datasetId/runs/$runId': {
       id: '/evals/$datasetId/runs/$runId'
       path: '/runs/$runId'
@@ -291,10 +308,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface EvalsDatasetIdRouteChildren {
+  EvalsDatasetIdIndexRoute: typeof EvalsDatasetIdIndexRoute
   EvalsDatasetIdRunsRunIdRoute: typeof EvalsDatasetIdRunsRunIdRoute
 }
 
 const EvalsDatasetIdRouteChildren: EvalsDatasetIdRouteChildren = {
+  EvalsDatasetIdIndexRoute: EvalsDatasetIdIndexRoute,
   EvalsDatasetIdRunsRunIdRoute: EvalsDatasetIdRunsRunIdRoute,
 }
 
