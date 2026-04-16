@@ -211,3 +211,10 @@ To proceed, either:
 [2026-04-16 14:46:17] [INFO] Incremented Revisions: 1 -> 2
 [2026-04-16 14:46:17] [DEBUG] STATE.md atomic write complete
 [2026-04-16 14:47:03] [DEBUG] STATE.md atomic write complete
+[2026-04-16 14:47:29] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-04-16 14:47:31] [INFO] STATE.md updated: phase=summary, status=in-progress
+[2026-04-16 14:47:31] [INFO] Updated Commits for 'Architecture review': 747d8c4f
+[2026-04-16 14:47:31] [INFO] Auto-filled agent rows: Create summary
+[2026-04-16 14:47:31] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
+[2026-04-16 14:47:31] [INFO] Deleted 1 old contract file(s)
+[2026-04-16 14:47:31] [DEBUG] STATE.md atomic write complete
