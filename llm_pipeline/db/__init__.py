@@ -21,6 +21,7 @@ from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
 from llm_pipeline.events.models import PipelineEventRecord
+from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationCaseResult
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,10 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             StepModelConfig.__table__,
             PipelineVisibility.__table__,
             PipelineReview.__table__,
+            EvaluationDataset.__table__,
+            EvaluationCase.__table__,
+            EvaluationRun.__table__,
+            EvaluationCaseResult.__table__,
         ],
     )
 
