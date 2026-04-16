@@ -1,0 +1,7 @@
+[2026-04-16 17:04:02] [INFO] ============================================================
+[2026-04-16 17:04:02] [INFO] TASK INITIALIZED: adhoc-20260416-evals-v2-variants
+[2026-04-16 17:04:02] [INFO] Base branch: dev
+[2026-04-16 17:04:02] [INFO] Task branch: sam/adhoc/20260416-evals-v2-variants
+[2026-04-16 17:04:02] [INFO] Created: STATE.md
+[2026-04-16 17:04:02] [INFO] ============================================================
+[2026-04-16 17:04:03] [DEBUG] STATE.md atomic write complete
