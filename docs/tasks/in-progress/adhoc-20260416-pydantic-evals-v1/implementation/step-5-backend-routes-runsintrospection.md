@@ -36,3 +36,25 @@ Schema introspection searches introspection_registry for pipeline INPUT_DATA or 
 [x] Route ordering safe (dataset_id typed as int, /schema won't match)
 [x] Matches PLAN.md step 10 spec for all endpoints and models
 [x] TriggerRunResponse returns run_id + status="accepted" per spec
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] CRITICAL - Route ordering: GET /evals/schema shadowed by GET /evals/{dataset_id}
+[x] HIGH - Duplicate EvaluationRun creation in trigger_eval_run (orphan pending rows)
+[x] MEDIUM - Inconsistent session handling: run endpoints use manual Session(engine)
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/evals.py`
+1. Moved `@router.get("/schema")` endpoint registration before `@router.get("/{dataset_id}")` so static path matches before parameterized path.
+2. Removed duplicate EvaluationRun creation from `trigger_eval_run()` - runner.run_dataset() already creates its own "running" row internally. Removed `run_id` from TriggerRunResponse (client polls runs list). Removed unused `Session` import from trigger endpoint.
+3. Changed `list_eval_runs` and `get_eval_run` signatures from `request: Request` + manual `Session(engine)` to `db: DBSession` dependency injection, matching dataset/case endpoint patterns.
+4. Removed unused `Float` import from sqlalchemy.
+
+### Verification
+[x] Route order: /schema registered before /{dataset_id}
+[x] No duplicate run creation - only runner.run_dataset() creates EvaluationRun
+[x] All run endpoints use DBSession dependency injection
+[x] No unused imports remain

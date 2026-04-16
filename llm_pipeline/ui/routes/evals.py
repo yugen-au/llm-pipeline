@@ -5,7 +5,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import Float, func
+from sqlalchemy import func
 from sqlmodel import select
 
 from llm_pipeline.evals.models import (
@@ -90,6 +90,54 @@ class CaseUpdateRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Run response / request models
+# ---------------------------------------------------------------------------
+
+
+class CaseResultItem(BaseModel):
+    id: int
+    case_name: str
+    passed: bool
+    evaluator_scores: dict
+    output_data: Optional[dict] = None
+    error_message: Optional[str] = None
+
+
+class RunListItem(BaseModel):
+    id: int
+    dataset_id: int
+    status: str
+    total_cases: int
+    passed: int
+    failed: int
+    errored: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class RunListResponse(BaseModel):
+    items: List[RunListItem]
+
+
+class RunDetail(RunListItem):
+    case_results: List[CaseResultItem]
+
+
+class TriggerRunRequest(BaseModel):
+    model: Optional[str] = None
+
+
+class TriggerRunResponse(BaseModel):
+    status: str
+
+
+class SchemaResponse(BaseModel):
+    target_type: str
+    target_name: str
+    json_schema: dict
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -130,36 +178,9 @@ def list_datasets(
         .subquery()
     )
 
-    # latest completed run per dataset subquery (avoids N+1)
-    latest_run_sq = (
-        select(
-            EvaluationRun.dataset_id,
-            func.max(EvaluationRun.id).label("max_run_id"),
-        )
-        .where(EvaluationRun.status == "completed")
-        .group_by(EvaluationRun.dataset_id)
-        .subquery()
-    )
-    pass_rate_sq = (
-        select(
-            latest_run_sq.c.dataset_id,
-            (
-                func.cast(EvaluationRun.passed, Float)
-                / func.nullif(EvaluationRun.total_cases, 0)
-            ).label("pass_rate"),
-        )
-        .join(EvaluationRun, EvaluationRun.id == latest_run_sq.c.max_run_id)
-        .subquery()
-    )
-
     stmt = (
-        select(
-            EvaluationDataset,
-            case_count_sq.c.case_count,
-            pass_rate_sq.c.pass_rate,
-        )
+        select(EvaluationDataset, case_count_sq.c.case_count)
         .outerjoin(case_count_sq, EvaluationDataset.id == case_count_sq.c.dataset_id)
-        .outerjoin(pass_rate_sq, EvaluationDataset.id == pass_rate_sq.c.dataset_id)
         .order_by(EvaluationDataset.updated_at.desc())
     )
 
@@ -172,7 +193,6 @@ def list_datasets(
     for row in rows:
         ds = row[0] if isinstance(row, tuple) else row
         cc = row[1] if isinstance(row, tuple) else 0
-        pr = row[2] if isinstance(row, tuple) else None
         items.append(
             DatasetListItem(
                 id=ds.id,
@@ -181,13 +201,37 @@ def list_datasets(
                 target_name=ds.target_name,
                 description=ds.description,
                 case_count=cc or 0,
-                last_run_pass_rate=round(pr, 4) if pr is not None else None,
+                last_run_pass_rate=_last_run_pass_rate(db, ds.id),
                 created_at=ds.created_at.isoformat(),
                 updated_at=ds.updated_at.isoformat(),
             )
         )
 
     return DatasetListResponse(items=items, total=total)
+
+
+# ---------------------------------------------------------------------------
+# Schema introspection (registered before /{dataset_id} to avoid shadowing)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/schema", response_model=SchemaResponse)
+def get_input_schema(
+    request: Request,
+    target_type: str = Query(..., pattern="^(step|pipeline)$"),
+    target_name: str = Query(..., min_length=1),
+) -> SchemaResponse:
+    """Return JSON Schema for a step or pipeline input type."""
+    introspection_registry: dict = getattr(
+        request.app.state, "introspection_registry", {}
+    )
+
+    if target_type == "pipeline":
+        return _pipeline_schema(target_name, introspection_registry)
+    elif target_type == "step":
+        return _step_schema(target_name, introspection_registry)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid target_type")
 
 
 @router.get("/{dataset_id}", response_model=DatasetDetail)
@@ -474,55 +518,6 @@ def delete_case(
 
 
 # ---------------------------------------------------------------------------
-# Run response / request models
-# ---------------------------------------------------------------------------
-
-
-class CaseResultItem(BaseModel):
-    id: int
-    case_name: str
-    passed: bool
-    evaluator_scores: dict
-    output_data: Optional[dict] = None
-    error_message: Optional[str] = None
-
-
-class RunListItem(BaseModel):
-    id: int
-    dataset_id: int
-    status: str
-    total_cases: int
-    passed: int
-    failed: int
-    errored: int
-    started_at: datetime
-    completed_at: Optional[datetime] = None
-
-
-class RunListResponse(BaseModel):
-    items: List[RunListItem]
-
-
-class RunDetail(RunListItem):
-    case_results: List[CaseResultItem]
-
-
-class TriggerRunRequest(BaseModel):
-    model: Optional[str] = None
-
-
-class TriggerRunResponse(BaseModel):
-    run_id: int
-    status: str
-
-
-class SchemaResponse(BaseModel):
-    target_type: str
-    target_name: str
-    json_schema: dict
-
-
-# ---------------------------------------------------------------------------
 # Run endpoints
 # ---------------------------------------------------------------------------
 
@@ -530,19 +525,15 @@ class SchemaResponse(BaseModel):
 @router.get("/{dataset_id}/runs", response_model=RunListResponse)
 def list_eval_runs(
     dataset_id: int,
-    request: Request,
+    db: DBSession,
 ) -> RunListResponse:
     """List runs for a dataset, ordered by started_at desc."""
-    from sqlmodel import Session
-
-    engine = request.app.state.engine
-    with Session(engine) as session:
-        stmt = (
-            select(EvaluationRun)
-            .where(EvaluationRun.dataset_id == dataset_id)
-            .order_by(EvaluationRun.started_at.desc())
-        )
-        rows = session.exec(stmt).all()
+    stmt = (
+        select(EvaluationRun)
+        .where(EvaluationRun.dataset_id == dataset_id)
+        .order_by(EvaluationRun.started_at.desc())
+    )
+    rows = db.exec(stmt).all()
 
     return RunListResponse(
         items=[
@@ -566,50 +557,46 @@ def list_eval_runs(
 def get_eval_run(
     dataset_id: int,
     run_id: int,
-    request: Request,
+    db: DBSession,
 ) -> RunDetail:
     """Run detail with per-case results."""
-    from sqlmodel import Session
-
-    engine = request.app.state.engine
-    with Session(engine) as session:
-        run = session.exec(
-            select(EvaluationRun).where(
-                EvaluationRun.id == run_id,
-                EvaluationRun.dataset_id == dataset_id,
-            )
-        ).first()
-        if run is None:
-            raise HTTPException(status_code=404, detail="Run not found")
-
-        case_results = session.exec(
-            select(EvaluationCaseResult)
-            .where(EvaluationCaseResult.run_id == run_id)
-            .order_by(EvaluationCaseResult.id)
-        ).all()
-
-        return RunDetail(
-            id=run.id,
-            dataset_id=run.dataset_id,
-            status=run.status,
-            total_cases=run.total_cases,
-            passed=run.passed,
-            failed=run.failed,
-            errored=run.errored,
-            started_at=run.started_at,
-            completed_at=run.completed_at,
-            case_results=[
-                CaseResultItem(
-                    id=cr.id,
-                    case_name=cr.case_name,
-                    passed=cr.passed,
-                    evaluator_scores=cr.evaluator_scores or {},
-                    output_data=cr.output_data,
-                    error_message=cr.error_message,
-                )
-                for cr in case_results
-            ],
+    run = db.exec(
+        select(EvaluationRun).where(
+            EvaluationRun.id == run_id,
+            EvaluationRun.dataset_id == dataset_id,
         )
+    ).first()
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    case_results = db.exec(
+        select(EvaluationCaseResult)
+        .where(EvaluationCaseResult.run_id == run_id)
+        .order_by(EvaluationCaseResult.id)
+    ).all()
+
+    return RunDetail(
+        id=run.id,
+        dataset_id=run.dataset_id,
+        status=run.status,
+        total_cases=run.total_cases,
+        passed=run.passed,
+        failed=run.failed,
+        errored=run.errored,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        case_results=[
+            CaseResultItem(
+                id=cr.id,
+                case_name=cr.case_name,
+                passed=cr.passed,
+                evaluator_scores=cr.evaluator_scores or {},
+                output_data=cr.output_data,
+                error_message=cr.error_message,
+            )
+            for cr in case_results
+        ],
+    )
 
 
 @router.post(
@@ -623,8 +610,7 @@ def trigger_eval_run(
     background_tasks: BackgroundTasks,
     request: Request,
 ) -> TriggerRunResponse:
-    """Trigger eval run in background. Returns run_id immediately."""
-    from sqlmodel import Session
+    """Trigger eval run in background. Runner creates its own run row."""
     from llm_pipeline.evals.runner import EvalRunner
 
     engine = request.app.state.engine
@@ -637,18 +623,6 @@ def trigger_eval_run(
         introspection_registry=introspection_registry,
     )
 
-    # Create pending run row so we can return its id
-    run = EvaluationRun(
-        dataset_id=dataset_id,
-        status="pending",
-        total_cases=0,
-    )
-    with Session(engine) as session:
-        session.add(run)
-        session.commit()
-        session.refresh(run)
-        run_id = run.id
-
     def _execute() -> None:
         try:
             runner.run_dataset(dataset_id, model=body.model)
@@ -657,31 +631,12 @@ def trigger_eval_run(
 
     background_tasks.add_task(_execute)
 
-    return TriggerRunResponse(run_id=run_id, status="accepted")
+    return TriggerRunResponse(status="accepted")
 
 
 # ---------------------------------------------------------------------------
-# Schema introspection
+# Schema introspection helpers
 # ---------------------------------------------------------------------------
-
-
-@router.get("/schema", response_model=SchemaResponse)
-def get_input_schema(
-    request: Request,
-    target_type: str = Query(..., pattern="^(step|pipeline)$"),
-    target_name: str = Query(..., min_length=1),
-) -> SchemaResponse:
-    """Return JSON Schema for a step or pipeline input type."""
-    introspection_registry: dict = getattr(
-        request.app.state, "introspection_registry", {}
-    )
-
-    if target_type == "pipeline":
-        return _pipeline_schema(target_name, introspection_registry)
-    elif target_type == "step":
-        return _step_schema(target_name, introspection_registry)
-    else:
-        raise HTTPException(status_code=400, detail="Invalid target_type")
 
 
 def _pipeline_schema(
