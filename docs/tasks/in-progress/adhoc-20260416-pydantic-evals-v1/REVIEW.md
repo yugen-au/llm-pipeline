@@ -158,3 +158,40 @@ None
 ## Recommendation
 **Decision:** CONDITIONAL
 4 of 5 fixes verified. The N+1 query (HIGH) in `list_datasets` was not addressed -- `_last_run_pass_rate` still queries per row. Fix this or explicitly accept as v1 follow-up before approving.
+
+---
+
+# Final Re-Review: N+1 Fix Verification (2026-04-16)
+
+## Scope
+Verify N+1 query fix in `list_datasets` (`llm_pipeline/ui/routes/evals.py`).
+
+## Fix Verification
+
+| # | Severity | Issue | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| 3 | HIGH | N+1 query in list_datasets | FIXED | `_last_run_pass_rate` no longer called in loop. Pass rate computed via two subqueries: `latest_run_sq` (lines 183-191) gets max run ID per dataset, `pass_rate_sq` (lines 192-202) joins to get passed/total_cases ratio. Both joined into main query via outerjoin (lines 204-208). Single query execution. |
+
+## All Issues Final Status
+
+| # | Severity | Issue | Status |
+| --- | --- | --- | --- |
+| 1 | CRITICAL | Route ordering | FIXED |
+| 2 | HIGH | Duplicate EvaluationRun | FIXED |
+| 3 | HIGH | N+1 query in list_datasets | FIXED |
+| 4 | MEDIUM | Inconsistent session DI | FIXED |
+| 5 | MEDIUM | target_type not validated | FIXED |
+| 6 | MEDIUM | No DB-level cascade deletes | ACCEPTED v1 |
+| 7 | LOW | No pagination on run/case lists | ACCEPTED v1 |
+| 8 | LOW | FieldMatchEvaluator strict equality | ACCEPTED v1 |
+| 9 | LOW | useMemo side effect in case editor | ACCEPTED v1 |
+| 10 | LOW | Frontend useEvalRuns type mismatch | ACCEPTED v1 |
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/evals.py | pass | N+1 fix verified. All 5 critical/high/medium fixes confirmed. |
+
+## Recommendation
+**Decision:** APPROVE
+All critical and high severity issues resolved. All medium issues either fixed or explicitly accepted for v1. Implementation is clean -- subquery approach mirrors existing `case_count_sq` pattern and uses `func.nullif` to avoid division by zero.
