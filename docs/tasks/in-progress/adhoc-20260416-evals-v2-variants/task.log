@@ -5,3 +5,8 @@
 [2026-04-16 17:04:02] [INFO] Created: STATE.md
 [2026-04-16 17:04:02] [INFO] ============================================================
 [2026-04-16 17:04:03] [DEBUG] STATE.md atomic write complete
+[2026-04-16 17:08:50] [ERROR] BLOCKED: Invalid AgentRow 'Existing evals + sandbox arch': commits: Commits must be pending (if unknown) or comma-separated 7-40 char hex hashes
+[2026-04-16 17:09:01] [INFO] STATE.md updated: phase=initialization, status=in-progress
+[2026-04-16 17:09:09] [INFO] STATE.md updated: phase=research, status=in-progress
+[2026-04-16 17:09:09] [INFO] Auto-updated agent statuses: Existing evals + sandbox arch: pending -> in-progress, Frontend evals patterns: pending -> in-progress, Pydantic create_model + delta: pending -> in-progress
+[2026-04-16 17:09:09] [DEBUG] STATE.md atomic write complete
