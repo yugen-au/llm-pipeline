@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-16 13:15
+## Last Updated: 2026-04-16 13:18
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -25,7 +25,7 @@
 | Core dep + DB models + table reg | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | ab4c5ff2d477803c7 | ff862ebd,534770d4 | - |
 | evaluators= param + auto FieldMatch | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | ad0a8c24e93aa8842 | 2644c8ad,534770d4 | - |
 | YAML sync + eval runner + CLI | llm-application-dev:ai-engineer | implementation | 3 | - | A | complete | 0 | a4459d6dbc298e2b5 | 534770d4 | - |
-| Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | in-progress | 0 | pending | pending | - |
+| Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | complete | 0 | a52791643e0e91adf | 0bebd93e | - |
 | Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | in-progress | 0 | pending | pending | - |
 | Wire evals router + startup sync | backend-development:backend-architect | implementation | 6 | - | B | in-progress | 0 | pending | pending | - |
 | Frontend API hooks + routes | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | pending | 0 | pending | pending | /tanstack/router |

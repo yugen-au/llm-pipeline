@@ -48,6 +48,12 @@ def main() -> None:
         help="Directory containing prompt YAML files",
     )
     ui_parser.add_argument(
+        "--evals-dir",
+        type=str,
+        default=None,
+        help="Directory containing eval dataset YAML files",
+    )
+    ui_parser.add_argument(
         "--demo",
         action="store_true",
         default=False,
