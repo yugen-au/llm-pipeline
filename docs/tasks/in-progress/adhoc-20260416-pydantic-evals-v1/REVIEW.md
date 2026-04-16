@@ -115,3 +115,46 @@ Solid v1 implementation following existing project patterns. Module separation (
 ## Recommendation
 **Decision:** CONDITIONAL
 Fix the critical route ordering bug and the high-severity duplicate run creation bug before merge. The N+1 query fix is strongly recommended but could ship as a fast-follow if needed. The remaining medium/low issues are acceptable for v1 with tracked follow-up.
+
+---
+
+# Re-Review: Fix Verification (2026-04-16)
+
+## Scope
+Verify 5 fixes applied to `llm_pipeline/ui/routes/evals.py` and `llm_pipeline/evals/runner.py`.
+
+## Fix Verification
+
+| # | Severity | Issue | Status | Evidence |
+| --- | --- | --- | --- | --- |
+| 1 | CRITICAL | Route ordering: /schema shadowed by /{dataset_id} | FIXED | `/schema` endpoint at line 218, before `/{dataset_id}` at line 237. Comment on line 215 documents intent. |
+| 2 | HIGH | Duplicate EvaluationRun creation | FIXED | `trigger_eval_run` (line 607) no longer creates a run row. Runner creates single "running" row at line 66-74 and owns lifecycle. |
+| 3 | HIGH | N+1 query in list_datasets | NOT FIXED | `_last_run_pass_rate(db, ds.id)` still called per-row in loop at line 204. Helper at line 145-156 executes separate query each call. |
+| 4 | MEDIUM | Inconsistent session DI | FIXED | `list_eval_runs` and `get_eval_run` now use `DBSession`. `trigger_eval_run` correctly passes engine to runner (no session needed). |
+| 5 | MEDIUM | target_type not validated | FIXED | `DatasetCreateRequest.target_type` is now `Literal["step", "pipeline"]` at line 69. |
+
+## Issues Found
+
+### High
+#### N+1 query in list_datasets still present
+**Step:** 4 (backend routes - datasets/cases CRUD)
+**Details:** `_last_run_pass_rate(db, ds.id)` is still called inside the `for row in rows` loop (line 204), executing one query per dataset. The case_count subquery pattern (lines 172-179) shows the correct approach -- pass rates should use a similar window/subquery join. With limit=50 this means 51 queries per list call.
+
+### Critical
+None
+
+### Medium
+None (previously accepted medium/low issues unchanged)
+
+### Low
+None
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/evals.py | fail | 4 of 5 fixes verified. N+1 still present. |
+| llm_pipeline/evals/runner.py | pass | Duplicate run fix correct. Runner owns run lifecycle cleanly. |
+
+## Recommendation
+**Decision:** CONDITIONAL
+4 of 5 fixes verified. The N+1 query (HIGH) in `list_datasets` was not addressed -- `_last_run_pass_rate` still queries per row. Fix this or explicitly accept as v1 follow-up before approving.
