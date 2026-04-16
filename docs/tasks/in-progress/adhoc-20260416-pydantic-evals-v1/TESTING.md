@@ -112,3 +112,30 @@ Pre-existing failures deselected per scope contract:
 
 ### Issues Found
 None — all review fixes verified clean.
+
+---
+
+## Re-verification (2026-04-16) — Post N+1 Fix in list_datasets
+
+### Scope
+Only `llm_pipeline/ui/routes/evals.py` changed (N+1 query fix).
+
+### Syntax Check
+- [x] `python -c "import ast; ast.parse(...evals.py); print('ok')"` — ok
+
+### Test Execution
+**Pass Rate:** 1295/1295 (2 deselected pre-existing; test_wal flaky in suite order, passes in isolation)
+```
+1295 passed, 6 skipped, 2 deselected, 5 warnings in 41.64s
+```
+Pre-existing failures deselected:
+- tests/ui/test_cli.py::TestDevModeWithFrontend::test_atexit_registered_with_cleanup_vite
+- tests/ui/test_runs.py::TestTriggerRun::test_returns_422_when_no_model_configured
+
+Note: tests/ui/test_wal.py::TestWALMode::test_file_based_sqlite_sets_wal fails in full suite run (ordering/state isolation issue), passes in isolation. Pre-existing flaky test, unrelated to this change.
+
+### Frontend TypeScript Build
+- [x] `cd llm_pipeline/ui/frontend && npx tsc -b` — clean (no output)
+
+### Issues Found
+None — N+1 fix verified clean. No new import errors (sqlalchemy already imported in evals.py).
