@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import select
@@ -445,4 +445,304 @@ def delete_case(
     db.commit()
 
 
-# --- Run + introspection endpoints added by Step 5 ---
+# ---------------------------------------------------------------------------
+# Run response / request models
+# ---------------------------------------------------------------------------
+
+
+class CaseResultItem(BaseModel):
+    id: int
+    case_name: str
+    passed: bool
+    evaluator_scores: dict
+    output_data: Optional[dict] = None
+    error_message: Optional[str] = None
+
+
+class RunListItem(BaseModel):
+    id: int
+    dataset_id: int
+    status: str
+    total_cases: int
+    passed: int
+    failed: int
+    errored: int
+    started_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class RunListResponse(BaseModel):
+    items: List[RunListItem]
+
+
+class RunDetail(RunListItem):
+    case_results: List[CaseResultItem]
+
+
+class TriggerRunRequest(BaseModel):
+    model: Optional[str] = None
+
+
+class TriggerRunResponse(BaseModel):
+    run_id: int
+    status: str
+
+
+class SchemaResponse(BaseModel):
+    target_type: str
+    target_name: str
+    json_schema: dict
+
+
+# ---------------------------------------------------------------------------
+# Run endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{dataset_id}/runs", response_model=RunListResponse)
+def list_eval_runs(
+    dataset_id: int,
+    request: Request,
+) -> RunListResponse:
+    """List runs for a dataset, ordered by started_at desc."""
+    from sqlmodel import Session
+
+    engine = request.app.state.engine
+    with Session(engine) as session:
+        stmt = (
+            select(EvaluationRun)
+            .where(EvaluationRun.dataset_id == dataset_id)
+            .order_by(EvaluationRun.started_at.desc())
+        )
+        rows = session.exec(stmt).all()
+
+    return RunListResponse(
+        items=[
+            RunListItem(
+                id=r.id,
+                dataset_id=r.dataset_id,
+                status=r.status,
+                total_cases=r.total_cases,
+                passed=r.passed,
+                failed=r.failed,
+                errored=r.errored,
+                started_at=r.started_at,
+                completed_at=r.completed_at,
+            )
+            for r in rows
+        ]
+    )
+
+
+@router.get("/{dataset_id}/runs/{run_id}", response_model=RunDetail)
+def get_eval_run(
+    dataset_id: int,
+    run_id: int,
+    request: Request,
+) -> RunDetail:
+    """Run detail with per-case results."""
+    from sqlmodel import Session
+
+    engine = request.app.state.engine
+    with Session(engine) as session:
+        run = session.exec(
+            select(EvaluationRun).where(
+                EvaluationRun.id == run_id,
+                EvaluationRun.dataset_id == dataset_id,
+            )
+        ).first()
+        if run is None:
+            raise HTTPException(status_code=404, detail="Run not found")
+
+        case_results = session.exec(
+            select(EvaluationCaseResult)
+            .where(EvaluationCaseResult.run_id == run_id)
+            .order_by(EvaluationCaseResult.id)
+        ).all()
+
+        return RunDetail(
+            id=run.id,
+            dataset_id=run.dataset_id,
+            status=run.status,
+            total_cases=run.total_cases,
+            passed=run.passed,
+            failed=run.failed,
+            errored=run.errored,
+            started_at=run.started_at,
+            completed_at=run.completed_at,
+            case_results=[
+                CaseResultItem(
+                    id=cr.id,
+                    case_name=cr.case_name,
+                    passed=cr.passed,
+                    evaluator_scores=cr.evaluator_scores or {},
+                    output_data=cr.output_data,
+                    error_message=cr.error_message,
+                )
+                for cr in case_results
+            ],
+        )
+
+
+@router.post(
+    "/{dataset_id}/runs",
+    response_model=TriggerRunResponse,
+    status_code=202,
+)
+def trigger_eval_run(
+    dataset_id: int,
+    body: TriggerRunRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> TriggerRunResponse:
+    """Trigger eval run in background. Returns run_id immediately."""
+    from sqlmodel import Session
+    from llm_pipeline.evals.runner import EvalRunner
+
+    engine = request.app.state.engine
+    pipeline_registry = getattr(request.app.state, "pipeline_registry", {})
+    introspection_registry = getattr(request.app.state, "introspection_registry", {})
+
+    runner = EvalRunner(
+        engine=engine,
+        pipeline_registry=pipeline_registry,
+        introspection_registry=introspection_registry,
+    )
+
+    # Create pending run row so we can return its id
+    run = EvaluationRun(
+        dataset_id=dataset_id,
+        status="pending",
+        total_cases=0,
+    )
+    with Session(engine) as session:
+        session.add(run)
+        session.commit()
+        session.refresh(run)
+        run_id = run.id
+
+    def _execute() -> None:
+        try:
+            runner.run_dataset(dataset_id, model=body.model)
+        except Exception:
+            logger.exception("Eval run failed for dataset_id=%d", dataset_id)
+
+    background_tasks.add_task(_execute)
+
+    return TriggerRunResponse(run_id=run_id, status="accepted")
+
+
+# ---------------------------------------------------------------------------
+# Schema introspection
+# ---------------------------------------------------------------------------
+
+
+@router.get("/schema", response_model=SchemaResponse)
+def get_input_schema(
+    request: Request,
+    target_type: str = Query(..., pattern="^(step|pipeline)$"),
+    target_name: str = Query(..., min_length=1),
+) -> SchemaResponse:
+    """Return JSON Schema for a step or pipeline input type."""
+    introspection_registry: dict = getattr(
+        request.app.state, "introspection_registry", {}
+    )
+
+    if target_type == "pipeline":
+        return _pipeline_schema(target_name, introspection_registry)
+    elif target_type == "step":
+        return _step_schema(target_name, introspection_registry)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid target_type")
+
+
+def _pipeline_schema(
+    pipeline_name: str, introspection_registry: dict
+) -> SchemaResponse:
+    """Resolve input schema for a pipeline via PipelineIntrospector."""
+    from llm_pipeline.introspection import PipelineIntrospector
+
+    pipeline_cls = introspection_registry.get(pipeline_name)
+    if pipeline_cls is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Pipeline '{pipeline_name}' not found",
+        )
+
+    # Check for INPUT_DATA (validated_input type) first
+    input_data_cls = getattr(pipeline_cls, "INPUT_DATA", None)
+    if input_data_cls is not None and hasattr(input_data_cls, "model_json_schema"):
+        return SchemaResponse(
+            target_type="pipeline",
+            target_name=pipeline_name,
+            json_schema=input_data_cls.model_json_schema(),
+        )
+
+    # Fallback: use PipelineIntrospector metadata
+    introspector = PipelineIntrospector(pipeline_cls)
+    metadata = introspector.get_metadata()
+    schema = metadata.get("pipeline_input_schema")
+    if schema is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No input schema found for pipeline '{pipeline_name}'",
+        )
+    return SchemaResponse(
+        target_type="pipeline",
+        target_name=pipeline_name,
+        json_schema=schema,
+    )
+
+
+def _step_schema(
+    step_name: str, introspection_registry: dict
+) -> SchemaResponse:
+    """Resolve input schema for a step by searching all registered pipelines."""
+    for _pipeline_name, pipeline_cls in introspection_registry.items():
+        strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
+        if strategies_cls is None:
+            continue
+        strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
+        for s_cls in strategy_classes:
+            try:
+                instance = s_cls()
+                for sd in instance.get_steps():
+                    if sd.step_name != step_name:
+                        continue
+                    # Found -- resolve its input schema
+                    instr_cls = sd.instructions
+                    if instr_cls is not None and hasattr(
+                        instr_cls, "model_json_schema"
+                    ):
+                        return SchemaResponse(
+                            target_type="step",
+                            target_name=step_name,
+                            json_schema=instr_cls.model_json_schema(),
+                        )
+                    ctx_cls = sd.context
+                    if ctx_cls is not None and hasattr(
+                        ctx_cls, "model_json_schema"
+                    ):
+                        return SchemaResponse(
+                            target_type="step",
+                            target_name=step_name,
+                            json_schema=ctx_cls.model_json_schema(),
+                        )
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Step '{step_name}' has no typed input schema",
+                    )
+            except HTTPException:
+                raise
+            except Exception:
+                logger.debug(
+                    "Failed to introspect for step '%s'",
+                    step_name,
+                    exc_info=True,
+                )
+                continue
+
+    raise HTTPException(
+        status_code=404,
+        detail=f"Step '{step_name}' not found in any registered pipeline",
+    )

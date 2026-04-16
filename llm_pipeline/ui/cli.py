@@ -187,6 +187,7 @@ def _run_ui(args: argparse.Namespace) -> None:
                 default_model=args.model,
                 pipeline_modules=args.pipelines,
                 prompts_dir=args.prompts_dir,
+                evals_dir=args.evals_dir,
                 demo_mode=args.demo,
             )
             _write_pid_file()
@@ -233,6 +234,8 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
     if getattr(args, "prompts_dir", None) and isinstance(args.prompts_dir, str):
         os.environ["LLM_PIPELINE_PROMPTS_DIR"] = args.prompts_dir
+    if getattr(args, "evals_dir", None) and isinstance(args.evals_dir, str):
+        os.environ["LLM_PIPELINE_EVALS_DIR"] = args.evals_dir
     if getattr(args, "demo", False):
         os.environ["LLM_PIPELINE_DEMO_MODE"] = "true"
 
