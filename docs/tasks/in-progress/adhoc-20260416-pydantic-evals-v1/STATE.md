@@ -12,7 +12,7 @@
 ## Steps to Fix: [4,5]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-16 13:49
+## Last Updated: 2026-04-16 13:52
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,7 +26,7 @@
 | evaluators= param + auto FieldMatch | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | ad0a8c24e93aa8842 | 2644c8ad,534770d4 | - |
 | YAML sync + eval runner + CLI | llm-application-dev:ai-engineer | implementation | 3 | - | A | complete | 0 | a4459d6dbc298e2b5 | 534770d4 | - |
 | Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | complete | 1 | aa949c2b17577e049 | 0bebd93e,06677777,c501e432 | - |
-| Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | in-progress | 1 | afd2e48500b28b299 | 06677777 | - |
+| Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | complete | 1 | ae93a80df9e09653c | 06677777,3b86f82e | - |
 | Wire evals router + startup sync | backend-development:backend-architect | implementation | 6 | - | B | complete | 0 | a8773e0286187058a | 9683d3cb,06677777 | - |
 | Frontend API hooks + routes | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | complete | 0 | a2d14f07542e90288 | 7f5f9583,bb4b604c | /tanstack/router |
 | Frontend dataset list + detail | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | ac557c08e614fd3a4 | bb4b604c | /tanstack/router |
