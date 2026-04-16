@@ -47,6 +47,7 @@ def step_definition(
     agent: Optional[str] = None,
     model: Optional[str] = None,
     review: Optional[Type] = None,
+    evaluators: Optional[List[Type]] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -112,6 +113,7 @@ def step_definition(
         step_class.AGENT = agent
         step_class.MODEL = model
         step_class.REVIEW = review
+        step_class._step_evaluators = evaluators or []
 
         @classmethod
         def create_definition(
@@ -140,6 +142,10 @@ def step_definition(
             # Default review from decorator if not overridden in kwargs
             if 'review' not in kwargs and cls.REVIEW is not None:
                 kwargs['review'] = cls.REVIEW
+
+            # Default evaluators from decorator if not overridden in kwargs
+            if 'evaluators' not in kwargs and cls._step_evaluators:
+                kwargs['evaluators'] = cls._step_evaluators
 
             return StepDefinition(
                 step_class=cls,

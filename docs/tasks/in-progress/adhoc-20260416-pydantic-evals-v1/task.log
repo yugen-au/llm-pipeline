@@ -50,3 +50,9 @@
 [2026-04-16 13:03:51] [INFO] Auto-updated agent statuses: Core dep + DB models + table reg: pending -> in-progress, evaluators= param + auto FieldMatch: pending -> in-progress, YAML sync + eval runner + CLI: pending -> in-progress
 [2026-04-16 13:03:51] [INFO] Deleted 1 old contract file(s)
 [2026-04-16 13:03:51] [DEBUG] STATE.md atomic write complete
+[2026-04-16 13:04:14] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-04-16 13:04:29] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-04-16 13:04:54] [INFO] Task call: llm-application-dev:ai-engineer (phase: implementation)
+[2026-04-16 13:06:39] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-16 13:07:19] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-16 13:07:35] [DEBUG] STATE.md atomic write complete
