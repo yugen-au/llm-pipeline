@@ -13,11 +13,14 @@ import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as PromptsRouteImport } from './routes/prompts'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
 import { Route as LiveRouteImport } from './routes/live'
+import { Route as EvalsRouteImport } from './routes/evals'
 import { Route as EditorRouteImport } from './routes/editor'
 import { Route as CreatorRouteImport } from './routes/creator'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
 import { Route as ReviewTokenRouteImport } from './routes/review/$token'
+import { Route as EvalsDatasetIdRouteImport } from './routes/evals.$datasetId'
+import { Route as EvalsDatasetIdRunsRunIdRouteImport } from './routes/evals.$datasetId.runs.$runId'
 
 const ReviewsRoute = ReviewsRouteImport.update({
   id: '/reviews',
@@ -37,6 +40,11 @@ const PipelinesRoute = PipelinesRouteImport.update({
 const LiveRoute = LiveRouteImport.update({
   id: '/live',
   path: '/live',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvalsRoute = EvalsRouteImport.update({
+  id: '/evals',
+  path: '/evals',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EditorRoute = EditorRouteImport.update({
@@ -64,40 +72,59 @@ const ReviewTokenRoute = ReviewTokenRouteImport.update({
   path: '/review/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const EvalsDatasetIdRoute = EvalsDatasetIdRouteImport.update({
+  id: '/evals/$datasetId',
+  path: '/evals/$datasetId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EvalsDatasetIdRunsRunIdRoute = EvalsDatasetIdRunsRunIdRouteImport.update({
+  id: '/evals/$datasetId/runs/$runId',
+  path: '/evals/$datasetId/runs/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/creator': typeof CreatorRoute
   '/editor': typeof EditorRoute
+  '/evals': typeof EvalsRoute
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
   '/reviews': typeof ReviewsRoute
+  '/evals/$datasetId': typeof EvalsDatasetIdRoute
   '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
+  '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/creator': typeof CreatorRoute
   '/editor': typeof EditorRoute
+  '/evals': typeof EvalsRoute
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
   '/reviews': typeof ReviewsRoute
+  '/evals/$datasetId': typeof EvalsDatasetIdRoute
   '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
+  '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/creator': typeof CreatorRoute
   '/editor': typeof EditorRoute
+  '/evals': typeof EvalsRoute
   '/live': typeof LiveRoute
   '/pipelines': typeof PipelinesRoute
   '/prompts': typeof PromptsRoute
   '/reviews': typeof ReviewsRoute
+  '/evals/$datasetId': typeof EvalsDatasetIdRoute
   '/review/$token': typeof ReviewTokenRoute
   '/runs/$runId': typeof RunsRunIdRoute
+  '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -105,46 +132,58 @@ export interface FileRouteTypes {
     | '/'
     | '/creator'
     | '/editor'
+    | '/evals'
     | '/live'
     | '/pipelines'
     | '/prompts'
     | '/reviews'
+    | '/evals/$datasetId'
     | '/review/$token'
     | '/runs/$runId'
+    | '/evals/$datasetId/runs/$runId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/creator'
     | '/editor'
+    | '/evals'
     | '/live'
     | '/pipelines'
     | '/prompts'
     | '/reviews'
+    | '/evals/$datasetId'
     | '/review/$token'
     | '/runs/$runId'
+    | '/evals/$datasetId/runs/$runId'
   id:
     | '__root__'
     | '/'
     | '/creator'
     | '/editor'
+    | '/evals'
     | '/live'
     | '/pipelines'
     | '/prompts'
     | '/reviews'
+    | '/evals/$datasetId'
     | '/review/$token'
     | '/runs/$runId'
+    | '/evals/$datasetId/runs/$runId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CreatorRoute: typeof CreatorRoute
   EditorRoute: typeof EditorRoute
+  EvalsRoute: typeof EvalsRoute
   LiveRoute: typeof LiveRoute
   PipelinesRoute: typeof PipelinesRoute
   PromptsRoute: typeof PromptsRoute
   ReviewsRoute: typeof ReviewsRoute
+  EvalsDatasetIdRoute: typeof EvalsDatasetIdRoute
   ReviewTokenRoute: typeof ReviewTokenRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
+  EvalsDatasetIdRunsRunIdRoute: typeof EvalsDatasetIdRunsRunIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -175,6 +214,13 @@ declare module '@tanstack/react-router' {
       path: '/live'
       fullPath: '/live'
       preLoaderRoute: typeof LiveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/evals': {
+      id: '/evals'
+      path: '/evals'
+      fullPath: '/evals'
+      preLoaderRoute: typeof EvalsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/editor': {
@@ -212,6 +258,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/evals/$datasetId': {
+      id: '/evals/$datasetId'
+      path: '/evals/$datasetId'
+      fullPath: '/evals/$datasetId'
+      preLoaderRoute: typeof EvalsDatasetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/evals/$datasetId/runs/$runId': {
+      id: '/evals/$datasetId/runs/$runId'
+      path: '/evals/$datasetId/runs/$runId'
+      fullPath: '/evals/$datasetId/runs/$runId'
+      preLoaderRoute: typeof EvalsDatasetIdRunsRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -219,12 +279,15 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CreatorRoute: CreatorRoute,
   EditorRoute: EditorRoute,
+  EvalsRoute: EvalsRoute,
   LiveRoute: LiveRoute,
   PipelinesRoute: PipelinesRoute,
   PromptsRoute: PromptsRoute,
   ReviewsRoute: ReviewsRoute,
+  EvalsDatasetIdRoute: EvalsDatasetIdRoute,
   ReviewTokenRoute: ReviewTokenRoute,
   RunsRunIdRoute: RunsRunIdRoute,
+  EvalsDatasetIdRunsRunIdRoute: EvalsDatasetIdRunsRunIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

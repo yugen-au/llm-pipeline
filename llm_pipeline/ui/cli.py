@@ -48,6 +48,12 @@ def main() -> None:
         help="Directory containing prompt YAML files",
     )
     ui_parser.add_argument(
+        "--evals-dir",
+        type=str,
+        default=None,
+        help="Directory containing eval dataset YAML files",
+    )
+    ui_parser.add_argument(
         "--demo",
         action="store_true",
         default=False,
@@ -56,12 +62,32 @@ def main() -> None:
 
     sub.add_parser("stop", help="Stop a running UI server")
 
+    eval_parser = sub.add_parser("eval", help="Run an evaluation dataset")
+    eval_parser.add_argument(
+        "dataset_name", help="Name of the evaluation dataset to run"
+    )
+    eval_parser.add_argument(
+        "--db", type=str, default=None, help="Path to SQLite database file"
+    )
+    eval_parser.add_argument(
+        "--model", type=str, default=None, help="LLM model string"
+    )
+    eval_parser.add_argument(
+        "--pipelines",
+        action="append",
+        default=None,
+        metavar="MODULE",
+        help="Python module path to scan for PipelineConfig subclasses (repeatable)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "ui":
         _run_ui(args)
     elif args.command == "stop":
         _stop_ui()
+    elif args.command == "eval":
+        _run_eval(args)
     else:
         parser.print_help()
         sys.exit(1)
@@ -161,6 +187,7 @@ def _run_ui(args: argparse.Namespace) -> None:
                 default_model=args.model,
                 pipeline_modules=args.pipelines,
                 prompts_dir=args.prompts_dir,
+                evals_dir=args.evals_dir,
                 demo_mode=args.demo,
             )
             _write_pid_file()
@@ -207,6 +234,8 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
     if getattr(args, "prompts_dir", None) and isinstance(args.prompts_dir, str):
         os.environ["LLM_PIPELINE_PROMPTS_DIR"] = args.prompts_dir
+    if getattr(args, "evals_dir", None) and isinstance(args.evals_dir, str):
+        os.environ["LLM_PIPELINE_EVALS_DIR"] = args.evals_dir
     if getattr(args, "demo", False):
         os.environ["LLM_PIPELINE_DEMO_MODE"] = "true"
 
@@ -298,6 +327,73 @@ def _create_dev_app() -> object:
         pipeline_modules=pipeline_modules,
     )
 
+
+
+def _run_eval(args: argparse.Namespace) -> None:
+    """Run an evaluation dataset by name and print summary."""
+    from llm_pipeline.db import init_pipeline_db
+    from llm_pipeline.evals.runner import EvalRunner
+    from llm_pipeline.evals.yaml_sync import sync_evals_yaml_to_db
+
+    # Init DB
+    if args.db:
+        from sqlalchemy import create_engine
+        engine = init_pipeline_db(create_engine(f"sqlite:///{args.db}"))
+    else:
+        engine = init_pipeline_db()
+
+    # Build registries from pipeline modules
+    pipeline_registry = {}
+    introspection_registry = {}
+    if args.pipelines:
+        from llm_pipeline.ui.app import _load_pipeline_modules
+        pipeline_registry, introspection_registry = _load_pipeline_modules(
+            args.pipelines, args.model, engine,
+        )
+
+    # Convention-based discovery
+    from llm_pipeline.discovery import discover_from_convention
+    conv_pipeline, conv_introspection = discover_from_convention(
+        engine, args.model, include_package=False,
+    )
+    pipeline_registry = {**conv_pipeline, **pipeline_registry}
+    introspection_registry = {**conv_introspection, **introspection_registry}
+
+    # Sync eval YAML from CWD
+    evals_dir = Path.cwd() / "llm-pipeline-evals"
+    if evals_dir.is_dir():
+        sync_evals_yaml_to_db(engine, [evals_dir])
+
+    # Run
+    runner = EvalRunner(
+        engine=engine,
+        pipeline_registry=pipeline_registry,
+        introspection_registry=introspection_registry,
+    )
+
+    try:
+        run_id = runner.run_dataset_by_name(args.dataset_name, model=args.model)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"ERROR: eval run failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Print summary
+    from sqlmodel import Session, select
+    from llm_pipeline.evals.models import EvaluationRun
+
+    with Session(engine) as session:
+        run = session.exec(
+            select(EvaluationRun).where(EvaluationRun.id == run_id)
+        ).first()
+        if run:
+            print(f"Eval run #{run.id} ({run.status})")
+            print(f"  Total: {run.total_cases}  Passed: {run.passed}  "
+                  f"Failed: {run.failed}  Errored: {run.errored}")
+            if run.error_message:
+                print(f"  Error: {run.error_message}")
 
 
 def _resolve_npx() -> str:

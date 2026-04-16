@@ -7,6 +7,7 @@ import {
   Wand2,
   GitBranch,
   ClipboardCheck,
+  FlaskConical,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
@@ -44,6 +45,7 @@ const navItems: NavItem[] = [
   { to: '/prompts', label: 'Prompts', icon: FileText },
   { to: '/pipelines', label: 'Pipelines', icon: Box },
   { to: '/reviews', label: 'Reviews', icon: ClipboardCheck },
+  { to: '/evals', label: 'Evals', icon: FlaskConical },
   { to: '/creator', label: 'Creator', icon: Wand2 },
   { to: '/editor', label: 'Editor', icon: GitBranch },
 ]

@@ -45,6 +45,16 @@ export const queryKeys = {
     drafts: () => ['editor', 'drafts'] as const,
     draft: (id: number) => ['editor', 'drafts', id] as const,
   },
+  evals: {
+    all: ['evals'] as const,
+    list: (filters?: Record<string, unknown>) => ['evals', filters] as const,
+    detail: (id: number) => ['evals', id] as const,
+    runs: (datasetId: number) => ['evals', datasetId, 'runs'] as const,
+    run: (datasetId: number, runId: number) =>
+      ['evals', datasetId, 'runs', runId] as const,
+    schema: (targetType: string, targetName: string) =>
+      ['evals', 'schema', targetType, targetName] as const,
+  },
 } as const
 
 /**

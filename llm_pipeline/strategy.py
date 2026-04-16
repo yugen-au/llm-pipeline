@@ -41,6 +41,7 @@ class StepDefinition:
     not_found_indicators: list[str] | None = None
     consensus_strategy: 'ConsensusStrategy | None' = None
     review: 'StepReview | None' = None
+    evaluators: list = field(default_factory=list)
 
     @property
     def step_name(self) -> str:

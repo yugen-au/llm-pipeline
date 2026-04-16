@@ -236,6 +236,7 @@ def create_app(
     pipeline_modules: Optional[List[str]] = None,
     auto_generate_base_path: Optional[str] = None,
     prompts_dir: Optional[str] = None,
+    evals_dir: Optional[str] = None,
     demo_mode: bool = False,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
@@ -402,6 +403,26 @@ def create_app(
     # Write-back always targets project-level dir (creates if needed)
     app.state.prompts_dir = project_prompts
 
+    # Eval YAML sync: scan package-level + project-level dirs
+    from llm_pipeline.evals.yaml_sync import sync_evals_yaml_to_db
+
+    eval_scan_dirs: list[Path] = []
+    pkg_evals = Path(__file__).resolve().parent.parent / "llm-pipeline-evals"
+    if resolved_demo and pkg_evals.is_dir():
+        eval_scan_dirs.append(pkg_evals)
+    project_evals = Path(
+        evals_dir
+        or os.environ.get("LLM_PIPELINE_EVALS_DIR", "llm-pipeline-evals")
+    )
+    if not project_evals.is_absolute():
+        project_evals = Path.cwd() / project_evals
+    if project_evals.is_dir() and project_evals.resolve() != pkg_evals.resolve():
+        eval_scan_dirs.append(project_evals)
+
+    if eval_scan_dirs:
+        sync_evals_yaml_to_db(app.state.engine, eval_scan_dirs)
+    app.state.evals_dir = project_evals
+
     # Sync DB-stored variable_definitions into runtime registry
     _sync_variable_definitions(app.state.engine)
 
@@ -417,6 +438,7 @@ def create_app(
     from llm_pipeline.ui.routes.models import router as models_router
     from llm_pipeline.ui.routes.auto_generate import router as auto_generate_router
     from llm_pipeline.ui.routes.reviews import router as reviews_router
+    from llm_pipeline.ui.routes.evals import router as evals_router
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
@@ -428,6 +450,7 @@ def create_app(
     app.include_router(models_router, prefix="/api")
     app.include_router(auto_generate_router, prefix="/api")
     app.include_router(reviews_router, prefix="/api")
+    app.include_router(evals_router, prefix="/api")
     app.include_router(ws_router)  # no /api prefix for websocket
 
     return app
