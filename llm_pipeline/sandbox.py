@@ -43,7 +43,10 @@ def create_sandbox_engine(prod_engine: Engine) -> Engine:
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.db.step_config import StepModelConfig
 
-    sandbox_engine = create_engine("sqlite:///:memory:")
+    sandbox_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+    )
     init_pipeline_db(sandbox_engine)
 
     with Session(prod_engine) as src, Session(sandbox_engine) as dst:
@@ -122,7 +125,10 @@ def create_single_step_pipeline(
         if prod_engine is not None:
             engine = create_sandbox_engine(prod_engine)
         else:
-            engine = create_engine("sqlite:///:memory:")
+            engine = create_engine(
+                "sqlite:///:memory:",
+                connect_args={"check_same_thread": False},
+            )
             from llm_pipeline.db import init_pipeline_db
             init_pipeline_db(engine)
 
