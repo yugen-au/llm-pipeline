@@ -26,7 +26,7 @@
 | evaluators= param + auto FieldMatch | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | ad0a8c24e93aa8842 | 2644c8ad,534770d4 | - |
 | YAML sync + eval runner + CLI | llm-application-dev:ai-engineer | implementation | 3 | - | A | complete | 0 | a4459d6dbc298e2b5 | 534770d4 | - |
 | Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | in-progress | 1 | a52791643e0e91adf | 0bebd93e,06677777 | - |
-| Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | in-progress | 0 | afd2e48500b28b299 | 06677777 | - |
+| Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | in-progress | 1 | afd2e48500b28b299 | 06677777 | - |
 | Wire evals router + startup sync | backend-development:backend-architect | implementation | 6 | - | B | complete | 0 | a8773e0286187058a | 9683d3cb,06677777 | - |
 | Frontend API hooks + routes | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | complete | 0 | a2d14f07542e90288 | 7f5f9583,bb4b604c | /tanstack/router |
 | Frontend dataset list + detail | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | ac557c08e614fd3a4 | bb4b604c | /tanstack/router |
