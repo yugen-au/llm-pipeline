@@ -164,6 +164,26 @@ class EvalRunner:
                     )
                 )
 
+            # Process failures (task_fn errors — pydantic-evals puts these in report.failures, not report.cases)
+            for failure in getattr(report, "failures", []):
+                errored += 1
+                case_db_id = name_to_id.get(failure.name, 0)
+                error_msg = getattr(failure, "error_message", None) or str(failure)
+                logger.error(
+                    "Eval case '%s' errored: %s", failure.name, error_msg,
+                )
+                case_results.append(
+                    EvaluationCaseResult(
+                        run_id=run_id,
+                        case_id=case_db_id,
+                        case_name=failure.name,
+                        passed=False,
+                        evaluator_scores={},
+                        output_data=None,
+                        error_message=error_msg,
+                    )
+                )
+
             # Serialize report_data
             report_data: dict[str, Any] = {}
             try:
