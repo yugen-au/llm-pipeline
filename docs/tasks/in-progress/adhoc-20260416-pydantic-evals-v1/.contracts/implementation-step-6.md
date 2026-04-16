@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-pydantic-evals-v1
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-2-evaluators-param-auto-fieldmatch.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-wire-evals-router-startup-sync.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 2 - implement ONLY this step, not others
+- Step: 6 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-2-evaluators-param-auto-fieldmatch.md
+4. Document decisions in implementation\step-6-wire-evals-router-startup-sync.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 2: EVALUATORS= PARAM + AUTO FIELDMATCH
+# IMPLEMENTATION - STEP 6: WIRE EVALS ROUTER + STARTUP SYNC
 **Status:** [completed/failed/blocked]
 
 ## Summary
