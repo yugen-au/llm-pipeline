@@ -1,4 +1,6 @@
 """Sentiment analysis step with human review and eval evaluators."""
+from dataclasses import dataclass
+
 from llm_pipeline.step import LLMStep, step_definition
 from llm_pipeline.review import StepReview, ReviewData, DisplayField
 from llm_pipeline.evals.evaluators import FieldMatchEvaluator
@@ -9,14 +11,11 @@ from llm_pipelines.schemas.text_analyzer import (
 )
 
 
+@dataclass(repr=False)
 class SentimentLabelEvaluator(FieldMatchEvaluator):
-    """Check output.sentiment matches expected_output['sentiment'].
+    """Check output.sentiment matches expected_output['sentiment']."""
 
-    Skips (returns {}) when expected has no 'sentiment' key.
-    """
-
-    def __init__(self) -> None:
-        super().__init__("sentiment")
+    field_name: str = "sentiment"
 
 
 class SentimentAnalysisReview(StepReview):

@@ -6,37 +6,26 @@ build_auto_evaluators: zero-config generator returning one evaluator per model f
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, List
 
+from pydantic_evals.evaluators import Evaluator
 
-class FieldMatchEvaluator:
+
+@dataclass(repr=False)
+class FieldMatchEvaluator(Evaluator):
     """Evaluator that checks a single field matches between output and expected.
 
-    Returns {} (skip) when expected is None or field not present in expected.
-    Returns bool result otherwise.
+    Skips (returns empty dict) when expected_output is None or field not present.
     """
 
-    def __init__(self, field_name: str):
-        self.field_name = field_name
+    field_name: str = ""
 
-    def __repr__(self) -> str:
-        return f"FieldMatchEvaluator({self.field_name!r})"
-
-    def __call__(self, output: Any, expected: Any) -> dict | bool:
-        """Compare output.field_name against expected[field_name].
-
-        Args:
-            output: step output (Pydantic model instance or object with attrs)
-            expected: dict or None
-
-        Returns:
-            {} if expected is None or field absent from expected (skip).
-            True if values match, False otherwise.
-        """
+    def evaluate(self, ctx: Any) -> bool | dict:
+        expected = ctx.expected_output
         if expected is None:
             return {}
 
-        # Support both dict and object expected
         if isinstance(expected, dict):
             if self.field_name not in expected:
                 return {}
@@ -46,21 +35,17 @@ class FieldMatchEvaluator:
         else:
             return {}
 
-        output_val = getattr(output, self.field_name, None)
+        output_val = getattr(ctx.output, self.field_name, None)
+        if output_val is None and isinstance(ctx.output, dict):
+            output_val = ctx.output.get(self.field_name)
+
         return output_val == expected_val
 
 
 def build_auto_evaluators(instructions_cls: type) -> List[FieldMatchEvaluator]:
-    """Build one FieldMatchEvaluator per field on a Pydantic model class.
-
-    Args:
-        instructions_cls: Pydantic BaseModel subclass (the step's instructions type)
-
-    Returns:
-        List of FieldMatchEvaluator, one per model_fields key.
-    """
+    """Build one FieldMatchEvaluator per field on a Pydantic model class."""
     fields = getattr(instructions_cls, "model_fields", {})
-    return [FieldMatchEvaluator(f) for f in fields.keys()]
+    return [FieldMatchEvaluator(field_name=f) for f in fields.keys()]
 
 
 __all__ = ["FieldMatchEvaluator", "build_auto_evaluators"]
