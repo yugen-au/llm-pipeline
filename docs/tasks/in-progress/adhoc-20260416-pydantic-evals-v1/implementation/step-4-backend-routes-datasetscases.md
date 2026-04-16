@@ -74,3 +74,30 @@ target_type: Literal["step", "pipeline"]
 [x] Float import added for cast in pass_rate subquery
 [x] Literal import added for target_type validation
 [x] _last_run_pass_rate helper retained for single-dataset endpoints (get_dataset, update_dataset)
+
+## Review Fix Iteration 1
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] HIGH - N+1 query in list_datasets still present: _last_run_pass_rate(db, ds.id) called per row at line 204 (iteration 0 fix was not applied)
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/evals.py`
+Added `import sqlalchemy as sa` for Float cast. Added two subqueries (`latest_run_sq`, `pass_rate_sq`) joined into main `stmt` via outerjoin. Removed per-row `_last_run_pass_rate(db, ds.id)` call. Pass rate now destructured from row[2].
+
+```
+# Before (line 204)
+last_run_pass_rate=_last_run_pass_rate(db, ds.id),
+
+# After
+# pass_rate_sq joined into main select; row destructured as ds, cc, pr
+pr = row[2] if isinstance(row, tuple) else None
+last_run_pass_rate=round(pr, 4) if pr is not None else None,
+```
+
+### Verification
+[x] Python syntax check passes (ast.parse)
+[x] No _last_run_pass_rate call in list_datasets loop
+[x] _last_run_pass_rate helper retained for single-dataset endpoints
+[x] Targeted edit only to list_datasets function

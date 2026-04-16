@@ -5,6 +5,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
+import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import select
 
@@ -178,9 +179,32 @@ def list_datasets(
         .subquery()
     )
 
+    # pass rate subquery: latest completed run per dataset
+    latest_run_sq = (
+        select(
+            EvaluationRun.dataset_id,
+            func.max(EvaluationRun.id).label("latest_run_id"),
+        )
+        .where(EvaluationRun.status == "completed")
+        .group_by(EvaluationRun.dataset_id)
+        .subquery()
+    )
+    pass_rate_sq = (
+        select(
+            latest_run_sq.c.dataset_id,
+            (
+                func.cast(EvaluationRun.passed, sa.Float)
+                / func.nullif(EvaluationRun.total_cases, 0)
+            ).label("pass_rate"),
+        )
+        .join(EvaluationRun, EvaluationRun.id == latest_run_sq.c.latest_run_id)
+        .subquery()
+    )
+
     stmt = (
-        select(EvaluationDataset, case_count_sq.c.case_count)
+        select(EvaluationDataset, case_count_sq.c.case_count, pass_rate_sq.c.pass_rate)
         .outerjoin(case_count_sq, EvaluationDataset.id == case_count_sq.c.dataset_id)
+        .outerjoin(pass_rate_sq, EvaluationDataset.id == pass_rate_sq.c.dataset_id)
         .order_by(EvaluationDataset.updated_at.desc())
     )
 
@@ -193,6 +217,7 @@ def list_datasets(
     for row in rows:
         ds = row[0] if isinstance(row, tuple) else row
         cc = row[1] if isinstance(row, tuple) else 0
+        pr = row[2] if isinstance(row, tuple) else None
         items.append(
             DatasetListItem(
                 id=ds.id,
@@ -201,7 +226,7 @@ def list_datasets(
                 target_name=ds.target_name,
                 description=ds.description,
                 case_count=cc or 0,
-                last_run_pass_rate=_last_run_pass_rate(db, ds.id),
+                last_run_pass_rate=round(pr, 4) if pr is not None else None,
                 created_at=ds.created_at.isoformat(),
                 updated_at=ds.updated_at.isoformat(),
             )
