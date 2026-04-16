@@ -171,3 +171,18 @@
 [2026-04-16 13:55:50] [INFO] Incremented Revisions: 0 -> 1
 [2026-04-16 13:55:50] [DEBUG] STATE.md atomic write complete
 [2026-04-16 13:57:14] [DEBUG] STATE.md atomic write complete
+[2026-04-16 14:38:34] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: c:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\ui\routes\evals.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-16 14:38:50] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-04-16 14:38:58] [INFO] Committed review-A: ['REVIEW.md'] -> 1d8478ba
+[2026-04-16 14:39:01] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-16 14:39:01] [INFO] Updated Commits for 'Architecture review': dfe627bd
+[2026-04-16 14:39:01] [INFO] Auto-set Current Group -> B (entering fixing-review)
+[2026-04-16 14:39:01] [INFO] Auto-updated agent statuses: Backend routes datasets+cases: complete -> in-progress, Architecture review: complete -> pending
+[2026-04-16 14:39:01] [INFO] Deleted 1 old contract file(s)
+[2026-04-16 14:39:01] [DEBUG] STATE.md atomic write complete

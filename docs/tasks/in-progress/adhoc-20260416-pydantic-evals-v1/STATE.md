@@ -1,9 +1,9 @@
 ## Task: adhoc-20260416-pydantic-evals-v1
 ## Description: Integrate pydantic-evals into llm-pipeline: YAML datasets (llm-pipeline-evals/) with bidirectional DB sync, step/pipeline-level evaluation, auto field-match evaluators from instructions schema, custom evaluators on step_definition, live eval runner, new DB tables (EvaluationDataset/Case/Run/CaseResult), backend routes, frontend Evals tab (dataset list, case editor, run history, run detail), CLI command, worked sentiment_analysis example.
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260416-pydantic-evals-v1
 ## Plugins: llm-application-dev, backend-development, frontend-mobile-development
@@ -12,7 +12,7 @@
 ## Steps to Fix: [4]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-16 13:57
+## Last Updated: 2026-04-16 14:39
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -25,7 +25,7 @@
 | Core dep + DB models + table reg | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | ab4c5ff2d477803c7 | ff862ebd,534770d4 | - |
 | evaluators= param + auto FieldMatch | backend-development:backend-architect | implementation | 2 | - | A | complete | 0 | ad0a8c24e93aa8842 | 2644c8ad,534770d4 | - |
 | YAML sync + eval runner + CLI | llm-application-dev:ai-engineer | implementation | 3 | - | A | complete | 0 | a4459d6dbc298e2b5 | 534770d4 | - |
-| Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | complete | 1 | aa949c2b17577e049 | 0bebd93e,06677777,c501e432 | - |
+| Backend routes datasets+cases | backend-development:backend-architect | implementation | 4 | - | B | in-progress | 1 | aa949c2b17577e049 | 0bebd93e,06677777,c501e432 | - |
 | Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | complete | 1 | ae93a80df9e09653c | 06677777,3b86f82e | - |
 | Wire evals router + startup sync | backend-development:backend-architect | implementation | 6 | - | B | complete | 0 | a8773e0286187058a | 9683d3cb,06677777 | - |
 | Frontend API hooks + routes | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | complete | 0 | a2d14f07542e90288 | 7f5f9583,bb4b604c | /tanstack/router |
@@ -33,4 +33,4 @@
 | Frontend run detail + sidebar | frontend-mobile-development:frontend-developer | implementation | 9 | - | C | complete | 0 | a67a6b99bff887b05 | 9c07d16e,bb4b604c | /tanstack/router |
 | Worked example sentiment eval | llm-application-dev:ai-engineer | implementation | 10 | llm-application-dev:llm-evaluation | D | complete | 0 | a25b1d92630002ffb | 365732ca | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | aa262e629cbbf3ae3 | 2726fb2a,d7ea715d | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | ae41e8f01d9e6f74f | 7426e072 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 1 | ae41e8f01d9e6f74f | 7426e072,dfe627bd | - |
