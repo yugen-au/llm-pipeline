@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-16 13:29
+## Last Updated: 2026-04-16 13:32
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -29,6 +29,6 @@
 | Backend routes runs+introspection | backend-development:backend-architect | implementation | 5 | - | B | complete | 0 | afd2e48500b28b299 | 06677777 | - |
 | Wire evals router + startup sync | backend-development:backend-architect | implementation | 6 | - | B | complete | 0 | a8773e0286187058a | 9683d3cb,06677777 | - |
 | Frontend API hooks + routes | frontend-mobile-development:frontend-developer | implementation | 7 | - | C | complete | 0 | a2d14f07542e90288 | 7f5f9583 | /tanstack/router |
-| Frontend dataset list + detail | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | in-progress | 0 | pending | pending | /tanstack/router |
+| Frontend dataset list + detail | frontend-mobile-development:frontend-developer | implementation | 8 | - | C | complete | 0 | ac557c08e614fd3a4 | bb4b604c | /tanstack/router |
 | Frontend run detail + sidebar | frontend-mobile-development:frontend-developer | implementation | 9 | - | C | complete | 0 | a67a6b99bff887b05 | 9c07d16e | /tanstack/router |
 | Worked example sentiment eval | llm-application-dev:ai-engineer | implementation | 10 | llm-application-dev:llm-evaluation | D | pending | 0 | pending | pending | - |
