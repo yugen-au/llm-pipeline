@@ -87,3 +87,28 @@ None
 1. Run human validation smoke test above before merging to verify routes/runner integration end-to-end
 2. The `DeprecationWarning: There is no current event loop` from pydantic_evals in test_eval_runner is benign in test context but may surface in prod async environments — monitor
 3. Pre-existing failures (test_atexit_registered_with_cleanup_vite, test_returns_422_when_no_model_configured) pre-date this feature; should be tracked separately
+
+---
+
+## Re-verification (2026-04-16) — Post Review Fixes
+
+### Scope
+Targeted fixes to `llm_pipeline/ui/routes/evals.py`: route ordering, duplicate run creation, N+1 query, session DI, target_type validation.
+
+### Syntax Check
+- [x] `python -c "import ast; ast.parse(...evals.py); print('ok')"` — ok
+
+### Test Execution
+**Pass Rate:** 1296/1296 (2 deselected pre-existing)
+```
+1296 passed, 6 skipped, 2 deselected, 5 warnings in 39.93s
+```
+Pre-existing failures deselected per scope contract:
+- tests/ui/test_cli.py::TestDevModeWithFrontend::test_atexit_registered_with_cleanup_vite
+- tests/ui/test_runs.py::TestTriggerRun::test_returns_422_when_no_model_configured
+
+### Frontend TypeScript Build
+- [x] `cd llm_pipeline/ui/frontend && npx tsc -b` — clean (no output)
+
+### Issues Found
+None — all review fixes verified clean.
