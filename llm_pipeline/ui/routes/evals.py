@@ -648,9 +648,11 @@ def trigger_eval_run(
         introspection_registry=introspection_registry,
     )
 
+    eval_model = body.model or getattr(request.app.state, "default_model", None)
+
     def _execute() -> None:
         try:
-            runner.run_dataset(dataset_id, model=body.model)
+            runner.run_dataset(dataset_id, model=eval_model)
         except Exception:
             logger.exception("Eval run failed for dataset_id=%d", dataset_id)
 

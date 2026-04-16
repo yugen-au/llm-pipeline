@@ -271,15 +271,21 @@ class EvalRunner:
         self, step_name: str, model: str | None
     ) -> tuple[Callable, list | None]:
         """Build task_fn for a single step evaluation."""
-        step_def = self._find_step_def(step_name)
+        step_def, input_data_cls, default_model = self._find_step_def(step_name)
         if step_def is None:
             raise ValueError(
                 f"Step '{step_name}' not found in any registered pipeline"
             )
 
-        # Resolve evaluators
+        step_model = model or default_model
+        if not step_model:
+            raise ValueError(
+                f"No model configured for step '{step_name}'. "
+                "Pass model= to run_dataset() or configure a default model."
+            )
+
         evaluators = self._resolve_evaluators(step_def)
-        task_fn = self._build_step_task_fn(step_def, model)
+        task_fn = self._build_step_task_fn(step_def, input_data_cls, step_model)
         return task_fn, evaluators
 
     def _resolve_pipeline_task(
@@ -293,10 +299,11 @@ class EvalRunner:
         task_fn = self._build_pipeline_task_fn(pipeline_name, model)
         return task_fn, None  # no evaluators for pipeline-level (uses case-level)
 
-    def _find_step_def(self, step_name: str) -> Optional[Any]:
-        """Find StepDefinition for a step across all registered pipelines."""
-        from llm_pipeline.introspection import PipelineIntrospector
+    def _find_step_def(self, step_name: str) -> tuple[Optional[Any], Optional[Type], Optional[str]]:
+        """Find StepDefinition + INPUT_DATA cls + default model for a step.
 
+        Returns (step_def, input_data_cls, default_model) or (None, None, None).
+        """
         for pipeline_name, pipeline_cls in self.introspection_registry.items():
             try:
                 strategies_cls = pipeline_cls.STRATEGIES
@@ -306,14 +313,16 @@ class EvalRunner:
                     strategy = strategy_cls()
                     for sd in strategy.get_steps():
                         if sd.step_name == step_name:
-                            return sd
+                            input_data_cls = getattr(pipeline_cls, "INPUT_DATA", None)
+                            default_model = getattr(pipeline_cls, "_default_model", None)
+                            return sd, input_data_cls, default_model
             except Exception:
                 logger.debug(
                     "Failed to introspect '%s' for step '%s'",
                     pipeline_name, step_name, exc_info=True,
                 )
                 continue
-        return None
+        return None, None, None
 
     def _resolve_evaluators(self, step_def: Any) -> list | None:
         """Get evaluators from step_def or auto-generate from instructions."""
@@ -338,49 +347,37 @@ class EvalRunner:
         return None
 
     def _build_step_task_fn(
-        self, step_def: Any, model: str | None
+        self, step_def: Any, input_data_cls: Optional[Type], step_model: str,
     ) -> Callable:
         """Return callable(inputs) -> output for single step execution.
 
-        Uses build_step_agent + agent.run_sync to mirror pipeline.py execution.
+        Uses sandbox pipeline so the step runs through the identical
+        execution path as production (prompt rendering, model resolution, etc).
         """
-        engine = self.engine
+        prod_engine = self.engine
 
         def task_fn(inputs: dict) -> Any:
-            from llm_pipeline.agent_builders import build_step_agent, StepDeps
-            from llm_pipeline.prompts.service import PromptService
-            from sqlmodel import Session as SqlSession
+            from llm_pipeline.sandbox import create_single_step_pipeline
 
-            instructions_type = step_def.instructions
-            step_model = model or step_def.model
-
-            agent = build_step_agent(
-                step_name=step_def.step_name,
-                output_type=instructions_type,
+            pipeline = create_single_step_pipeline(
+                step_def=step_def,
+                input_data_cls=input_data_cls,
+                prod_engine=prod_engine,
                 model=step_model,
-                system_instruction_key=step_def.system_instruction_key,
+                run_id="eval",
             )
 
-            with SqlSession(engine) as session:
-                prompt_service = PromptService(session)
-                deps = StepDeps(
-                    session=session,
-                    pipeline_context={},
-                    prompt_service=prompt_service,
-                    run_id="eval",
-                    pipeline_name="eval",
-                    step_name=step_def.step_name,
-                )
-
-                # Build user prompt from inputs
-                user_prompt = str(inputs)
-
-                result = agent.run_sync(
-                    user_prompt,
-                    deps=deps,
-                    model=step_model,
-                )
-                return result.output
+            try:
+                pipeline.execute(input_data=inputs)
+                output = pipeline.instructions.get(step_def.step_name)
+                if output and isinstance(output, list) and len(output) == 1:
+                    return output[0]
+                return output
+            finally:
+                try:
+                    pipeline.close()
+                except Exception:
+                    pass
 
         return task_fn
 
@@ -389,25 +386,35 @@ class EvalRunner:
     ) -> Callable:
         """Return callable(inputs) -> dict[step_name, output] for full pipeline."""
         factory = self.pipeline_registry[pipeline_name]
-        engine = self.engine
+        prod_engine = self.engine
 
         def task_fn(inputs: dict) -> dict:
-            pipeline = factory(engine=engine)
-            if model:
-                pipeline._model = model
+            from llm_pipeline.sandbox import create_sandbox_from_factory
 
-            pipeline.execute(input_data=inputs)
+            pipeline = create_sandbox_from_factory(
+                factory=factory,
+                prod_engine=prod_engine,
+                model=model,
+                run_id="eval",
+            )
 
-            # Collect per-step outputs from instructions
-            outputs: dict[str, Any] = {}
-            for key, val in pipeline._instructions.items():
-                if hasattr(val, "model_dump"):
-                    outputs[key] = val.model_dump()
-                elif isinstance(val, dict):
-                    outputs[key] = val
-                else:
-                    outputs[key] = str(val)
-            return outputs
+            try:
+                pipeline.execute(input_data=inputs)
+
+                outputs: dict[str, Any] = {}
+                for key, val in pipeline._instructions.items():
+                    if hasattr(val, "model_dump"):
+                        outputs[key] = val.model_dump()
+                    elif isinstance(val, dict):
+                        outputs[key] = val
+                    else:
+                        outputs[key] = str(val)
+                return outputs
+            finally:
+                try:
+                    pipeline.close()
+                except Exception:
+                    pass
 
         return task_fn
 
