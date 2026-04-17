@@ -9,11 +9,13 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import select
 
+from llm_pipeline.evals import apply_instruction_delta
 from llm_pipeline.evals.models import (
     EvaluationCase,
     EvaluationCaseResult,
     EvaluationDataset,
     EvaluationRun,
+    EvaluationVariant,
 )
 from llm_pipeline.ui.deps import DBSession, WritableDBSession
 
@@ -114,6 +116,8 @@ class RunListItem(BaseModel):
     errored: int
     started_at: datetime
     completed_at: Optional[datetime] = None
+    variant_id: Optional[int] = None
+    delta_snapshot: Optional[dict] = None
 
 
 class RunListResponse(BaseModel):
@@ -126,6 +130,7 @@ class RunDetail(RunListItem):
 
 class TriggerRunRequest(BaseModel):
     model: Optional[str] = None
+    variant_id: Optional[int] = None
 
 
 class TriggerRunResponse(BaseModel):
@@ -138,6 +143,85 @@ class SchemaResponse(BaseModel):
     json_schema: dict
     input_schema: Optional[dict] = None
     output_schema: Optional[dict] = None
+
+
+# ---------------------------------------------------------------------------
+# Variant request / response models
+# ---------------------------------------------------------------------------
+
+
+class VariantItem(BaseModel):
+    id: int
+    dataset_id: int
+    name: str
+    description: Optional[str] = None
+    delta: dict
+    created_at: str
+    updated_at: str
+
+
+class VariantCreateRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    delta: dict
+
+
+class VariantUpdateRequest(BaseModel):
+    # all optional — partial update via PUT
+    name: Optional[str] = None
+    description: Optional[str] = None
+    delta: Optional[dict] = None
+
+
+class VariantListResponse(BaseModel):
+    items: List[VariantItem]
+    total: int
+
+
+# ---------------------------------------------------------------------------
+# Variant helpers
+# ---------------------------------------------------------------------------
+
+
+def _variant_to_item(v: EvaluationVariant) -> VariantItem:
+    return VariantItem(
+        id=v.id,
+        dataset_id=v.dataset_id,
+        name=v.name,
+        description=v.description,
+        delta=v.delta or {},
+        created_at=v.created_at.isoformat(),
+        updated_at=v.updated_at.isoformat(),
+    )
+
+
+def _dry_run_validate_delta(delta: Optional[dict]) -> None:
+    """Dry-run validation of a variant delta via apply_instruction_delta.
+
+    Runs the same whitelist/field/op/type/default checks as runtime delta
+    application to prevent persisting invalid deltas. Raises HTTPException
+    422 if validation fails.
+
+    Note: uses pydantic BaseModel as the dry-run base class since the real
+    step_def.instructions is not known at variant-authoring time. The
+    whitelist/field-name/length/op/type checks all fire regardless of base
+    class, so ACE protection is complete. The only edge case uncovered at
+    dry-run is `op=modify` of a field inherited from the real step_def's
+    instructions without a type_str — that is only checkable against the
+    actual base class at run-time and will surface as a ValueError when
+    the runner executes.
+    """
+    if not delta:
+        return
+    instructions_delta = delta.get("instructions_delta")
+    if not instructions_delta:
+        return
+    from pydantic import BaseModel as _DryRunBase
+
+    try:
+        apply_instruction_delta(_DryRunBase, instructions_delta)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +512,13 @@ def delete_dataset(dataset_id: int, db: WritableDBSession) -> None:
     for c in cases:
         db.delete(c)
 
+    # cascade: variants for this dataset
+    variants = db.exec(
+        select(EvaluationVariant).where(EvaluationVariant.dataset_id == dataset_id)
+    ).all()
+    for v in variants:
+        db.delete(v)
+
     db.delete(ds)
     db.commit()
 
@@ -572,6 +663,8 @@ def list_eval_runs(
                 errored=r.errored,
                 started_at=r.started_at,
                 completed_at=r.completed_at,
+                variant_id=r.variant_id,
+                delta_snapshot=r.delta_snapshot,
             )
             for r in rows
         ]
@@ -610,6 +703,8 @@ def get_eval_run(
         errored=run.errored,
         started_at=run.started_at,
         completed_at=run.completed_at,
+        variant_id=run.variant_id,
+        delta_snapshot=run.delta_snapshot,
         case_results=[
             CaseResultItem(
                 id=cr.id,
@@ -634,9 +729,28 @@ def trigger_eval_run(
     body: TriggerRunRequest,
     background_tasks: BackgroundTasks,
     request: Request,
+    db: DBSession,
 ) -> TriggerRunResponse:
     """Trigger eval run in background. Runner creates its own run row."""
     from llm_pipeline.evals.runner import EvalRunner
+
+    # Validate dataset exists
+    ds = db.exec(
+        select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
+    ).first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    # Validate variant belongs to dataset (422 if mismatched)
+    if body.variant_id is not None:
+        variant = db.exec(
+            select(EvaluationVariant).where(EvaluationVariant.id == body.variant_id)
+        ).first()
+        if variant is None or variant.dataset_id != dataset_id:
+            raise HTTPException(
+                status_code=422,
+                detail="variant_id does not belong to this dataset",
+            )
 
     engine = request.app.state.engine
     pipeline_registry = getattr(request.app.state, "pipeline_registry", {})
@@ -649,16 +763,160 @@ def trigger_eval_run(
     )
 
     eval_model = body.model or getattr(request.app.state, "default_model", None)
+    eval_variant_id = body.variant_id
 
     def _execute() -> None:
         try:
-            runner.run_dataset(dataset_id, model=eval_model)
+            runner.run_dataset(
+                dataset_id, model=eval_model, variant_id=eval_variant_id
+            )
         except Exception:
             logger.exception("Eval run failed for dataset_id=%d", dataset_id)
 
     background_tasks.add_task(_execute)
 
     return TriggerRunResponse(status="accepted")
+
+
+# ---------------------------------------------------------------------------
+# Variant endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{dataset_id}/variants", response_model=VariantListResponse)
+def list_variants(dataset_id: int, db: DBSession) -> VariantListResponse:
+    """List variants for a dataset, ordered by created_at desc."""
+    ds = db.exec(
+        select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
+    ).first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    rows = db.exec(
+        select(EvaluationVariant)
+        .where(EvaluationVariant.dataset_id == dataset_id)
+        .order_by(EvaluationVariant.created_at.desc())
+    ).all()
+
+    items = [_variant_to_item(v) for v in rows]
+    return VariantListResponse(items=items, total=len(items))
+
+
+@router.post(
+    "/{dataset_id}/variants",
+    response_model=VariantItem,
+    status_code=201,
+)
+def create_variant(
+    dataset_id: int,
+    body: VariantCreateRequest,
+    db: WritableDBSession,
+) -> VariantItem:
+    """Create a variant scoped to a dataset.
+
+    Dry-run validates instructions_delta via apply_instruction_delta; returns
+    422 with the ValueError message on failure.
+    """
+    ds = db.exec(
+        select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
+    ).first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    _dry_run_validate_delta(body.delta)
+
+    now = datetime.now(timezone.utc)
+    variant = EvaluationVariant(
+        dataset_id=dataset_id,
+        name=body.name,
+        description=body.description,
+        delta=body.delta or {},
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(variant)
+    db.commit()
+    db.refresh(variant)
+
+    return _variant_to_item(variant)
+
+
+@router.get(
+    "/{dataset_id}/variants/{variant_id}",
+    response_model=VariantItem,
+)
+def get_variant(
+    dataset_id: int,
+    variant_id: int,
+    db: DBSession,
+) -> VariantItem:
+    """Get a single variant; 404 if not found or not belonging to dataset."""
+    variant = db.exec(
+        select(EvaluationVariant)
+        .where(EvaluationVariant.id == variant_id)
+        .where(EvaluationVariant.dataset_id == dataset_id)
+    ).first()
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Variant not found")
+    return _variant_to_item(variant)
+
+
+@router.put(
+    "/{dataset_id}/variants/{variant_id}",
+    response_model=VariantItem,
+)
+def update_variant(
+    dataset_id: int,
+    variant_id: int,
+    body: VariantUpdateRequest,
+    db: WritableDBSession,
+) -> VariantItem:
+    """Partial update of a variant. Dry-run validates delta when provided."""
+    variant = db.exec(
+        select(EvaluationVariant)
+        .where(EvaluationVariant.id == variant_id)
+        .where(EvaluationVariant.dataset_id == dataset_id)
+    ).first()
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Variant not found")
+
+    if body.delta is not None:
+        _dry_run_validate_delta(body.delta)
+        variant.delta = body.delta
+
+    if body.name is not None:
+        variant.name = body.name
+    if body.description is not None:
+        variant.description = body.description
+
+    variant.updated_at = datetime.now(timezone.utc)
+    db.add(variant)
+    db.commit()
+    db.refresh(variant)
+
+    return _variant_to_item(variant)
+
+
+@router.delete(
+    "/{dataset_id}/variants/{variant_id}",
+    status_code=204,
+)
+def delete_variant(
+    dataset_id: int,
+    variant_id: int,
+    db: WritableDBSession,
+) -> None:
+    """Delete a variant."""
+    variant = db.exec(
+        select(EvaluationVariant)
+        .where(EvaluationVariant.id == variant_id)
+        .where(EvaluationVariant.dataset_id == dataset_id)
+    ).first()
+    if variant is None:
+        raise HTTPException(status_code=404, detail="Variant not found")
+
+    db.delete(variant)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
