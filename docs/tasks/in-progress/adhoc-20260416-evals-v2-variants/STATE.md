@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-17 15:53
+## Last Updated: 2026-04-17 15:57
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -23,7 +23,7 @@
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a593c36154cf4363e | da26c741 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a0bf164b49e299fcd | 299354b2 | - |
 | EvaluationVariant model + migration | python-development:python-pro | implementation | 1 | python-development:python-testing-patterns | A | complete | 0 | a43ec22fa5b73262f | f00e56a3 | /fastapi/sqlmodel |
-| apply_instruction_delta() utility | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | A | in-progress | 0 | pending | pending | /websites/pydantic_dev_validation |
+| apply_instruction_delta() utility | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | A | complete | 0 | a868d19f2c82b884f | 8bb85a25 | /websites/pydantic_dev_validation |
 | Runner integration - delta + prompt override | python-development:python-pro | implementation | 3 | python-development:python-testing-patterns | B | pending | 0 | pending | pending | /fastapi/sqlmodel |
 | Variant CRUD API routes | backend-development:backend-architect | implementation | 4 | backend-development:api-design-principles | B | pending | 0 | pending | pending | /fastapi/sqlmodel |
 | Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | pending | 0 | pending | pending | /tanstack/router |
