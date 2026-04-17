@@ -27,5 +27,5 @@
 | Runner integration - delta + prompt override | python-development:python-pro | implementation | 3 | python-development:python-testing-patterns | B | complete | 0 | a1b5b78eda4b80e3e | 519a92d2 | /fastapi/sqlmodel |
 | Variant CRUD API routes | backend-development:backend-architect | implementation | 4 | backend-development:api-design-principles | B | complete | 0 | a51ff3ae2ab07a9b7 | 3435d20d,519a92d2 | /fastapi/sqlmodel |
 | Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | complete | 0 | ad2accfc6e4f449ea | 42bd31f2 | /tanstack/router |
-| Variants tab + variant editor route | frontend-mobile-development:frontend-developer | implementation | 6 | frontend-mobile-development:react-state-management | D | in-progress | 0 | pending | pending | /tanstack/router |
+| Variants tab + variant editor route | frontend-mobile-development:frontend-developer | implementation | 6 | frontend-mobile-development:react-state-management | D | complete | 0 | adb1e6314d1da7afc | bf925d58 | /tanstack/router |
 | Run comparison view | frontend-mobile-development:frontend-developer | implementation | 7 | frontend-mobile-development:react-state-management | D | complete | 0 | a0683257e071b7cd8 | 8e14f525 | /tanstack/router |
