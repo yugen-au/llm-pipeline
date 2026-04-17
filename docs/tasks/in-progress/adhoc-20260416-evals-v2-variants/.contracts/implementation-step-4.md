@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-evals-v2-variants
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-2-applyinstructiondelta-utility.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-variant-crud-api-routes.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 2 - implement ONLY this step, not others
-- Skills to invoke: python-development:python-testing-patterns
+- Step: 4 - implement ONLY this step, not others
+- Skills to invoke: backend-development:api-design-principles
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /websites/pydantic_dev_validation
+3. Context7 library IDs to query: /fastapi/sqlmodel
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-2-applyinstructiondelta-utility.md
+4. Document decisions in implementation\step-4-variant-crud-api-routes.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 2: APPLY_INSTRUCTION_DELTA() UTILITY
+# IMPLEMENTATION - STEP 4: VARIANT CRUD API ROUTES
 **Status:** [completed/failed/blocked]
 
 ## Summary

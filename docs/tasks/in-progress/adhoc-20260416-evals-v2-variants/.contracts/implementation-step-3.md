@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-evals-v2-variants
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-1-evaluationvariant-model-migration.md (if already exists, APPEND to file)
+- Output Files: implementation\step-3-runner-integration-delta-prompt-override.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 1 - implement ONLY this step, not others
+- Step: 3 - implement ONLY this step, not others
 - Skills to invoke: python-development:python-testing-patterns
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-1-evaluationvariant-model-migration.md
+4. Document decisions in implementation\step-3-runner-integration-delta-prompt-override.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 1: EVALUATIONVARIANT MODEL + MIGRATION
+# IMPLEMENTATION - STEP 3: RUNNER INTEGRATION - DELTA + PROMPT OVERRIDE
 **Status:** [completed/failed/blocked]
 
 ## Summary
