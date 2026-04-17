@@ -680,3 +680,582 @@ class TestApplyInstructionDelta:
         delta = [{"op": "modify", "field": "no_such_field", "default": 1}]
         with pytest.raises(ValueError, match="not present on base class"):
             apply_instruction_delta(_DemoInstructions, delta)
+
+
+# ---------------------------------------------------------------------------
+# Step 3 — merge_variable_definitions + runner integration.
+# ---------------------------------------------------------------------------
+from unittest.mock import patch  # noqa: E402
+
+from sqlalchemy.pool import StaticPool  # noqa: E402
+
+from llm_pipeline.db.prompt import Prompt  # noqa: E402
+from llm_pipeline.db.step_config import StepModelConfig  # noqa: E402
+from llm_pipeline.evals import merge_variable_definitions  # noqa: E402
+from llm_pipeline.evals.models import EvaluationCase  # noqa: E402
+from llm_pipeline.evals.runner import EvalRunner, _apply_variant_to_sandbox  # noqa: E402
+
+
+class TestMergeVariableDefinitions:
+    """Union-by-name merge; variant wins on conflict; None handled."""
+
+    def test_both_none_returns_empty_list(self):
+        assert merge_variable_definitions(None, None) == []
+
+    def test_prod_none_returns_variant_copy(self):
+        variant = [{"name": "x", "type": "str"}]
+        result = merge_variable_definitions(None, variant)
+        assert result == variant
+        # Must be a copy so downstream mutation doesn't corrupt caller's list.
+        result.append({"name": "extra"})
+        assert len(variant) == 1
+
+    def test_variant_none_returns_prod_copy(self):
+        prod = [{"name": "y", "type": "int"}]
+        result = merge_variable_definitions(prod, None)
+        assert result == prod
+        result.append({"name": "extra"})
+        assert len(prod) == 1
+
+    def test_disjoint_union(self):
+        prod = [{"name": "a", "type": "str"}]
+        variant = [{"name": "b", "type": "int"}]
+        merged = merge_variable_definitions(prod, variant)
+        names = {item["name"] for item in merged}
+        assert names == {"a", "b"}
+
+    def test_variant_wins_on_name_collision(self):
+        prod = [{"name": "a", "type": "str", "auto_generate": "orig_expr"}]
+        variant = [{"name": "a", "type": "int", "auto_generate": "new_expr"}]
+        merged = merge_variable_definitions(prod, variant)
+        assert len(merged) == 1
+        assert merged[0]["type"] == "int"
+        assert merged[0]["auto_generate"] == "new_expr"
+
+    def test_auto_generate_expressions_passed_through_unevaluated(self):
+        """MUST NOT evaluate auto_generate expressions during merge."""
+        # Arbitrary non-registered expression — if this were eval'd, it'd raise.
+        prod = [
+            {"name": "a", "type": "list", "auto_generate": "enum_values(Nope)"}
+        ]
+        variant = [
+            {"name": "b", "type": "list", "auto_generate": "enum_values(AlsoNope)"}
+        ]
+        merged = merge_variable_definitions(prod, variant)
+        # Both expressions survive as strings — no attempt at resolution.
+        by_name = {i["name"]: i for i in merged}
+        assert by_name["a"]["auto_generate"] == "enum_values(Nope)"
+        assert by_name["b"]["auto_generate"] == "enum_values(AlsoNope)"
+
+    def test_items_without_name_skipped(self):
+        prod = [{"name": "a"}, {"type": "str"}]  # second has no name
+        variant = [{"no_name_here": True}]
+        merged = merge_variable_definitions(prod, variant)
+        names = {i.get("name") for i in merged}
+        assert names == {"a"}
+
+
+# ---- shared fixtures -------------------------------------------------------
+
+
+@pytest.fixture()
+def shared_engine():
+    e = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    init_pipeline_db(e)
+    return e
+
+
+@pytest.fixture()
+def seeded_prompts(shared_engine):
+    """Insert prod prompts the sandbox will copy."""
+    with Session(shared_engine) as session:
+        session.add(Prompt(
+            prompt_key="my_step.sys",
+            prompt_name="My Step System",
+            prompt_type="system",
+            content="PROD_SYSTEM",
+            variable_definitions=[
+                {"name": "shared", "type": "str", "auto_generate": "prod_expr"},
+                {"name": "prod_only", "type": "int"},
+            ],
+            version="1.0",
+            is_active=True,
+        ))
+        session.add(Prompt(
+            prompt_key="my_step.usr",
+            prompt_name="My Step User",
+            prompt_type="user",
+            content="PROD_USER",
+            variable_definitions=[
+                {"name": "shared", "type": "str"},
+            ],
+            version="1.0",
+            is_active=True,
+        ))
+        session.commit()
+    return shared_engine
+
+
+# ---- _apply_variant_to_sandbox direct tests --------------------------------
+
+
+class TestApplyVariantToSandbox:
+    """Unit-level checks on the sandbox-patch helper."""
+
+    def _make_step_def(
+        self, system_key="my_step.sys", user_key="my_step.usr", step_name="my_step"
+    ):
+        # Minimal duck-typed step_def — runner only reads these attrs.
+        class _SD:
+            pass
+        sd = _SD()
+        sd.system_instruction_key = system_key
+        sd.user_prompt_key = user_key
+        sd.step_name = step_name
+        return sd
+
+    def test_system_prompt_override_applied(self, seeded_prompts):
+        step_def = self._make_step_def()
+        _apply_variant_to_sandbox(
+            sandbox_engine=seeded_prompts,
+            step_def=step_def,
+            variant_delta={
+                "system_prompt": "VARIANT_SYS",
+                "user_prompt": None,
+                "model": None,
+                "instructions_delta": [],
+            },
+        )
+        with Session(seeded_prompts) as session:
+            sys_prompt = session.exec(
+                select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+            ).one()
+            usr_prompt = session.exec(
+                select(Prompt).where(Prompt.prompt_key == "my_step.usr")
+            ).one()
+            assert sys_prompt.content == "VARIANT_SYS"
+            # User prompt content unchanged (no override).
+            assert usr_prompt.content == "PROD_USER"
+
+    def test_user_prompt_override_applied(self, seeded_prompts):
+        step_def = self._make_step_def()
+        _apply_variant_to_sandbox(
+            sandbox_engine=seeded_prompts,
+            step_def=step_def,
+            variant_delta={"user_prompt": "VARIANT_USR"},
+        )
+        with Session(seeded_prompts) as session:
+            usr = session.exec(
+                select(Prompt).where(Prompt.prompt_key == "my_step.usr")
+            ).one()
+            assert usr.content == "VARIANT_USR"
+
+    def test_variable_definitions_merged_variant_wins(self, seeded_prompts):
+        step_def = self._make_step_def()
+        _apply_variant_to_sandbox(
+            sandbox_engine=seeded_prompts,
+            step_def=step_def,
+            variant_delta={
+                "variable_definitions": [
+                    {"name": "shared", "type": "int", "auto_generate": "new_expr"},
+                    {"name": "variant_only", "type": "str"},
+                ],
+            },
+        )
+        with Session(seeded_prompts) as session:
+            sys_prompt = session.exec(
+                select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+            ).one()
+            defs = sys_prompt.variable_definitions
+            assert isinstance(defs, list)
+            by_name = {d["name"]: d for d in defs}
+            # Variant wins on "shared"
+            assert by_name["shared"]["type"] == "int"
+            assert by_name["shared"]["auto_generate"] == "new_expr"
+            # Prod-only kept
+            assert "prod_only" in by_name
+            # Variant-only added
+            assert "variant_only" in by_name
+
+    def test_model_upserts_step_model_config(self, seeded_prompts):
+        step_def = self._make_step_def()
+        _apply_variant_to_sandbox(
+            sandbox_engine=seeded_prompts,
+            step_def=step_def,
+            variant_delta={"model": "gpt-5-test"},
+        )
+        with Session(seeded_prompts) as session:
+            cfg = session.exec(
+                select(StepModelConfig).where(
+                    StepModelConfig.pipeline_name == "sandbox",
+                    StepModelConfig.step_name == "my_step",
+                )
+            ).first()
+            assert cfg is not None
+            assert cfg.model == "gpt-5-test"
+
+    def test_model_upsert_updates_existing_row(self, seeded_prompts):
+        step_def = self._make_step_def()
+        # Seed with existing config
+        with Session(seeded_prompts) as session:
+            session.add(StepModelConfig(
+                pipeline_name="sandbox",
+                step_name="my_step",
+                model="old-model",
+            ))
+            session.commit()
+
+        _apply_variant_to_sandbox(
+            sandbox_engine=seeded_prompts,
+            step_def=step_def,
+            variant_delta={"model": "new-model"},
+        )
+        with Session(seeded_prompts) as session:
+            rows = session.exec(
+                select(StepModelConfig).where(
+                    StepModelConfig.pipeline_name == "sandbox",
+                    StepModelConfig.step_name == "my_step",
+                )
+            ).all()
+            # Upsert, not insert — still a single row.
+            assert len(rows) == 1
+            assert rows[0].model == "new-model"
+
+    def test_missing_system_key_logs_warning_no_raise(self, seeded_prompts, caplog):
+        import logging
+        step_def = self._make_step_def(system_key=None)
+        with caplog.at_level(logging.WARNING):
+            _apply_variant_to_sandbox(
+                sandbox_engine=seeded_prompts,
+                step_def=step_def,
+                variant_delta={"system_prompt": "VARIANT_SYS"},
+            )
+        # Prod content unchanged because key was None.
+        with Session(seeded_prompts) as session:
+            sys_prompt = session.exec(
+                select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+            ).one()
+            assert sys_prompt.content == "PROD_SYSTEM"
+        assert any("system_instruction_key" in rec.message
+                   for rec in caplog.records)
+
+    def test_missing_prompt_row_logs_warning_no_raise(self, seeded_prompts, caplog):
+        import logging
+        step_def = self._make_step_def(system_key="does_not_exist")
+        with caplog.at_level(logging.WARNING):
+            _apply_variant_to_sandbox(
+                sandbox_engine=seeded_prompts,
+                step_def=step_def,
+                variant_delta={"system_prompt": "VARIANT_SYS"},
+            )
+        assert any("no Prompt row" in rec.message for rec in caplog.records)
+
+
+# ---- End-to-end: runner with variant ---------------------------------------
+
+
+class _CustomerQuery(LLMResultMixin):
+    """Base instructions class for runner integration test."""
+    category: str = "unknown"
+    sentiment: str = "neutral"
+
+    example: ClassVar[dict] = {
+        "category": "unknown",
+        "sentiment": "neutral",
+        "confidence_score": 0.95,
+        "notes": None,
+    }
+
+
+@pytest.fixture()
+def dataset_with_variant(shared_engine, seeded_prompts):
+    """Create dataset + cases + variant with all 4 delta types."""
+    with Session(shared_engine) as session:
+        ds = EvaluationDataset(
+            name="variant_ds",
+            target_type="step",
+            target_name="my_step",
+        )
+        session.add(ds)
+        session.flush()
+        session.add(EvaluationCase(
+            dataset_id=ds.id,
+            name="case_a",
+            inputs={"text": "hello"},
+            expected_output={"category": "billing"},
+        ))
+        session.commit()
+        ds_id = ds.id
+
+        variant = EvaluationVariant(
+            dataset_id=ds_id,
+            name="full_variant",
+            description="all four delta types",
+            delta={
+                "model": "variant-model-x",
+                "system_prompt": "VARIANT_SYSTEM",
+                "user_prompt": "VARIANT_USER",
+                "variable_definitions": [
+                    {"name": "shared", "type": "int", "auto_generate": "var_expr"},
+                ],
+                "instructions_delta": [
+                    {"op": "add", "field": "urgency",
+                     "type_str": "str", "default": "normal"},
+                    {"op": "modify", "field": "category",
+                     "type_str": "str", "default": "updated"},
+                ],
+            },
+        )
+        session.add(variant)
+        session.commit()
+        session.refresh(variant)
+        return ds_id, variant.id
+
+
+class TestRunnerVariantIntegration:
+    """End-to-end: run_dataset(variant_id=...) applies delta + persists snapshot."""
+
+    def _make_step_def(self):
+        """Duck-typed StepDefinition-like object for _find_step_def stub."""
+        from dataclasses import dataclass, field
+        from typing import Optional as _Opt
+
+        @dataclass
+        class _SD:
+            step_class: type = type("MyStep", (), {"__name__": "MyStep"})
+            system_instruction_key: _Opt[str] = "my_step.sys"
+            user_prompt_key: _Opt[str] = "my_step.usr"
+            instructions: type = _CustomerQuery
+            evaluators: list = field(default_factory=list)
+
+            @property
+            def step_name(self) -> str:
+                return "my_step"
+
+        return _SD()
+
+    def test_run_with_variant_persists_variant_id_and_snapshot(
+        self, shared_engine, seeded_prompts, dataset_with_variant
+    ):
+        ds_id, variant_id = dataset_with_variant
+        runner = EvalRunner(engine=shared_engine)
+
+        def stub_find(step_name):
+            return self._make_step_def(), None, "default-model"
+
+        # Replace sandbox-running task with a no-op so we never hit LLMs.
+        # The real value under test is: delta snapshot + variant_id persisted,
+        # sandbox patched (verified via applied prompt/config rows).
+        captured: dict = {}
+
+        def stub_build(step_def, input_data_cls, step_model, variant_delta=None):
+            captured["step_def"] = step_def
+            captured["step_model"] = step_model
+            captured["variant_delta"] = variant_delta
+
+            def task(inputs):
+                # Exercise the sandbox patching path end-to-end so the side
+                # effects (Prompt rows, StepModelConfig) are observable.
+                from llm_pipeline.sandbox import create_sandbox_engine
+                sandbox_engine = create_sandbox_engine(shared_engine)
+                if variant_delta:
+                    _apply_variant_to_sandbox(
+                        sandbox_engine=sandbox_engine,
+                        step_def=step_def,
+                        variant_delta=variant_delta,
+                    )
+                # Record sandbox state on captured[] for later assertions.
+                with Session(sandbox_engine) as s:
+                    sys_p = s.exec(
+                        select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+                    ).first()
+                    cfg = s.exec(
+                        select(StepModelConfig).where(
+                            StepModelConfig.pipeline_name == "sandbox",
+                            StepModelConfig.step_name == "my_step",
+                        )
+                    ).first()
+                    captured.setdefault("sandbox_states", []).append({
+                        "sys_content": sys_p.content if sys_p else None,
+                        "sys_var_defs": sys_p.variable_definitions if sys_p else None,
+                        "cfg_model": cfg.model if cfg else None,
+                    })
+                return {"category": "updated", "sentiment": "neutral",
+                        "urgency": "normal"}
+            return task
+
+        with patch.object(runner, "_find_step_def", side_effect=stub_find), \
+             patch.object(runner, "_build_step_task_fn", side_effect=stub_build):
+            run_id = runner.run_dataset(ds_id, variant_id=variant_id)
+
+        # 1. Run row populated with variant_id + delta_snapshot.
+        with Session(shared_engine) as session:
+            run = session.exec(
+                select(EvaluationRun).where(EvaluationRun.id == run_id)
+            ).one()
+            assert run.variant_id == variant_id
+            assert run.status == "completed"
+            # delta_snapshot must match the variant delta exactly (deep copy).
+            assert run.delta_snapshot["model"] == "variant-model-x"
+            assert run.delta_snapshot["system_prompt"] == "VARIANT_SYSTEM"
+            assert run.delta_snapshot["user_prompt"] == "VARIANT_USER"
+            assert run.delta_snapshot["instructions_delta"] == [
+                {"op": "add", "field": "urgency",
+                 "type_str": "str", "default": "normal"},
+                {"op": "modify", "field": "category",
+                 "type_str": "str", "default": "updated"},
+            ]
+
+        # 2. Runner picked up the variant model in preference to kwargs/default.
+        assert captured["step_model"] == "variant-model-x"
+
+        # 3. Variant delta was passed through to _build_step_task_fn.
+        assert captured["variant_delta"]["model"] == "variant-model-x"
+        assert captured["variant_delta"]["instructions_delta"][0]["field"] == "urgency"
+
+        # 4. Sandbox engine received the overrides (verified inside task_fn).
+        sandbox_states = captured["sandbox_states"]
+        assert sandbox_states, "task_fn must have executed at least once"
+        for state in sandbox_states:
+            assert state["sys_content"] == "VARIANT_SYSTEM"
+            assert state["cfg_model"] == "variant-model-x"
+            var_defs = state["sys_var_defs"]
+            # list (original shape) preserved
+            assert isinstance(var_defs, list)
+            by_name = {d["name"]: d for d in var_defs}
+            # variant wins
+            assert by_name["shared"]["type"] == "int"
+            assert by_name["shared"]["auto_generate"] == "var_expr"
+            # prod-only survives
+            assert "prod_only" in by_name
+
+    def test_evaluator_resolution_uses_modified_instructions_class(
+        self, shared_engine, seeded_prompts, dataset_with_variant
+    ):
+        """Variant-added `urgency` field must appear in auto-evaluator set.
+
+        _resolve_step_task must call apply_instruction_delta BEFORE
+        _resolve_evaluators so build_auto_evaluators sees the new field.
+        """
+        runner = EvalRunner(engine=shared_engine)
+
+        def stub_find(step_name):
+            return self._make_step_def(), None, "default-model"
+
+        with patch.object(runner, "_find_step_def", side_effect=stub_find):
+            task_fn, evaluators = runner._resolve_step_task(
+                "my_step",
+                model=None,
+                variant_delta={
+                    "model": "some-model",
+                    "instructions_delta": [
+                        {"op": "add", "field": "urgency",
+                         "type_str": "str", "default": "normal"},
+                    ],
+                },
+            )
+        # The auto-generated evaluators should include the new urgency field.
+        from llm_pipeline.evals.evaluators import FieldMatchEvaluator
+        assert evaluators is not None
+        names = {e.field_name for e in evaluators
+                 if isinstance(e, FieldMatchEvaluator)}
+        assert "urgency" in names, (
+            "auto-evaluator must include variant-added field "
+            f"— got {names}"
+        )
+        # Sanity: base fields still present.
+        assert "category" in names
+        assert "sentiment" in names
+
+    def test_variant_not_belonging_to_dataset_raises(
+        self, shared_engine, seeded_prompts
+    ):
+        """Variant must belong to the requested dataset."""
+        with Session(shared_engine) as session:
+            ds1 = EvaluationDataset(
+                name="ds_one", target_type="step", target_name="s")
+            ds2 = EvaluationDataset(
+                name="ds_two", target_type="step", target_name="s")
+            session.add(ds1)
+            session.add(ds2)
+            session.flush()
+            # Give ds1 a case so we progress past the "no cases" check on ds1
+            session.add(EvaluationCase(
+                dataset_id=ds1.id, name="c", inputs={}))
+            v = EvaluationVariant(
+                dataset_id=ds2.id, name="v", delta={})
+            session.add(v)
+            session.commit()
+            ds1_id = ds1.id
+            v_id = v.id
+
+        runner = EvalRunner(engine=shared_engine)
+        with pytest.raises(ValueError, match="does not belong"):
+            runner.run_dataset(ds1_id, variant_id=v_id)
+
+    def test_missing_variant_id_raises(self, shared_engine, seeded_prompts):
+        with Session(shared_engine) as session:
+            ds = EvaluationDataset(
+                name="only_ds", target_type="step", target_name="s")
+            session.add(ds)
+            session.flush()
+            session.add(EvaluationCase(
+                dataset_id=ds.id, name="c", inputs={}))
+            session.commit()
+            ds_id = ds.id
+
+        runner = EvalRunner(engine=shared_engine)
+        with pytest.raises(ValueError, match="Variant .* not found"):
+            runner.run_dataset(ds_id, variant_id=99999)
+
+    def test_run_dataset_by_name_passes_variant_id_through(
+        self, shared_engine, seeded_prompts, dataset_with_variant
+    ):
+        """Signature extension: run_dataset_by_name forwards variant_id."""
+        ds_id, variant_id = dataset_with_variant
+        runner = EvalRunner(engine=shared_engine)
+
+        with patch.object(runner, "run_dataset") as run_mock:
+            run_mock.return_value = 123
+            result = runner.run_dataset_by_name(
+                "variant_ds", model="m", variant_id=variant_id
+            )
+        assert result == 123
+        run_mock.assert_called_once_with(
+            ds_id, model="m", variant_id=variant_id
+        )
+
+    def test_no_variant_id_baseline_run_snapshot_null(
+        self, shared_engine, seeded_prompts
+    ):
+        """Baseline runs (no variant) must leave variant_id + delta_snapshot None."""
+        with Session(shared_engine) as session:
+            ds = EvaluationDataset(
+                name="baseline_ds", target_type="step", target_name="my_step")
+            session.add(ds)
+            session.flush()
+            session.add(EvaluationCase(
+                dataset_id=ds.id, name="c", inputs={}))
+            session.commit()
+            ds_id = ds.id
+
+        runner = EvalRunner(engine=shared_engine)
+
+        def mock_task_fn(inputs):
+            return {"category": "x"}
+
+        with patch.object(
+            runner, "_resolve_task", return_value=(mock_task_fn, None)
+        ):
+            run_id = runner.run_dataset(ds_id)
+
+        with Session(shared_engine) as session:
+            run = session.exec(
+                select(EvaluationRun).where(EvaluationRun.id == run_id)
+            ).one()
+            assert run.variant_id is None
+            assert run.delta_snapshot is None

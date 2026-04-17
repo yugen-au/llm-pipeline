@@ -256,4 +256,40 @@ def apply_instruction_delta(
     )
 
 
-__all__ = ["apply_instruction_delta"]
+def merge_variable_definitions(
+    prod_defs: list | None,
+    variant_defs: list | None,
+) -> list:
+    """Union variable_definitions lists by variable name; variant wins on conflict.
+
+    Both inputs are lists of dicts with at minimum a ``name`` key (matching the
+    shape persisted on ``Prompt.variable_definitions``). Either list may be
+    ``None`` — a ``None`` + list case returns a shallow copy of the other; both
+    ``None`` returns ``[]``.
+
+    This function MUST NOT evaluate any ``auto_generate`` expression strings —
+    registry-based resolution happens later at prompt rendering time. Pass-
+    through only.
+
+    Security: no eval/exec; pure data-structure merge. Relocatable into a
+    future Docker sandbox layer with zero refactor.
+    """
+    if prod_defs is None and variant_defs is None:
+        return []
+    if prod_defs is None:
+        return list(variant_defs or [])
+    if variant_defs is None:
+        return list(prod_defs or [])
+
+    by_name: dict[str, dict] = {}
+    for item in prod_defs:
+        if isinstance(item, dict) and "name" in item:
+            by_name[item["name"]] = item
+    # Variant overrides prod on name collision.
+    for item in variant_defs:
+        if isinstance(item, dict) and "name" in item:
+            by_name[item["name"]] = item
+    return list(by_name.values())
+
+
+__all__ = ["apply_instruction_delta", "merge_variable_definitions"]
