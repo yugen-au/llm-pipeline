@@ -1,9 +1,9 @@
 ## Task: adhoc-20260416-evals-v2-variants
 ## Description: Evals v2 variant comparison — delta-based step definition overrides, EvaluationVariant table, runner integration, variant CRUD routes, frontend variant editor + comparison view
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: D
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260416-evals-v2-variants
 ## Plugins: backend-development, frontend-mobile-development, python-development
@@ -28,4 +28,5 @@
 | Variant CRUD API routes | backend-development:backend-architect | implementation | 4 | backend-development:api-design-principles | B | complete | 0 | a51ff3ae2ab07a9b7 | 3435d20d,519a92d2 | /fastapi/sqlmodel |
 | Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | complete | 0 | ad2accfc6e4f449ea | 42bd31f2 | /tanstack/router |
 | Variants tab + variant editor route | frontend-mobile-development:frontend-developer | implementation | 6 | frontend-mobile-development:react-state-management | D | complete | 0 | adb1e6314d1da7afc | bf925d58 | /tanstack/router |
-| Run comparison view | frontend-mobile-development:frontend-developer | implementation | 7 | frontend-mobile-development:react-state-management | D | complete | 0 | a0683257e071b7cd8 | 8e14f525 | /tanstack/router |
+| Run comparison view | frontend-mobile-development:frontend-developer | implementation | 7 | frontend-mobile-development:react-state-management | D | complete | 0 | a0683257e071b7cd8 | 8e14f525,bf925d58 | /tanstack/router |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
