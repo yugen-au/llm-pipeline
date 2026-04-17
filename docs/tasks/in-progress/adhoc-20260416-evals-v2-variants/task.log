@@ -39,3 +39,29 @@
 [2026-04-16 17:26:08] [INFO] Auto-updated agent statuses: Plan: pending -> in-progress
 [2026-04-16 17:26:08] [INFO] Deleted 1 old contract file(s)
 [2026-04-16 17:26:08] [DEBUG] STATE.md atomic write complete
+[2026-04-17 10:26:44] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-17 10:27:39] [INFO] Task call: planning (phase: planning)
+[2026-04-17 10:34:29] [INFO] Task call: planning (phase: planning)
+[2026-04-17 10:38:29] [INFO] WARNING: No active agent found for 'planning'
+[2026-04-17 10:44:30] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-17 15:39:08] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-17 15:40:17] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-17 15:42:24] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-17 15:42:59] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-17 15:43:45] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: d:\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\adhoc-20260416-evals-v2-variants\PLAN.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-17 15:44:08] [INFO] Task call: planning (phase: planning)
+[2026-04-17 15:45:01] [INFO] WARNING: No active agent found for 'planning'
+[2026-04-17 15:45:17] [ERROR] BLOCKED: Cannot enter implementation: no agents in table
+[2026-04-17 15:45:32] [INFO] STATE.md updated: phase=planning, status=in-progress
+[2026-04-17 15:45:40] [INFO] Committed planning-A: ['PLAN.md'] -> 299354b2
+[2026-04-17 15:45:43] [INFO] STATE.md updated: phase=implementation, status=in-progress
+[2026-04-17 15:45:43] [INFO] Updated Commits for 'Plan': 299354b2
+[2026-04-17 15:45:43] [INFO] Auto-updated agent statuses: EvaluationVariant model + migration: pending -> in-progress, apply_instruction_delta() utility: pending -> in-progress
+[2026-04-17 15:45:43] [INFO] Deleted 1 old contract file(s)
+[2026-04-17 15:45:43] [DEBUG] STATE.md atomic write complete
