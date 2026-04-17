@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-evals-v2-variants
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-5-frontend-api-layer-variants-run-types.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-variants-tab-variant-editor-route.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 5 - implement ONLY this step, not others
+- Step: 6 - implement ONLY this step, not others
 - Skills to invoke: frontend-mobile-development:react-state-management
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-5-frontend-api-layer-variants-run-types.md
+4. Document decisions in implementation\step-6-variants-tab-variant-editor-route.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 5: FRONTEND API LAYER - VARIANTS + RUN TYPES
+# IMPLEMENTATION - STEP 6: VARIANTS TAB + VARIANT EDITOR ROUTE
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -72,7 +72,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-5-frontend-api-layer-variants-run-types.md
+Created: implementation\step-[step]-[slug].md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
