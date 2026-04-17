@@ -50,6 +50,8 @@ export interface RunListItem {
   errored: number
   started_at: string
   completed_at: string | null
+  variant_id: number | null
+  delta_snapshot: Record<string, unknown> | null
 }
 
 export interface CaseResultItem {
@@ -101,6 +103,50 @@ export interface CaseUpdateRequest {
 
 export interface TriggerRunRequest {
   model?: string | null
+  variant_id?: number | null
+}
+
+// ---------------------------------------------------------------------------
+// Variant interfaces (mirror backend Pydantic models in routes/evals.py)
+// ---------------------------------------------------------------------------
+
+export type InstructionDeltaOp = 'add' | 'modify'
+
+export interface InstructionDeltaItem {
+  op: InstructionDeltaOp
+  field: string
+  type_str: string
+  default?: unknown
+}
+
+export interface VariantDelta {
+  model: string | null
+  system_prompt: string | null
+  user_prompt: string | null
+  instructions_delta: InstructionDeltaItem[] | null
+}
+
+export interface VariantItem {
+  id: number
+  dataset_id: number
+  name: string
+  description: string | null
+  delta: VariantDelta
+  created_at: string
+  updated_at: string
+}
+
+export interface VariantCreateRequest {
+  name: string
+  description?: string | null
+  delta: VariantDelta
+}
+
+export type VariantUpdateRequest = Partial<VariantCreateRequest>
+
+export interface VariantListResponse {
+  items: VariantItem[]
+  total: number
 }
 
 export interface DatasetListParams {
@@ -274,6 +320,117 @@ export function useTriggerEvalRun(datasetId: number) {
       toast.success('Evaluation run triggered')
       qc.invalidateQueries({ queryKey: queryKeys.evals.runs(datasetId) })
       qc.invalidateQueries({ queryKey: queryKeys.evals.detail(datasetId) })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Variant fetch functions
+// ---------------------------------------------------------------------------
+
+export function fetchVariants(datasetId: number): Promise<VariantListResponse> {
+  return apiClient<VariantListResponse>(`/evals/${datasetId}/variants`)
+}
+
+export function fetchVariant(
+  datasetId: number,
+  variantId: number,
+): Promise<VariantItem> {
+  return apiClient<VariantItem>(`/evals/${datasetId}/variants/${variantId}`)
+}
+
+export function createVariant(
+  datasetId: number,
+  body: VariantCreateRequest,
+): Promise<VariantItem> {
+  return apiClient<VariantItem>(`/evals/${datasetId}/variants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function updateVariant(
+  datasetId: number,
+  variantId: number,
+  body: VariantUpdateRequest,
+): Promise<VariantItem> {
+  return apiClient<VariantItem>(`/evals/${datasetId}/variants/${variantId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function deleteVariant(
+  datasetId: number,
+  variantId: number,
+): Promise<void> {
+  return apiClient<void>(`/evals/${datasetId}/variants/${variantId}`, {
+    method: 'DELETE',
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Variant query hooks
+// ---------------------------------------------------------------------------
+
+export function useVariants(datasetId: number) {
+  return useQuery({
+    queryKey: queryKeys.evals.variants(datasetId),
+    queryFn: () => fetchVariants(datasetId),
+    enabled: datasetId > 0,
+  })
+}
+
+export function useVariant(datasetId: number, variantId: number) {
+  return useQuery({
+    queryKey: queryKeys.evals.variant(datasetId, variantId),
+    queryFn: () => fetchVariant(datasetId, variantId),
+    enabled: datasetId > 0 && variantId > 0,
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Variant mutation hooks
+// ---------------------------------------------------------------------------
+
+export function useCreateVariant(datasetId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body: VariantCreateRequest) => createVariant(datasetId, body),
+    onSuccess: (data) => {
+      toast.success(`Variant "${data.name}" created`)
+      qc.invalidateQueries({ queryKey: queryKeys.evals.variants(datasetId) })
+    },
+  })
+}
+
+export function useUpdateVariant(datasetId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      variantId,
+      ...body
+    }: VariantUpdateRequest & { variantId: number }) =>
+      updateVariant(datasetId, variantId, body),
+    onSuccess: (data) => {
+      toast.success(`Variant "${data.name}" updated`)
+      qc.invalidateQueries({ queryKey: queryKeys.evals.variants(datasetId) })
+      qc.invalidateQueries({
+        queryKey: queryKeys.evals.variant(datasetId, data.id),
+      })
+    },
+  })
+}
+
+export function useDeleteVariant(datasetId: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (variantId: number) => deleteVariant(datasetId, variantId),
+    onSuccess: () => {
+      toast.success('Variant deleted')
+      qc.invalidateQueries({ queryKey: queryKeys.evals.variants(datasetId) })
     },
   })
 }
