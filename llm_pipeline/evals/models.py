@@ -59,6 +59,8 @@ class EvaluationRun(SQLModel, table=True):
     error_message: Optional[str] = Field(default=None)
     started_at: datetime = Field(default_factory=utc_now)
     completed_at: Optional[datetime] = Field(default=None)
+    variant_id: Optional[int] = Field(default=None, foreign_key="eval_variants.id")
+    delta_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
     __table_args__ = (
         Index("ix_eval_runs_dataset", "dataset_id"),
@@ -84,9 +86,32 @@ class EvaluationCaseResult(SQLModel, table=True):
     )
 
 
+class EvaluationVariant(SQLModel, table=True):
+    """Delta-based override for a step definition, scoped to a dataset.
+
+    The `delta` field stores JSON with keys: `model`, `system_prompt`,
+    `user_prompt`, `instructions_delta`. Applied by the runner before
+    sandbox execution and evaluator resolution.
+    """
+    __tablename__ = "eval_variants"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    dataset_id: int = Field(foreign_key="eval_datasets.id", index=True)
+    name: str = Field(max_length=200)
+    description: Optional[str] = Field(default=None)
+    delta: dict = Field(sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    __table_args__ = (
+        Index("ix_eval_variants_dataset", "dataset_id"),
+    )
+
+
 __all__ = [
     "EvaluationDataset",
     "EvaluationCase",
     "EvaluationRun",
     "EvaluationCaseResult",
+    "EvaluationVariant",
 ]

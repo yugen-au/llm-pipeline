@@ -21,7 +21,7 @@ from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
 from llm_pipeline.events.models import PipelineEventRecord
-from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationCaseResult
+from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationCaseResult, EvaluationVariant
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +49,8 @@ def _migrate_add_columns(engine: Engine) -> None:
         ("step_model_configs", "request_limit", "INTEGER"),
         ("pipeline_runs", "error_message", "TEXT"),
         ("pipeline_reviews", "input_data", "TEXT"),
+        ("eval_runs", "variant_id", "INTEGER"),
+        ("eval_runs", "delta_snapshot", "TEXT"),
     ]
 
     # Group by table to minimise lookups
@@ -213,6 +215,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             EvaluationCase.__table__,
             EvaluationRun.__table__,
             EvaluationCaseResult.__table__,
+            EvaluationVariant.__table__,
         ],
     )
 
