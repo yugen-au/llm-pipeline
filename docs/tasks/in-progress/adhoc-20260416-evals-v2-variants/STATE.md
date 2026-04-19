@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: B
+## Current Group: C
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260416-evals-v2-variants
 ## Plugins: backend-development, frontend-mobile-development, python-development
@@ -26,7 +26,7 @@
 | apply_instruction_delta() utility | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | A | complete | 1 | a92dec2553cad1f71 | 8bb85a25,24013252 | /websites/pydantic_dev_validation |
 | Runner integration - delta + prompt override | python-development:python-pro | implementation | 3 | python-development:python-testing-patterns | B | complete | 1 | a9d9e958121f0d9de | 519a92d2,068c8c8a | /fastapi/sqlmodel |
 | Variant CRUD API routes | backend-development:backend-architect | implementation | 4 | backend-development:api-design-principles | B | complete | 1 | a5141c3cff00c13fa | 3435d20d,519a92d2,b7bd3b0e | /fastapi/sqlmodel |
-| Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | pending | 0 | ad2accfc6e4f449ea | 42bd31f2 | /tanstack/router |
+| Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | in-progress | 0 | ad2accfc6e4f449ea | 42bd31f2 | /tanstack/router |
 | Variants tab + variant editor route | frontend-mobile-development:frontend-developer | implementation | 6 | frontend-mobile-development:react-state-management | D | pending | 0 | adb1e6314d1da7afc | bf925d58 | /tanstack/router |
 | Run comparison view | frontend-mobile-development:frontend-developer | implementation | 7 | frontend-mobile-development:react-state-management | D | complete | 0 | a0683257e071b7cd8 | 8e14f525,bf925d58 | /tanstack/router |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | ab44bc3cae5435f6f | 58064b81,d90740d5 | - |
