@@ -587,7 +587,6 @@ def _apply_variant_to_sandbox(
     """
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.db.step_config import StepModelConfig
-    from llm_pipeline.evals.delta import merge_variable_definitions
 
     system_key = getattr(step_def, "system_instruction_key", None)
     user_key = getattr(step_def, "user_prompt_key", None)
@@ -612,16 +611,12 @@ def _apply_variant_to_sandbox(
                 )
             ).first()
             if prompt is not None:
-                if isinstance(system_content_override, str):
-                    prompt.content = system_content_override
-                merged = merge_variable_definitions(
-                    _coerce_var_defs(prompt.variable_definitions),
-                    _coerce_var_defs(variant_var_defs),
+                _merge_variant_defs_into_prompt(
+                    session,
+                    prompt,
+                    system_content_override,
+                    variant_var_defs,
                 )
-                prompt.variable_definitions = (
-                    _encode_var_defs(prompt.variable_definitions, merged)
-                )
-                session.add(prompt)
             elif isinstance(system_content_override, str):
                 logger.warning(
                     "variant system_prompt override: no Prompt row for key "
@@ -644,16 +639,12 @@ def _apply_variant_to_sandbox(
                 )
             ).first()
             if prompt is not None:
-                if isinstance(user_content_override, str):
-                    prompt.content = user_content_override
-                merged = merge_variable_definitions(
-                    _coerce_var_defs(prompt.variable_definitions),
-                    _coerce_var_defs(variant_var_defs),
+                _merge_variant_defs_into_prompt(
+                    session,
+                    prompt,
+                    user_content_override,
+                    variant_var_defs,
                 )
-                prompt.variable_definitions = (
-                    _encode_var_defs(prompt.variable_definitions, merged)
-                )
-                session.add(prompt)
             elif isinstance(user_content_override, str):
                 logger.warning(
                     "variant user_prompt override: no Prompt row for key "
@@ -687,6 +678,34 @@ def _apply_variant_to_sandbox(
                 )
 
         session.commit()
+
+
+def _merge_variant_defs_into_prompt(
+    session: Session,
+    prompt: Any,
+    content_override: Any,
+    variant_var_defs: Any,
+) -> None:
+    """Merge variant variable_definitions into a sandbox Prompt row.
+
+    Module-private helper shared by the system/user prompt branches of
+    ``_apply_variant_to_sandbox``. Applies content override (if a string),
+    merges ``variant_var_defs`` over existing ``prompt.variable_definitions``
+    (variant wins on name conflict via ``merge_variable_definitions``),
+    preserves the original column shape, and stages the row on the session.
+    """
+    from llm_pipeline.evals.delta import merge_variable_definitions
+
+    if isinstance(content_override, str):
+        prompt.content = content_override
+    merged = merge_variable_definitions(
+        _coerce_var_defs(prompt.variable_definitions),
+        _coerce_var_defs(variant_var_defs),
+    )
+    prompt.variable_definitions = _encode_var_defs(
+        prompt.variable_definitions, merged
+    )
+    session.add(prompt)
 
 
 def _coerce_var_defs(raw: Any) -> list:

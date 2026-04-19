@@ -87,3 +87,66 @@ Appended three test classes (Step 3 section):
 - [x] Baseline run (no variant_id) leaves variant_id + delta_snapshot NULL (test: `test_no_variant_id_baseline_run_snapshot_null`)
 - [x] Sandbox receives all 4 delta types correctly (test: `test_run_with_variant_persists_variant_id_and_snapshot` asserts sys_content, cfg_model, sys_var_defs post-patch)
 - [x] `llm_pipeline/ui/routes/evals.py` NOT modified (Step 4 concurrent scope)
+
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] LOW: `_coerce_var_defs` / `_encode_var_defs` duplicated between system/user prompt branches in `_apply_variant_to_sandbox` (runner.py L606-667)
+
+### Changes Made
+#### File: `llm_pipeline/evals/runner.py`
+Extracted duplicated merge-and-write pattern into new private helper `_merge_variant_defs_into_prompt(session, prompt, content_override, variant_var_defs)`. Both system_prompt and user_prompt branches now delegate to it. Removed now-unused `merge_variable_definitions` import from `_apply_variant_to_sandbox` body (moved into helper). Pure refactor — no behavior change, variant still wins on name conflict, original column shape preserved, content override still only applied when string.
+
+```
+# Before (system branch, ~20 lines mirrored in user branch)
+if prompt is not None:
+    if isinstance(system_content_override, str):
+        prompt.content = system_content_override
+    merged = merge_variable_definitions(
+        _coerce_var_defs(prompt.variable_definitions),
+        _coerce_var_defs(variant_var_defs),
+    )
+    prompt.variable_definitions = (
+        _encode_var_defs(prompt.variable_definitions, merged)
+    )
+    session.add(prompt)
+
+# After (single helper call)
+if prompt is not None:
+    _merge_variant_defs_into_prompt(
+        session,
+        prompt,
+        system_content_override,
+        variant_var_defs,
+    )
+```
+
+New helper:
+```
+def _merge_variant_defs_into_prompt(
+    session: Session,
+    prompt: Any,
+    content_override: Any,
+    variant_var_defs: Any,
+) -> None:
+    from llm_pipeline.evals.delta import merge_variable_definitions
+    if isinstance(content_override, str):
+        prompt.content = content_override
+    merged = merge_variable_definitions(
+        _coerce_var_defs(prompt.variable_definitions),
+        _coerce_var_defs(variant_var_defs),
+    )
+    prompt.variable_definitions = _encode_var_defs(
+        prompt.variable_definitions, merged
+    )
+    session.add(prompt)
+```
+
+### Verification
+- [x] `uv run pytest tests/test_eval_variants.py` — 86 passed (1 pre-existing deprecation warning unrelated)
+- [x] Both prompt branches still exercised: `test_system_prompt_override_applied`, `test_user_prompt_override_applied`, `test_variable_definitions_merged_variant_wins` (L831-883 in test_eval_variants.py) cover variant_var_defs merge paths for both system and user prompts
+- [x] Helper is module-private (underscore prefix); not added to `__all__`
+- [x] MEDIUM variable_definitions drift issue NOT touched — branch remains fully functional per user direction (UI extension owns that fix in Steps 5/6)
