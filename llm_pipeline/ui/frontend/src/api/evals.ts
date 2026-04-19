@@ -112,18 +112,67 @@ export interface TriggerRunRequest {
 
 export type InstructionDeltaOp = 'add' | 'modify'
 
+/**
+ * Canonical literal union of allowed `type_str` values for instruction deltas.
+ *
+ * Mirrors backend `_TYPE_WHITELIST` in `llm_pipeline/evals/delta.py`. Runtime
+ * source of truth is `GET /evals/delta-type-whitelist` (see
+ * `useDeltaTypeWhitelist`) — this union is the compile-time mirror so callers
+ * cannot construct deltas with invalid types without an explicit cast.
+ */
+export type DeltaTypeStr =
+  | 'str'
+  | 'int'
+  | 'float'
+  | 'bool'
+  | 'list'
+  | 'dict'
+  | 'Optional[str]'
+  | 'Optional[int]'
+  | 'Optional[float]'
+  | 'Optional[bool]'
+
 export interface InstructionDeltaItem {
   op: InstructionDeltaOp
   field: string
-  type_str: string
+  type_str: DeltaTypeStr
   default?: unknown
 }
+
+/**
+ * Shape of a single entry in `Prompt.variable_definitions`, keyed by variable
+ * name. Mirrors the backend Prompt ORM column and the existing
+ * `PromptVariant.variable_definitions` TS type in `api/types.ts`.
+ *
+ * Extra fields round-trip via the `[key: string]: unknown` index signature so
+ * the UI does not silently drop unknown keys the backend might add later.
+ */
+export interface VariableDefinitionEntry {
+  type: string
+  description?: string
+  auto_generate?: string
+  [key: string]: unknown
+}
+
+/** Map of variable-name -> definition (matches backend JSON shape). */
+export type VariableDefinitions = Record<string, VariableDefinitionEntry>
 
 export interface VariantDelta {
   model: string | null
   system_prompt: string | null
   user_prompt: string | null
   instructions_delta: InstructionDeltaItem[] | null
+  /**
+   * Optional override/extension for Prompt.variable_definitions. When present
+   * the runner merges this into the sandbox Prompt row (`system_prompt` and
+   * `user_prompt` both read from the same Prompt record's variable_definitions
+   * column). Omit / null to leave the production variable_definitions intact.
+   */
+  variable_definitions?: VariableDefinitions | null
+}
+
+export interface TypeWhitelistResponse {
+  types: DeltaTypeStr[]
 }
 
 export interface VariantItem {
@@ -374,6 +423,30 @@ export function deleteVariant(
 // ---------------------------------------------------------------------------
 // Variant query hooks
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Delta type whitelist (single-source-of-truth fetcher)
+// ---------------------------------------------------------------------------
+
+/** Fetch the canonical `type_str` whitelist served by the backend. */
+export function fetchDeltaTypeWhitelist(): Promise<TypeWhitelistResponse> {
+  return apiClient<TypeWhitelistResponse>('/evals/delta-type-whitelist')
+}
+
+/**
+ * TanStack Query hook for the delta type whitelist. Types never change at
+ * runtime so the result is effectively immutable — use `staleTime: Infinity`
+ * to avoid refetches. Lets the variant editor drop its local hard-coded
+ * `TYPE_WHITELIST` constant and source the dropdown options from the backend.
+ */
+export function useDeltaTypeWhitelist() {
+  return useQuery({
+    queryKey: queryKeys.evals.deltaTypeWhitelist(),
+    queryFn: fetchDeltaTypeWhitelist,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  })
+}
 
 export function useVariants(datasetId: number) {
   return useQuery({
