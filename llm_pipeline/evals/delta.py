@@ -176,14 +176,17 @@ def apply_instruction_delta(
         ValueError: on any validation failure (unknown op, bad field name,
             unknown type_str, non-JSON default, list too long, etc.).
     """
-    if instructions_delta is None or len(instructions_delta) == 0:
-        return base_cls
-
-    if not isinstance(instructions_delta, list):
+    # Type check FIRST — reject non-list inputs (e.g. dict, str) before any
+    # length-based early-return. An empty dict has ``len == 0`` and would
+    # otherwise pass the no-op check, silently bypassing type validation.
+    if instructions_delta is not None and not isinstance(instructions_delta, list):
         raise ValueError(
             f"instructions_delta must be a list, got "
             f"{type(instructions_delta).__name__}"
         )
+
+    if instructions_delta is None or len(instructions_delta) == 0:
+        return base_cls
 
     if len(instructions_delta) > _MAX_DELTA_ITEMS:
         raise ValueError(

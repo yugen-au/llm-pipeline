@@ -55,3 +55,49 @@ Appended `_DemoInstructions(LLMResultMixin)` fixture class and `TestApplyInstruc
 - [x] No eval/exec/importlib/get_type_hints in `delta.py` (grep-verified during authoring).
 - [x] `apply_instruction_delta` is pure — no I/O, no session, no global mutation.
 - [x] Did not touch `pipeline.py`, `runner.py`, or any Step 3+ integration surface.
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] MEDIUM: `_dry_run_validate_delta` accepts `instructions_delta={}` (empty dict) as a no-op instead of rejecting type. Early-return on `len==0` ran BEFORE `isinstance(..., list)` check; empty dict has `len==0` so bypassed type validation.
+
+### Changes Made
+#### File: `llm_pipeline/evals/delta.py`
+Reordered top of `apply_instruction_delta`: isinstance-list check now runs FIRST (rejecting non-list inputs like `{}` or `"foo"`), THEN None/empty-list early-return. Empty LIST `[]` still treated as valid no-op; empty DICT `{}` now raises `ValueError("instructions_delta must be a list, got dict")`.
+```
+# Before
+if instructions_delta is None or len(instructions_delta) == 0:
+    return base_cls
+
+if not isinstance(instructions_delta, list):
+    raise ValueError(
+        f"instructions_delta must be a list, got "
+        f"{type(instructions_delta).__name__}"
+    )
+
+# After
+# Type check FIRST — reject non-list inputs (e.g. dict, str) before any
+# length-based early-return. An empty dict has ``len == 0`` and would
+# otherwise pass the no-op check, silently bypassing type validation.
+if instructions_delta is not None and not isinstance(instructions_delta, list):
+    raise ValueError(
+        f"instructions_delta must be a list, got "
+        f"{type(instructions_delta).__name__}"
+    )
+
+if instructions_delta is None or len(instructions_delta) == 0:
+    return base_cls
+```
+
+#### File: `tests/test_eval_variants.py`
+Added two tests in `TestApplyInstructionDelta` class immediately after `test_empty_delta_returns_unchanged`: `test_empty_dict_delta_rejected` (empty `{}` raises ValueError) and `test_string_delta_rejected` (string input raises ValueError). Existing `test_empty_delta_returns_unchanged` (empty LIST no-op) and `test_non_list_delta_raises` continue to pass.
+
+### Verification
+- [x] `uv run pytest tests/test_eval_variants.py::TestApplyInstructionDelta -v` → 57/57 pass (55 original + 2 new)
+- [x] `uv run pytest tests/test_eval_variants.py` → 86/86 pass (no regressions across full variant suite)
+- [x] New test `test_empty_dict_delta_rejected` confirms `apply_instruction_delta(cls, {})` raises ValueError("must be a list")
+- [x] New test `test_string_delta_rejected` confirms `apply_instruction_delta(cls, "foo")` raises ValueError("must be a list")
+- [x] Original `test_empty_delta_returns_unchanged` still passes: `apply_instruction_delta(cls, [])` returns cls unchanged; `apply_instruction_delta(cls, None)` returns cls unchanged
+- [x] All ACE hygiene tests (op whitelist, type whitelist, field regex, default JSON round-trip, length caps) still pass — hardening fix preserves existing security guarantees

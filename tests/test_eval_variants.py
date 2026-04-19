@@ -338,6 +338,16 @@ class TestApplyInstructionDelta:
         assert apply_instruction_delta(_DemoInstructions, []) is _DemoInstructions
         assert apply_instruction_delta(_DemoInstructions, None) is _DemoInstructions  # type: ignore[arg-type]
 
+    def test_empty_dict_delta_rejected(self):
+        """Empty dict ``{}`` has len==0 but is not a list — must raise, not no-op."""
+        with pytest.raises(ValueError, match="must be a list"):
+            apply_instruction_delta(_DemoInstructions, {})  # type: ignore[arg-type]
+
+    def test_string_delta_rejected(self):
+        """Non-list input (string) must raise ValueError, not be coerced."""
+        with pytest.raises(ValueError, match="must be a list"):
+            apply_instruction_delta(_DemoInstructions, "foo")  # type: ignore[arg-type]
+
     # --- security: op validation ------------------------------------------
 
     @pytest.mark.parametrize(
