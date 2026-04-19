@@ -128,3 +128,14 @@ To proceed, either:
 [2026-04-17 16:47:03] [INFO] Auto-updated agent statuses: Architecture review: pending -> in-progress
 [2026-04-17 16:47:03] [INFO] Deleted 1 old contract file(s)
 [2026-04-17 16:47:03] [DEBUG] STATE.md atomic write complete
+[2026-04-17 16:47:39] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-04-17 16:52:39] [INFO] WARNING: No active agent found for 'comprehensive-review:architect-review'
+[2026-04-20 09:33:55] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-20 09:35:01] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-04-20 09:35:08] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '2,3,4,5,6'
+[2026-04-20 09:35:21] [INFO] Committed review-A: ['REVIEW.md'] -> f66ed069
+[2026-04-20 09:35:22] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-20 09:35:22] [INFO] Updated Commits for 'Architecture review': f66ed069
+[2026-04-20 09:35:22] [INFO] Auto-updated agent statuses: apply_instruction_delta() utility: complete -> in-progress, Runner integration - delta + prompt override: complete -> pending, Variant CRUD API routes: complete -> pending, Frontend API layer - variants + run types: complete -> pending, Variants tab + variant editor route: complete -> pending, Architecture review: complete -> pending
+[2026-04-20 09:35:22] [INFO] Deleted 1 old contract file(s)
+[2026-04-20 09:35:22] [DEBUG] STATE.md atomic write complete
