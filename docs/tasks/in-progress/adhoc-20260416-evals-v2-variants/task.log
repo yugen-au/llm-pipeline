@@ -169,3 +169,8 @@ To proceed, either:
 [2026-04-20 09:51:10] [DEBUG] STATE.md atomic write complete
 [2026-04-20 09:56:29] [ERROR] BLOCKED: Invalid commit message format
 [2026-04-20 09:57:03] [DEBUG] STATE.md atomic write complete
+[2026-04-20 09:57:12] [INFO] Already committed fixing-review-C: ['step-5-frontend-api-layer-variants-run-types.md']
+[2026-04-20 09:57:15] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-20 09:57:15] [INFO] Auto-updated agent statuses: Variants tab + variant editor route: pending -> in-progress
+[2026-04-20 09:57:15] [INFO] Deleted 1 old contract file(s)
+[2026-04-20 09:57:15] [DEBUG] STATE.md atomic write complete

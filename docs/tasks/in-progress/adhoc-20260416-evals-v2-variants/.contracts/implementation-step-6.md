@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260416-evals-v2-variants
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-5-frontend-api-layer-variants-run-types.md (if already exists, APPEND to file)
+- Output Files: implementation\step-6-variants-tab-variant-editor-route.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 5
+- Step to fix: 6
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -14,9 +14,9 @@
 3. Context7 library IDs to query: /tanstack/router
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 5
+1. Read REVIEW.md for issues assigned to Step 6
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-5-frontend-api-layer-variants-run-types.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-6-variants-tab-variant-editor-route.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
@@ -57,7 +57,7 @@ description of fix applied
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-5-frontend-api-layer-variants-run-types.md
+Created: implementation\step-[step]-[slug].md
 Modified: [file paths or 'none']
 Commit: [commit hash or 'none']
 ~~~
