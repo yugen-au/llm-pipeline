@@ -406,6 +406,65 @@ class TestDeleteVariant:
         resp = client.delete(f"/api/evals/{dataset_id}/variants/9999")
         assert resp.status_code == 404
 
+    def test_delete_variant_nulls_run_fk_preserves_snapshot(
+        self, seeded_dataset
+    ):
+        """Deleting a variant nulls ``EvaluationRun.variant_id`` references
+        but preserves ``delta_snapshot`` for run reproducibility."""
+        client, engine, dataset_id = seeded_dataset
+
+        # Create variant + run referencing it with a delta_snapshot.
+        snapshot = {
+            "model": "claude-3-opus",
+            "instructions_delta": [
+                {
+                    "op": "add",
+                    "field": "new_field",
+                    "type_str": "str",
+                    "default": "hello",
+                }
+            ],
+        }
+        with Session(engine) as session:
+            v = EvaluationVariant(
+                dataset_id=dataset_id, name="v", delta=snapshot
+            )
+            session.add(v)
+            session.commit()
+            session.refresh(v)
+            vid = v.id
+
+            run = EvaluationRun(
+                dataset_id=dataset_id,
+                status="completed",
+                total_cases=1,
+                passed=1,
+                failed=0,
+                errored=0,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+                variant_id=vid,
+                delta_snapshot=snapshot,
+            )
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            run_id = run.id
+
+        resp = client.delete(f"/api/evals/{dataset_id}/variants/{vid}")
+        assert resp.status_code == 204
+
+        # Run still exists with variant_id nulled; delta_snapshot intact.
+        with Session(engine) as session:
+            from sqlmodel import select
+
+            persisted = session.exec(
+                select(EvaluationRun).where(EvaluationRun.id == run_id)
+            ).first()
+            assert persisted is not None
+            assert persisted.variant_id is None
+            assert persisted.delta_snapshot == snapshot
+
 
 # ---------------------------------------------------------------------------
 # Cascade delete: variants removed when dataset deleted
@@ -666,3 +725,26 @@ class TestRunExposesVariantFields:
         data = resp.json()
         assert data["variant_id"] == variant_id
         assert data["delta_snapshot"] == snapshot
+
+
+# ---------------------------------------------------------------------------
+# GET /evals/delta-type-whitelist
+# ---------------------------------------------------------------------------
+
+
+class TestDeltaTypeWhitelist:
+    def test_returns_200_with_canonical_types(self, evals_app):
+        """Endpoint returns the sorted type_str whitelist so the frontend
+        editor can source its type dropdown from a single backend truth."""
+        client, _ = evals_app
+        resp = client.get("/api/evals/delta-type-whitelist")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "types" in data
+        types = data["types"]
+        assert isinstance(types, list)
+        # Must include the documented canonical values.
+        for expected in ("str", "int", "Optional[str]"):
+            assert expected in types, f"{expected!r} missing from whitelist"
+        # Sorted for stable client-side rendering.
+        assert types == sorted(types)

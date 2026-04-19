@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import select
 
-from llm_pipeline.evals import apply_instruction_delta
+from llm_pipeline.evals import apply_instruction_delta, get_type_whitelist
 from llm_pipeline.evals.models import (
     EvaluationCase,
     EvaluationCaseResult,
@@ -178,6 +178,17 @@ class VariantListResponse(BaseModel):
     total: int
 
 
+class TypeWhitelistResponse(BaseModel):
+    """Canonical list of allowed ``type_str`` values for instruction deltas.
+
+    Served by ``GET /evals/delta-type-whitelist`` so the frontend variant
+    editor can source the type dropdown from the backend — single source
+    of truth, no drift with ``llm_pipeline.evals.delta._TYPE_WHITELIST``.
+    """
+
+    types: List[str]
+
+
 # ---------------------------------------------------------------------------
 # Variant helpers
 # ---------------------------------------------------------------------------
@@ -341,6 +352,22 @@ def get_input_schema(
         return _step_schema(target_name, introspection_registry)
     else:
         raise HTTPException(status_code=400, detail="Invalid target_type")
+
+
+@router.get(
+    "/delta-type-whitelist",
+    response_model=TypeWhitelistResponse,
+)
+def get_delta_type_whitelist() -> TypeWhitelistResponse:
+    """Return the canonical list of allowed ``type_str`` values.
+
+    Frontend variant editor consumes this so the type dropdown cannot drift
+    from ``llm_pipeline.evals.delta._TYPE_WHITELIST``. Static list, no auth,
+    no params. Registered before ``/{dataset_id}`` to avoid path-param
+    shadowing (int coercion would reject it, but explicit ordering is
+    clearer — matches the ``/schema`` convention).
+    """
+    return TypeWhitelistResponse(types=get_type_whitelist())
 
 
 @router.get("/{dataset_id}", response_model=DatasetDetail)
@@ -906,7 +933,18 @@ def delete_variant(
     variant_id: int,
     db: WritableDBSession,
 ) -> None:
-    """Delete a variant."""
+    """Delete a variant, nulling out ``EvaluationRun.variant_id`` references.
+
+    Application-level cascade: SQLite does not enforce foreign keys without
+    ``PRAGMA foreign_keys=ON``, so dangling ``variant_id`` pointers on
+    historical ``EvaluationRun`` rows would otherwise persist. We null them
+    out in the same transaction as the variant delete for atomicity.
+
+    Note: ``EvaluationRun.delta_snapshot`` is intentionally left untouched.
+    It is a deep-copied JSON snapshot captured at run time so a run stays
+    reproducible even after its source variant is deleted. Nulling it would
+    destroy historical audit data.
+    """
     variant = db.exec(
         select(EvaluationVariant)
         .where(EvaluationVariant.id == variant_id)
@@ -914,6 +952,15 @@ def delete_variant(
     ).first()
     if variant is None:
         raise HTTPException(status_code=404, detail="Variant not found")
+
+    # Null out variant_id on historical runs referencing this variant.
+    # delta_snapshot is preserved — see docstring.
+    runs_referencing = db.exec(
+        select(EvaluationRun).where(EvaluationRun.variant_id == variant_id)
+    ).all()
+    for run in runs_referencing:
+        run.variant_id = None
+        db.add(run)
 
     db.delete(variant)
     db.commit()

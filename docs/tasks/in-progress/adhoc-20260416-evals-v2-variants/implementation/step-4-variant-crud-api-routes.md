@@ -62,3 +62,61 @@ New file. Local `_make_evals_app` fixture (in-memory SQLite + StaticPool, mounts
 - [x] Dry-run validation rejects malicious `field` (dunder/traversal), malicious `op`, non-whitelisted `type_str`, including attempted code injection literals.
 - [x] Run list/detail responses include `variant_id` and `delta_snapshot` (null for baseline runs).
 - [x] Dataset delete cascades variants for that dataset only; other datasets unaffected.
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] MEDIUM: `delete_variant` leaves orphaned `EvaluationRun.variant_id` (PLAN cascade promise unfulfilled)
+- [x] MEDIUM: Delta `type_str` whitelist drifted between `delta._TYPE_WHITELIST` and frontend editor (two sources of truth)
+
+### Changes Made
+
+#### File: `llm_pipeline/evals/delta.py`
+Added public accessor `get_type_whitelist()` exposing sorted `_TYPE_WHITELIST` keys. Cleaner contract than importing the private dict into the route layer. Added to `__all__`.
+
+```python
+# After
+def get_type_whitelist() -> list[str]:
+    """Return the sorted list of allowed ``type_str`` values."""
+    return sorted(_TYPE_WHITELIST.keys())
+```
+
+#### File: `llm_pipeline/evals/__init__.py`
+Re-exported `get_type_whitelist` from the package public API.
+
+#### File: `llm_pipeline/ui/routes/evals.py`
+1. `delete_variant` now nulls `EvaluationRun.variant_id` for all referencing runs in the same transaction as the variant delete. `delta_snapshot` is intentionally preserved so historical runs stay reproducible even after their source variant is deleted — documented inline.
+2. New `GET /evals/delta-type-whitelist` endpoint returning `TypeWhitelistResponse { types: list[str] }`, sourced from `get_type_whitelist()`. Registered adjacent to `/schema` (before `/{dataset_id}`) to match the convention for static introspection endpoints.
+
+```python
+# delete_variant — After (excerpt)
+runs_referencing = db.exec(
+    select(EvaluationRun).where(EvaluationRun.variant_id == variant_id)
+).all()
+for run in runs_referencing:
+    run.variant_id = None
+    db.add(run)
+
+db.delete(variant)
+db.commit()
+```
+
+```python
+# New endpoint
+@router.get("/delta-type-whitelist", response_model=TypeWhitelistResponse)
+def get_delta_type_whitelist() -> TypeWhitelistResponse:
+    return TypeWhitelistResponse(types=get_type_whitelist())
+```
+
+#### File: `tests/ui/test_evals_routes.py`
+1. `TestDeleteVariant::test_delete_variant_nulls_run_fk_preserves_snapshot` — creates a variant + completed run with `delta_snapshot`, deletes the variant, asserts the run row persists with `variant_id IS NULL` and `delta_snapshot` intact.
+2. `TestDeltaTypeWhitelist::test_returns_200_with_canonical_types` — asserts endpoint returns 200, list contains at least `str`, `int`, `Optional[str]`, and the list is sorted.
+
+### Verification
+- [x] `uv run pytest tests/ui/test_evals_routes.py -q` — 32 passed (was 30, +2 new tests)
+- [x] `uv run pytest tests/ -k "delta or variant" -q` — 123 passed, no regressions
+- [x] Full suite: 1444 passed. 15 failures are pre-existing and unrelated (FieldMatchEvaluator interface mismatch, sandbox mock tests, CLI atexit test, runs 422 test) — none touch files I modified.
+- [x] `delta_snapshot` preservation verified in test assertion against deep-equal dict.
+- [x] Route order: `/delta-type-whitelist` registered before `/{dataset_id}` to mirror `/schema` convention.

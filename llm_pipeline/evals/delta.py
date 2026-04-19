@@ -295,4 +295,19 @@ def merge_variable_definitions(
     return list(by_name.values())
 
 
-__all__ = ["apply_instruction_delta", "merge_variable_definitions"]
+def get_type_whitelist() -> list[str]:
+    """Return the sorted list of allowed ``type_str`` values.
+
+    Public accessor for the module-private ``_TYPE_WHITELIST``. Used by the
+    API to expose the canonical whitelist to the frontend so the editor's
+    type dropdown stays in sync with backend validation — single source of
+    truth, no drift.
+    """
+    return sorted(_TYPE_WHITELIST.keys())
+
+
+__all__ = [
+    "apply_instruction_delta",
+    "merge_variable_definitions",
+    "get_type_whitelist",
+]
