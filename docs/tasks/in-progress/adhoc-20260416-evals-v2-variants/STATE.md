@@ -3,7 +3,7 @@
 
 ## Phase: fixing-review
 ## Status: in-progress
-## Current Group: A
+## Current Group: B
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260416-evals-v2-variants
 ## Plugins: backend-development, frontend-mobile-development, python-development
@@ -24,8 +24,8 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | a0bf164b49e299fcd | 299354b2 | - |
 | EvaluationVariant model + migration | python-development:python-pro | implementation | 1 | python-development:python-testing-patterns | A | complete | 0 | a43ec22fa5b73262f | f00e56a3,8bb85a25 | /fastapi/sqlmodel |
 | apply_instruction_delta() utility | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | A | complete | 1 | a92dec2553cad1f71 | 8bb85a25,24013252 | /websites/pydantic_dev_validation |
-| Runner integration - delta + prompt override | python-development:python-pro | implementation | 3 | python-development:python-testing-patterns | B | pending | 0 | a1b5b78eda4b80e3e | 519a92d2 | /fastapi/sqlmodel |
-| Variant CRUD API routes | backend-development:backend-architect | implementation | 4 | backend-development:api-design-principles | B | pending | 0 | a51ff3ae2ab07a9b7 | 3435d20d,519a92d2 | /fastapi/sqlmodel |
+| Runner integration - delta + prompt override | python-development:python-pro | implementation | 3 | python-development:python-testing-patterns | B | in-progress | 0 | a1b5b78eda4b80e3e | 519a92d2 | /fastapi/sqlmodel |
+| Variant CRUD API routes | backend-development:backend-architect | implementation | 4 | backend-development:api-design-principles | B | in-progress | 0 | a51ff3ae2ab07a9b7 | 3435d20d,519a92d2 | /fastapi/sqlmodel |
 | Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | pending | 0 | ad2accfc6e4f449ea | 42bd31f2 | /tanstack/router |
 | Variants tab + variant editor route | frontend-mobile-development:frontend-developer | implementation | 6 | frontend-mobile-development:react-state-management | D | pending | 0 | adb1e6314d1da7afc | bf925d58 | /tanstack/router |
 | Run comparison view | frontend-mobile-development:frontend-developer | implementation | 7 | frontend-mobile-development:react-state-management | D | complete | 0 | a0683257e071b7cd8 | 8e14f525,bf925d58 | /tanstack/router |
