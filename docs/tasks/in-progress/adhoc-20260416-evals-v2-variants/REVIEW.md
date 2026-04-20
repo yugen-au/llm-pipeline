@@ -117,3 +117,79 @@ None.
 ACE-hygiene is watertight: no `eval`/`exec`/`importlib`/`get_type_hints`; hard-coded whitelist; regex-gated field names with dunder rejection; JSON round-trip default validation; length caps. Every persistence entry point (API POST, API PUT, runner) runs the same validation. Evaluator resolution is reordered per CEO decision so variant-added fields are visible to auto-evaluators (runner.py L359-384). `delta_snapshot` is a deep-copied JSON dict — no Python class references, no host paths, nothing that wouldn't round-trip through a container boundary. `apply_instruction_delta` is a pure function. `create_sandbox_engine` remains the clean seam for a future Docker swap. Docker migration is unblocked architecturally.
 
 MEDIUM items are quality-of-life and contract-hygiene, not correctness or security. Recommend addressing the `variable_definitions` drift (either extend UI or remove runner branch) and `delete_variant` FK nullification in a follow-up patch before production deploy, but these do not block merge of this PR.
+
+---
+
+# Architecture Review (Re-Review: fixes applied)
+
+## Overall Assessment
+**Status:** complete
+Re-reviewed the fixes for the 5 MEDIUM + 3 LOW items flagged in the initial review. All eight addressed fixes match the original finding's intent, maintain the PLAN Security Constraints (ACE hygiene), and introduce no new architectural drift. Testing phase already reported +4 tests green, no regressions, TypeScript clean. The `variable_definitions` UI-extension path (MEDIUM #1) is sound: the TS `VariableDefinitions` map-shape mirrors the backend JSON contract, and the runner's list/dict coercion (`_coerce_var_defs` / `_encode_var_defs`) tolerates either input shape, preserving round-trip fidelity. The new `delta-type-whitelist` endpoint establishes a single source of truth for the `type_str` dropdown and keeps the offline fallback constant as a graceful-degradation safety net. `delete_variant` FK nullification is atomic within one session/transaction, and `delta_snapshot` preservation is explicitly documented as intentional for run reproducibility.
+
+## Project Guidelines Compliance
+**CLAUDE.md:** d:\Documents\claude-projects\llm-pipeline\.claude\CLAUDE.md
+| Guideline | Status | Notes |
+| --- | --- | --- |
+| Pydantic v2 + SQLModel + SQLAlchemy 2.0 | pass | No changes to persistence layer shape; FK nullification uses same-session ORM pattern. |
+| TDD strict | pass | +4 tests (empty-dict rejection, string rejection, delete cascades FK, whitelist endpoint). No regressions. |
+| ACE risk awareness (Security Constraints) | pass | Type-check-first reorder in `apply_instruction_delta` closes empty-dict bypass; whitelist endpoint exposes the same hardcoded map with no additional surface area; no new eval/exec/importlib/get_type_hints. |
+| Docker-sandbox readiness | pass | `get_type_whitelist()` is a pure accessor; helper `_merge_variant_defs_into_prompt` is session-scoped and JSON-data-only; no new host paths or Python class crossings. |
+| No hardcoded values | pass | Frontend fallback whitelist is explicitly documented as offline-only; runtime source is backend endpoint. |
+| Error handling present | pass | `parseBackendFieldError` longest-match eliminates mis-attribution; new-variant retry guarded by `attemptedRef` + `retryKey`. |
+| DRY / YAGNI | pass | `_merge_variant_defs_into_prompt` extracted; no speculative abstractions in UI VarDef editor. |
+
+## Issues Found
+
+### Critical
+None.
+
+### High
+None.
+
+### Medium
+None.
+
+### Low
+
+#### `variable_definitions` editor overwrites unknown spec keys on save (documented trade-off but worth flagging)
+**Step:** 6 (frontend variant editor)
+**Details:** `varDefsToRows` reads only `name`, `type`, `auto_generate` from each spec entry and `rowsToVarDefs` re-serialises only those three fields. Comment at L102-104 acknowledges this. Impact: if a hand-edited variant JSON has an extra key like `description` on a variable def spec, the key is preserved on load but silently dropped the first time the user saves. Low because (a) the UI is the write path for 99% of cases, (b) the TS type already declares `[key: string]: unknown` for round-trip hinting, and (c) the runner only consumes `name` + `type` + `auto_generate`. Consider: either storing raw entries as opaque `unknown` on the row shape and merging known fields for editing, or adding a visible "unknown keys preserved" badge. Documentation is adequate for now.
+
+#### Frontend fallback whitelist can drift from backend
+**Step:** 5 (frontend API layer)
+**Details:** `FALLBACK_TYPE_WHITELIST` (variants editor L49-60) is maintained in sync with `_TYPE_WHITELIST` in `llm_pipeline/evals/delta.py` by convention (comment L47). The `DeltaTypeStr` literal union (evals.ts L123-134) similarly duplicates the 10 whitelist entries. Both duplicate what `GET /evals/delta-type-whitelist` now serves authoritatively. If a future contributor adds `"Optional[list]"` to the backend whitelist, they must update three locations: `_TYPE_WHITELIST`, `DeltaTypeStr`, and `FALLBACK_TYPE_WHITELIST`. The original MEDIUM #5 finding is resolved at runtime (runtime source is backend); the compile-time type and the offline fallback remain manual-sync points. Low risk — the backend endpoint is the runtime authority, and a drift would be caught by any dev smoke test. Consider a codegen step in a follow-up.
+
+#### `varDefsToRows` / `rowsToVarDefs` round-trip can reorder rows across save
+**Step:** 6
+**Details:** `rowsToVarDefs` builds a `VariableDefinitions` map (insertion-ordered), and `varDefsToRows` iterates via `Object.entries` on the next load. JavaScript preserves insertion order for string keys, so practical row order is preserved. If the backend ever materialises the dict through a non-order-preserving layer (it does not today — FastAPI/Pydantic v2 preserves dict ordering), rows could reshuffle on reload. Low — note for future Python-side serializer swaps.
+
+## Review Checklist
+[x] Architecture patterns followed (pure `get_type_whitelist` accessor; single-transaction FK cascade; helper extraction for DRY without over-abstraction)
+[x] Code quality and maintainability (reorder comment in `apply_instruction_delta` documents the why; `delete_variant` docstring explains delta_snapshot preservation)
+[x] Error handling present (longest-match field error mapping; state-key retry preserves component state without URL round-trip)
+[x] No hardcoded values (fallback whitelist documented as graceful-degradation; runtime source is backend)
+[x] Project conventions followed (queryKeys factory extended; `fetchDeltaTypeWhitelist` + hook pattern consistent with other evals hooks)
+[x] Security considerations (type-check-first reorder closes empty-dict non-list bypass; no new ACE surface)
+[x] Properly scoped (DRY, YAGNI, no over-engineering) (variable_definitions UI is the minimal editor surface; helper extraction is behavior-preserving)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\evals\delta.py | pass | Reorder at L179-186 places isinstance check before length check — correctly rejects `{}`. `get_type_whitelist()` is a sorted-list accessor over `_TYPE_WHITELIST.keys()`. Exported in `__all__`. No new unsafe surface. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\evals\__init__.py | pass | Re-exports `get_type_whitelist` alongside `apply_instruction_delta` + `merge_variable_definitions`. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\evals\runner.py | pass | `_merge_variant_defs_into_prompt` extracted (L683-708); identical logic preserved from system/user branches. `_coerce_var_defs` / `_encode_var_defs` still handle list-vs-dict shape preservation. Behaviour-preserving refactor. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\ui\routes\evals.py | pass | `/delta-type-whitelist` registered before `/{dataset_id}` to avoid path-param shadowing (L357-370). `delete_variant` (L927-966) UPDATEs run.variant_id=NULL and DELETEs variant in one commit — atomic. Delta_snapshot preservation documented. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\ui\frontend\src\api\evals.ts | pass | `DeltaTypeStr` literal union (L123-134); `InstructionDeltaItem.type_str` now typed as union. `VariableDefinitions` map type with index-signature for forward-compat. `useDeltaTypeWhitelist` with staleTime/gcTime Infinity — correct for static data. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\ui\frontend\src\api\query-keys.ts | pass | `deltaTypeWhitelist()` key added to evals factory — consistent tuple-typed pattern. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\ui\frontend\src\routes\evals.$datasetId.variants.$variantId.tsx | pass | Variable-definitions editor with row cap (20), backend whitelist consumption with fallback, dirty tracking covers varDef rows. `parseBackendFieldError` (L892-913) uses longest-match with word-quoted boundary. |
+| d:\Documents\claude-projects\llm-pipeline\llm_pipeline\ui\frontend\src\routes\evals.$datasetId.variants.new.tsx | pass | `retryKey` state triggers effect re-run via deps; `attemptedRef` reset inline. No URL navigation round-trip. |
+| d:\Documents\claude-projects\llm-pipeline\tests\test_eval_variants.py | pass | `test_empty_dict_delta_rejected` + `test_string_delta_rejected` cover the reorder fix. |
+| d:\Documents\claude-projects\llm-pipeline\tests\ui\test_evals_routes.py | pass | `test_delete_variant_nulls_run_fk_preserves_snapshot` covers FK cascade + snapshot preservation. `TestDeltaTypeWhitelist` covers endpoint shape + sort order. |
+
+## New Issues Introduced
+- None detected. All three surfaced items are LOW (doc-grade / future-codegen candidates), not regressions.
+
+## Recommendation
+**Decision:** APPROVE
+All five MEDIUM and three LOW fixes correctly address the original findings. The `variable_definitions` UI extension is the stronger path over removing the runner branch — it matches the runner contract, exposes the capability to end users, and the list/dict coercion in the runner means backend storage variability doesn't leak into the UI. The FK nullification is atomic and preserves audit data; the whitelist endpoint collapses three compile-time duplicates (backend dict, TS union, fallback const) into a single runtime authority with two graceful-degradation mirrors. No regressions, no new architectural smells, no new ACE surface. Ready for PM summary.
+
