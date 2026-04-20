@@ -1,9 +1,19 @@
+import { useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
-import { ArrowLeft, Check, X, Minus, TrendingUp, TrendingDown } from 'lucide-react'
-import { useEvalRun, useVariant } from '@/api/evals'
-import type { CaseResultItem, RunDetail } from '@/api/evals'
+import {
+  ArrowLeft,
+  Check,
+  X,
+  Minus,
+  TrendingUp,
+  TrendingDown,
+  ChevronRight,
+  ChevronDown,
+} from 'lucide-react'
+import { useDataset, useEvalRun, useVariant } from '@/api/evals'
+import type { CaseItem, CaseResultItem, RunDetail } from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -142,6 +152,10 @@ function caseDelta(
   return variantPassed ? 'improved' : 'regressed'
 }
 
+function isErrored(result: CaseResultItem | undefined): boolean {
+  return !!result?.error_message
+}
+
 function DeltaIndicator({ kind }: { kind: DeltaKind }) {
   switch (kind) {
     case 'improved':
@@ -262,6 +276,211 @@ function ComparisonStatCard({
 }
 
 // ---------------------------------------------------------------------------
+// Per-case detail panels
+// ---------------------------------------------------------------------------
+
+function ErrorBlock({ message }: { message: string }) {
+  return (
+    <pre className="text-xs text-destructive bg-destructive/5 p-2 rounded overflow-auto max-h-[200px] whitespace-pre-wrap break-words">
+      {message}
+    </pre>
+  )
+}
+
+function JsonScroll({ children }: { children: React.ReactNode }) {
+  return <div className="max-h-[300px] overflow-auto">{children}</div>
+}
+
+function InputExpectedPanel({ caseDef }: { caseDef: CaseItem | undefined }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+          Input
+        </p>
+        {caseDef ? (
+          <JsonScroll>
+            <JsonViewer data={caseDef.inputs} maxDepth={2} />
+          </JsonScroll>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">Not available</p>
+        )}
+      </div>
+      <div>
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+          Expected output
+        </p>
+        {caseDef?.expected_output ? (
+          <JsonScroll>
+            <JsonViewer data={caseDef.expected_output} maxDepth={2} />
+          </JsonScroll>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">
+            {caseDef ? 'No expected output defined' : 'Not available'}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BaselineOutputPanel({ result }: { result: CaseResultItem | undefined }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+          Baseline output
+        </p>
+        <PassFailBadge result={result} />
+      </div>
+      {result?.error_message ? (
+        <ErrorBlock message={result.error_message} />
+      ) : result?.output_data ? (
+        <JsonScroll>
+          <JsonViewer data={result.output_data} maxDepth={3} />
+        </JsonScroll>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">No output recorded</p>
+      )}
+    </div>
+  )
+}
+
+function VariantOutputPanel({
+  baselineResult,
+  variantResult,
+}: {
+  baselineResult: CaseResultItem | undefined
+  variantResult: CaseResultItem | undefined
+}) {
+  const baseOut = baselineResult?.output_data ?? null
+  const varOut = variantResult?.output_data ?? null
+
+  let body: React.ReactNode
+  if (variantResult?.error_message) {
+    body = <ErrorBlock message={variantResult.error_message} />
+  } else if (varOut && baseOut && !isErrored(baselineResult)) {
+    // Both sides have outputs and baseline didn't error -- show diff
+    body = (
+      <JsonScroll>
+        <JsonViewer before={baseOut} after={varOut} maxDepth={3} />
+      </JsonScroll>
+    )
+  } else if (varOut) {
+    // Variant produced output but baseline did not (or errored) -- fall back to plain view
+    body = (
+      <JsonScroll>
+        <JsonViewer data={varOut} maxDepth={3} />
+      </JsonScroll>
+    )
+  } else {
+    body = <p className="text-xs text-muted-foreground italic">No output recorded</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+          Variant output
+        </p>
+        <PassFailBadge result={variantResult} />
+      </div>
+      {body}
+    </div>
+  )
+}
+
+function CaseDetailCard({
+  caseDef,
+  baselineResult,
+  variantResult,
+}: {
+  caseDef: CaseItem | undefined
+  baselineResult: CaseResultItem | undefined
+  variantResult: CaseResultItem | undefined
+}) {
+  return (
+    <Card className="bg-muted/20 border-0 rounded-none">
+      <CardContent className="p-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <InputExpectedPanel caseDef={caseDef} />
+          <BaselineOutputPanel result={baselineResult} />
+          <VariantOutputPanel
+            baselineResult={baselineResult}
+            variantResult={variantResult}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Case row
+// ---------------------------------------------------------------------------
+
+function CaseRow({
+  name,
+  caseDef,
+  baselineResult,
+  variantResult,
+  isExpanded,
+  onToggle,
+}: {
+  name: string
+  caseDef: CaseItem | undefined
+  baselineResult: CaseResultItem | undefined
+  variantResult: CaseResultItem | undefined
+  isExpanded: boolean
+  onToggle: () => void
+}) {
+  const delta = caseDelta(baselineResult, variantResult)
+  return (
+    <>
+      <TableRow
+        className="cursor-pointer hover:bg-muted/50"
+        onClick={onToggle}
+      >
+        <TableCell className="w-8 px-2">
+          {isExpanded ? (
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+        </TableCell>
+        <TableCell className="font-medium text-sm">{name}</TableCell>
+        <TableCell>
+          <PassFailBadge result={baselineResult} />
+        </TableCell>
+        <TableCell>
+          <ScoresCell result={baselineResult} />
+        </TableCell>
+        <TableCell>
+          <PassFailBadge result={variantResult} />
+        </TableCell>
+        <TableCell>
+          <ScoresCell result={variantResult} />
+        </TableCell>
+        <TableCell>
+          <DeltaIndicator kind={delta} />
+        </TableCell>
+      </TableRow>
+      {isExpanded && (
+        <TableRow>
+          <TableCell colSpan={7} className="p-0 border-b">
+            <CaseDetailCard
+              caseDef={caseDef}
+              baselineResult={baselineResult}
+              variantResult={variantResult}
+            />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -272,8 +491,10 @@ function CompareRunsPage() {
 
   const baseRunQ = useEvalRun(datasetId, baseRunId)
   const variantRunQ = useEvalRun(datasetId, variantRunId)
+  const datasetQ = useDataset(datasetId)
 
-  const isLoading = baseRunQ.isLoading || variantRunQ.isLoading
+  const isLoading = baseRunQ.isLoading || variantRunQ.isLoading || datasetQ.isLoading
+  // Dataset-fetch errors degrade gracefully (no inputs/expected); don't block.
   const error = baseRunQ.error || variantRunQ.error
 
   const baseRun = baseRunQ.data
@@ -282,6 +503,75 @@ function CompareRunsPage() {
   // Look up variant name if variant run has variant_id
   const variantIdForLookup = variantRun?.variant_id ?? 0
   const variantQ = useVariant(datasetId, variantIdForLookup)
+
+  // Build dataset case map (by case name -> CaseItem). Empty when dataset
+  // errored or hasn't loaded yet.
+  const caseByName = useMemo(() => {
+    const m = new Map<string, CaseItem>()
+    for (const c of datasetQ.data?.cases ?? []) m.set(c.name, c)
+    return m
+  }, [datasetQ.data])
+
+  // Build per-case run-result maps + union of all case names. Memoed so the
+  // auto-expand initializer downstream is stable.
+  const { baseByName, variantByName, allCaseNames } = useMemo(() => {
+    const baseMap = new Map<string, CaseResultItem>()
+    const varMap = new Map<string, CaseResultItem>()
+    for (const r of baseRun?.case_results ?? []) baseMap.set(r.case_name, r)
+    for (const r of variantRun?.case_results ?? []) varMap.set(r.case_name, r)
+    const names = Array.from(
+      new Set([...baseMap.keys(), ...varMap.keys()]),
+    ).sort()
+    return { baseByName: baseMap, variantByName: varMap, allCaseNames: names }
+  }, [baseRun, variantRun])
+
+  // Seed expanded set with regressed + errored cases. useState initializer
+  // runs once; when runs load async, we re-seed via useMemo + state merge in
+  // the effect below. Simpler: derive initial set lazily once `allCaseNames`
+  // is populated.
+  const initialExpanded = useMemo(() => {
+    const s = new Set<string>()
+    for (const name of allCaseNames) {
+      const b = baseByName.get(name)
+      const v = variantByName.get(name)
+      if (caseDelta(b, v) === 'regressed' || isErrored(b) || isErrored(v)) {
+        s.add(name)
+      }
+    }
+    return s
+  }, [allCaseNames, baseByName, variantByName])
+
+  // Track which cases are expanded. Initialized from initialExpanded via a
+  // useState initializer that references the memo; once user interacts we
+  // keep their state (no resets on re-render).
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [seededFor, setSeededFor] = useState<string>('')
+
+  // Once run data has loaded, seed expanded set exactly once per (baseRun,
+  // variantRun) pair. Key on run ids so reloading a different compare URL
+  // re-seeds correctly.
+  const seedKey = `${baseRun?.id ?? 0}-${variantRun?.id ?? 0}`
+  if (baseRun && variantRun && seedKey !== seededFor) {
+    setExpanded(new Set(initialExpanded))
+    setSeededFor(seedKey)
+  }
+
+  function toggleCase(name: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
+  function expandAll() {
+    setExpanded(new Set(allCaseNames))
+  }
+
+  function collapseAll() {
+    setExpanded(new Set())
+  }
 
   // Early param validation
   if (baseRunId === 0 || variantRunId === 0) {
@@ -331,16 +621,9 @@ function CompareRunsPage() {
   const basePassRate = passRate(baseRun)
   const variantPassRate = passRate(variantRun)
 
-  // Build per-case union map
-  const baseByName = new Map<string, CaseResultItem>()
-  for (const r of baseRun.case_results ?? []) baseByName.set(r.case_name, r)
-  const variantByName = new Map<string, CaseResultItem>()
-  for (const r of variantRun.case_results ?? []) variantByName.set(r.case_name, r)
-  const allCaseNames = Array.from(
-    new Set([...baseByName.keys(), ...variantByName.keys()]),
-  ).sort()
-
   const deltaSnapshot = variantRun.delta_snapshot
+  const allExpanded =
+    allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
   return (
     <ScrollArea className="h-full">
@@ -500,8 +783,18 @@ function CompareRunsPage() {
 
         {/* Per-case comparison */}
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">Per-case comparison</CardTitle>
+            {allCaseNames.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={allExpanded ? collapseAll : expandAll}
+                className="h-7 text-xs"
+              >
+                {allExpanded ? 'Collapse all' : 'Expand all'}
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             {allCaseNames.length === 0 ? (
@@ -510,6 +803,7 @@ function CompareRunsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8" />
                     <TableHead>Case</TableHead>
                     <TableHead>Baseline</TableHead>
                     <TableHead>Baseline scores</TableHead>
@@ -519,31 +813,17 @@ function CompareRunsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allCaseNames.map((name) => {
-                    const b = baseByName.get(name)
-                    const v = variantByName.get(name)
-                    const d = caseDelta(b, v)
-                    return (
-                      <TableRow key={name}>
-                        <TableCell className="font-medium text-sm">{name}</TableCell>
-                        <TableCell>
-                          <PassFailBadge result={b} />
-                        </TableCell>
-                        <TableCell>
-                          <ScoresCell result={b} />
-                        </TableCell>
-                        <TableCell>
-                          <PassFailBadge result={v} />
-                        </TableCell>
-                        <TableCell>
-                          <ScoresCell result={v} />
-                        </TableCell>
-                        <TableCell>
-                          <DeltaIndicator kind={d} />
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
+                  {allCaseNames.map((name) => (
+                    <CaseRow
+                      key={name}
+                      name={name}
+                      caseDef={caseByName.get(name)}
+                      baselineResult={baseByName.get(name)}
+                      variantResult={variantByName.get(name)}
+                      isExpanded={expanded.has(name)}
+                      onToggle={() => toggleCase(name)}
+                    />
+                  ))}
                 </TableBody>
               </Table>
             )}
