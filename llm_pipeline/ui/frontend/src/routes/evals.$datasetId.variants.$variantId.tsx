@@ -59,7 +59,11 @@ import {
   ModelCombobox,
   formatModel,
 } from '@/components/pipelines/ModelCombobox'
-import { TypedValueEditor } from '@/components/shared/TypedValueEditor'
+import {
+  TypedValueEditor,
+  type EnumCatalog,
+} from '@/components/shared/TypedValueEditor'
+import { useAutoGenerateObjects } from '@/api/prompts'
 
 export const Route = createFileRoute('/evals/$datasetId/variants/$variantId')({
   component: VariantEditorPage,
@@ -169,21 +173,41 @@ interface EditorState {
  * Render a pydantic-generated JSON-schema subtree to a short Python-ish type
  * label for the read-only "type" column of the merged schema table. Matches
  * the style of the left pane's production fields list (e.g. "str", "int",
- * "Optional[str]", "list", "TopicItem").
+ * "Optional[str]", "list", "TopicItem", "enum:SentimentLabel").
  *
  * This is display-only. It has NO effect on what gets sent to the backend —
  * modify ops omit `type_str` entirely, so we don't need a round-trippable
  * inverse. Unknown shapes fall back to "unknown".
+ *
+ * `$defs` is the full schema's $defs map, threaded through so $ref lookups
+ * can detect enum branches (pydantic emits enums as `{$ref: "#/$defs/X"}`
+ * plus `$defs.X.enum = [...]`).
  */
-function jsonSchemaTypeLabel(schema: unknown): string {
+function jsonSchemaTypeLabel(
+  schema: unknown,
+  defs?: Record<string, unknown> | null,
+): string {
   if (!schema || typeof schema !== 'object') return 'unknown'
   const s = schema as Record<string, unknown>
 
-  // $ref -> strip "#/$defs/<Name>" to just <Name>.
+  // $ref -> resolve against $defs to detect enum definitions. Pydantic emits
+  // enums as `{$defs: {SentimentLabel: {enum: [...], type: 'string'}}}`, so
+  // when the ref target has an `enum` array we surface as `enum:<Name>`.
+  // Non-enum refs (e.g. nested models like `TopicItem`) fall back to the bare
+  // class name as before.
   const ref = s.$ref
   if (typeof ref === 'string') {
     const m = ref.match(/\/([^/]+)$/)
-    return m ? m[1] : 'unknown'
+    if (!m) return 'unknown'
+    const defName = m[1]
+    const def = defs?.[defName]
+    if (def && typeof def === 'object') {
+      const defObj = def as Record<string, unknown>
+      if (Array.isArray(defObj.enum)) {
+        return `enum:${defName}`
+      }
+    }
+    return defName
   }
 
   // Optional[X] shapes: anyOf with one null branch.
@@ -193,8 +217,8 @@ function jsonSchemaTypeLabel(schema: unknown): string {
     const b = anyOf[1] as Record<string, unknown> | undefined
     const aNull = a?.type === 'null'
     const bNull = b?.type === 'null'
-    if (aNull && !bNull) return `Optional[${jsonSchemaTypeLabel(b)}]`
-    if (bNull && !aNull) return `Optional[${jsonSchemaTypeLabel(a)}]`
+    if (aNull && !bNull) return `Optional[${jsonSchemaTypeLabel(b, defs)}]`
+    if (bNull && !aNull) return `Optional[${jsonSchemaTypeLabel(a, defs)}]`
   }
 
   // Primitive `type` field.
@@ -223,15 +247,41 @@ function jsonSchemaTypeLabel(schema: unknown): string {
   return 'unknown'
 }
 
+/** Extract `$defs` from the full output_schema so callers can thread it into
+ * `jsonSchemaTypeLabel`. Returns null when absent/malformed. */
+function schemaDefs(
+  outputSchema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!outputSchema || typeof outputSchema !== 'object') return null
+  const defs = (outputSchema as Record<string, unknown>).$defs
+  if (defs && typeof defs === 'object') {
+    return defs as Record<string, unknown>
+  }
+  return null
+}
+
 /**
  * Seed value for a freshly-picked whitelist type_str. Keeps the TypedValueEditor
  * widget fed a value of the right shape when the user changes a variant row's
  * type. Mirrors defaultForBase() inside TypedValueEditor but keyed off the
- * wire-level type_str (which can include Optional[X]).
+ * wire-level type_str (which can include Optional[X] and enum:<Name>).
+ *
+ * For `enum:<Name>` types the seed is the first registered member's value so
+ * the widget never opens with an invalid empty selection (backend would
+ * reject it). Falls back to empty string when the catalog doesn't have the
+ * enum (user will see the "enum not in registry" warning and type manually).
  */
-function variantDefaultForType(type_str: string): unknown {
+function variantDefaultForType(
+  type_str: string,
+  enumCatalog: EnumCatalog,
+): unknown {
   const t = (type_str ?? '').trim()
   if (t.startsWith('Optional[')) return null
+  if (t.startsWith('enum:')) {
+    const name = t.slice('enum:'.length)
+    const members = enumCatalog[name]
+    return members && members.length > 0 ? members[0].value : ''
+  }
   switch (t) {
     case 'str':
       return ''
@@ -411,6 +461,7 @@ function variantToEditorState(
   const required = Array.isArray(outSchema?.required)
     ? (outSchema!.required as string[])
     : []
+  const defs = schemaDefs(outSchema)
 
   const mergedFields: MergedFieldRow[] = []
   const prodIndex = new Map<string, number>()
@@ -423,7 +474,7 @@ function variantToEditorState(
     const row: MergedFieldRow = {
       kind: 'prod',
       field: name,
-      type_label: jsonSchemaTypeLabel(prop),
+      type_label: jsonSchemaTypeLabel(prop, defs),
       prod_default: prodDefault,
       current_default: prodDefault,
       is_inherited: INHERITED_FIELDS.includes(name),
@@ -745,6 +796,7 @@ function ProdStepDefPanel({
   prodSchema,
   schemaLoading,
   isDark,
+  enumCatalog,
 }: {
   datasetId: number
   prodSystem: ProdPromptContent | null
@@ -753,6 +805,7 @@ function ProdStepDefPanel({
   prodSchema: SchemaResponse | null | undefined
   schemaLoading: boolean
   isDark: boolean
+  enumCatalog: EnumCatalog
 }) {
   const { data: dataset } = useDataset(datasetId)
 
@@ -764,11 +817,14 @@ function ProdStepDefPanel({
     const required = Array.isArray(prodSchema?.output_schema?.required)
       ? (prodSchema!.output_schema!.required as string[])
       : []
+    const defs = schemaDefs(
+      (prodSchema?.output_schema ?? null) as Record<string, unknown> | null,
+    )
     return Object.entries(props).map(([name, p]) => {
       const hasDefault = Object.prototype.hasOwnProperty.call(p, 'default')
       return {
         name,
-        type_label: jsonSchemaTypeLabel(p),
+        type_label: jsonSchemaTypeLabel(p, defs),
         title: typeof p.title === 'string' ? p.title : undefined,
         description:
           typeof p.description === 'string' ? p.description : undefined,
@@ -925,6 +981,7 @@ function ProdStepDefPanel({
                             readOnly
                             type_str={f.type_label}
                             value={f.prod_default}
+                            enumCatalog={enumCatalog}
                             placeholder={
                               f.is_required && f.prod_default === undefined
                                 ? 'required — no default'
@@ -1037,12 +1094,14 @@ function ProdFieldRow({
   onChangeDefault,
   onReset,
   backendErrorMsg,
+  enumCatalog,
 }: {
   row: Extract<MergedFieldRow, { kind: 'prod' }>
   idx: number
   onChangeDefault: (next: unknown | undefined) => void
   onReset: () => void
   backendErrorMsg?: string
+  enumCatalog: EnumCatalog
 }) {
   const modified = !deepEqualJSON(row.current_default, row.prod_default)
   const isRequiredNoDefault = row.is_required && row.current_default === undefined
@@ -1110,6 +1169,7 @@ function ProdFieldRow({
             type_str={row.type_label}
             value={row.current_default}
             onChange={(v) => onChangeDefault(v)}
+            enumCatalog={enumCatalog}
             placeholder={
               isRequiredNoDefault ? 'required — no default' : undefined
             }
@@ -1149,8 +1209,10 @@ function VariantFieldRow({
   onChangeDefault,
   onRemove,
   typeOptions,
+  typeOptionLabels,
   typesDisabled,
   backendErrorMsg,
+  enumCatalog,
 }: {
   row: Extract<MergedFieldRow, { kind: 'variant' }>
   idx: number
@@ -1159,8 +1221,12 @@ function VariantFieldRow({
   onChangeDefault: (v: unknown) => void
   onRemove: () => void
   typeOptions: ReadonlyArray<string>
+  /** Display labels for each option (e.g. `enum:SentimentLabel` ->
+   * `SentimentLabel`). Same length as `typeOptions`. */
+  typeOptionLabels: ReadonlyArray<string>
   typesDisabled: boolean
   backendErrorMsg?: string
+  enumCatalog: EnumCatalog
 }) {
   const isInherited = INHERITED_FIELDS.includes(row.field.trim())
 
@@ -1201,9 +1267,9 @@ function VariantFieldRow({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {typeOptions.map((t) => (
+            {typeOptions.map((t, i) => (
               <SelectItem key={t} value={t} className="text-xs font-mono">
-                {t}
+                {typeOptionLabels[i] ?? t}
               </SelectItem>
             ))}
           </SelectContent>
@@ -1215,6 +1281,7 @@ function VariantFieldRow({
             type_str={row.type_str}
             value={row.default}
             onChange={onChangeDefault}
+            enumCatalog={enumCatalog}
             error={backendErrorMsg}
           />
         </div>
@@ -1251,8 +1318,10 @@ function VariantDeltaPanel({
   setVarDefs,
   backendFieldError,
   typeOptions,
+  typeOptionLabels,
   typesLoading,
   isDark,
+  enumCatalog,
 }: {
   state: EditorState
   patch: (p: Partial<EditorState>) => void
@@ -1263,8 +1332,10 @@ function VariantDeltaPanel({
   setVarDefs: (defs: VarDefs) => void
   backendFieldError: { rowIdx: number | null; message: string } | null
   typeOptions: ReadonlyArray<string>
+  typeOptionLabels: ReadonlyArray<string>
   typesLoading: boolean
   isDark: boolean
+  enumCatalog: EnumCatalog
 }) {
   // Count only entries that contribute to instructions_delta payload:
   // modified prod rows + all variant rows. Matches backend cap semantics.
@@ -1379,6 +1450,7 @@ function VariantDeltaPanel({
                           }
                           onReset={() => resetProdRow(idx)}
                           backendErrorMsg={backendMsg}
+                          enumCatalog={enumCatalog}
                         />
                       )
                     }
@@ -1395,7 +1467,7 @@ function VariantDeltaPanel({
                           // isn't fed a stale value of the wrong type.
                           updateMergedRow(idx, {
                             type_str: v,
-                            default: variantDefaultForType(v),
+                            default: variantDefaultForType(v, enumCatalog),
                           })
                         }
                         onChangeDefault={(v) =>
@@ -1403,8 +1475,10 @@ function VariantDeltaPanel({
                         }
                         onRemove={() => removeVariantRow(idx)}
                         typeOptions={typeOptions}
+                        typeOptionLabels={typeOptionLabels}
                         typesDisabled={typesLoading}
                         backendErrorMsg={backendMsg}
+                        enumCatalog={enumCatalog}
                       />
                     )
                   })}
@@ -1598,12 +1672,38 @@ function VariantEditorPage() {
       )
     }
   }, [typesError])
-  const typeOptions: ReadonlyArray<string> = useMemo(() => {
+  const baseTypeOptions: ReadonlyArray<string> = useMemo(() => {
     if (typeWhitelist?.types && typeWhitelist.types.length > 0) {
       return typeWhitelist.types
     }
     return FALLBACK_TYPE_WHITELIST
   }, [typeWhitelist])
+
+  // Enum catalog from the auto_generate registry. Shared by all TypedValueEditor
+  // instances on this page via prop-drilling — the hook is fetched ONCE here so
+  // the query cache produces a single network call no matter how many rows.
+  const { data: autoGenData } = useAutoGenerateObjects()
+  const enumCatalog: EnumCatalog = useMemo(() => {
+    const out: Record<string, ReadonlyArray<{ name: string; value: string }>> = {}
+    for (const obj of autoGenData?.objects ?? []) {
+      if (obj.kind === 'enum' && Array.isArray(obj.members)) {
+        out[obj.name] = obj.members.map((m) => ({ name: m.name, value: m.value }))
+      }
+    }
+    return out
+  }, [autoGenData])
+
+  // Extend the variant-row type dropdown with one option per registered enum.
+  // Values: `enum:<Name>` (wire format). Labels: bare enum name for nicer UI.
+  const { typeOptions, typeOptionLabels } = useMemo(() => {
+    const values: string[] = [...baseTypeOptions]
+    const labels: string[] = baseTypeOptions.map((t) => t)
+    for (const name of Object.keys(enumCatalog).sort()) {
+      values.push(`enum:${name}`)
+      labels.push(name)
+    }
+    return { typeOptions: values as ReadonlyArray<string>, typeOptionLabels: labels as ReadonlyArray<string> }
+  }, [baseTypeOptions, enumCatalog])
 
   const {
     state,
@@ -1818,6 +1918,7 @@ function VariantEditorPage() {
             prodSchema={prodSchema ?? null}
             schemaLoading={prodSchemaLoading}
             isDark={isDark}
+            enumCatalog={enumCatalog}
           />
           <VariantDeltaPanel
             state={state}
@@ -1829,8 +1930,10 @@ function VariantEditorPage() {
             setVarDefs={setVarDefs}
             backendFieldError={backendFieldError}
             typeOptions={typeOptions}
+            typeOptionLabels={typeOptionLabels}
             typesLoading={typesLoading}
             isDark={isDark}
+            enumCatalog={enumCatalog}
           />
         </div>
       </div>

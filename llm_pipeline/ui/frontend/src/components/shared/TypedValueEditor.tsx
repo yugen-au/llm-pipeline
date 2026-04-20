@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Plus, Trash2, AlertCircle } from 'lucide-rea
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -11,6 +12,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+
+/** Enum member: `{name: 'POSITIVE', value: 'positive'}`. */
+export interface EnumMemberSpec {
+  name: string
+  value: string
+}
+
+/** Catalog of registered enums keyed by enum name. Passed down from the
+ * parent component that owns the `useAutoGenerateObjects()` hook, so this
+ * component remains hook-free and testable. */
+export type EnumCatalog = Record<string, ReadonlyArray<EnumMemberSpec>>
 
 // ---------------------------------------------------------------------------
 // TypedValueEditor
@@ -27,9 +39,9 @@ import { cn } from '@/lib/utils'
 export interface TypedValueEditorProps {
   /**
    * Type annotation label — e.g. `str`, `int`, `float`, `bool`, `list`,
-   * `dict`, `Optional[str]`. Unknown / complex labels (e.g. a $ref like
-   * `TopicItem`) fall back to the dict/object tree renderer so nested JSON
-   * is still editable.
+   * `dict`, `Optional[str]`, `enum:<Name>`, `Optional[enum:<Name>]`.
+   * Unknown / complex labels (e.g. a $ref like `TopicItem`) fall back to
+   * the dict/object tree renderer so nested JSON is still editable.
    */
   type_str: string
   value: unknown
@@ -41,6 +53,14 @@ export interface TypedValueEditorProps {
   /** Placeholder text for empty scalar inputs / null placeholders. */
   placeholder?: string
   className?: string
+  /**
+   * Registered enum catalog (enum name -> ordered member list). Required
+   * for `enum:<Name>` / `Optional[enum:<Name>]` types to render the member
+   * picker. When a referenced enum is missing from the catalog the widget
+   * falls back to a plain string input with a muted warning — never blocks
+   * editing (user might still want to pin a literal member value manually).
+   */
+  enumCatalog?: EnumCatalog
 }
 
 /** Max recursion depth, matching backend nested-default cap (thematic). */
@@ -48,8 +68,9 @@ const MAX_DEPTH = 20
 
 /** Child type options for heterogeneous list/dict children. Excludes
  * Optional[X] to keep v1 simple — nested nulls can still be expressed as
- * `null` JSON literals when the user picks a concrete type. */
-const CHILD_TYPE_OPTIONS: ReadonlyArray<ChildType> = [
+ * `null` JSON literals when the user picks a concrete type. Registered
+ * enum names are appended at render time as `enum:<Name>` options. */
+const BASIC_CHILD_TYPE_OPTIONS: ReadonlyArray<ChildType> = [
   'str',
   'int',
   'float',
@@ -58,7 +79,15 @@ const CHILD_TYPE_OPTIONS: ReadonlyArray<ChildType> = [
   'dict',
 ]
 
-type ChildType = 'str' | 'int' | 'float' | 'bool' | 'list' | 'dict'
+type ChildType = 'str' | 'int' | 'float' | 'bool' | 'list' | 'dict' | string
+
+/** Encode/decode `enum:<Name>` type_str for child selectors. */
+function isEnumTypeStr(t: string): boolean {
+  return t.startsWith('enum:')
+}
+function enumNameFromTypeStr(t: string): string {
+  return t.slice('enum:'.length)
+}
 
 // ---------------------------------------------------------------------------
 // Type parsing
@@ -66,8 +95,10 @@ type ChildType = 'str' | 'int' | 'float' | 'bool' | 'list' | 'dict'
 
 interface ParsedType {
   /** Base type after Optional-unwrap. */
-  base: 'str' | 'int' | 'float' | 'bool' | 'list' | 'dict' | 'object'
+  base: 'str' | 'int' | 'float' | 'bool' | 'list' | 'dict' | 'object' | 'enum'
   optional: boolean
+  /** Enum class name when `base === 'enum'`. */
+  enumName?: string
 }
 
 function parseTypeStr(type_str: string): ParsedType {
@@ -76,7 +107,11 @@ function parseTypeStr(type_str: string): ParsedType {
   const m = /^Optional\[(.+)\]$/.exec(t)
   if (m) {
     const inner = parseTypeStr(m[1])
-    return { base: inner.base, optional: true }
+    return { base: inner.base, optional: true, enumName: inner.enumName }
+  }
+  // enum:<Name>
+  if (t.startsWith('enum:')) {
+    return { base: 'enum', optional: false, enumName: t.slice('enum:'.length) }
   }
   switch (t) {
     case 'str':
@@ -103,8 +138,15 @@ function parseTypeStr(type_str: string): ParsedType {
   }
 }
 
-/** Default value for a freshly-picked child type. */
-function defaultForChildType(t: ChildType): unknown {
+/** Default value for a freshly-picked child type. For `enum:<Name>` child
+ * types, seeds to the first registered member value or empty string when
+ * the catalog is missing / empty. */
+function defaultForChildType(t: ChildType, enumCatalog?: EnumCatalog): unknown {
+  if (isEnumTypeStr(t)) {
+    const name = enumNameFromTypeStr(t)
+    const members = enumCatalog?.[name]
+    return members && members.length > 0 ? members[0].value : ''
+  }
   switch (t) {
     case 'str':
       return ''
@@ -119,10 +161,13 @@ function defaultForChildType(t: ChildType): unknown {
     case 'dict':
       return {}
   }
+  return null
 }
 
 /** Best-effort runtime type inference — used to pick the right widget when
- * rendering list items / dict values whose declared type is heterogeneous. */
+ * rendering list items / dict values whose declared type is heterogeneous.
+ * Note: enum-typed children in heterogeneous containers can't be detected
+ * from value alone (string) — users must pick `enum:<Name>` explicitly. */
 function inferChildType(v: unknown): ChildType {
   if (typeof v === 'string') return 'str'
   if (typeof v === 'boolean') return 'bool'
@@ -131,6 +176,22 @@ function inferChildType(v: unknown): ChildType {
   if (v !== null && typeof v === 'object') return 'dict'
   // null falls back to str (caller handles the null case separately).
   return 'str'
+}
+
+/** Build the full child-type dropdown option list: base scalars/containers
+ * plus each registered enum as `enum:<Name>`. */
+function buildChildTypeOptions(
+  enumCatalog: EnumCatalog | undefined,
+): ReadonlyArray<{ value: ChildType; label: string }> {
+  const out: Array<{ value: ChildType; label: string }> = BASIC_CHILD_TYPE_OPTIONS.map(
+    (t) => ({ value: t, label: t }),
+  )
+  if (enumCatalog) {
+    for (const name of Object.keys(enumCatalog).sort()) {
+      out.push({ value: `enum:${name}`, label: name })
+    }
+  }
+  return out
 }
 
 // ---------------------------------------------------------------------------
@@ -165,6 +226,94 @@ function ReadOnlyScalar({
     return <Checkbox checked={Boolean(value)} disabled />
   }
   return <span className="text-muted-foreground">{String(value)}</span>
+}
+
+/** Read-only enum display: value + enum-name badge to the right. When the
+ * enum isn't in the catalog, still show the raw value with an "unregistered"
+ * warning badge so the user can spot drift. */
+function ReadOnlyEnum({
+  enumName,
+  value,
+  members,
+}: {
+  enumName: string
+  value: unknown
+  members: ReadonlyArray<EnumMemberSpec> | undefined
+}) {
+  if (value === null || value === undefined) {
+    return <span className="text-muted-foreground italic">null</span>
+  }
+  const raw = String(value)
+  const member = members?.find((m) => m.value === raw)
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-green-600 dark:text-green-400 font-mono text-xs">
+        {member ? member.name : raw}
+        {member && member.name !== member.value && (
+          <span className="text-muted-foreground"> ({member.value})</span>
+        )}
+      </span>
+      <Badge
+        variant="secondary"
+        className="text-[9px] h-4 px-1 py-0 font-mono"
+        title={members ? `enum ${enumName}` : `enum '${enumName}' not in registry`}
+      >
+        {enumName}
+        {!members && ' ?'}
+      </Badge>
+    </span>
+  )
+}
+
+/** Edit-mode enum picker. When the enum is missing from the catalog, falls
+ * back to a plain string input with a muted warning so the user can still
+ * type a literal member value (not blocked). */
+function EnumInput({
+  enumName,
+  value,
+  onChange,
+  members,
+  placeholder,
+}: {
+  enumName: string
+  value: unknown
+  onChange: (v: unknown) => void
+  members: ReadonlyArray<EnumMemberSpec> | undefined
+  placeholder?: string
+}) {
+  if (!members) {
+    return (
+      <div className="w-full space-y-0.5">
+        <Input
+          className="h-8 text-xs font-mono"
+          value={typeof value === 'string' ? value : ''}
+          placeholder={placeholder ?? `enum:${enumName}`}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <p className="text-[10px] text-muted-foreground italic">
+          enum '{enumName}' not in registry — free-text entry
+        </p>
+      </div>
+    )
+  }
+  const current = typeof value === 'string' ? value : ''
+  return (
+    <Select value={current} onValueChange={(v) => onChange(v)}>
+      <SelectTrigger size="sm" className="h-8 text-xs font-mono">
+        <SelectValue placeholder={placeholder ?? 'Select member'} />
+      </SelectTrigger>
+      <SelectContent>
+        {members.map((m) => (
+          <SelectItem key={m.value} value={m.value} className="text-xs font-mono">
+            {m.name}
+            {m.name !== m.value && (
+              <span className="text-muted-foreground"> ({m.value})</span>
+            )}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
 }
 
 function ScalarInput({
@@ -253,22 +402,25 @@ function ListEditor({
   onChange,
   readOnly,
   depth,
+  enumCatalog,
 }: {
   value: unknown[]
   onChange?: (v: unknown) => void
   readOnly: boolean
   depth: number
+  enumCatalog?: EnumCatalog
 }) {
   // Auto-expand only the top two levels (root + immediate children). Deeper
   // containers open collapsed so prod schemas like list[TopicItem] with 10
   // items x 5 fields don't flood the viewport.
   const [expanded, setExpanded] = useState(depth < 2)
   const [newItemType, setNewItemType] = useState<ChildType>('str')
+  const childTypeOptions = buildChildTypeOptions(enumCatalog)
 
   const addItem = useCallback(() => {
     if (!onChange) return
-    onChange([...value, defaultForChildType(newItemType)])
-  }, [value, onChange, newItemType])
+    onChange([...value, defaultForChildType(newItemType, enumCatalog)])
+  }, [value, onChange, newItemType, enumCatalog])
 
   const removeItem = useCallback(
     (idx: number) => {
@@ -294,10 +446,10 @@ function ListEditor({
     (idx: number, t: ChildType) => {
       if (!onChange) return
       const next = value.slice()
-      next[idx] = defaultForChildType(t)
+      next[idx] = defaultForChildType(t, enumCatalog)
       onChange(next)
     },
-    [value, onChange],
+    [value, onChange, enumCatalog],
   )
 
   return (
@@ -323,6 +475,9 @@ function ListEditor({
           style={{ marginLeft: `${depth * 8 + 4}px` }}
         >
           {value.map((item, i) => {
+            // Heterogeneous lists: we can't know at runtime which items are
+            // enum-typed from value alone. Default to inferred scalar type;
+            // users can switch an item to `enum:<Name>` via the dropdown.
             const childType = inferChildType(item)
             return (
               <div key={i} className="flex items-start gap-1 py-0.5">
@@ -336,18 +491,18 @@ function ListEditor({
                   >
                     <SelectTrigger
                       size="sm"
-                      className="h-7 w-[72px] text-[10px] font-mono shrink-0"
+                      className="h-7 w-[100px] text-[10px] font-mono shrink-0"
                     >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CHILD_TYPE_OPTIONS.map((t) => (
+                      {childTypeOptions.map((opt) => (
                         <SelectItem
-                          key={t}
-                          value={t}
+                          key={opt.value}
+                          value={opt.value}
                           className="text-xs font-mono"
                         >
-                          {t}
+                          {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -361,6 +516,7 @@ function ListEditor({
                     readOnly={readOnly}
                     depth={depth + 1}
                     nested
+                    enumCatalog={enumCatalog}
                   />
                 </div>
                 {!readOnly && (
@@ -385,18 +541,18 @@ function ListEditor({
               >
                 <SelectTrigger
                   size="sm"
-                  className="h-7 w-[72px] text-[10px] font-mono shrink-0"
+                  className="h-7 w-[100px] text-[10px] font-mono shrink-0"
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CHILD_TYPE_OPTIONS.map((t) => (
+                  {childTypeOptions.map((opt) => (
                     <SelectItem
-                      key={t}
-                      value={t}
+                      key={opt.value}
+                      value={opt.value}
                       className="text-xs font-mono"
                     >
-                      {t}
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -422,11 +578,13 @@ function DictEditor({
   onChange,
   readOnly,
   depth,
+  enumCatalog,
 }: {
   value: Record<string, unknown>
   onChange?: (v: unknown) => void
   readOnly: boolean
   depth: number
+  enumCatalog?: EnumCatalog
 }) {
   // Auto-expand only the top two levels (root + immediate children). Deeper
   // containers open collapsed so nested dicts with many entries don't flood
@@ -437,15 +595,16 @@ function DictEditor({
 
   // Preserve insertion order by working against entries arrays.
   const entries = Object.entries(value)
+  const childTypeOptions = buildChildTypeOptions(enumCatalog)
 
   const addEntry = useCallback(() => {
     if (!onChange) return
     const k = newEntryKey.trim()
     if (k === '') return
     if (Object.prototype.hasOwnProperty.call(value, k)) return
-    onChange({ ...value, [k]: defaultForChildType(newEntryType) })
+    onChange({ ...value, [k]: defaultForChildType(newEntryType, enumCatalog) })
     setNewEntryKey('')
-  }, [value, onChange, newEntryKey, newEntryType])
+  }, [value, onChange, newEntryKey, newEntryType, enumCatalog])
 
   const removeEntry = useCallback(
     (key: string) => {
@@ -487,9 +646,9 @@ function DictEditor({
   const changeEntryType = useCallback(
     (key: string, t: ChildType) => {
       if (!onChange) return
-      onChange({ ...value, [key]: defaultForChildType(t) })
+      onChange({ ...value, [key]: defaultForChildType(t, enumCatalog) })
     },
-    [value, onChange],
+    [value, onChange, enumCatalog],
   )
 
   return (
@@ -538,18 +697,18 @@ function DictEditor({
                   >
                     <SelectTrigger
                       size="sm"
-                      className="h-7 w-[72px] text-[10px] font-mono shrink-0"
+                      className="h-7 w-[100px] text-[10px] font-mono shrink-0"
                     >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {CHILD_TYPE_OPTIONS.map((t) => (
+                      {childTypeOptions.map((opt) => (
                         <SelectItem
-                          key={t}
-                          value={t}
+                          key={opt.value}
+                          value={opt.value}
                           className="text-xs font-mono"
                         >
-                          {t}
+                          {opt.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -563,6 +722,7 @@ function DictEditor({
                     readOnly={readOnly}
                     depth={depth + 1}
                     nested
+                    enumCatalog={enumCatalog}
                   />
                 </div>
                 {!readOnly && (
@@ -593,18 +753,18 @@ function DictEditor({
               >
                 <SelectTrigger
                   size="sm"
-                  className="h-7 w-[72px] text-[10px] font-mono shrink-0"
+                  className="h-7 w-[100px] text-[10px] font-mono shrink-0"
                 >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CHILD_TYPE_OPTIONS.map((t) => (
+                  {childTypeOptions.map((opt) => (
                     <SelectItem
-                      key={t}
-                      value={t}
+                      key={opt.value}
+                      value={opt.value}
                       className="text-xs font-mono"
                     >
-                      {t}
+                      {opt.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -653,6 +813,7 @@ export function TypedValueEditor({
   className,
   depth = 0,
   nested = false,
+  enumCatalog,
 }: InternalProps) {
   const parsed = parseTypeStr(type_str)
 
@@ -685,6 +846,23 @@ export function TypedValueEditor({
       )
     }
 
+    if (parsed.base === 'enum') {
+      const enumName = parsed.enumName ?? ''
+      const members = enumCatalog?.[enumName]
+      if (readOnly) {
+        return <ReadOnlyEnum enumName={enumName} value={value} members={members} />
+      }
+      return (
+        <EnumInput
+          enumName={enumName}
+          value={value}
+          onChange={(v) => onChange?.(v)}
+          members={members}
+          placeholder={placeholder}
+        />
+      )
+    }
+
     if (parsed.base === 'list') {
       const arr = Array.isArray(value) ? value : []
       return (
@@ -693,6 +871,7 @@ export function TypedValueEditor({
           onChange={readOnly ? undefined : onChange}
           readOnly={readOnly}
           depth={depth}
+          enumCatalog={enumCatalog}
         />
       )
     }
@@ -707,6 +886,7 @@ export function TypedValueEditor({
           onChange={readOnly ? undefined : onChange}
           readOnly={readOnly}
           depth={depth}
+          enumCatalog={enumCatalog}
         />
       )
     }
@@ -736,7 +916,7 @@ export function TypedValueEditor({
                 if (c === true) {
                   onChange?.(null)
                 } else {
-                  onChange?.(defaultForBase(parsed.base))
+                  onChange?.(defaultForBase(parsed.base, parsed.enumName, enumCatalog))
                 }
               }}
               aria-label="null"
@@ -767,7 +947,11 @@ export function TypedValueEditor({
   )
 }
 
-function defaultForBase(base: ParsedType['base']): unknown {
+function defaultForBase(
+  base: ParsedType['base'],
+  enumName?: string,
+  enumCatalog?: EnumCatalog,
+): unknown {
   switch (base) {
     case 'str':
       return ''
@@ -782,5 +966,9 @@ function defaultForBase(base: ParsedType['base']): unknown {
     case 'dict':
     case 'object':
       return {}
+    case 'enum': {
+      const members = enumName ? enumCatalog?.[enumName] : undefined
+      return members && members.length > 0 ? members[0].value : ''
+    }
   }
 }
