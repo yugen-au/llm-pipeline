@@ -30,7 +30,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import {
+  PromptContentEditor,
+  useIsDark,
+  type VarDefs,
+} from '@/components/prompts/PromptContentEditor'
+import { VariableDefinitionsEditor } from '@/components/prompts/VariableDefinitionsEditor'
 
 export const Route = createFileRoute('/evals/$datasetId/variants/$variantId')({
   component: VariantEditorPage,
@@ -63,9 +68,6 @@ const OP_CHOICES: ReadonlyArray<InstructionDeltaOp> = ['add', 'modify']
 
 const MAX_DELTA_ENTRIES = 50
 
-/** Cap on variable_definitions rows — prompt-scoped so not huge. */
-const MAX_VAR_DEF_ENTRIES = 20
-
 /** Fields inherited from LLMResultMixin — cannot be removed in v2. */
 const INHERITED_FIELDS: ReadonlyArray<string> = ['confidence_score', 'notes']
 
@@ -80,65 +82,72 @@ interface EditorState {
   systemPrompt: string
   userPrompt: string
   instructionsDelta: InstructionDeltaItem[]
-  variableDefinitions: VariableDefinitionRow[]
+  /**
+   * Variable definition overrides keyed by variable name. Stored as a Record
+   * matching the shared `VarDefs` shape used by the reusable prompts
+   * `VariableDefinitionsEditor`. Serialised to `VariableDefinitions` (same
+   * shape) on save — backend accepts this directly.
+   */
+  variableDefinitions: VarDefs
 }
 
 /**
- * UI row shape for the variable_definitions editor. Stored as an array of rows
- * (easy to render / dirty-track) and serialised to `VariableDefinitions`
- * (backend map shape keyed by name) on save.
+ * Read stored `VariableDefinitions` (or a legacy list-of-dicts variant) into
+ * the shared `VarDefs` Record shape. Backend historically accepted both; we
+ * now standardise on Record going forward but keep list-shape tolerance for
+ * backward compat on read.
  */
-interface VariableDefinitionRow {
-  name: string
-  type: string
-  auto_generate: string
-}
-
-/**
- * Convert a stored `VariableDefinitions` map (or null/undefined) into the
- * UI row list. Each `[name, spec]` entry becomes one row; extra keys on the
- * spec are dropped from the UI view but preserved via round-trip only if the
- * user does not re-save (we overwrite on save — documented trade-off). The
- * backend also accepts list-of-dicts with a `name` key, so tolerate that shape
- * here for resilience against hand-edited deltas.
- */
-function varDefsToRows(
+function readVarDefs(
   defs: VariableDefinitions | null | undefined,
-): VariableDefinitionRow[] {
-  if (!defs) return []
+): VarDefs {
+  if (!defs) return {}
   if (Array.isArray(defs)) {
-    return (defs as Array<Record<string, unknown>>)
-      .filter((d) => d && typeof d === 'object')
-      .map((d) => ({
-        name: typeof d.name === 'string' ? d.name : '',
-        type: typeof d.type === 'string' ? d.type : '',
+    const out: VarDefs = {}
+    for (const d of defs as Array<Record<string, unknown>>) {
+      if (!d || typeof d !== 'object') continue
+      const name = typeof d.name === 'string' ? d.name : ''
+      if (!name) continue
+      out[name] = {
+        type: typeof d.type === 'string' ? d.type : 'str',
+        description: typeof d.description === 'string' ? d.description : '',
         auto_generate:
           typeof d.auto_generate === 'string' ? d.auto_generate : '',
-      }))
+      }
+    }
+    return out
   }
-  return Object.entries(defs).map(([name, spec]) => ({
-    name,
-    type: typeof spec?.type === 'string' ? spec.type : '',
-    auto_generate:
-      typeof spec?.auto_generate === 'string' ? spec.auto_generate : '',
-  }))
+  // Record shape: normalise to VarDefs, coercing missing fields.
+  const out: VarDefs = {}
+  for (const [name, spec] of Object.entries(defs)) {
+    out[name] = {
+      type: typeof spec?.type === 'string' ? spec.type : 'str',
+      description:
+        typeof spec?.description === 'string' ? spec.description : '',
+      auto_generate:
+        typeof spec?.auto_generate === 'string' ? spec.auto_generate : '',
+    }
+  }
+  return out
 }
 
 /**
- * Serialise UI rows to the backend map shape. Rows with empty `name` are
- * dropped. `auto_generate` is omitted when blank so we don't spuriously
- * overwrite prod defs with an empty expression string.
+ * Serialise `VarDefs` back to `VariableDefinitions` for the backend.
+ * Drops rows with empty names; omits `auto_generate` when blank so we don't
+ * spuriously overwrite prod defs with an empty expression string.
  */
-function rowsToVarDefs(
-  rows: VariableDefinitionRow[],
-): VariableDefinitions | null {
-  const filtered = rows.filter((r) => r.name.trim() !== '')
-  if (filtered.length === 0) return null
+function writeVarDefs(defs: VarDefs): VariableDefinitions | null {
+  const entries = Object.entries(defs).filter(([name]) => name.trim() !== '')
+  if (entries.length === 0) return null
   const out: VariableDefinitions = {}
-  for (const r of filtered) {
-    const entry: VariableDefinitions[string] = { type: r.type }
-    if (r.auto_generate.trim() !== '') entry.auto_generate = r.auto_generate
-    out[r.name.trim()] = entry
+  for (const [name, spec] of entries) {
+    const entry: VariableDefinitions[string] = { type: spec.type }
+    if (spec.description && spec.description.trim() !== '') {
+      entry.description = spec.description
+    }
+    if (spec.auto_generate && spec.auto_generate.trim() !== '') {
+      entry.auto_generate = spec.auto_generate
+    }
+    out[name.trim()] = entry
   }
   return out
 }
@@ -159,7 +168,7 @@ function variantToEditorState(v: VariantItem): EditorState {
     instructionsDelta: Array.isArray(d.instructions_delta)
       ? d.instructions_delta.map((i) => ({ ...i }))
       : [],
-    variableDefinitions: varDefsToRows(d.variable_definitions),
+    variableDefinitions: readVarDefs(d.variable_definitions),
   }
 }
 
@@ -170,7 +179,7 @@ function editorStateToDelta(s: EditorState): VariantDelta {
     user_prompt: s.userPrompt === '' ? null : s.userPrompt,
     instructions_delta:
       s.instructionsDelta.length === 0 ? null : s.instructionsDelta,
-    variable_definitions: rowsToVarDefs(s.variableDefinitions),
+    variable_definitions: writeVarDefs(s.variableDefinitions),
   }
 }
 
@@ -195,17 +204,14 @@ function statesEqual(a: EditorState, b: EditorState): boolean {
     )
       return false
   }
-  if (a.variableDefinitions.length !== b.variableDefinitions.length)
+  // Record shape: order-independent JSON comparison is sufficient — both sides
+  // are produced by `readVarDefs`/component updates which always emit stable
+  // key ordering (component key set is deterministic).
+  if (
+    JSON.stringify(a.variableDefinitions) !==
+    JSON.stringify(b.variableDefinitions)
+  ) {
     return false
-  for (let i = 0; i < a.variableDefinitions.length; i++) {
-    const x = a.variableDefinitions[i]
-    const y = b.variableDefinitions[i]
-    if (
-      x.name !== y.name ||
-      x.type !== y.type ||
-      x.auto_generate !== y.auto_generate
-    )
-      return false
   }
   return true
 }
@@ -267,39 +273,8 @@ function useVariantEditor(variant: VariantItem | undefined) {
     })
   }, [])
 
-  const addVarDefRow = useCallback(() => {
-    setState((prev) => {
-      if (!prev) return prev
-      if (prev.variableDefinitions.length >= MAX_VAR_DEF_ENTRIES) return prev
-      return {
-        ...prev,
-        variableDefinitions: [
-          ...prev.variableDefinitions,
-          { name: '', type: '', auto_generate: '' },
-        ],
-      }
-    })
-  }, [])
-
-  const updateVarDefRow = useCallback(
-    (idx: number, patch: Partial<VariableDefinitionRow>) => {
-      setState((prev) => {
-        if (!prev) return prev
-        const next = prev.variableDefinitions.slice()
-        next[idx] = { ...next[idx], ...patch }
-        return { ...prev, variableDefinitions: next }
-      })
-    },
-    [],
-  )
-
-  const removeVarDefRow = useCallback((idx: number) => {
-    setState((prev) => {
-      if (!prev) return prev
-      const next = prev.variableDefinitions.slice()
-      next.splice(idx, 1)
-      return { ...prev, variableDefinitions: next }
-    })
+  const setVarDefs = useCallback((defs: VarDefs) => {
+    setState((prev) => (prev ? { ...prev, variableDefinitions: defs } : prev))
   }, [])
 
   const resetToBaseline = useCallback(() => {
@@ -314,9 +289,7 @@ function useVariantEditor(variant: VariantItem | undefined) {
     addDeltaRow,
     updateDeltaRow,
     removeDeltaRow,
-    addVarDefRow,
-    updateVarDefRow,
-    removeVarDefRow,
+    setVarDefs,
     resetToBaseline,
   }
 }
@@ -563,28 +536,32 @@ function VariantDeltaPanel({
   addDeltaRow,
   updateDeltaRow,
   removeDeltaRow,
-  addVarDefRow,
-  updateVarDefRow,
-  removeVarDefRow,
+  setVarDefs,
   fieldError,
   typeOptions,
   typesLoading,
+  isDark,
 }: {
   state: EditorState
   patch: (p: Partial<EditorState>) => void
   addDeltaRow: () => void
   updateDeltaRow: (idx: number, p: Partial<InstructionDeltaItem>) => void
   removeDeltaRow: (idx: number) => void
-  addVarDefRow: () => void
-  updateVarDefRow: (idx: number, p: Partial<VariableDefinitionRow>) => void
-  removeVarDefRow: (idx: number) => void
+  setVarDefs: (defs: VarDefs) => void
   fieldError: { rowIdx: number | null; message: string } | null
   typeOptions: ReadonlyArray<string>
   typesLoading: boolean
+  isDark: boolean
 }) {
   const nearCap = state.instructionsDelta.length >= MAX_DELTA_ENTRIES - 5
   const atCap = state.instructionsDelta.length >= MAX_DELTA_ENTRIES
-  const varDefsAtCap = state.variableDefinitions.length >= MAX_VAR_DEF_ENTRIES
+
+  // Concatenate both prompts so the shared VariableDefinitionsEditor can
+  // extract variables from either.
+  const combinedPromptContent = useMemo(
+    () => state.systemPrompt + '\n' + state.userPrompt,
+    [state.systemPrompt, state.userPrompt],
+  )
 
   return (
     <Card className="h-full">
@@ -633,11 +610,12 @@ function VariantDeltaPanel({
           <Label className="text-[10px] uppercase text-muted-foreground">
             System prompt override
           </Label>
-          <Textarea
-            className="min-h-[80px] text-xs font-mono"
-            placeholder="Leave blank to use production system prompt"
+          <PromptContentEditor
             value={state.systemPrompt}
-            onChange={(e) => patch({ systemPrompt: e.target.value })}
+            onChange={(v) => patch({ systemPrompt: v })}
+            varDefs={state.variableDefinitions}
+            isDark={isDark}
+            height="240px"
           />
         </div>
 
@@ -646,11 +624,12 @@ function VariantDeltaPanel({
           <Label className="text-[10px] uppercase text-muted-foreground">
             User prompt override
           </Label>
-          <Textarea
-            className="min-h-[80px] text-xs font-mono"
-            placeholder="Leave blank to use production user prompt"
+          <PromptContentEditor
             value={state.userPrompt}
-            onChange={(e) => patch({ userPrompt: e.target.value })}
+            onChange={(v) => patch({ userPrompt: v })}
+            varDefs={state.variableDefinitions}
+            isDark={isDark}
+            height="240px"
           />
         </div>
 
@@ -732,94 +711,26 @@ function VariantDeltaPanel({
 
         {/* Variable definitions */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label className="text-[10px] uppercase text-muted-foreground">
-              Variable definitions ({state.variableDefinitions.length}/
-              {MAX_VAR_DEF_ENTRIES})
-            </Label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1"
-              onClick={addVarDefRow}
-              disabled={varDefsAtCap}
-            >
-              <Plus className="size-3" /> Add variable
-            </Button>
-          </div>
+          <Label className="text-[10px] uppercase text-muted-foreground">
+            Variable definitions
+          </Label>
 
           <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2 flex items-start gap-2 text-[11px] text-muted-foreground">
             <Info className="size-3 shrink-0 mt-0.5 text-blue-500" />
             <span>
-              Variables defined here override or add to the production prompt's
-              variable_definitions. Variant wins on name collision.{' '}
+              Variables are auto-detected from the system and user prompt
+              overrides above. Edits here override or add to the production
+              prompt's variable_definitions — variant wins on name collision.{' '}
               <code>auto_generate</code> expressions are resolved at prompt
-              render time by the backend registry — not evaluated client-side.
+              render time by the backend registry (not evaluated client-side).
             </span>
           </div>
 
-          {varDefsAtCap && (
-            <p className="text-[10px] text-destructive">
-              At the {MAX_VAR_DEF_ENTRIES}-entry cap — remove entries to add
-              more.
-            </p>
-          )}
-
-          {state.variableDefinitions.length === 0 ? (
-            <p className="text-muted-foreground italic text-[11px]">
-              No variable overrides. Click "Add variable" to override or extend
-              the prompt's variable_definitions.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <div className="grid grid-cols-[1fr_120px_1fr_32px] gap-2 px-1 text-[10px] uppercase text-muted-foreground">
-                <span>Name</span>
-                <span>Type</span>
-                <span>auto_generate</span>
-                <span />
-              </div>
-              {state.variableDefinitions.map((row, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-[1fr_120px_1fr_32px] gap-2 items-start"
-                >
-                  <Input
-                    className="h-8 text-xs font-mono"
-                    placeholder="variable_name"
-                    value={row.name}
-                    onChange={(e) =>
-                      updateVarDefRow(idx, { name: e.target.value })
-                    }
-                  />
-                  <Input
-                    className="h-8 text-xs font-mono"
-                    placeholder="str / int / EnumName"
-                    value={row.type}
-                    onChange={(e) =>
-                      updateVarDefRow(idx, { type: e.target.value })
-                    }
-                  />
-                  <Input
-                    className="h-8 text-xs font-mono"
-                    placeholder="optional, e.g. enum_values(Foo)"
-                    value={row.auto_generate}
-                    onChange={(e) =>
-                      updateVarDefRow(idx, { auto_generate: e.target.value })
-                    }
-                  />
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-destructive"
-                    onClick={() => removeVarDefRow(idx)}
-                    title={`Remove variable row ${idx + 1}`}
-                  >
-                    <Trash2 className="size-3" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+          <VariableDefinitionsEditor
+            content={combinedPromptContent}
+            value={state.variableDefinitions}
+            onChange={setVarDefs}
+          />
         </div>
       </CardContent>
     </Card>
@@ -836,6 +747,7 @@ function VariantEditorPage() {
   const datasetId = Number(rawDatasetId)
   const variantId = Number(rawVariantId)
   const navigate = useNavigate()
+  const isDark = useIsDark()
 
   const {
     data: variant,
@@ -877,9 +789,7 @@ function VariantEditorPage() {
     addDeltaRow,
     updateDeltaRow,
     removeDeltaRow,
-    addVarDefRow,
-    updateVarDefRow,
-    removeVarDefRow,
+    setVarDefs,
     resetToBaseline,
   } = useVariantEditor(variant)
 
@@ -1079,12 +989,11 @@ function VariantEditorPage() {
             addDeltaRow={addDeltaRow}
             updateDeltaRow={updateDeltaRow}
             removeDeltaRow={removeDeltaRow}
-            addVarDefRow={addVarDefRow}
-            updateVarDefRow={updateVarDefRow}
-            removeVarDefRow={removeVarDefRow}
+            setVarDefs={setVarDefs}
             fieldError={fieldError}
             typeOptions={typeOptions}
             typesLoading={typesLoading}
+            isDark={isDark}
           />
         </div>
       </div>
