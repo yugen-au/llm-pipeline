@@ -168,26 +168,57 @@ def get_step_prompts(
     request: Request,
     db: DBSession,
 ) -> StepPromptsResponse:
-    """Return prompt/instruction content for a pipeline step."""
+    """Return prompt/instruction content for a pipeline step.
+
+    Resolves prompt keys via the shared resolver so decorator-default
+    (tier 2) and DB auto-discovery (tier 3) keys are surfaced, not just
+    tier-1 declared values. Iterates every strategy on the pipeline —
+    keys from all strategies that include ``step_name`` are unioned.
+    """
+    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
+
     registry: dict = getattr(request.app.state, "introspection_registry", {})
     if name not in registry:
         raise HTTPException(
             status_code=404, detail=f"Pipeline '{name}' not found"
         )
 
-    # Collect prompt keys declared by this step in this pipeline via
-    # introspection to prevent cross-pipeline leakage when two pipelines
-    # share the same step_name.
     pipeline_cls = registry[name]
-    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
     declared_keys: set[str] = set()
-    for strategy in metadata.get("strategies", []):
-        for step in strategy.get("steps", []):
-            if step.get("step_name") == step_name:
-                if step.get("system_key"):
-                    declared_keys.add(step["system_key"])
-                if step.get("user_key"):
-                    declared_keys.add(step["user_key"])
+
+    strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
+    strategy_classes = (
+        getattr(strategies_cls, "STRATEGIES", []) if strategies_cls else []
+    ) or []
+
+    for strategy_cls in strategy_classes:
+        try:
+            strategy = strategy_cls()
+        except Exception:
+            logger.debug(
+                "Failed to instantiate strategy %s for step prompts",
+                strategy_cls.__name__, exc_info=True,
+            )
+            continue
+
+        strategy_name = getattr(strategy, "name", None)
+        try:
+            step_defs = strategy.get_steps()
+        except Exception:
+            logger.debug(
+                "Failed to get_steps for %s", strategy_cls.__name__,
+                exc_info=True,
+            )
+            continue
+
+        for sd in step_defs:
+            if sd.step_name != step_name:
+                continue
+            sys_k, usr_k = resolve_with_auto_discovery(sd, db, strategy_name)
+            if sys_k:
+                declared_keys.add(sys_k)
+            if usr_k:
+                declared_keys.add(usr_k)
 
     if not declared_keys:
         return StepPromptsResponse(

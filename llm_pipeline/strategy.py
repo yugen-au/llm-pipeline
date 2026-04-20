@@ -51,79 +51,31 @@ class StepDefinition:
     def create_step(self, pipeline: 'PipelineConfig'):
         """
         Create a configured step instance with pipeline reference.
-        
-        Auto-discovers prompt keys if not provided:
-        1. Strategy-level: step_name.strategy_name (e.g., 'constraint_extraction.lane_based')
-        2. Step-level: step_name (e.g., 'constraint_extraction')
-        3. Error if none found
-        
+
+        Delegates prompt-key resolution to ``llm_pipeline.prompts.resolver``:
+        1. Tier 1/2: explicit or decorator-default keys on this StepDefinition
+        2. Tier 3: DB auto-discovery (``{step}.{strategy}`` then ``{step}``)
+
         Args:
             pipeline: Reference to the pipeline instance
-        
+
         Returns:
             Instantiated step with prompts configured and pipeline reference
         """
-        from sqlmodel import select
-        from llm_pipeline.db.prompt import Prompt
+        from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
 
-        # Get step name for auto-discovery
-        step_class_name = self.step_class.__name__
-        step_name = to_snake_case(step_class_name, strip_suffix='Step')
-        
-        # Determine final prompt keys with auto-discovery
-        final_system_key = self.system_instruction_key
-        final_user_key = self.user_prompt_key
-        
-        # Auto-discover if keys are None
-        if final_system_key is None or final_user_key is None:
-            # Get current strategy name from pipeline
-            strategy_name = None
-            if hasattr(pipeline, '_current_strategy') and pipeline._current_strategy:
-                strategy_name = pipeline._current_strategy.name
-            
-            # Try strategy-level first (step_name.strategy_name)
-            if strategy_name:
-                if final_system_key is None:
-                    strategy_key = f"{step_name}.{strategy_name}"
-                    system_prompt = pipeline.session.exec(select(Prompt).where(
-                        Prompt.prompt_key == strategy_key,
-                        Prompt.prompt_type == 'system',
-                        Prompt.is_active == True
-                    )).first()
-                    if system_prompt:
-                        final_system_key = system_prompt.prompt_key
-                
-                if final_user_key is None:
-                    strategy_key = f"{step_name}.{strategy_name}"
-                    user_prompt = pipeline.session.exec(select(Prompt).where(
-                        Prompt.prompt_key == strategy_key,
-                        Prompt.prompt_type == 'user',
-                        Prompt.is_active == True
-                    )).first()
-                    if user_prompt:
-                        final_user_key = user_prompt.prompt_key
-            
-            # Fall back to step-level (step_name)
-            if final_system_key is None:
-                system_prompt = pipeline.session.exec(select(Prompt).where(
-                    Prompt.prompt_key == step_name,
-                    Prompt.prompt_type == 'system',
-                    Prompt.is_active == True
-                )).first()
-                if system_prompt:
-                    final_system_key = system_prompt.prompt_key
+        strategy_name = None
+        if hasattr(pipeline, '_current_strategy') and pipeline._current_strategy:
+            strategy_name = pipeline._current_strategy.name
 
-            if final_user_key is None:
-                user_prompt = pipeline.session.exec(select(Prompt).where(
-                    Prompt.prompt_key == step_name,
-                    Prompt.prompt_type == 'user',
-                    Prompt.is_active == True
-                )).first()
-                if user_prompt:
-                    final_user_key = user_prompt.prompt_key
-        
+        final_system_key, final_user_key = resolve_with_auto_discovery(
+            self, pipeline.session, strategy_name
+        )
+
         # Validate that we have at least one key
         if final_system_key is None and final_user_key is None:
+            step_class_name = self.step_class.__name__
+            step_name = to_snake_case(step_class_name, strip_suffix='Step')
             raise ValueError(
                 f"No prompts found for {step_class_name}. "
                 f"Searched for:\n"
