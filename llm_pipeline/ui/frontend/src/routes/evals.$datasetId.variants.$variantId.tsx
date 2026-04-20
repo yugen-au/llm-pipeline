@@ -919,7 +919,7 @@ function ProdStepDefPanel({
                           {f.type_label}
                         </Badge>
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-1.5 max-w-0 w-full">
                         <div className="max-h-[320px] overflow-auto">
                           <TypedValueEditor
                             readOnly
@@ -1104,7 +1104,7 @@ function ProdFieldRow({
           {row.type_label}
         </Badge>
       </td>
-      <td className="px-2 py-1.5">
+      <td className="px-2 py-1.5 max-w-0 w-full">
         <div className="max-h-[320px] overflow-auto">
           <TypedValueEditor
             type_str={row.type_label}
@@ -1209,7 +1209,7 @@ function VariantFieldRow({
           </SelectContent>
         </Select>
       </td>
-      <td className="px-2 py-1.5">
+      <td className="px-2 py-1.5 max-w-0 w-full">
         <div className="max-h-[320px] overflow-auto">
           <TypedValueEditor
             type_str={row.type_str}
