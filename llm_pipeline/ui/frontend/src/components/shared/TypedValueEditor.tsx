@@ -259,7 +259,10 @@ function ListEditor({
   readOnly: boolean
   depth: number
 }) {
-  const [expanded, setExpanded] = useState(depth < 3)
+  // Auto-expand only the top two levels (root + immediate children). Deeper
+  // containers open collapsed so prod schemas like list[TopicItem] with 10
+  // items x 5 fields don't flood the viewport.
+  const [expanded, setExpanded] = useState(depth < 2)
   const [newItemType, setNewItemType] = useState<ChildType>('str')
 
   const addItem = useCallback(() => {
@@ -302,7 +305,7 @@ function ListEditor({
       <button
         type="button"
         className="flex w-full items-center gap-1 py-0.5 font-mono text-xs hover:bg-muted/30 rounded"
-        style={{ paddingLeft: `${depth * 16}px` }}
+        style={{ paddingLeft: `${depth * 8}px` }}
         onClick={() => setExpanded((p) => !p)}
       >
         {expanded ? (
@@ -315,15 +318,14 @@ function ListEditor({
         </span>
       </button>
       {expanded && (
-        <div>
+        <div
+          className="border-l border-border/60 pl-1"
+          style={{ marginLeft: `${depth * 8 + 4}px` }}
+        >
           {value.map((item, i) => {
             const childType = inferChildType(item)
             return (
-              <div
-                key={i}
-                className="flex items-start gap-1 py-0.5"
-                style={{ paddingLeft: `${(depth + 1) * 16}px` }}
-              >
+              <div key={i} className="flex items-start gap-1 py-0.5">
                 <span className="text-muted-foreground font-mono text-xs shrink-0 w-4 pt-1.5">
                   {i}:
                 </span>
@@ -376,10 +378,7 @@ function ListEditor({
             )
           })}
           {!readOnly && (
-            <div
-              className="flex items-center gap-1 py-1"
-              style={{ paddingLeft: `${(depth + 1) * 16}px` }}
-            >
+            <div className="flex items-center gap-1 py-1">
               <Select
                 value={newItemType}
                 onValueChange={(t) => setNewItemType(t as ChildType)}
@@ -429,7 +428,10 @@ function DictEditor({
   readOnly: boolean
   depth: number
 }) {
-  const [expanded, setExpanded] = useState(depth < 3)
+  // Auto-expand only the top two levels (root + immediate children). Deeper
+  // containers open collapsed so nested dicts with many entries don't flood
+  // the viewport.
+  const [expanded, setExpanded] = useState(depth < 2)
   const [newEntryKey, setNewEntryKey] = useState('')
   const [newEntryType, setNewEntryType] = useState<ChildType>('str')
 
@@ -495,7 +497,7 @@ function DictEditor({
       <button
         type="button"
         className="flex w-full items-center gap-1 py-0.5 font-mono text-xs hover:bg-muted/30 rounded"
-        style={{ paddingLeft: `${depth * 16}px` }}
+        style={{ paddingLeft: `${depth * 8}px` }}
         onClick={() => setExpanded((p) => !p)}
       >
         {expanded ? (
@@ -510,15 +512,14 @@ function DictEditor({
         </span>
       </button>
       {expanded && (
-        <div>
+        <div
+          className="border-l border-border/60 pl-1"
+          style={{ marginLeft: `${depth * 8 + 4}px` }}
+        >
           {entries.map(([k, v]) => {
             const childType = inferChildType(v)
             return (
-              <div
-                key={k}
-                className="flex items-start gap-1 py-0.5"
-                style={{ paddingLeft: `${(depth + 1) * 16}px` }}
-              >
+              <div key={k} className="flex items-start gap-1 py-0.5">
                 {readOnly ? (
                   <span className="text-muted-foreground font-mono text-xs shrink-0 pt-1.5">
                     {k}:
@@ -579,10 +580,7 @@ function DictEditor({
             )
           })}
           {!readOnly && (
-            <div
-              className="flex items-center gap-1 py-1"
-              style={{ paddingLeft: `${(depth + 1) * 16}px` }}
-            >
+            <div className="flex items-center gap-1 py-1">
               <Input
                 className="h-7 w-[120px] text-[11px] font-mono shrink-0"
                 placeholder="key"

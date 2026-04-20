@@ -920,16 +920,18 @@ function ProdStepDefPanel({
                         </Badge>
                       </td>
                       <td className="px-2 py-1.5">
-                        <TypedValueEditor
-                          readOnly
-                          type_str={f.type_label}
-                          value={f.prod_default}
-                          placeholder={
-                            f.is_required && f.prod_default === undefined
-                              ? 'required — no default'
-                              : undefined
-                          }
-                        />
+                        <div className="max-h-[320px] overflow-y-auto">
+                          <TypedValueEditor
+                            readOnly
+                            type_str={f.type_label}
+                            value={f.prod_default}
+                            placeholder={
+                              f.is_required && f.prod_default === undefined
+                                ? 'required — no default'
+                                : undefined
+                            }
+                          />
+                        </div>
                       </td>
                       <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
                         {f.description ? (
@@ -1103,15 +1105,17 @@ function ProdFieldRow({
         </Badge>
       </td>
       <td className="px-2 py-1.5">
-        <TypedValueEditor
-          type_str={row.type_label}
-          value={row.current_default}
-          onChange={(v) => onChangeDefault(v)}
-          placeholder={
-            isRequiredNoDefault ? 'required — no default' : undefined
-          }
-          error={backendErrorMsg}
-        />
+        <div className="max-h-[320px] overflow-y-auto">
+          <TypedValueEditor
+            type_str={row.type_label}
+            value={row.current_default}
+            onChange={(v) => onChangeDefault(v)}
+            placeholder={
+              isRequiredNoDefault ? 'required — no default' : undefined
+            }
+            error={backendErrorMsg}
+          />
+        </div>
       </td>
       <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
         {row.description ? (
@@ -1206,12 +1210,14 @@ function VariantFieldRow({
         </Select>
       </td>
       <td className="px-2 py-1.5">
-        <TypedValueEditor
-          type_str={row.type_str}
-          value={row.default}
-          onChange={onChangeDefault}
-          error={backendErrorMsg}
-        />
+        <div className="max-h-[320px] overflow-y-auto">
+          <TypedValueEditor
+            type_str={row.type_str}
+            value={row.default}
+            onChange={onChangeDefault}
+            error={backendErrorMsg}
+          />
+        </div>
       </td>
       <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
         <span className="text-muted-foreground/50">—</span>
