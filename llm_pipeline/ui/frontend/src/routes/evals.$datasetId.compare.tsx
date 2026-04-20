@@ -12,8 +12,21 @@ import {
   ChevronRight,
   ChevronDown,
 } from 'lucide-react'
-import { useDataset, useEvalRun, useVariant } from '@/api/evals'
-import type { CaseItem, CaseResultItem, RunDetail } from '@/api/evals'
+import {
+  useDataset,
+  useDatasetProdModel,
+  useDatasetProdPrompts,
+  useEvalRun,
+  useVariant,
+} from '@/api/evals'
+import type {
+  CaseItem,
+  CaseResultItem,
+  ProdPromptsResponse,
+  RunDetail,
+  VariableDefinitions,
+  VariantDelta,
+} from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -231,6 +244,106 @@ function ScoresCell({ result }: { result: CaseResultItem | undefined }) {
 }
 
 // ---------------------------------------------------------------------------
+// Effective-config diff helpers (for Delta summary card)
+// ---------------------------------------------------------------------------
+
+/**
+ * Shape of the before/after objects fed to JsonViewer's diff mode. Keys must
+ * match on both sides so unchanged fields render muted and overrides render
+ * as CHANGE.
+ */
+interface EffectiveConfig {
+  model: string | null
+  system_prompt: string | null
+  user_prompt: string | null
+  variable_definitions: VariableDefinitions | null
+  instructions_delta: unknown[]
+}
+
+/**
+ * Tolerate both map and list shapes from the backend prompt column, matching
+ * the `readVarDefs` helper in the variant editor. Returns null for empty.
+ */
+function normalizeVarDefs(
+  defs: VariableDefinitions | null | undefined,
+): VariableDefinitions | null {
+  if (!defs) return null
+  if (Array.isArray(defs)) {
+    const out: VariableDefinitions = {}
+    for (const d of defs as Array<Record<string, unknown>>) {
+      if (!d || typeof d !== 'object') continue
+      const name = typeof d.name === 'string' ? d.name : ''
+      if (!name) continue
+      const type = typeof d.type === 'string' ? d.type : 'str'
+      const entry: VariableDefinitions[string] = { type }
+      if (typeof d.description === 'string') entry.description = d.description
+      if (typeof d.auto_generate === 'string') entry.auto_generate = d.auto_generate
+      out[name] = entry
+    }
+    return Object.keys(out).length === 0 ? null : out
+  }
+  return Object.keys(defs).length === 0 ? null : defs
+}
+
+/** Union of prod system + user variable_definitions. Variant-editor uses same merge. */
+function mergeProdVarDefs(
+  prod: ProdPromptsResponse | undefined,
+): VariableDefinitions | null {
+  const sys = normalizeVarDefs(
+    (prod?.system?.variable_definitions ?? null) as VariableDefinitions | null,
+  )
+  const user = normalizeVarDefs(
+    (prod?.user?.variable_definitions ?? null) as VariableDefinitions | null,
+  )
+  if (!sys && !user) return null
+  return { ...(sys ?? {}), ...(user ?? {}) }
+}
+
+/** Apply variant variable_definitions override on top of prod baseline. */
+function applyVarDefsDelta(
+  prodDefs: VariableDefinitions | null,
+  variantDefs: VariableDefinitions | null | undefined,
+): VariableDefinitions | null {
+  const v = normalizeVarDefs(variantDefs)
+  if (!prodDefs && !v) return null
+  if (!prodDefs) return v
+  if (!v) return prodDefs
+  return { ...prodDefs, ...v }
+}
+
+function buildBefore(
+  prodModel: string | null,
+  prod: ProdPromptsResponse | undefined,
+): EffectiveConfig {
+  return {
+    model: prodModel,
+    system_prompt: prod?.system?.content ?? null,
+    user_prompt: prod?.user?.content ?? null,
+    variable_definitions: mergeProdVarDefs(prod),
+    instructions_delta: [],
+  }
+}
+
+function buildAfter(
+  delta: VariantDelta | null | undefined,
+  before: EffectiveConfig,
+): EffectiveConfig {
+  const d = delta ?? null
+  return {
+    model: d?.model ?? before.model,
+    system_prompt: d?.system_prompt ?? before.system_prompt,
+    user_prompt: d?.user_prompt ?? before.user_prompt,
+    variable_definitions: applyVarDefsDelta(
+      before.variable_definitions,
+      d?.variable_definitions ?? null,
+    ),
+    instructions_delta: Array.isArray(d?.instructions_delta)
+      ? (d!.instructions_delta as unknown[])
+      : [],
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Stat card
 // ---------------------------------------------------------------------------
 
@@ -288,7 +401,7 @@ function ErrorBlock({ message }: { message: string }) {
 }
 
 function JsonScroll({ children }: { children: React.ReactNode }) {
-  return <div className="max-h-[300px] overflow-auto">{children}</div>
+  return <div className="max-h-[300px] overflow-auto min-w-0">{children}</div>
 }
 
 function InputExpectedPanel({ caseDef }: { caseDef: CaseItem | undefined }) {
@@ -504,6 +617,13 @@ function CompareRunsPage() {
   const variantIdForLookup = variantRun?.variant_id ?? 0
   const variantQ = useVariant(datasetId, variantIdForLookup)
 
+  // Prod-config fetches feed the Delta summary diff view. Non-blocking:
+  // the main page and per-case table render regardless of these results;
+  // the Delta card falls back to the raw delta_snapshot render if either
+  // fetch errors.
+  const prodPromptsQ = useDatasetProdPrompts(datasetId)
+  const prodModelQ = useDatasetProdModel(datasetId)
+
   // Build dataset case map (by case name -> CaseItem). Empty when dataset
   // errored or hasn't loaded yet.
   const caseByName = useMemo(() => {
@@ -625,6 +745,26 @@ function CompareRunsPage() {
   const allExpanded =
     allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
+  // Delta summary diff state. Prefer rendering the diff when at least one
+  // prod fetch settled (success or error) — a single failed prod fetch still
+  // yields an informative diff with nulls on the missing side. Only fall
+  // back to the raw snapshot when BOTH prod fetches errored.
+  const prodPromptsSettled =
+    !prodPromptsQ.isLoading && (prodPromptsQ.data !== undefined || prodPromptsQ.isError)
+  const prodModelSettled =
+    !prodModelQ.isLoading && (prodModelQ.data !== undefined || prodModelQ.isError)
+  const summaryLoading = !prodPromptsSettled || !prodModelSettled
+  const bothProdErrored = prodPromptsQ.isError && prodModelQ.isError
+  const summaryReady =
+    !summaryLoading && !bothProdErrored && deltaSnapshot != null
+
+  const summaryBefore: EffectiveConfig | null = summaryReady
+    ? buildBefore(prodModelQ.data?.model ?? null, prodPromptsQ.data)
+    : null
+  const summaryAfter: EffectiveConfig | null = summaryReady && summaryBefore
+    ? buildAfter(deltaSnapshot as unknown as VariantDelta | null, summaryBefore)
+    : null
+
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-6xl space-y-6 p-6">
@@ -721,17 +861,28 @@ function CompareRunsPage() {
             <CardTitle className="text-base">Delta summary</CardTitle>
           </CardHeader>
           <CardContent>
-            {deltaSnapshot ? (
+            {deltaSnapshot == null ? (
+              <p className="text-xs text-muted-foreground">
+                No delta_snapshot recorded for this variant run.
+              </p>
+            ) : summaryReady && summaryBefore && summaryAfter ? (
+              <div className="rounded border bg-background p-2 max-h-[400px] overflow-auto">
+                <JsonViewer
+                  before={summaryBefore as unknown as Record<string, unknown>}
+                  after={summaryAfter as unknown as Record<string, unknown>}
+                  maxDepth={3}
+                />
+              </div>
+            ) : summaryLoading ? (
+              <p className="text-xs text-muted-foreground">Loading diff...</p>
+            ) : (
+              // Both prod fetches errored — fall back to raw snapshot view.
               <div className="rounded border bg-background p-2">
                 <JsonViewer
                   data={deltaSnapshot as Record<string, unknown>}
                   maxDepth={3}
                 />
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                No delta_snapshot recorded for this variant run.
-              </p>
             )}
           </CardContent>
         </Card>
