@@ -548,14 +548,22 @@ function ProdStepDefPanel({
             )}
           </Label>
           {prodSystem ? (
-            <PromptContentEditor
-              value={prodSystem.content}
-              onChange={() => {}}
-              varDefs={prodSystemVarDefs}
-              isDark={isDark}
-              height="180px"
-              readOnly
-            />
+            <>
+              <PromptContentEditor
+                value={prodSystem.content}
+                onChange={() => {}}
+                varDefs={prodSystemVarDefs}
+                isDark={isDark}
+                height="180px"
+                readOnly
+              />
+              <VariableDefinitionsEditor
+                readOnly
+                content={prodSystem.content}
+                value={prodSystemVarDefs}
+                onChange={() => {}}
+              />
+            </>
           ) : (
             <p className="text-muted-foreground italic">
               No production system prompt.
@@ -573,14 +581,22 @@ function ProdStepDefPanel({
             )}
           </Label>
           {prodUser ? (
-            <PromptContentEditor
-              value={prodUser.content}
-              onChange={() => {}}
-              varDefs={prodUserVarDefs}
-              isDark={isDark}
-              height="180px"
-              readOnly
-            />
+            <>
+              <PromptContentEditor
+                value={prodUser.content}
+                onChange={() => {}}
+                varDefs={prodUserVarDefs}
+                isDark={isDark}
+                height="180px"
+                readOnly
+              />
+              <VariableDefinitionsEditor
+                readOnly
+                content={prodUser.content}
+                value={prodUserVarDefs}
+                onChange={() => {}}
+              />
+            </>
           ) : (
             <p className="text-muted-foreground italic">
               No production user prompt.

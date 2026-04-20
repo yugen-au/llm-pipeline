@@ -115,12 +115,14 @@ export function AutoGenerateSelector({
   objects,
   onChange,
   onClear,
+  readOnly = false,
 }: {
   type: string
   value: string
   objects: AutoGenerateObject[]
   onChange: (expr: string) => void
   onClear: () => void
+  readOnly?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const options = useMemo(() => getAutoGenOptions(type, objects), [type, objects])
@@ -136,6 +138,16 @@ export function AutoGenerateSelector({
   if (value) {
     // Show current selection with clear button
     const label = expressionToLabel(value)
+    if (readOnly) {
+      return (
+        <Badge
+          variant="secondary"
+          className="text-[10px] px-1.5 py-0 font-mono truncate max-w-[160px]"
+        >
+          {label}
+        </Badge>
+      )
+    }
     return (
       <div className="flex items-center gap-1">
         <Badge
@@ -148,6 +160,12 @@ export function AutoGenerateSelector({
           <X className="h-3 w-3" />
         </Button>
       </div>
+    )
+  }
+
+  if (readOnly) {
+    return (
+      <span className="text-[10px] text-muted-foreground italic">none</span>
     )
   }
 
@@ -200,12 +218,14 @@ export function VariableDefinitionsEditor({
   promptType,
   value,
   onChange,
+  readOnly = false,
 }: {
   content: string
   promptKey?: string
   promptType?: string
   value: VarDefs
   onChange: (defs: VarDefs) => void
+  readOnly?: boolean
 }) {
   const vars = useMemo(() => extractVariables(content), [content])
   const { data: schema } = usePromptVariableSchema(promptKey ?? '', promptType ?? '')
@@ -243,6 +263,7 @@ export function VariableDefinitionsEditor({
 
   // Initialize value from schema if empty
   useEffect(() => {
+    if (readOnly) return
     if (rows.length === 0) return
     if (Object.keys(value).length > 0) return
     const init: VarDefs = {}
@@ -259,6 +280,7 @@ export function VariableDefinitionsEditor({
 
   // Sync when content variables change: add new, remove gone
   useEffect(() => {
+    if (readOnly) return
     const contentNames = new Set(vars.map((v) => v.replace(/[{}]/g, '')))
     if (contentNames.size === 0 && Object.keys(value).length === 0) return
     const updated = { ...value }
@@ -315,7 +337,7 @@ export function VariableDefinitionsEditor({
                   <Select
                     value={def.type}
                     onValueChange={(v) => updateField(name, { type: v, auto_generate: '' })}
-                    disabled={hasAutoGen}
+                    disabled={readOnly || hasAutoGen}
                   >
                     <SelectTrigger className="h-7 w-24 text-xs">
                       <SelectValue />
@@ -335,6 +357,7 @@ export function VariableDefinitionsEditor({
                     onChange={(e) => updateField(name, { description: e.target.value })}
                     placeholder="description"
                     className="h-7 text-xs"
+                    disabled={readOnly}
                   />
                 </TableCell>
                 <TableCell className="py-1 text-xs">
@@ -344,6 +367,7 @@ export function VariableDefinitionsEditor({
                     objects={autoGenObjects}
                     onChange={(expr) => updateField(name, { auto_generate: expr })}
                     onClear={() => updateField(name, { auto_generate: '' })}
+                    readOnly={readOnly}
                   />
                 </TableCell>
                 <TableCell className="py-1 text-xs">
