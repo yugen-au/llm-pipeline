@@ -24,6 +24,8 @@ function NewVariantPage() {
 
   const attemptedRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
+  // Retry counter — bumping this re-runs the effect without a URL round-trip.
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     if (attemptedRef.current) return
@@ -64,7 +66,7 @@ function NewVariantPage() {
       },
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [datasetId])
+  }, [datasetId, retryKey])
 
   if (error) {
     return (
@@ -94,12 +96,8 @@ function NewVariantPage() {
               onClick={() => {
                 setError(null)
                 attemptedRef.current = false
-                // force-rerun effect by reassigning state — toggle dummy below
-                // is simplest via navigation to same route
-                navigate({
-                  to: `/evals/${datasetId}/variants/new` as string,
-                  replace: true,
-                })
+                // Re-run the effect locally — no navigation, no remount.
+                setRetryKey((k) => k + 1)
               }}
             >
               Retry

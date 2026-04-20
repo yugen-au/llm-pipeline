@@ -7,10 +7,12 @@ import {
   useVariant,
   useUpdateVariant,
   useTriggerEvalRun,
+  useDeltaTypeWhitelist,
 } from '@/api/evals'
 import type {
   InstructionDeltaItem,
   InstructionDeltaOp,
+  VariableDefinitions,
   VariantDelta,
   VariantItem,
 } from '@/api/evals'
@@ -38,8 +40,13 @@ export const Route = createFileRoute('/evals/$datasetId/variants/$variantId')({
 // Constants
 // ---------------------------------------------------------------------------
 
-/** Must match backend whitelist in llm_pipeline/evals/delta.py. */
-const TYPE_WHITELIST: ReadonlyArray<string> = [
+/**
+ * Offline fallback whitelist used only when the backend whitelist fetch fails
+ * or is still loading. Runtime source of truth is
+ * `GET /evals/delta-type-whitelist` via `useDeltaTypeWhitelist()`.
+ * Kept in sync with backend `_TYPE_WHITELIST` in `llm_pipeline/evals/delta.py`.
+ */
+const FALLBACK_TYPE_WHITELIST: ReadonlyArray<string> = [
   'str',
   'int',
   'float',
@@ -56,6 +63,9 @@ const OP_CHOICES: ReadonlyArray<InstructionDeltaOp> = ['add', 'modify']
 
 const MAX_DELTA_ENTRIES = 50
 
+/** Cap on variable_definitions rows — prompt-scoped so not huge. */
+const MAX_VAR_DEF_ENTRIES = 20
+
 /** Fields inherited from LLMResultMixin — cannot be removed in v2. */
 const INHERITED_FIELDS: ReadonlyArray<string> = ['confidence_score', 'notes']
 
@@ -70,6 +80,67 @@ interface EditorState {
   systemPrompt: string
   userPrompt: string
   instructionsDelta: InstructionDeltaItem[]
+  variableDefinitions: VariableDefinitionRow[]
+}
+
+/**
+ * UI row shape for the variable_definitions editor. Stored as an array of rows
+ * (easy to render / dirty-track) and serialised to `VariableDefinitions`
+ * (backend map shape keyed by name) on save.
+ */
+interface VariableDefinitionRow {
+  name: string
+  type: string
+  auto_generate: string
+}
+
+/**
+ * Convert a stored `VariableDefinitions` map (or null/undefined) into the
+ * UI row list. Each `[name, spec]` entry becomes one row; extra keys on the
+ * spec are dropped from the UI view but preserved via round-trip only if the
+ * user does not re-save (we overwrite on save — documented trade-off). The
+ * backend also accepts list-of-dicts with a `name` key, so tolerate that shape
+ * here for resilience against hand-edited deltas.
+ */
+function varDefsToRows(
+  defs: VariableDefinitions | null | undefined,
+): VariableDefinitionRow[] {
+  if (!defs) return []
+  if (Array.isArray(defs)) {
+    return (defs as Array<Record<string, unknown>>)
+      .filter((d) => d && typeof d === 'object')
+      .map((d) => ({
+        name: typeof d.name === 'string' ? d.name : '',
+        type: typeof d.type === 'string' ? d.type : '',
+        auto_generate:
+          typeof d.auto_generate === 'string' ? d.auto_generate : '',
+      }))
+  }
+  return Object.entries(defs).map(([name, spec]) => ({
+    name,
+    type: typeof spec?.type === 'string' ? spec.type : '',
+    auto_generate:
+      typeof spec?.auto_generate === 'string' ? spec.auto_generate : '',
+  }))
+}
+
+/**
+ * Serialise UI rows to the backend map shape. Rows with empty `name` are
+ * dropped. `auto_generate` is omitted when blank so we don't spuriously
+ * overwrite prod defs with an empty expression string.
+ */
+function rowsToVarDefs(
+  rows: VariableDefinitionRow[],
+): VariableDefinitions | null {
+  const filtered = rows.filter((r) => r.name.trim() !== '')
+  if (filtered.length === 0) return null
+  const out: VariableDefinitions = {}
+  for (const r of filtered) {
+    const entry: VariableDefinitions[string] = { type: r.type }
+    if (r.auto_generate.trim() !== '') entry.auto_generate = r.auto_generate
+    out[r.name.trim()] = entry
+  }
+  return out
 }
 
 function variantToEditorState(v: VariantItem): EditorState {
@@ -88,6 +159,7 @@ function variantToEditorState(v: VariantItem): EditorState {
     instructionsDelta: Array.isArray(d.instructions_delta)
       ? d.instructions_delta.map((i) => ({ ...i }))
       : [],
+    variableDefinitions: varDefsToRows(d.variable_definitions),
   }
 }
 
@@ -98,6 +170,7 @@ function editorStateToDelta(s: EditorState): VariantDelta {
     user_prompt: s.userPrompt === '' ? null : s.userPrompt,
     instructions_delta:
       s.instructionsDelta.length === 0 ? null : s.instructionsDelta,
+    variable_definitions: rowsToVarDefs(s.variableDefinitions),
   }
 }
 
@@ -119,6 +192,18 @@ function statesEqual(a: EditorState, b: EditorState): boolean {
       x.field !== y.field ||
       x.type_str !== y.type_str ||
       JSON.stringify(x.default ?? null) !== JSON.stringify(y.default ?? null)
+    )
+      return false
+  }
+  if (a.variableDefinitions.length !== b.variableDefinitions.length)
+    return false
+  for (let i = 0; i < a.variableDefinitions.length; i++) {
+    const x = a.variableDefinitions[i]
+    const y = b.variableDefinitions[i]
+    if (
+      x.name !== y.name ||
+      x.type !== y.type ||
+      x.auto_generate !== y.auto_generate
     )
       return false
   }
@@ -182,6 +267,41 @@ function useVariantEditor(variant: VariantItem | undefined) {
     })
   }, [])
 
+  const addVarDefRow = useCallback(() => {
+    setState((prev) => {
+      if (!prev) return prev
+      if (prev.variableDefinitions.length >= MAX_VAR_DEF_ENTRIES) return prev
+      return {
+        ...prev,
+        variableDefinitions: [
+          ...prev.variableDefinitions,
+          { name: '', type: '', auto_generate: '' },
+        ],
+      }
+    })
+  }, [])
+
+  const updateVarDefRow = useCallback(
+    (idx: number, patch: Partial<VariableDefinitionRow>) => {
+      setState((prev) => {
+        if (!prev) return prev
+        const next = prev.variableDefinitions.slice()
+        next[idx] = { ...next[idx], ...patch }
+        return { ...prev, variableDefinitions: next }
+      })
+    },
+    [],
+  )
+
+  const removeVarDefRow = useCallback((idx: number) => {
+    setState((prev) => {
+      if (!prev) return prev
+      const next = prev.variableDefinitions.slice()
+      next.splice(idx, 1)
+      return { ...prev, variableDefinitions: next }
+    })
+  }, [])
+
   const resetToBaseline = useCallback(() => {
     if (baseline) setState(baseline)
   }, [baseline])
@@ -194,6 +314,9 @@ function useVariantEditor(variant: VariantItem | undefined) {
     addDeltaRow,
     updateDeltaRow,
     removeDeltaRow,
+    addVarDefRow,
+    updateVarDefRow,
+    removeVarDefRow,
     resetToBaseline,
   }
 }
@@ -308,12 +431,16 @@ function DeltaRowEditor({
   onChange,
   onRemove,
   error,
+  typeOptions,
+  typesDisabled,
 }: {
   idx: number
   row: InstructionDeltaItem
   onChange: (patch: Partial<InstructionDeltaItem>) => void
   onRemove: () => void
   error?: string
+  typeOptions: ReadonlyArray<string>
+  typesDisabled?: boolean
 }) {
   const defaultStr = useMemo(() => {
     if (row.default === undefined || row.default === null) return ''
@@ -384,13 +511,14 @@ function DeltaRowEditor({
       <div>
         <Select
           value={row.type_str}
-          onValueChange={(v) => onChange({ type_str: v })}
+          onValueChange={(v) => onChange({ type_str: v as typeof row.type_str })}
+          disabled={typesDisabled}
         >
           <SelectTrigger size="sm" className="h-8 text-xs font-mono">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {TYPE_WHITELIST.map((t) => (
+            {typeOptions.map((t) => (
               <SelectItem key={t} value={t} className="text-xs font-mono">
                 {t}
               </SelectItem>
@@ -435,17 +563,28 @@ function VariantDeltaPanel({
   addDeltaRow,
   updateDeltaRow,
   removeDeltaRow,
+  addVarDefRow,
+  updateVarDefRow,
+  removeVarDefRow,
   fieldError,
+  typeOptions,
+  typesLoading,
 }: {
   state: EditorState
   patch: (p: Partial<EditorState>) => void
   addDeltaRow: () => void
   updateDeltaRow: (idx: number, p: Partial<InstructionDeltaItem>) => void
   removeDeltaRow: (idx: number) => void
+  addVarDefRow: () => void
+  updateVarDefRow: (idx: number, p: Partial<VariableDefinitionRow>) => void
+  removeVarDefRow: (idx: number) => void
   fieldError: { rowIdx: number | null; message: string } | null
+  typeOptions: ReadonlyArray<string>
+  typesLoading: boolean
 }) {
   const nearCap = state.instructionsDelta.length >= MAX_DELTA_ENTRIES - 5
   const atCap = state.instructionsDelta.length >= MAX_DELTA_ENTRIES
+  const varDefsAtCap = state.variableDefinitions.length >= MAX_VAR_DEF_ENTRIES
 
   return (
     <Card className="h-full">
@@ -583,7 +722,101 @@ function VariantDeltaPanel({
                       ? fieldError.message
                       : undefined
                   }
+                  typeOptions={typeOptions}
+                  typesDisabled={typesLoading}
                 />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Variable definitions */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="text-[10px] uppercase text-muted-foreground">
+              Variable definitions ({state.variableDefinitions.length}/
+              {MAX_VAR_DEF_ENTRIES})
+            </Label>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={addVarDefRow}
+              disabled={varDefsAtCap}
+            >
+              <Plus className="size-3" /> Add variable
+            </Button>
+          </div>
+
+          <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2 flex items-start gap-2 text-[11px] text-muted-foreground">
+            <Info className="size-3 shrink-0 mt-0.5 text-blue-500" />
+            <span>
+              Variables defined here override or add to the production prompt's
+              variable_definitions. Variant wins on name collision.{' '}
+              <code>auto_generate</code> expressions are resolved at prompt
+              render time by the backend registry — not evaluated client-side.
+            </span>
+          </div>
+
+          {varDefsAtCap && (
+            <p className="text-[10px] text-destructive">
+              At the {MAX_VAR_DEF_ENTRIES}-entry cap — remove entries to add
+              more.
+            </p>
+          )}
+
+          {state.variableDefinitions.length === 0 ? (
+            <p className="text-muted-foreground italic text-[11px]">
+              No variable overrides. Click "Add variable" to override or extend
+              the prompt's variable_definitions.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-[1fr_120px_1fr_32px] gap-2 px-1 text-[10px] uppercase text-muted-foreground">
+                <span>Name</span>
+                <span>Type</span>
+                <span>auto_generate</span>
+                <span />
+              </div>
+              {state.variableDefinitions.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="grid grid-cols-[1fr_120px_1fr_32px] gap-2 items-start"
+                >
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    placeholder="variable_name"
+                    value={row.name}
+                    onChange={(e) =>
+                      updateVarDefRow(idx, { name: e.target.value })
+                    }
+                  />
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    placeholder="str / int / EnumName"
+                    value={row.type}
+                    onChange={(e) =>
+                      updateVarDefRow(idx, { type: e.target.value })
+                    }
+                  />
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    placeholder="optional, e.g. enum_values(Foo)"
+                    value={row.auto_generate}
+                    onChange={(e) =>
+                      updateVarDefRow(idx, { auto_generate: e.target.value })
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 w-8 p-0 text-destructive"
+                    onClick={() => removeVarDefRow(idx)}
+                    title={`Remove variable row ${idx + 1}`}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                </div>
               ))}
             </div>
           )}
@@ -614,6 +847,29 @@ function VariantEditorPage() {
   const updateVariantMut = useUpdateVariant(datasetId)
   const triggerRun = useTriggerEvalRun(datasetId)
 
+  // Backend whitelist — single source of truth for the type_str dropdown.
+  // Fall back to the static list on fetch failure so the editor remains usable.
+  const {
+    data: typeWhitelist,
+    isLoading: typesLoading,
+    error: typesError,
+  } = useDeltaTypeWhitelist()
+  useEffect(() => {
+    if (typesError) {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[variants] Failed to fetch delta type whitelist; using fallback.',
+        typesError,
+      )
+    }
+  }, [typesError])
+  const typeOptions: ReadonlyArray<string> = useMemo(() => {
+    if (typeWhitelist?.types && typeWhitelist.types.length > 0) {
+      return typeWhitelist.types
+    }
+    return FALLBACK_TYPE_WHITELIST
+  }, [typeWhitelist])
+
   const {
     state,
     dirty,
@@ -621,6 +877,9 @@ function VariantEditorPage() {
     addDeltaRow,
     updateDeltaRow,
     removeDeltaRow,
+    addVarDefRow,
+    updateVarDefRow,
+    removeVarDefRow,
     resetToBaseline,
   } = useVariantEditor(variant)
 
@@ -635,13 +894,22 @@ function VariantEditorPage() {
     delta: InstructionDeltaItem[],
   ): { rowIdx: number | null; message: string } {
     // Backend messages commonly include the offending field name verbatim
-    // (e.g. "field name '__class__' is invalid"). Map to row index when we
-    // can; otherwise leave as a banner-only error.
+    // quoted (e.g. "field name '__class__' is invalid"). Map to row index by
+    // finding the LONGEST matching field — avoids prefix collisions where
+    // e.g. rows have `foo` and `foobar` and the message mentions 'foobar'
+    // (naive iteration would mis-match the shorter 'foo' row even with the
+    // wrapping quotes, if candidates were sorted insertion-order).
+    let bestIdx: number | null = null
+    let bestLen = -1
     for (let i = 0; i < delta.length; i++) {
       const f = delta[i].field
-      if (f && msg.includes(`'${f}'`)) return { rowIdx: i, message: msg }
+      if (!f) continue
+      if (msg.includes(`'${f}'`) && f.length > bestLen) {
+        bestIdx = i
+        bestLen = f.length
+      }
     }
-    return { rowIdx: null, message: msg }
+    return { rowIdx: bestIdx, message: msg }
   }
 
   async function handleSave() {
@@ -811,7 +1079,12 @@ function VariantEditorPage() {
             addDeltaRow={addDeltaRow}
             updateDeltaRow={updateDeltaRow}
             removeDeltaRow={removeDeltaRow}
+            addVarDefRow={addVarDefRow}
+            updateVarDefRow={updateVarDefRow}
+            removeVarDefRow={removeVarDefRow}
             fieldError={fieldError}
+            typeOptions={typeOptions}
+            typesLoading={typesLoading}
           />
         </div>
       </div>

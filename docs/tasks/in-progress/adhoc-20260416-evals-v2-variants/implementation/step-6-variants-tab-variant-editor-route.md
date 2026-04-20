@@ -136,3 +136,40 @@ Mounts, POSTs a blank variant via `useCreateVariant`, and navigates (`replace: t
 - [x] Type/op dropdowns match backend whitelist exactly.
 - [x] Instructions-delta array capped at 50 entries UI-side with counter + disabled add button.
 - [x] Step 7 files (`evals.$datasetId.compare.tsx`, `evals.$datasetId.runs.$runId.tsx`) untouched.
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] MEDIUM: `variable_definitions` UI missing — backend runner consumes it but editor had no affordance. Extended the UI to author variable_definitions overrides.
+- [x] LOW: NewVariantPage retry forced full navigate() round-trip — replaced with local `retryKey` state included in the effect dep list.
+- [x] LOW: `parseBackendFieldError` used substring matching — replaced with longest-field-match so `'foo'` in the field list does not shadow a real `'foobar'` error.
+
+### Changes Made
+
+#### File: `llm_pipeline/ui/frontend/src/routes/evals.$datasetId.variants.$variantId.tsx`
+- Added `useDeltaTypeWhitelist` + `VariableDefinitions` imports from `@/api/evals`.
+- Renamed the local `TYPE_WHITELIST` constant to `FALLBACK_TYPE_WHITELIST`; only used when the backend fetch is loading or errored (error logged via `console.error`).
+- Added `MAX_VAR_DEF_ENTRIES = 20` cap constant.
+- Extended `EditorState` with `variableDefinitions: VariableDefinitionRow[]` (new row shape `{name, type, auto_generate}`).
+- Added `varDefsToRows()` / `rowsToVarDefs()` serialisation helpers (tolerates both map and list-of-dicts shapes on read; writes back the TS canonical map form keyed by name; drops empty rows and omits blank `auto_generate` to avoid overwriting prod defs with empty strings).
+- Extended `statesEqual` to diff the var-defs row list.
+- Added `addVarDefRow` / `updateVarDefRow` / `removeVarDefRow` to the `useVariantEditor` hook.
+- `DeltaRowEditor` now takes `typeOptions` + `typesDisabled` props; the `type_str` select reads from props instead of the module-level constant.
+- `VariantDeltaPanel` takes the new handlers + `typeOptions` / `typesLoading` props; renders a new "Variable definitions" section under the instructions-delta section with a dynamic row list (name / type / auto_generate inputs + remove button), add button, counter, info banner explaining "Variant wins on name collision" and that `auto_generate` is backend-resolved.
+- `VariantEditorPage` calls `useDeltaTypeWhitelist()`, falls back to `FALLBACK_TYPE_WHITELIST` on error or empty result, logs errors to console, and passes `typeOptions` / `typesLoading` through.
+- `parseBackendFieldError` rewritten to find the LONGEST quoted-field match instead of the first, so `foo` vs `foobar` no longer mis-attributes (both would match `'foobar'` with naive substring; longest-match wins).
+
+#### File: `llm_pipeline/ui/frontend/src/routes/evals.$datasetId.variants.new.tsx`
+- Added `retryKey` local state (`useState(0)`).
+- Effect dep list is now `[datasetId, retryKey]` so bumping the key re-runs the create attempt without a URL round-trip.
+- Retry button replaces the prior `navigate(..., replace: true)` call with `setRetryKey(k => k + 1)` (plus the existing `attemptedRef.current = false` reset).
+
+### Verification
+- [x] `npx tsc --noEmit` clean in `llm_pipeline/ui/frontend` (no TS errors).
+- [x] `uv run pytest tests/ -q -k "variant or delta"` — 123/123 passed.
+- [x] No changes to Step 5 API files (`api/evals.ts`, `api/query-keys.ts`) or Step 7 files (`evals.$datasetId.compare.tsx`, `evals.$datasetId.runs.$runId.tsx`).
+- [x] Imports the existing Step 5 exports (`useDeltaTypeWhitelist`, `VariableDefinitions`) — no new API layer code added.
+- [x] Variable definitions editor writes to `delta.variable_definitions` on Save; backend runner already consumes this field (runner.py `_apply_variant_to_sandbox`, confirmed against `merge_variable_definitions`).
+- [x] `auto_generate` resolver logic NOT duplicated client-side — UI only captures expression strings; registry resolution remains a backend concern.
