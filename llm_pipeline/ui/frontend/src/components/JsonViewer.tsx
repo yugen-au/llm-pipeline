@@ -44,7 +44,7 @@ function PrimitiveValue({ value }: { value: unknown }) {
     return <span className="text-muted-foreground italic">null</span>
   }
   if (typeof value === 'string') {
-    return <span className="text-green-600 dark:text-green-400">"{value}"</span>
+    return <span className="text-green-600 dark:text-green-400 whitespace-pre-wrap break-words">"{value}"</span>
   }
   if (typeof value === 'number') {
     return <span className="text-blue-600 dark:text-blue-400">{String(value)}</span>
@@ -388,7 +388,7 @@ const DiffNode = memo(function DiffNode({
         style={{ paddingLeft: `${depth * 16}px` }}
       >
         <span className="shrink-0 w-4" />
-        <span>{node.key}: {formatValue(node.unchangedValue)}</span>
+        <span className="min-w-0 break-words whitespace-pre-wrap">{node.key}: {formatValue(node.unchangedValue)}</span>
       </div>
     )
   }
@@ -415,7 +415,7 @@ const DiffNode = memo(function DiffNode({
             style={{ paddingLeft: `${depth * 16}px` }}
           >
             <span className="shrink-0 w-4">+</span>
-            <span>{node.key}: {formatValue(d.value)}</span>
+            <span className="min-w-0 break-words whitespace-pre-wrap">{node.key}: {formatValue(d.value)}</span>
           </div>
         )
       case 'REMOVE':
@@ -436,7 +436,7 @@ const DiffNode = memo(function DiffNode({
             style={{ paddingLeft: `${depth * 16}px` }}
           >
             <span className="shrink-0 w-4">-</span>
-            <span>{node.key}: {formatValue(d.oldValue)}</span>
+            <span className="min-w-0 break-words whitespace-pre-wrap">{node.key}: {formatValue(d.oldValue)}</span>
           </div>
         )
       case 'CHANGE': {
@@ -459,7 +459,7 @@ const DiffNode = memo(function DiffNode({
                   style={{ paddingLeft: `${depth * 16}px` }}
                 >
                   <span className="shrink-0 w-4">-</span>
-                  <span>{node.key}: {formatValue(d.oldValue)}</span>
+                  <span className="min-w-0 break-words whitespace-pre-wrap">{node.key}: {formatValue(d.oldValue)}</span>
                 </div>
               )}
               {newComplex ? (
@@ -476,7 +476,7 @@ const DiffNode = memo(function DiffNode({
                   style={{ paddingLeft: `${depth * 16}px` }}
                 >
                   <span className="shrink-0 w-4">+</span>
-                  <span>{node.key}: {formatValue(d.value)}</span>
+                  <span className="min-w-0 break-words whitespace-pre-wrap">{node.key}: {formatValue(d.value)}</span>
                 </div>
               )}
             </div>
