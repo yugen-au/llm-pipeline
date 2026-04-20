@@ -1071,3 +1071,249 @@ class TestProdPrompts:
         resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
         assert resp.status_code == 404
         assert "nonexistent_step" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# GET /evals/{dataset_id}/prod-model
+# ---------------------------------------------------------------------------
+
+
+class TestProdModel:
+    """Prod model endpoint: resolves step model across the three tiers.
+
+    Same pipeline-registration pattern as TestProdPrompts.
+    """
+
+    def _register_pipeline(
+        self,
+        client,
+        *,
+        step_model: str | None,
+        default_model: str | None,
+        step_name: str = "prod_model_step",
+        pipeline_key: str = "pm_pipeline",
+    ):
+        """Register a 1-strategy, 1-step pipeline with configurable tiers.
+
+        Dynamically builds CamelCase step + instruction classes derived from
+        ``step_name`` so ``step_definition``'s naming-convention assertion
+        passes. Returns the snake_case step_name (matches sd.step_name).
+        """
+        from typing import ClassVar as _CV
+
+        from llm_pipeline import (
+            PipelineConfig,
+            PipelineDatabaseRegistry,
+            PipelineStrategies,
+            PipelineStrategy,
+        )
+        from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+
+        # CamelCase from snake_case: "foo_bar" -> "FooBar"
+        prefix = "".join(p.capitalize() for p in step_name.split("_"))
+
+        # Build instruction class via exec so the ClassVar annotation is
+        # parsed by Python's annotation machinery (type() with a raw
+        # __annotations__ dict doesn't trigger pydantic's ClassVar
+        # special-casing correctly).
+        ns: dict = {
+            "LLMResultMixin": LLMResultMixin,
+            "ClassVar": _CV,
+        }
+        exec(
+            f"class {prefix}Instructions(LLMResultMixin):\n"
+            f"    x: int = 0\n"
+            f"    example: ClassVar[dict] = {{'x': 1, 'notes': 'ok'}}\n",
+            ns,
+        )
+        InstrCls = ns[f"{prefix}Instructions"]
+
+        # Build step class with expected name "{Prefix}Step"
+        StepCls = type(
+            f"{prefix}Step",
+            (LLMStep,),
+            {
+                "prepare_calls": lambda self: [],
+                "__module__": __name__,
+            },
+        )
+
+        decorator_kwargs: dict = {"instructions": InstrCls}
+        if step_model is not None:
+            decorator_kwargs["model"] = step_model
+
+        StepCls = step_definition(**decorator_kwargs)(StepCls)
+
+        class _Strategy(PipelineStrategy):
+            def can_handle(self, context):
+                return True
+
+            def get_steps(self):
+                return [StepCls.create_definition()]
+
+        class _Registry(PipelineDatabaseRegistry, models=[]):
+            pass
+
+        class _Strategies(PipelineStrategies, strategies=[_Strategy]):
+            pass
+
+        class _Pipeline(
+            PipelineConfig,
+            registry=_Registry,
+            strategies=_Strategies,
+        ):
+            _default_model = default_model
+
+        client.app.state.introspection_registry[pipeline_key] = _Pipeline
+        return step_name
+
+    def test_step_definition_tier(self, evals_app):
+        """Step decorator declares model, no DB row, no pipeline default →
+        source == 'step_definition'."""
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model="gpt-step-def", default_model=None,
+            step_name="sd_step", pipeline_key="sd_pipeline",
+        )
+
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_sd",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] == "gpt-step-def"
+        assert data["source"] == "step_definition"
+
+    def test_db_override_tier(self, evals_app):
+        """StepModelConfig row beats step_def.model."""
+        from llm_pipeline.db.step_config import StepModelConfig
+
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model="gpt-step-def", default_model="pipe-default",
+            step_name="db_step", pipeline_key="db_pipeline",
+        )
+
+        with Session(engine) as session:
+            session.add(
+                StepModelConfig(
+                    pipeline_name="db_pipeline",
+                    step_name=step_name,
+                    model="gpt-db-override",
+                )
+            )
+            ds = EvaluationDataset(
+                name="ds_db",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] == "gpt-db-override"
+        assert data["source"] == "db"
+
+    def test_pipeline_default_tier(self, evals_app):
+        """Only pipeline _default_model is set → source 'pipeline_default'."""
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model=None, default_model="pipe-default",
+            step_name="pd_step", pipeline_key="pd_pipeline",
+        )
+
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_pd",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] == "pipe-default"
+        assert data["source"] == "pipeline_default"
+
+    def test_all_tiers_empty(self, evals_app):
+        """Nothing set anywhere → model null, source 'none'."""
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model=None, default_model=None,
+            step_name="empty_step", pipeline_key="empty_pipeline",
+        )
+
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_empty",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] is None
+        assert data["source"] == "none"
+
+    def test_dataset_not_found(self, evals_app):
+        client, _ = evals_app
+        resp = client.get("/api/evals/9999/prod-model")
+        assert resp.status_code == 404
+
+    def test_pipeline_target_returns_422(self, evals_app):
+        client, engine = evals_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_pipe_m",
+                target_type="pipeline",
+                target_name="some_pipeline",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "step-targets only" in detail
+
+    def test_step_not_found_in_any_pipeline(self, evals_app):
+        """Step target name that no registered pipeline defines → 404."""
+        client, engine = evals_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_missing_m",
+                target_type="step",
+                target_name="nonexistent_step_m",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 404
+        assert "nonexistent_step_m" in resp.json()["detail"]
