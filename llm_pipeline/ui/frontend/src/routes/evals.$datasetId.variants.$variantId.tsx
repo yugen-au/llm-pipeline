@@ -1293,13 +1293,6 @@ function VariantDeltaPanel({
   const nearCap = emittedCount >= MAX_DELTA_ENTRIES - 5
   const atCap = emittedCount >= MAX_DELTA_ENTRIES
 
-  // Concatenate both prompts so the shared VariableDefinitionsEditor can
-  // extract variables from either.
-  const combinedPromptContent = useMemo(
-    () => state.systemPrompt + '\n' + state.userPrompt,
-    [state.systemPrompt, state.userPrompt],
-  )
-
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
@@ -1339,34 +1332,6 @@ function VariantDeltaPanel({
             onChange={(m) => patch({ model: m })}
             onClear={() => patch({ model: '' })}
             placeholder="Inherit production model"
-          />
-        </div>
-
-        {/* System prompt */}
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase text-muted-foreground">
-            System prompt override
-          </Label>
-          <PromptContentEditor
-            value={state.systemPrompt}
-            onChange={(v) => patch({ systemPrompt: v })}
-            varDefs={state.variableDefinitions}
-            isDark={isDark}
-            height="240px"
-          />
-        </div>
-
-        {/* User prompt */}
-        <div className="space-y-1">
-          <Label className="text-[10px] uppercase text-muted-foreground">
-            User prompt override
-          </Label>
-          <PromptContentEditor
-            value={state.userPrompt}
-            onChange={(v) => patch({ userPrompt: v })}
-            varDefs={state.variableDefinitions}
-            isDark={isDark}
-            height="240px"
           />
         </div>
 
@@ -1476,28 +1441,46 @@ function VariantDeltaPanel({
           </div>
         </div>
 
-        {/* Variable definitions */}
-        <div className="space-y-2">
+        {/* System prompt + its variable definitions */}
+        <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground">
-            Variable definitions
+            System prompt override
           </Label>
-
-          <div className="rounded border border-blue-500/30 bg-blue-500/5 p-2 flex items-start gap-2 text-[11px] text-muted-foreground">
-            <Info className="size-3 shrink-0 mt-0.5 text-blue-500" />
-            <span>
-              Variables are auto-detected from the system and user prompt
-              overrides above. Edits here override or add to the production
-              prompt's variable_definitions — variant wins on name collision.{' '}
-              <code>auto_generate</code> expressions are resolved at prompt
-              render time by the backend registry (not evaluated client-side).
-            </span>
-          </div>
-
-          <VariableDefinitionsEditor
-            content={combinedPromptContent}
-            value={state.variableDefinitions}
-            onChange={setVarDefs}
+          <PromptContentEditor
+            value={state.systemPrompt}
+            onChange={(v) => patch({ systemPrompt: v })}
+            varDefs={state.variableDefinitions}
+            isDark={isDark}
+            height="240px"
           />
+          <div className="pt-2">
+            <VariableDefinitionsEditor
+              content={state.systemPrompt}
+              value={state.variableDefinitions}
+              onChange={setVarDefs}
+            />
+          </div>
+        </div>
+
+        {/* User prompt + its variable definitions */}
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase text-muted-foreground">
+            User prompt override
+          </Label>
+          <PromptContentEditor
+            value={state.userPrompt}
+            onChange={(v) => patch({ userPrompt: v })}
+            varDefs={state.variableDefinitions}
+            isDark={isDark}
+            height="240px"
+          />
+          <div className="pt-2">
+            <VariableDefinitionsEditor
+              content={state.userPrompt}
+              value={state.variableDefinitions}
+              onChange={setVarDefs}
+            />
+          </div>
         </div>
       </CardContent>
     </Card>
