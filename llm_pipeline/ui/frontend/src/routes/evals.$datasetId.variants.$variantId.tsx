@@ -9,10 +9,12 @@ import {
   useTriggerEvalRun,
   useDeltaTypeWhitelist,
   useDatasetProdPrompts,
+  useDatasetProdModel,
 } from '@/api/evals'
 import type {
   InstructionDeltaItem,
   InstructionDeltaOp,
+  ProdModelResponse,
   ProdPromptContent,
   ProdPromptsResponse,
   VariableDefinitions,
@@ -39,6 +41,10 @@ import {
   type VarDefs,
 } from '@/components/prompts/PromptContentEditor'
 import { VariableDefinitionsEditor } from '@/components/prompts/VariableDefinitionsEditor'
+import {
+  ModelCombobox,
+  formatModel,
+} from '@/components/pipelines/ModelCombobox'
 
 export const Route = createFileRoute('/evals/$datasetId/variants/$variantId')({
   component: VariantEditorPage,
@@ -165,11 +171,14 @@ function mergeVarDefs(a: VarDefs, b: VarDefs): VarDefs {
 }
 
 /**
- * Build the editor baseline from a variant + (optional) prod prompts.
+ * Build the editor baseline from a variant + (optional) prod prompts/model.
  *
  * Prefill rules:
  * - `systemPrompt` / `userPrompt`: if the variant delta has no override AND
  *   prod content is available, use prod content as the baseline.
+ * - `model`: if the variant delta has no model override AND prod model
+ *   resolved, use prod model as the baseline. Degrades silently when
+ *   `prodModel` is null (fetch errored or pipeline-target dataset).
  * - `variableDefinitions`: if the variant has none AND prod has any, use the
  *   MERGED prod system + user defs (runner merges both prod prompts anyway,
  *   so one combined set on the variant matches runtime behavior).
@@ -181,6 +190,7 @@ function mergeVarDefs(a: VarDefs, b: VarDefs): VarDefs {
 function variantToEditorState(
   v: VariantItem,
   prod: ProdPromptsResponse | null | undefined,
+  prodModel: ProdModelResponse | null | undefined,
 ): EditorState {
   const d: VariantDelta = (v.delta ?? {
     model: null,
@@ -201,6 +211,13 @@ function variantToEditorState(
   const userPrompt = variantUser === '' && prodUser !== ''
     ? prodUser
     : variantUser
+
+  // Prefill model only when variant has no override AND prod model resolved.
+  const variantModel = d.model ?? ''
+  const prodModelStr = prodModel?.model ?? ''
+  const model = variantModel === '' && prodModelStr !== ''
+    ? prodModelStr
+    : variantModel
 
   // Variable definitions: variant override wins wholesale when present.
   const variantDefs = readVarDefs(d.variable_definitions)
@@ -226,7 +243,7 @@ function variantToEditorState(
   return {
     name: v.name ?? '',
     description: v.description ?? '',
-    model: d.model ?? '',
+    model,
     systemPrompt,
     userPrompt,
     instructionsDelta: Array.isArray(d.instructions_delta)
@@ -283,18 +300,20 @@ function statesEqual(a: EditorState, b: EditorState): boolean {
 function useVariantEditor(
   variant: VariantItem | undefined,
   prod: ProdPromptsResponse | null | undefined,
+  prodModel: ProdModelResponse | null | undefined,
   prodReady: boolean,
 ) {
   const [state, setState] = useState<EditorState | null>(null)
   const [baseline, setBaseline] = useState<EditorState | null>(null)
 
-  // sync from server when variant OR prod prompts change (only once prod has
+  // sync from server when variant OR prod data change (only once prod has
   // resolved — otherwise we'd build a baseline without prefill and flip the
-  // editor to dirty as soon as prod arrives).
+  // editor to dirty as soon as prod arrives). `prodReady` gates both
+  // prod-prompts and prod-model so the baseline captures all prefills.
   useEffect(() => {
     if (!variant) return
     if (!prodReady) return
-    const snap = variantToEditorState(variant, prod ?? null)
+    const snap = variantToEditorState(variant, prod ?? null, prodModel ?? null)
     setState((prev) => (prev === null ? snap : prev))
     setBaseline(snap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -369,15 +388,31 @@ function useVariantEditor(
 // Prod step definition panel (read-only left pane)
 // ---------------------------------------------------------------------------
 
+/** Human-readable label for a ProdModelSource. "none" collapses to no label. */
+function prodModelSourceLabel(source: ProdModelResponse['source']): string | null {
+  switch (source) {
+    case 'db':
+      return 'user override'
+    case 'step_definition':
+      return 'step definition'
+    case 'pipeline_default':
+      return 'pipeline default'
+    case 'none':
+      return null
+  }
+}
+
 function ProdStepDefPanel({
   datasetId,
   prodSystem,
   prodUser,
+  prodModel,
   isDark,
 }: {
   datasetId: number
   prodSystem: ProdPromptContent | null
   prodUser: ProdPromptContent | null
+  prodModel: ProdModelResponse | null
   isDark: boolean
 }) {
   const { data: dataset } = useDataset(datasetId)
@@ -441,6 +476,31 @@ function ProdStepDefPanel({
               ? `${dataset.target_type}: ${dataset.target_name}`
               : 'Loading...'}
           </p>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase text-muted-foreground">
+            Base eval model
+          </Label>
+          {prodModel?.model ? (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="secondary" className="text-xs py-0 shrink-0">
+                {formatModel(prodModel.model).provider}
+              </Badge>
+              <code className="text-xs font-mono">
+                {formatModel(prodModel.model).name}
+              </code>
+              {prodModelSourceLabel(prodModel.source) && (
+                <span className="text-muted-foreground text-xs">
+                  ({prodModelSourceLabel(prodModel.source)})
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-muted-foreground italic">
+              No production model configured.
+            </p>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -529,9 +589,7 @@ function ProdStepDefPanel({
         </div>
 
         <p className="text-muted-foreground text-[11px]">
-          Production content shown read-only. Edit the right-hand panel to
-          override — leave a field at its prefilled prod value to keep it in
-          sync with production.
+          Inherit by leaving variant fields blank.
         </p>
       </CardContent>
     </Card>
@@ -741,11 +799,11 @@ function VariantDeltaPanel({
           <Label className="text-[10px] uppercase text-muted-foreground">
             Model override
           </Label>
-          <Input
-            className="h-8 text-xs font-mono"
-            placeholder="Leave blank to use production model"
-            value={state.model}
-            onChange={(e) => patch({ model: e.target.value })}
+          <ModelCombobox
+            value={state.model || null}
+            onChange={(m) => patch({ model: m })}
+            onClear={() => patch({ model: '' })}
+            placeholder="Inherit production model"
           />
         </div>
 
@@ -921,11 +979,31 @@ function VariantEditorPage() {
       )
     }
   }, [prodPromptsErrored, prodPromptsError])
-  // "ready" = we're no longer waiting on a pending fetch. Either data landed
-  // OR the fetch errored (404/network/etc). Both paths build a baseline —
-  // the error path just builds one with `prod = null`, matching prior
-  // behavior (empty prompts, no prefill).
-  const prodReady = !prodPromptsLoading
+
+  // Prod model mirrors prod prompts: prefill source + left-pane display.
+  // Fetch failure degrades silently (empty model override field, left pane
+  // shows "No production model configured").
+  const {
+    data: prodModel,
+    isLoading: prodModelLoading,
+    isError: prodModelErrored,
+    error: prodModelError,
+  } = useDatasetProdModel(datasetId)
+  useEffect(() => {
+    if (prodModelErrored) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[variants] Failed to fetch prod model; editor will open without prefill.',
+        prodModelError,
+      )
+    }
+  }, [prodModelErrored, prodModelError])
+
+  // "ready" = we're no longer waiting on any pending prod fetch. Either data
+  // landed OR the fetch errored (404/network/etc). Both paths build a
+  // baseline — the error path just builds one with `prod = null` /
+  // `prodModel = null`, matching prior behavior (no prefill).
+  const prodReady = !prodPromptsLoading && !prodModelLoading
 
   const updateVariantMut = useUpdateVariant(datasetId)
   const triggerRun = useTriggerEvalRun(datasetId)
@@ -962,7 +1040,7 @@ function VariantEditorPage() {
     removeDeltaRow,
     setVarDefs,
     resetToBaseline,
-  } = useVariantEditor(variant, prodPrompts, prodReady)
+  } = useVariantEditor(variant, prodPrompts, prodModel, prodReady)
 
   // Backend 422 error surfacing
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -1052,7 +1130,7 @@ function VariantEditorPage() {
         <p className="text-muted-foreground">
           {variantLoading
             ? 'Loading variant...'
-            : 'Loading production prompts...'}
+            : 'Loading production config...'}
         </p>
       </div>
     )
@@ -1161,6 +1239,7 @@ function VariantEditorPage() {
             datasetId={datasetId}
             prodSystem={prodPrompts?.system ?? null}
             prodUser={prodPrompts?.user ?? null}
+            prodModel={prodModel ?? null}
             isDark={isDark}
           />
           <VariantDeltaPanel
