@@ -189,6 +189,26 @@ class TypeWhitelistResponse(BaseModel):
     types: List[str]
 
 
+class ProdPromptContent(BaseModel):
+    """Resolved prod prompt payload surfaced to the variant editor."""
+
+    prompt_key: str
+    content: str
+    variable_definitions: Optional[dict | list] = None
+    version: Optional[str] = None
+
+
+class ProdPromptsResponse(BaseModel):
+    """Prod system + user prompts resolved for a dataset's step target.
+
+    Either side may be ``null`` when the corresponding key is not declared
+    (tier 1/2) and no matching active ``Prompt`` row exists (tier 3).
+    """
+
+    system: Optional[ProdPromptContent] = None
+    user: Optional[ProdPromptContent] = None
+
+
 # ---------------------------------------------------------------------------
 # Variant helpers
 # ---------------------------------------------------------------------------
@@ -405,6 +425,117 @@ def get_dataset(dataset_id: int, db: DBSession) -> DatasetDetail:
             )
             for c in cases
         ],
+    )
+
+
+@router.get(
+    "/{dataset_id}/prod-prompts", response_model=ProdPromptsResponse
+)
+def get_dataset_prod_prompts(
+    dataset_id: int,
+    request: Request,
+    db: DBSession,
+) -> ProdPromptsResponse:
+    """Return resolved prod (system, user) prompts for a dataset's step target.
+
+    Step-targeted only — pipeline-target variants are not supported in v2.
+    Uses the shared resolver so tier 1/2/3 keys are all surfaced, then
+    fetches Prompt rows for each non-None key. Either side returns null
+    when the key is unresolved OR the Prompt row doesn't exist.
+
+    Strategy resolution: walks registered pipelines in registry order and
+    returns on the first match (same convention as ``EvalRunner._find_step_def``).
+    Datasets don't store strategy_name, so the first-match strategy name
+    is what drives tier-3 lookup.
+    """
+    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
+
+    ds = db.exec(
+        select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
+    ).first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if ds.target_type != "step":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "prod-prompts endpoint supports step-targets only "
+                "(pipeline target variants are not supported in v2)"
+            ),
+        )
+
+    introspection_registry: dict = getattr(
+        request.app.state, "introspection_registry", {}
+    )
+
+    # Inline step lookup (mirrors EvalRunner._find_step_def but also
+    # captures strategy_name for tier-3 prompt resolution). Extracting to
+    # a shared util would force EvalRunner to accept a 4-tuple signature
+    # it doesn't use — kept inline here so the runner stays untouched.
+    step_def = None
+    strategy_name: Optional[str] = None
+    target_step = ds.target_name
+    for _pipeline_name, pipeline_cls in introspection_registry.items():
+        strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
+        if strategies_cls is None:
+            continue
+        strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
+        found = False
+        for strategy_cls in strategy_classes:
+            try:
+                strategy_inst = strategy_cls()
+                for sd in strategy_inst.get_steps():
+                    if sd.step_name == target_step:
+                        step_def = sd
+                        strategy_name = getattr(strategy_inst, "name", None)
+                        found = True
+                        break
+            except Exception:
+                logger.debug(
+                    "Failed to introspect strategy %s for step '%s'",
+                    strategy_cls.__name__, target_step, exc_info=True,
+                )
+                continue
+            if found:
+                break
+        if found:
+            break
+
+    if step_def is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Step '{target_step}' not found in any registered pipeline"
+            ),
+        )
+
+    system_key, user_key = resolve_with_auto_discovery(
+        step_def, db, strategy_name
+    )
+
+    def _fetch(key: Optional[str], ptype: str) -> Optional[ProdPromptContent]:
+        if key is None:
+            return None
+        row = db.exec(
+            select(Prompt).where(
+                Prompt.prompt_key == key,
+                Prompt.prompt_type == ptype,
+            )
+        ).first()
+        if row is None:
+            return None
+        return ProdPromptContent(
+            prompt_key=row.prompt_key,
+            content=row.content,
+            variable_definitions=row.variable_definitions,
+            version=row.version,
+        )
+
+    return ProdPromptsResponse(
+        system=_fetch(system_key, "system"),
+        user=_fetch(user_key, "user"),
     )
 
 
