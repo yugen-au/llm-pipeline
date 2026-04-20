@@ -4,6 +4,7 @@ Suites:
 - Step 1 (TestFreshDbCreation / TestMigrationOnExistingDb): schema + migrations.
 - Step 2 (TestApplyInstructionDelta): delta application + ACE hardening.
 """
+import json
 from datetime import datetime, timezone
 from typing import ClassVar
 
@@ -15,6 +16,8 @@ from sqlmodel import Session, select
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.evals import apply_instruction_delta
 from llm_pipeline.evals.delta import (
+    _MAX_DEFAULT_LEN,
+    _MAX_DEFAULT_NODES,
     _MAX_DELTA_ITEMS,
     _MAX_STRING_LEN,
     _resolve_type,
@@ -467,31 +470,6 @@ class TestApplyInstructionDelta:
         with pytest.raises(ValueError, match="not JSON-serialisable"):
             apply_instruction_delta(_DemoInstructions, delta)
 
-    def test_nested_dict_default_rejected(self):
-        """Nested structures beyond flat dict/list of scalars are rejected."""
-        delta = [
-            {
-                "op": "add",
-                "field": "x",
-                "type_str": "dict",
-                "default": {"nested": {"inner": 1}},
-            }
-        ]
-        with pytest.raises(ValueError, match="must be scalars"):
-            apply_instruction_delta(_DemoInstructions, delta)
-
-    def test_list_of_dicts_default_rejected(self):
-        delta = [
-            {
-                "op": "add",
-                "field": "x",
-                "type_str": "list",
-                "default": [{"a": 1}],
-            }
-        ]
-        with pytest.raises(ValueError, match="may only contain scalars"):
-            apply_instruction_delta(_DemoInstructions, delta)
-
     def test_flat_list_default_accepted(self):
         delta = [
             {
@@ -690,6 +668,149 @@ class TestApplyInstructionDelta:
         delta = [{"op": "modify", "field": "no_such_field", "default": 1}]
         with pytest.raises(ValueError, match="not present on base class"):
             apply_instruction_delta(_DemoInstructions, delta)
+
+
+class TestDefaultValidatorNested:
+    """Arbitrary nested JSON defaults accepted; ACE rejections preserved."""
+
+    # --- happy path: nested structures ------------------------------------
+
+    def test_list_of_dicts_accepted(self):
+        _validate_default([{"name": "foo", "count": 1}])
+
+    def test_dict_with_list_value_accepted(self):
+        _validate_default({"outer": [1, 2, 3]})
+
+    def test_three_level_nesting_accepted(self):
+        _validate_default({"a": {"b": {"c": "deep"}}})
+
+    def test_list_of_lists_accepted(self):
+        _validate_default([[1, 2], [3, 4]])
+
+    def test_empty_list_accepted(self):
+        _validate_default([])
+
+    def test_empty_dict_accepted(self):
+        _validate_default({})
+
+    def test_nested_default_flows_through_apply_instruction_delta(self):
+        delta = [
+            {
+                "op": "add",
+                "field": "items",
+                "type_str": "list",
+                "default": [{"name": "foo", "count": 1},
+                            {"name": "bar", "count": 2}],
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        instance = cls()
+        assert instance.items == [
+            {"name": "foo", "count": 1},
+            {"name": "bar", "count": 2},
+        ]
+
+    def test_mixed_nested_default_via_delta(self):
+        delta = [
+            {
+                "op": "add",
+                "field": "topics",
+                "type_str": "dict",
+                "default": {
+                    "primary": ["a", "b"],
+                    "metadata": {"source": "test", "tags": [1, 2, 3]},
+                },
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        assert cls().topics == {
+            "primary": ["a", "b"],
+            "metadata": {"source": "test", "tags": [1, 2, 3]},
+        }
+
+    # --- ACE rejections still in force ------------------------------------
+
+    def test_callable_rejected(self):
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default(lambda: 1)
+
+    def test_set_rejected(self):
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default({1, 2, 3})
+
+    def test_arbitrary_object_instance_rejected(self):
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default(object())
+
+    def test_pydantic_basemodel_instance_rejected(self):
+        class _Thing(BaseModel):
+            x: int = 1
+
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default(_Thing())
+
+    def test_dict_with_non_string_key_rejected(self):
+        # json.dumps silently coerces int keys to strings, so the explicit
+        # walker guard is what rejects this case.
+        with pytest.raises(ValueError, match="dict keys must be strings"):
+            _validate_default({1: "a"})
+
+    def test_dict_with_tuple_key_rejected(self):
+        # Tuple keys: json.dumps raises TypeError.
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default({(1, 2): "a"})
+
+    def test_nested_callable_rejected(self):
+        """Callable nested inside a valid container still rejected."""
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default({"a": [lambda: 1]})
+
+    def test_nested_set_rejected(self):
+        with pytest.raises(ValueError, match="not JSON-serialisable"):
+            _validate_default([{"x": {1, 2}}])
+
+    # --- size caps --------------------------------------------------------
+
+    def test_encoded_length_exceeds_cap_rejected(self):
+        # Build a string whose json.dumps encoding exceeds _MAX_DEFAULT_LEN.
+        # A raw string of length 2001 becomes a JSON string of 2003 chars
+        # (wrapping quotes), so this comfortably trips the cap.
+        oversized = "a" * (_MAX_DEFAULT_LEN + 1)
+        with pytest.raises(ValueError, match="exceeds max"):
+            _validate_default(oversized)
+
+    def test_node_count_exceeds_cap_rejected(self):
+        """Overly large structure rejected by either cap — both are defences.
+
+        Oversized payloads trip whichever cap fires first (encoded-length
+        runs before the walker). We just verify the rejection happens with a
+        meaningful error — not which specific cap caught it.
+        """
+        payload = [0] * (_MAX_DEFAULT_NODES + 1)
+        with pytest.raises(ValueError, match="exceeds max|nested node count"):
+            _validate_default(payload)
+
+    def test_encoded_length_exactly_at_cap_accepted(self):
+        # Construct a default whose json.dumps encoding is EXACTLY 2000
+        # chars. `"x...x"` with n x's encodes to n+2 chars.
+        payload = "x" * (_MAX_DEFAULT_LEN - 2)
+        encoded = json.dumps(payload)
+        assert len(encoded) == _MAX_DEFAULT_LEN
+        _validate_default(payload)  # must not raise
+
+    def test_node_count_boundary_accepted_when_under_size_cap(self):
+        """Near-boundary node count + under size cap = accepted.
+
+        With _MAX_DEFAULT_LEN=2000, fitting _MAX_DEFAULT_NODES=1000 distinct
+        JSON nodes in under 2000 encoded chars isn't possible (min ~1 char
+        per node + delimiters). We instead verify that a payload with many
+        nodes but well under both caps is accepted cleanly.
+        """
+        # 500 zeros: node_count=500, encoded ~= 1501 chars. Well within caps.
+        payload = [0] * 500
+        encoded = json.dumps(payload)
+        assert len(encoded) <= _MAX_DEFAULT_LEN
+        _validate_default(payload)  # must not raise
 
 
 # ---------------------------------------------------------------------------

@@ -13,10 +13,12 @@ Security constraints (ACE hygiene):
   ``remove`` is explicitly NOT supported in this v2 (removing inherited fields
   from LLMResultMixin subclasses breaks pydantic-ai output validation and
   downstream evaluator assumptions).
-- Defaults must be JSON-serialisable scalars, flat lists of scalars, or flat
-  dicts of scalars. Callables, class references, nested objects rejected.
-- Length caps on delta list (50) and string fields (1000 chars) prevent
-  resource exhaustion from malicious payloads.
+- Defaults must be JSON-serialisable structures (scalars, or arbitrarily
+  nested lists/dicts with string keys). Callables, class references, sets,
+  and other non-JSON objects are rejected by the json.dumps round-trip.
+- Length caps on delta list (50), string fields (1000 chars), default
+  JSON-encoded length (2000 chars), and total nested node count in defaults
+  (1000) prevent resource exhaustion from malicious payloads.
 
 Architectural invariants for future Docker-sandbox relocation:
 - No I/O, no session, no global state.
@@ -55,6 +57,8 @@ _DUNDER_RE = re.compile(r"^__.*__$")
 
 _MAX_DELTA_ITEMS = 50
 _MAX_STRING_LEN = 1000
+_MAX_DEFAULT_LEN = 2000
+_MAX_DEFAULT_NODES = 1000
 
 _ALLOWED_OPS = frozenset({"add", "modify"})
 _SCALAR_TYPES = (str, int, float, bool, type(None))
@@ -84,47 +88,72 @@ def _resolve_type(type_str: str) -> type:
 def _validate_default(default: Any) -> None:
     """Validate that a default value is safe to persist and apply.
 
-    JSON round-trip via ``json.dumps`` — rejects callables, class refs, and
-    any non-JSON-serialisable object. Additionally enforces: only scalars,
-    flat lists of scalars, or flat dicts of scalars.
+    Accepts arbitrary JSON-compatible structures: scalars, or nested lists
+    and dicts (string keys only) of any depth. Rejects anything else.
+
+    ACE safeguards:
+    - ``json.dumps`` round-trip rejects callables, class references, sets,
+      custom objects, and non-string dict keys (raises TypeError).
+    - Encoded-length cap (``_MAX_DEFAULT_LEN``, 2000 chars) bounds payload
+      size.
+    - Total node count cap (``_MAX_DEFAULT_NODES``, 1000) sums list items +
+      dict entries recursively, preventing pathological deeply-nested or
+      wide inputs.
+
+    Note: Python tuples are permitted as inputs and treated as lists; the
+    ``json.dumps`` round-trip serialises them identically to JSON arrays,
+    so downstream storage sees a list either way.
     """
-    # json.dumps rejects callables, sets, class refs, custom objects.
+    # json.dumps rejects callables, sets, class refs, custom objects, and
+    # non-string dict keys (e.g. {1: "a"} raises TypeError in strict mode).
     try:
         encoded = json.dumps(default)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"default is not JSON-serialisable: {exc}") from exc
 
-    if len(encoded) > _MAX_STRING_LEN:
+    if len(encoded) > _MAX_DEFAULT_LEN:
         raise ValueError(
-            f"default JSON-encoded length exceeds max {_MAX_STRING_LEN}"
+            f"default JSON-encoded length {len(encoded)} exceeds max "
+            f"{_MAX_DEFAULT_LEN}"
         )
 
-    # Structural checks: scalar | flat list of scalars | flat dict of scalars.
-    if isinstance(default, _SCALAR_TYPES):
-        return
-    if isinstance(default, list):
-        for item in default:
-            if not isinstance(item, _SCALAR_TYPES):
+    # Iterative walk: scalars, lists (any depth), dicts with string keys
+    # (any depth). Anything else at any depth raises. Count every list item
+    # and every dict entry toward the node budget.
+    stack: list[Any] = [default]
+    node_count = 0
+    while stack:
+        node = stack.pop()
+        if isinstance(node, _SCALAR_TYPES):
+            continue
+        if isinstance(node, (list, tuple)):
+            node_count += len(node)
+            if node_count > _MAX_DEFAULT_NODES:
                 raise ValueError(
-                    "default list may only contain scalars "
-                    "(str, int, float, bool, None)"
+                    f"default nested node count exceeds max "
+                    f"{_MAX_DEFAULT_NODES}"
                 )
-        return
-    if isinstance(default, dict):
-        for key, value in default.items():
-            if not isinstance(key, str):
-                raise ValueError("default dict keys must be strings")
-            if not isinstance(value, _SCALAR_TYPES):
+            stack.extend(node)
+            continue
+        if isinstance(node, dict):
+            node_count += len(node)
+            if node_count > _MAX_DEFAULT_NODES:
                 raise ValueError(
-                    "default dict values must be scalars "
-                    "(str, int, float, bool, None)"
+                    f"default nested node count exceeds max "
+                    f"{_MAX_DEFAULT_NODES}"
                 )
-        return
-    # Anything else (tuples from json decode won't occur; nested containers fall here).
-    raise ValueError(
-        f"default must be a scalar, flat list of scalars, or flat dict of "
-        f"scalars; got {type(default).__name__}"
-    )
+            for key, value in node.items():
+                if not isinstance(key, str):
+                    # json.dumps catches this too, but be explicit — if
+                    # json.dumps ever changes, we still reject here.
+                    raise ValueError("default dict keys must be strings")
+                stack.append(value)
+            continue
+        raise ValueError(
+            f"default contains unsupported type {type(node).__name__}; "
+            f"only scalars, lists, and dicts (string keys) permitted "
+            f"at any depth"
+        )
 
 
 def _validate_field_name(field: Any) -> str:
@@ -165,8 +194,12 @@ def apply_instruction_delta(
             - ``type_str``: whitelisted type string. Required for ``add``;
               optional for ``modify`` (preserves existing annotation if
               omitted).
-            - ``default``: optional default value (JSON-scalar, flat list of
-              scalars, or flat dict of scalars).
+            - ``default``: optional default value. Must be JSON-serialisable:
+              a scalar (str/int/float/bool/None), or any nested structure of
+              lists and string-keyed dicts (any depth). Callables, class
+              refs, sets, and non-string dict keys are rejected. Encoded
+              length capped at 2000 chars; total nested node count capped
+              at 1000.
 
     Returns:
         A new pydantic BaseModel subclass named ``VariantInstructions`` (or
