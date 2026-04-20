@@ -294,18 +294,30 @@ def put_pipeline_status(
 # ---------------------------------------------------------------------------
 
 
-def _find_step_model_from_introspection(
-    registry: dict, pipeline_name: str, step_name: str,
-) -> Optional[str]:
-    """Return step-level model from introspection metadata, or None."""
-    pipeline_cls = registry.get(pipeline_name)
-    if pipeline_cls is None:
+def _find_step_def_in_pipeline(
+    pipeline_cls: Any, step_name: str
+) -> Optional[Any]:
+    """Return the StepDefinition for ``step_name`` on ``pipeline_cls`` or None.
+
+    Walks the pipeline's registered strategies in declaration order and
+    returns the first matching step definition.
+    """
+    strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
+    if strategies_cls is None:
         return None
-    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
-    for strategy in metadata.get("strategies", []):
-        for step in strategy.get("steps", []):
-            if step.get("step_name") == step_name:
-                return step.get("model")
+    strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
+    for s_cls in strategy_classes:
+        try:
+            strategy = s_cls()
+            for sd in strategy.get_steps():
+                if sd.step_name == step_name:
+                    return sd
+        except Exception:
+            logger.debug(
+                "Failed to introspect strategy %s for step '%s'",
+                s_cls.__name__, step_name, exc_info=True,
+            )
+            continue
     return None
 
 
@@ -316,24 +328,62 @@ def get_step_model(
     request: Request,
     db: DBSession,
 ):
-    """Get the effective model for a pipeline step."""
+    """Get the effective model for a pipeline step.
+
+    Delegates model resolution to ``llm_pipeline.model.resolver`` for
+    tiers 1/2/3. ``request_limit`` stays a direct ``StepModelConfig`` read
+    since it's a separate per-step concern not covered by the model
+    resolver.
+
+    Source mapping: the canonical resolver's ``"none"`` (no model at any
+    tier) is surfaced as ``"pipeline_default"`` with ``model=None`` to
+    preserve the existing endpoint contract consumed by the frontend.
+    """
+    from llm_pipeline.model.resolver import resolve_model_with_fallbacks
+
     registry: dict = getattr(request.app.state, "introspection_registry", {})
     if name not in registry:
         raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
 
-    stmt = select(StepModelConfig).where(
-        StepModelConfig.pipeline_name == name,
-        StepModelConfig.step_name == step_name,
-    )
-    row = db.exec(stmt).first()
-    if row is not None:
-        return {"model": row.model, "request_limit": row.request_limit, "source": "db"}
+    pipeline_cls = registry[name]
 
-    introspected_model = _find_step_model_from_introspection(registry, name, step_name)
-    if introspected_model is not None:
-        return {"model": introspected_model, "request_limit": None, "source": "step_definition"}
+    # request_limit stays a direct DB read — not covered by the model resolver.
+    cfg_row = db.exec(
+        select(StepModelConfig).where(
+            StepModelConfig.pipeline_name == name,
+            StepModelConfig.step_name == step_name,
+        )
+    ).first()
+    request_limit = cfg_row.request_limit if cfg_row is not None else None
 
-    return {"model": None, "request_limit": None, "source": "pipeline_default"}
+    step_def = _find_step_def_in_pipeline(pipeline_cls, step_name)
+    if step_def is None:
+        # No step found in registered strategies — fall back to resolver
+        # using a minimal shim so tier-2 DB lookup and tier-3 default still
+        # apply. This preserves prior behavior when introspection couldn't
+        # find the step.
+        class _MissingStepShim:
+            def __init__(self, n: str) -> None:
+                self.step_name = n
+                self.model = None
+
+        step_def_shim = _MissingStepShim(step_name)
+        pipeline_default = getattr(pipeline_cls, "_default_model", None)
+        model, source = resolve_model_with_fallbacks(
+            step_def_shim, db, name, pipeline_default
+        )
+    else:
+        pipeline_default = getattr(pipeline_cls, "_default_model", None)
+        model, source = resolve_model_with_fallbacks(
+            step_def, db, name, pipeline_default
+        )
+
+    # Back-compat: legacy endpoint returns "pipeline_default" when nothing
+    # is configured (model=None). The resolver returns "none" in that case.
+    if source == "none":
+        source = "pipeline_default"
+
+    return {"model": model, "request_limit": request_limit, "source": source}
 
 
 @router.put("/{name}/steps/{step_name}/model")

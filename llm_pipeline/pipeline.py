@@ -1223,26 +1223,28 @@ class PipelineConfig(ABC):
         return self.extractions.get(model_class, [])
 
     def _resolve_step_model(self, step) -> str:
-        """Resolve model for a step. Priority: DB config > step definition > pipeline default."""
-        # 1. DB-backed (UI-configured)
-        from sqlmodel import select
-        from llm_pipeline.db.step_config import StepModelConfig
-        config = self._real_session.exec(
-            select(StepModelConfig).where(
-                StepModelConfig.pipeline_name == self.pipeline_name,
-                StepModelConfig.step_name == step.step_name,
-            )
-        ).first()
-        if config:
-            return config.model
+        """Resolve model for a step via the shared resolver.
 
-        # 2. Step definition default
-        step_model = getattr(step, '_step_model', None)
-        if step_model:
-            return step_model
+        Delegates to ``llm_pipeline.model.resolver.resolve_model_with_fallbacks``
+        using a ``StepDefinition``-shaped shim over the step instance. The
+        step instance exposes ``step_name`` directly but stores the tier-1
+        model on ``_step_model`` (populated by ``PipelineStrategy.create_step``),
+        so we wrap it in a minimal shim that matches the resolver's
+        expected shape.
+        """
+        from llm_pipeline.model.resolver import resolve_model_with_fallbacks
 
-        # 3. Pipeline default
-        return self._model
+        class _StepDefShim:
+            step_name = step.step_name
+            model = getattr(step, "_step_model", None)
+
+        model, _source = resolve_model_with_fallbacks(
+            _StepDefShim(),
+            self._real_session,
+            self.pipeline_name,
+            self._model,
+        )
+        return model
 
     def _resolve_step_usage_limits(self, step):
         """Resolve usage limits for a step from DB config."""

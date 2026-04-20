@@ -1055,7 +1055,7 @@ class TestRunnerVariantIntegration:
         runner = EvalRunner(engine=shared_engine)
 
         def stub_find(step_name):
-            return self._make_step_def(), None, "default-model"
+            return self._make_step_def(), None, "default-model", "sandbox"
 
         # Replace sandbox-running task with a no-op so we never hit LLMs.
         # The real value under test is: delta snapshot + variant_id persisted,
@@ -1154,7 +1154,7 @@ class TestRunnerVariantIntegration:
         runner = EvalRunner(engine=shared_engine)
 
         def stub_find(step_name):
-            return self._make_step_def(), None, "default-model"
+            return self._make_step_def(), None, "default-model", "sandbox"
 
         with patch.object(runner, "_find_step_def", side_effect=stub_find):
             task_fn, evaluators = runner._resolve_step_task(
