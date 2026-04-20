@@ -563,9 +563,7 @@ function RunHistoryTab({ datasetId }: { datasetId: number }) {
   const { data: runs, isLoading } = useEvalRuns(datasetId)
   const triggerRun = useTriggerEvalRun(datasetId)
 
-  const items: RunListItem[] = Array.isArray(runs)
-    ? runs
-    : ((runs as unknown) as { items?: RunListItem[] })?.items ?? []
+  const items: RunListItem[] = runs ?? []
 
   return (
     <div className="space-y-3">

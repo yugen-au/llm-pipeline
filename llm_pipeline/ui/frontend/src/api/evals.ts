@@ -284,7 +284,12 @@ export function useDataset(id: number) {
 export function useEvalRuns(datasetId: number) {
   return useQuery({
     queryKey: queryKeys.evals.runs(datasetId),
-    queryFn: () => apiClient<RunListItem[]>(`/evals/${datasetId}/runs`),
+    queryFn: async () => {
+      const res = await apiClient<{ items: RunListItem[] }>(
+        `/evals/${datasetId}/runs`,
+      )
+      return res.items
+    },
     enabled: datasetId > 0,
   })
 }
