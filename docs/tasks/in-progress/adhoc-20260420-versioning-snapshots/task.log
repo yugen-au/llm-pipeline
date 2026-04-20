@@ -86,3 +86,5 @@ To proceed, either:
 [2026-04-21 00:00:17] [INFO] Auto-updated agent statuses: Move compare_versions to utils: pending -> in-progress, Prompt schema updates: pending -> in-progress, EvaluationCase + EvaluationRun schema: pending -> in-progress
 [2026-04-21 00:00:17] [INFO] Deleted 1 old contract file(s)
 [2026-04-21 00:00:17] [DEBUG] STATE.md atomic write complete
+[2026-04-21 00:01:01] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-21 00:01:36] [ERROR] BLOCKED: Bash not allowed in task dir
