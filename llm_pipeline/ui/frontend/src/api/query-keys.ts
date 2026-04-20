@@ -54,6 +54,10 @@ export const queryKeys = {
       ['evals', datasetId, 'runs', runId] as const,
     schema: (targetType: string, targetName: string) =>
       ['evals', 'schema', targetType, targetName] as const,
+    variants: (datasetId: number) => ['evals', datasetId, 'variants'] as const,
+    variant: (datasetId: number, variantId: number) =>
+      ['evals', datasetId, 'variants', variantId] as const,
+    deltaTypeWhitelist: () => ['evals', 'delta-type-whitelist'] as const,
   },
 } as const
 

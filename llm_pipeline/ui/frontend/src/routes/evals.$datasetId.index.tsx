@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Plus, Trash2, Play, ArrowLeft } from 'lucide-react'
+import { Plus, Trash2, Play, ArrowLeft, Pencil } from 'lucide-react'
 import {
   useDataset,
   useCreateCase,
@@ -10,8 +10,10 @@ import {
   useEvalRuns,
   useTriggerEvalRun,
   useInputSchema,
+  useVariants,
+  useDeleteVariant,
 } from '@/api/evals'
-import type { CaseItem, RunListItem, SchemaResponse } from '@/api/evals'
+import type { CaseItem, RunListItem, SchemaResponse, VariantItem } from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -635,6 +637,112 @@ function RunHistoryTab({ datasetId }: { datasetId: number }) {
 }
 
 // ---------------------------------------------------------------------------
+// Variants tab
+// ---------------------------------------------------------------------------
+
+function VariantsTab({ datasetId }: { datasetId: number }) {
+  const navigate = useNavigate()
+  const { data, isLoading } = useVariants(datasetId)
+  const deleteVariantMut = useDeleteVariant(datasetId)
+
+  const items: VariantItem[] = data?.items ?? []
+
+  function handleDelete(v: VariantItem) {
+    if (!confirm(`Delete variant "${v.name}"? This cannot be undone.`)) return
+    deleteVariantMut.mutate(v.id)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {items.length} variant{items.length !== 1 ? 's' : ''}
+        </p>
+        <Button
+          size="sm"
+          className="gap-1 h-7 text-xs"
+          onClick={() =>
+            navigate({
+              to: `/evals/${datasetId}/variants/new` as string,
+            })
+          }
+        >
+          <Plus className="size-3" /> New Variant
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No variants yet. Click "New Variant" to create one.
+        </p>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="text-xs">Name</TableHead>
+              <TableHead className="text-xs">Description</TableHead>
+              <TableHead className="text-xs">Created</TableHead>
+              <TableHead className="text-xs w-24" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((v) => (
+              <TableRow
+                key={v.id}
+                className="cursor-pointer hover:bg-muted/50"
+                onClick={() =>
+                  navigate({
+                    to: `/evals/${datasetId}/variants/${v.id}` as string,
+                  })
+                }
+              >
+                <TableCell className="text-xs font-medium">{v.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {v.description ?? '-'}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {formatDate(v.created_at)}
+                </TableCell>
+                <TableCell>
+                  <div
+                    className="flex justify-end gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        navigate({
+                          to: `/evals/${datasetId}/variants/${v.id}` as string,
+                        })
+                      }
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs text-destructive"
+                      disabled={deleteVariantMut.isPending}
+                      onClick={() => handleDelete(v)}
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -713,6 +821,7 @@ function DatasetDetailPage() {
             <TabsTrigger value="cases">
               Cases ({dataset.cases?.length ?? 0})
             </TabsTrigger>
+            <TabsTrigger value="variants">Variants</TabsTrigger>
             <TabsTrigger value="runs">Run History</TabsTrigger>
           </TabsList>
 
@@ -723,6 +832,10 @@ function DatasetDetailPage() {
               targetType={dataset.target_type}
               targetName={dataset.target_name}
             />
+          </TabsContent>
+
+          <TabsContent value="variants" className="mt-4">
+            <VariantsTab datasetId={datasetId} />
           </TabsContent>
 
           <TabsContent value="runs" className="mt-4">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
   Check,
@@ -7,9 +7,16 @@ import {
   Minus,
   ChevronDown,
   ChevronRight,
+  GitCompare,
 } from 'lucide-react'
-import { useEvalRun } from '@/api/evals'
-import type { CaseResultItem } from '@/api/evals'
+import { useEvalRun, useEvalRuns } from '@/api/evals'
+import type { CaseResultItem, RunListItem } from '@/api/evals'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -158,12 +165,52 @@ function ExpandableDetail({ result }: { result: CaseResultItem }) {
 // Page
 // ---------------------------------------------------------------------------
 
+function findMostRecentBaseline(
+  runs: RunListItem[] | undefined,
+  currentRunId: number,
+): RunListItem | null {
+  if (!runs) return null
+  // Runs endpoint typically returns in chronological order; filter variant_id==null
+  // excluding the current run itself. Pick the one with the latest started_at.
+  const baselines = runs.filter(
+    (r) => r.variant_id == null && r.id !== currentRunId,
+  )
+  if (baselines.length === 0) return null
+  return baselines.reduce((best, r) => {
+    if (!best) return r
+    const bestTs = best.started_at ? Date.parse(best.started_at) : 0
+    const rTs = r.started_at ? Date.parse(r.started_at) : 0
+    return rTs > bestTs ? r : best
+  }, null as RunListItem | null)
+}
+
 function EvalRunDetailPage() {
   const { datasetId: rawDatasetId, runId: rawRunId } = Route.useParams()
   const datasetId = Number(rawDatasetId)
   const runId = Number(rawRunId)
   const { data: run, isLoading, error } = useEvalRun(datasetId, runId)
+  const navigate = useNavigate()
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+
+  // Only load run list when current run is a variant run. We use `enabled`
+  // semantics indirectly: the hook is keyed by datasetId and safe to mount
+  // unconditionally; filtering logic ignores it when run is not a variant.
+  const runsQ = useEvalRuns(datasetId)
+  const isVariantRun = run?.variant_id != null
+  const baseline = isVariantRun
+    ? findMostRecentBaseline(runsQ.data, runId)
+    : null
+  const canCompare = isVariantRun && baseline != null
+  const compareDisabled = isVariantRun && !canCompare
+
+  function handleCompare() {
+    if (!baseline) return
+    navigate({
+      to: '/evals/$datasetId/compare',
+      params: { datasetId: String(datasetId) },
+      search: { baseRunId: baseline.id, variantRunId: runId },
+    })
+  }
 
   function toggleRow(id: number) {
     setExpandedRows((prev) => {
@@ -228,11 +275,51 @@ function EvalRunDetailPage() {
               Started {run.started_at ? new Date(run.started_at).toLocaleString() : 'N/A'}
               {run.completed_at && ` -- completed ${new Date(run.completed_at).toLocaleString()}`}
             </p>
+            {run.variant_id != null && (
+              <p className="text-xs text-muted-foreground">
+                Variant run (variant #{run.variant_id})
+              </p>
+            )}
           </div>
-          <Badge variant={statusVariant(run.status)} className="gap-1.5 shrink-0">
-            <span className={`h-2 w-2 rounded-full ${statusColor(run.status)}`} />
-            {run.status}
-          </Badge>
+          <div className="flex items-center gap-2 shrink-0">
+            {isVariantRun && (
+              compareDisabled ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled
+                          className="gap-1.5"
+                        >
+                          <GitCompare className="h-4 w-4" />
+                          Compare with baseline
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>No baseline run available</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCompare}
+                  disabled={runsQ.isLoading || !baseline}
+                  className="gap-1.5"
+                >
+                  <GitCompare className="h-4 w-4" />
+                  Compare with baseline
+                </Button>
+              )
+            )}
+            <Badge variant={statusVariant(run.status)} className="gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${statusColor(run.status)}`} />
+              {run.status}
+            </Badge>
+          </div>
         </div>
 
         {/* Stat cards */}
