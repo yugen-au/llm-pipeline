@@ -576,12 +576,142 @@ function formatDeltaTag(kind: DeltaKind): string {
 }
 
 function outputOrError(r: CaseResultItem | undefined): string {
-  if (!r) return '_no result_'
+  if (!r) return '*no result*'
   if (r.error_message) {
     return fenced('', `error: ${r.error_message}`)
   }
-  if (r.output_data == null) return '_no output_'
+  if (r.output_data == null) return '*no output*'
   return jsonFence(r.output_data)
+}
+
+// --- YAML rendering for evaluator scores -----------------------------------
+
+/** Escape a string value for YAML flow-scalar use. Quotes if contains special chars. */
+function yamlString(s: string): string {
+  // Quote if contains control chars, colons, hashes, brackets, or leading/trailing
+  // whitespace — keeps things safe without full YAML spec compliance.
+  if (/[:#\[\]{},&*!|>'"%@`\n\r\t]/.test(s) || /^\s|\s$/.test(s) || s === '') {
+    return JSON.stringify(s)
+  }
+  return s
+}
+
+function yamlScalar(v: unknown): string {
+  if (v === null || v === undefined) return 'null'
+  if (typeof v === 'boolean') return v ? 'true' : 'false'
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'null'
+  if (typeof v === 'string') return yamlString(v)
+  // Fallback: JSON-encode arrays/objects on one line
+  return JSON.stringify(v)
+}
+
+function isScalar(v: unknown): boolean {
+  return (
+    v === null ||
+    v === undefined ||
+    typeof v === 'boolean' ||
+    typeof v === 'number' ||
+    typeof v === 'string'
+  )
+}
+
+/** Render an object as YAML, indented by `indent` spaces per level. */
+function yamlObject(obj: Record<string, unknown>, indent = 0): string {
+  const pad = ' '.repeat(indent)
+  const lines: string[] = []
+  for (const [k, v] of Object.entries(obj)) {
+    const key = yamlString(k)
+    if (isScalar(v)) {
+      lines.push(`${pad}${key}: ${yamlScalar(v)}`)
+    } else if (Array.isArray(v)) {
+      if (v.length === 0) {
+        lines.push(`${pad}${key}: []`)
+      } else {
+        lines.push(`${pad}${key}:`)
+        for (const item of v) {
+          if (isScalar(item)) {
+            lines.push(`${pad}  - ${yamlScalar(item)}`)
+          } else if (item && typeof item === 'object') {
+            const sub = yamlObject(item as Record<string, unknown>, indent + 4)
+            // Push first key onto the "- " line for readability
+            const subLines = sub.split('\n')
+            if (subLines.length > 0) {
+              lines.push(`${pad}  - ${subLines[0].trimStart()}`)
+              for (let i = 1; i < subLines.length; i++) lines.push(subLines[i])
+            }
+          }
+        }
+      }
+    } else if (v && typeof v === 'object') {
+      const entries = Object.keys(v as Record<string, unknown>)
+      if (entries.length === 0) {
+        lines.push(`${pad}${key}: {}`)
+      } else {
+        lines.push(`${pad}${key}:`)
+        lines.push(yamlObject(v as Record<string, unknown>, indent + 2))
+      }
+    } else {
+      lines.push(`${pad}${key}: ${yamlScalar(v)}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Render evaluator_scores map as YAML. Handles nested shapes flexibly:
+ * - scalar value -> `key: value`
+ * - `{value: X}` -> `key: X`
+ * - `{value: X, reason: Y}` -> `key: X  # Y`
+ * - other object -> nested YAML block
+ */
+function evaluatorScoresYaml(raw: Record<string, unknown>): string {
+  const lines: string[] = []
+  for (const [k, v] of Object.entries(raw)) {
+    const key = yamlString(k)
+    if (isScalar(v)) {
+      lines.push(`${key}: ${yamlScalar(v)}`)
+      continue
+    }
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const obj = v as Record<string, unknown>
+      const keys = Object.keys(obj)
+      if ('value' in obj && isScalar(obj.value)) {
+        const inline = `${key}: ${yamlScalar(obj.value)}`
+        const reason = obj.reason
+        const onlyValueAndMaybeReason = keys.every((kk) => kk === 'value' || kk === 'reason')
+        if (onlyValueAndMaybeReason && typeof reason === 'string' && reason) {
+          // Inline comment — strip newlines so comment stays single-line
+          const safeReason = reason.replace(/[\r\n]+/g, ' ').trim()
+          lines.push(`${inline}  # ${safeReason}`)
+        } else if (onlyValueAndMaybeReason) {
+          lines.push(inline)
+        } else {
+          // Has extra keys — fall through to nested render
+          lines.push(`${key}:`)
+          lines.push(yamlObject(obj, 2))
+        }
+      } else {
+        lines.push(`${key}:`)
+        lines.push(yamlObject(obj, 2))
+      }
+    } else if (Array.isArray(v)) {
+      lines.push(`${key}: ${JSON.stringify(v)}`)
+    } else {
+      lines.push(`${key}: ${yamlScalar(v)}`)
+    }
+  }
+  return lines.join('\n')
+}
+
+/** Build evaluator-scores markdown block for a single side, or empty string. */
+function evaluatorScoresBlock(
+  label: string,
+  r: CaseResultItem | undefined,
+): string {
+  if (!r || !r.evaluator_scores) return ''
+  const scores = r.evaluator_scores as Record<string, unknown>
+  if (Object.keys(scores).length === 0) return ''
+  return `**${label} evaluator scores:**\n${fenced('yaml', evaluatorScoresYaml(scores))}`
 }
 
 interface MarkdownCaseInput {
@@ -613,21 +743,28 @@ function caseMarkdownSection(
   const header = `### \`${caseName}\` [baseline: ${baseStatus}] -> [variant: ${varStatus}] (${formatDeltaTag(kind)})`
   const input = caseDef
     ? `**Input:**\n${jsonFence(caseDef.inputs)}`
-    : `**Input:** _not available_`
+    : `**Input:** *not available*`
   const expected = caseDef?.expected_output
     ? `**Expected:**\n${jsonFence(caseDef.expected_output)}`
-    : `**Expected:** _none defined_`
+    : `**Expected:** *none defined*`
+  const baseScores = evaluatorScoresBlock('Baseline', baseRes)
+  const varScores = evaluatorScoresBlock('Variant', variantRes)
   const baseOut = `**Baseline output:**\n${outputOrError(baseRes)}`
   const varOut = `**Variant output:**\n${outputOrError(variantRes)}`
 
-  return `${header}\n\n${input}\n\n${expected}\n\n${baseOut}\n\n${varOut}\n`
+  const parts = [header, input, expected]
+  if (baseScores) parts.push(baseScores)
+  parts.push(baseOut)
+  if (varScores) parts.push(varScores)
+  parts.push(varOut)
+  return parts.join('\n\n') + '\n'
 }
 
 function enumCatalogMarkdown(
   catalog: Record<string, Array<{ name: string; value: string }>>,
 ): string {
   const keys = Object.keys(catalog)
-  if (keys.length === 0) return '_none registered_'
+  if (keys.length === 0) return '*none registered*'
   return keys
     .map((k) => {
       const members = catalog[k]
@@ -636,6 +773,130 @@ function enumCatalogMarkdown(
       return `- \`${k}\`: [${members}]`
     })
     .join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Failing-case summary banner + aggregate comparison table
+// ---------------------------------------------------------------------------
+
+// Minimal shape needed by caseDelta/isErrored — accepts both CaseResultItem and
+// ExportCaseResult since both expose `passed` + `error_message`.
+type CaseResultLike = Pick<CaseResultItem, 'passed' | 'error_message'>
+
+function failingSummaryBanner(
+  allNames: string[],
+  baseByName: Map<string, CaseResultLike>,
+  variantByName: Map<string, CaseResultLike>,
+): string {
+  // caseDelta/isErrored only touch `passed` + `error_message`; cast-through is
+  // safe here and avoids threading a generic through both helpers.
+  const asFull = (r: CaseResultLike | undefined) =>
+    r as unknown as CaseResultItem | undefined
+  if (allNames.length === 0) return ''
+  const regressed: string[] = []
+  const erroredInVariant: string[] = []
+  for (const name of allNames) {
+    const b = asFull(baseByName.get(name))
+    const v = asFull(variantByName.get(name))
+    if (caseDelta(b, v) === 'regressed') regressed.push(name)
+    if (isErrored(v)) erroredInVariant.push(name)
+  }
+  const parts: string[] = []
+  if (regressed.length > 0) {
+    const shown = regressed.slice(0, 5).map((n) => `\`${n}\``).join(', ')
+    const more = regressed.length > 5 ? `, +${regressed.length - 5} more` : ''
+    parts.push(`${regressed.length} regressed (${shown}${more})`)
+  }
+  if (erroredInVariant.length > 0) {
+    const shown = erroredInVariant.slice(0, 5).map((n) => `\`${n}\``).join(', ')
+    const more =
+      erroredInVariant.length > 5 ? `, +${erroredInVariant.length - 5} more` : ''
+    parts.push(`${erroredInVariant.length} errored (${shown}${more})`)
+  }
+  if (parts.length === 0) return '**All cases passed.**'
+  return `**Failing cases:** ${parts.join(', ')}`
+}
+
+function signedInt(n: number): string {
+  if (n === 0) return '0'
+  return n > 0 ? `+${n}` : `${n}`
+}
+
+function signedPct(base: number | null, variant: number | null): string {
+  if (base == null || variant == null) return '—'
+  const delta = (variant - base) * 100
+  if (delta === 0) return '0.0%'
+  const sign = delta > 0 ? '+' : ''
+  return `${sign}${delta.toFixed(1)}%`
+}
+
+function padCell(s: string, w: number): string {
+  if (s.length >= w) return s
+  return s + ' '.repeat(w - s.length)
+}
+
+function aggregateComparisonTable(
+  baseRunId: number,
+  variantRunId: number,
+  baseStats: ExportStats,
+  varStats: ExportStats,
+): string {
+  const passRateDelta = signedPct(baseStats.pass_rate, varStats.pass_rate)
+  const rows: Array<[string, string, string, string]> = [
+    [
+      'Pass rate',
+      formatPct(baseStats.pass_rate),
+      formatPct(varStats.pass_rate),
+      passRateDelta,
+    ],
+    [
+      'Passed',
+      `${baseStats.passed}/${baseStats.total}`,
+      `${varStats.passed}/${varStats.total}`,
+      signedInt(varStats.passed - baseStats.passed),
+    ],
+    [
+      'Failed',
+      String(baseStats.failed),
+      String(varStats.failed),
+      signedInt(varStats.failed - baseStats.failed),
+    ],
+    [
+      'Errored',
+      String(baseStats.errored),
+      String(varStats.errored),
+      signedInt(varStats.errored - baseStats.errored),
+    ],
+  ]
+  const headers: [string, string, string, string] = [
+    'Metric',
+    `Baseline (#${baseRunId})`,
+    `Variant (#${variantRunId})`,
+    'Δ',
+  ]
+  // Compute column widths for light padding
+  const widths: [number, number, number, number] = [
+    headers[0].length,
+    headers[1].length,
+    headers[2].length,
+    headers[3].length,
+  ]
+  for (const r of rows) {
+    for (let i = 0; i < 4; i++) {
+      if (r[i].length > widths[i]) widths[i] = r[i].length
+    }
+  }
+  const header =
+    `| ${padCell(headers[0], widths[0])} | ${padCell(headers[1], widths[1])} | ${padCell(headers[2], widths[2])} | ${padCell(headers[3], widths[3])} |`
+  const sep =
+    `|${'-'.repeat(widths[0] + 2)}|${'-'.repeat(widths[1] + 2)}|${'-'.repeat(widths[2] + 2)}|${'-'.repeat(widths[3] + 2)}|`
+  const body = rows
+    .map(
+      (r) =>
+        `| ${padCell(r[0], widths[0])} | ${padCell(r[1], widths[1])} | ${padCell(r[2], widths[2])} | ${padCell(r[3], widths[3])} |`,
+    )
+    .join('\n')
+  return [header, sep, body].join('\n')
 }
 
 function buildPayloadMarkdown(args: BuildPayloadArgs): string {
@@ -680,34 +941,45 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     )
     .join('\n')
 
-  const varDefsBlock = prod_config.variable_definitions
-    ? jsonFence(prod_config.variable_definitions)
-    : '_none_'
+  const varDefs = prod_config.variable_definitions
+  const varDefsBlock =
+    varDefs && Object.keys(varDefs).length > 0
+      ? jsonFence(varDefs)
+      : '(none defined)'
   const instrBlock = prod_config.instructions_schema
     ? jsonFence(prod_config.instructions_schema)
-    : '_not available_'
-  const modelLine = prod_config.model ? `\`${prod_config.model}\`` : '_not set_'
+    : '*not available*'
+  const modelLine = prod_config.model ? `\`${prod_config.model}\`` : '*not set*'
   const sysBlock = prod_config.system_prompt
     ? fenced('', prod_config.system_prompt)
-    : '_none_'
+    : '*none*'
   const userBlock = prod_config.user_prompt
     ? fenced('', prod_config.user_prompt)
-    : '_none_'
+    : '*none*'
 
   const variantSection = variant
     ? [
         `## Current variant: ${variant.name ?? `#${variant.id}`}`,
-        variant.description ? variant.description : '_no description_',
+        variant.description ? variant.description : '(no description)',
         '',
         '### Delta',
-        variant.delta ? jsonFence(variant.delta) : '_empty delta_',
+        variant.delta ? jsonFence(variant.delta) : '*empty delta*',
       ].join('\n')
-    : '## Current variant\n_none — comparing two raw runs_'
+    : '## Current variant\n*none — comparing two raw runs*'
 
   const baseStats = runs.baseline.stats
   const varStats = runs.variant.stats
-  const baseRate = formatPct(baseStats.pass_rate)
-  const varRate = formatPct(varStats.pass_rate)
+  const aggregateTable = aggregateComparisonTable(
+    runs.baseline.id,
+    runs.variant.id,
+    baseStats,
+    varStats,
+  )
+
+  const banner = failingSummaryBanner(sortedNames, baseByName, variantByName)
+  const perCaseSection = banner
+    ? `## Per-case details\n\n${banner}\n\n${perCase}`
+    : `## Per-case details\n\n${perCase}`
 
   return [
     META_PROMPT,
@@ -739,15 +1011,9 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     '',
     '## Run results',
     '',
-    `### Baseline (run #${runs.baseline.id})`,
-    `- Total: ${baseStats.total}, Passed: ${baseStats.passed}, Failed: ${baseStats.failed}, Errored: ${baseStats.errored}, Pass rate: ${baseRate}`,
+    aggregateTable,
     '',
-    `### Variant (run #${runs.variant.id})`,
-    `- Total: ${varStats.total}, Passed: ${varStats.passed}, Failed: ${varStats.failed}, Errored: ${varStats.errored}, Pass rate: ${varRate}`,
-    '',
-    '## Per-case details',
-    '',
-    perCase,
+    perCaseSection,
   ].join('\n')
 }
 
