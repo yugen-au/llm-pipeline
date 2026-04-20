@@ -1,58 +1,16 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ChevronRight, ChevronDown, X } from 'lucide-react'
+import { ChevronRight, ChevronDown } from 'lucide-react'
 import type {
   PipelineStrategyMetadata,
   PipelineStepMetadata,
   ExtractionMetadata,
   TransformationMetadata,
 } from '@/api/types'
-import { useStepModel, useSetStepModel, useRemoveStepModel, useAvailableModels } from '@/api/pipelines'
+import { useStepModel, useSetStepModel, useRemoveStepModel } from '@/api/pipelines'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
 import { JsonViewer } from '@/components/JsonViewer'
-
-// ---------------------------------------------------------------------------
-// Provider display
-// ---------------------------------------------------------------------------
-
-const PROVIDER_LABELS: Record<string, string> = {
-  'anthropic': 'Anthropic',
-  'google-gla': 'Google AI',
-  'google-vertex': 'Vertex AI',
-  'gemini': 'Gemini',
-  'groq': 'Groq',
-  'mistral': 'Mistral',
-  'openai': 'OpenAI',
-  'deepseek': 'DeepSeek',
-  'cohere': 'Cohere',
-  'bedrock': 'Bedrock',
-  'grok': 'Grok',
-  'xai': 'Grok',
-  'meta': 'Meta',
-  'cerebras': 'Cerebras',
-  'huggingface': 'HuggingFace',
-}
-
-function formatModel(model: string) {
-  const provider = model.includes(':') ? model.split(':')[0] : 'openai'
-  const name = model.includes(':') ? model.split(':').slice(1).join(':') : model
-  const label = PROVIDER_LABELS[provider] ?? provider
-  return { provider: label, name }
-}
+import { ModelCombobox } from '@/components/pipelines/ModelCombobox'
 
 // ---------------------------------------------------------------------------
 // StepModelSelector
@@ -66,77 +24,22 @@ interface StepModelSelectorProps {
 }
 
 function StepModelSelector({ pipelineName, stepName, currentModel, modelSource }: StepModelSelectorProps) {
-  const [open, setOpen] = useState(false)
-  const { data: modelsMap } = useAvailableModels()
   const setModel = useSetStepModel(pipelineName, stepName)
   const removeModel = useRemoveStepModel(pipelineName, stepName)
-
-  const providers = modelsMap ? Object.keys(modelsMap).sort() : []
 
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium text-muted-foreground">Model</p>
       <div className="flex items-center gap-2">
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              role="combobox"
-              aria-expanded={open}
-              className="max-w-[380px] justify-between font-normal"
-            >
-              {currentModel ? (
-                <span className="flex items-center gap-1.5 truncate">
-                  <Badge variant="secondary" className="text-xs py-0 shrink-0">{formatModel(currentModel).provider}</Badge>
-                  <span className="font-mono text-xs truncate">{formatModel(currentModel).name}</span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground">Select model...</span>
-              )}
-              <ChevronDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[380px] p-0" align="start">
-            <Command>
-              <CommandInput placeholder="Search models..." />
-              <CommandList className="max-h-[300px]">
-                <CommandEmpty>No models found.</CommandEmpty>
-                {providers.map((provider) => (
-                  <CommandGroup key={provider} heading={PROVIDER_LABELS[provider] ?? provider}>
-                    {modelsMap![provider].map((model) => {
-                      const name = model.includes(':') ? model.split(':').slice(1).join(':') : model
-                      return (
-                        <CommandItem
-                          key={model}
-                          value={model}
-                          onSelect={() => {
-                            setModel.mutate(model)
-                            setOpen(false)
-                          }}
-                          className="font-mono text-xs"
-                        >
-                          {name}
-                        </CommandItem>
-                      )
-                    })}
-                  </CommandGroup>
-                ))}
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-        {currentModel && modelSource === 'db' && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0"
-            onClick={() => removeModel.mutate()}
-            title="Remove override"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
-        )}
+        <ModelCombobox
+          value={currentModel}
+          onChange={(m) => setModel.mutate(m)}
+          onClear={
+            currentModel && modelSource === 'db'
+              ? () => removeModel.mutate()
+              : undefined
+          }
+        />
         {currentModel && (
           <span className="text-xs text-muted-foreground">({modelSource.replace('_', ' ')})</span>
         )}
