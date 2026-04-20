@@ -1,7 +1,7 @@
 ## Task: adhoc-20260416-evals-v2-variants
 ## Description: Evals v2 variant comparison — delta-based step definition overrides, EvaluationVariant table, runner integration, variant CRUD routes, frontend variant editor + comparison view
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -29,5 +29,5 @@
 | Frontend API layer - variants + run types | frontend-mobile-development:frontend-developer | implementation | 5 | frontend-mobile-development:react-state-management | C | complete | 1 | a42e44e1b0561b494 | 42bd31f2,be02f8bd | /tanstack/router |
 | Variants tab + variant editor route | frontend-mobile-development:frontend-developer | implementation | 6 | frontend-mobile-development:react-state-management | D | complete | 1 | a71db229e59652969 | bf925d58,8e7b1dda | /tanstack/router |
 | Run comparison view | frontend-mobile-development:frontend-developer | implementation | 7 | frontend-mobile-development:react-state-management | D | complete | 0 | a0683257e071b7cd8 | 8e14f525,bf925d58 | /tanstack/router |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a296c18a7e88bfaff | 58064b81,d90740d5 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a1697ff3934d57d1b | 8adbc25c,f66ed069 | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a296c18a7e88bfaff | 58064b81,d90740d5,e793152d | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | a1697ff3934d57d1b | 8adbc25c,f66ed069 | - |
