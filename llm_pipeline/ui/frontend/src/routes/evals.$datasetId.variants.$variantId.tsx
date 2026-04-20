@@ -1,6 +1,14 @@
 import { useMemo, useState, useCallback, useEffect } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
-import { ArrowLeft, Plus, Trash2, Play, Info, AlertCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  Plus,
+  Trash2,
+  Play,
+  Info,
+  AlertCircle,
+  RotateCcw,
+} from 'lucide-react'
 import {
   useDataset,
   useInputSchema,
@@ -13,10 +21,10 @@ import {
 } from '@/api/evals'
 import type {
   InstructionDeltaItem,
-  InstructionDeltaOp,
   ProdModelResponse,
   ProdPromptContent,
   ProdPromptsResponse,
+  SchemaResponse,
   VariableDefinitions,
   VariantDelta,
   VariantItem,
@@ -35,6 +43,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   PromptContentEditor,
   useIsDark,
@@ -73,16 +87,61 @@ const FALLBACK_TYPE_WHITELIST: ReadonlyArray<string> = [
   'Optional[bool]',
 ]
 
-const OP_CHOICES: ReadonlyArray<InstructionDeltaOp> = ['add', 'modify']
-
 const MAX_DELTA_ENTRIES = 50
 
 /** Fields inherited from LLMResultMixin — cannot be removed in v2. */
 const INHERITED_FIELDS: ReadonlyArray<string> = ['confidence_score', 'notes']
 
 // ---------------------------------------------------------------------------
-// Dirty-tracking editor state
+// Merged-row state (unified prod + variant instructions schema)
 // ---------------------------------------------------------------------------
+
+/**
+ * One row in the unified "Instructions schema" table on the variant editor's
+ * right pane. Rows are either production fields (from `output_schema`) with an
+ * editable default, or variant-added fields with a user-specified type and
+ * default.
+ *
+ * On save, `prod` rows whose `current_default` deviates from `prod_default`
+ * emit `{op: 'modify'}` entries (with no `type_str` — the backend preserves
+ * the original pydantic annotation, which is essential for complex types like
+ * `list[TopicItem]` that would have no stable whitelist representation). All
+ * `variant` rows emit `{op: 'add'}` entries.
+ */
+export type MergedFieldRow =
+  | {
+      kind: 'prod'
+      /** Field name from the production schema; fixed (not user-editable). */
+      field: string
+      /** Display-only type label (e.g. "str", "Optional[str]", "list"). */
+      type_label: string
+      /** Production default value; `undefined` means the field is required. */
+      prod_default: unknown | undefined
+      /**
+       * Default currently shown in the editor. Starts equal to `prod_default`
+       * and updates on user edit. Deviation from `prod_default` signals a
+       * pending modify-op at save time.
+       */
+      current_default: unknown | undefined
+      /** True for confidence_score/notes (from LLMResultMixin). */
+      is_inherited: boolean
+      /** True if prod had no default (required prod field). */
+      is_required: boolean
+      description?: string
+    }
+  | {
+      kind: 'variant'
+      /** Field name, user-editable. */
+      field: string
+      /** type_str from the whitelist; always defined. */
+      type_str: string
+      /**
+       * Raw JSON string the user types for the default. Parsed on save;
+       * parse-on-save (not parse-on-change) lets the user type mid-edits
+       * like `[1,` without losing focus. Parse failure disables save.
+       */
+      default_json: string
+    }
 
 interface EditorState {
   name: string
@@ -90,7 +149,7 @@ interface EditorState {
   model: string
   systemPrompt: string
   userPrompt: string
-  instructionsDelta: InstructionDeltaItem[]
+  mergedFields: MergedFieldRow[]
   /**
    * Variable definition overrides keyed by variable name. Stored as a Record
    * matching the shared `VarDefs` shape used by the reusable prompts
@@ -98,6 +157,76 @@ interface EditorState {
    * shape) on save — backend accepts this directly.
    */
   variableDefinitions: VarDefs
+}
+
+// ---------------------------------------------------------------------------
+// JSON-schema helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a pydantic-generated JSON-schema subtree to a short Python-ish type
+ * label for the read-only "type" column of the merged schema table. Matches
+ * the style of the left pane's production fields list (e.g. "str", "int",
+ * "Optional[str]", "list", "TopicItem").
+ *
+ * This is display-only. It has NO effect on what gets sent to the backend —
+ * modify ops omit `type_str` entirely, so we don't need a round-trippable
+ * inverse. Unknown shapes fall back to "unknown".
+ */
+function jsonSchemaTypeLabel(schema: unknown): string {
+  if (!schema || typeof schema !== 'object') return 'unknown'
+  const s = schema as Record<string, unknown>
+
+  // $ref -> strip "#/$defs/<Name>" to just <Name>.
+  const ref = s.$ref
+  if (typeof ref === 'string') {
+    const m = ref.match(/\/([^/]+)$/)
+    return m ? m[1] : 'unknown'
+  }
+
+  // Optional[X] shapes: anyOf with one null branch.
+  const anyOf = s.anyOf
+  if (Array.isArray(anyOf) && anyOf.length === 2) {
+    const a = anyOf[0] as Record<string, unknown> | undefined
+    const b = anyOf[1] as Record<string, unknown> | undefined
+    const aNull = a?.type === 'null'
+    const bNull = b?.type === 'null'
+    if (aNull && !bNull) return `Optional[${jsonSchemaTypeLabel(b)}]`
+    if (bNull && !aNull) return `Optional[${jsonSchemaTypeLabel(a)}]`
+  }
+
+  // Primitive `type` field.
+  const t = s.type
+  if (typeof t === 'string') {
+    switch (t) {
+      case 'string':
+        return 'str'
+      case 'integer':
+        return 'int'
+      case 'number':
+        return 'float'
+      case 'boolean':
+        return 'bool'
+      case 'array':
+        return 'list'
+      case 'object':
+        return 'dict'
+      case 'null':
+        return 'None'
+      default:
+        return t
+    }
+  }
+
+  return 'unknown'
+}
+
+function deepEqualJSON(a: unknown, b: unknown): boolean {
+  try {
+    return JSON.stringify(a) === JSON.stringify(b)
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -171,7 +300,7 @@ function mergeVarDefs(a: VarDefs, b: VarDefs): VarDefs {
 }
 
 /**
- * Build the editor baseline from a variant + (optional) prod prompts/model.
+ * Build the editor baseline from a variant + (optional) prod prompts/model/schema.
  *
  * Prefill rules:
  * - `systemPrompt` / `userPrompt`: if the variant delta has no override AND
@@ -182,6 +311,9 @@ function mergeVarDefs(a: VarDefs, b: VarDefs): VarDefs {
  * - `variableDefinitions`: if the variant has none AND prod has any, use the
  *   MERGED prod system + user defs (runner merges both prod prompts anyway,
  *   so one combined set on the variant matches runtime behavior).
+ * - `mergedFields`: seeded from `prodSchema.output_schema.properties` as `prod`
+ *   rows. The variant's persisted `instructions_delta` then patches those rows
+ *   (modify -> overwrite `current_default`) or appends `variant` rows (add).
  *
  * The baseline MUST capture the prefilled content — `statesEqual(state,
  * baseline)` is how dirty-tracking works, so returning a baseline without the
@@ -191,6 +323,7 @@ function variantToEditorState(
   v: VariantItem,
   prod: ProdPromptsResponse | null | undefined,
   prodModel: ProdModelResponse | null | undefined,
+  prodSchema: SchemaResponse | null | undefined,
 ): EditorState {
   const d: VariantDelta = (v.delta ?? {
     model: null,
@@ -240,28 +373,187 @@ function variantToEditorState(
     }
   }
 
+  // Build merged-rows: prod fields first (insertion order from JSON object),
+  // then variant-added rows from any `add` ops in the persisted delta.
+  const outSchema =
+    (prodSchema?.output_schema as Record<string, unknown> | null) ?? null
+  const props =
+    (outSchema?.properties as Record<string, Record<string, unknown>>) ?? {}
+  const required = Array.isArray(outSchema?.required)
+    ? (outSchema!.required as string[])
+    : []
+
+  const mergedFields: MergedFieldRow[] = []
+  const prodIndex = new Map<string, number>()
+
+  for (const [name, prop] of Object.entries(props)) {
+    const hasDefault = Object.prototype.hasOwnProperty.call(prop, 'default')
+    const prodDefault = hasDefault ? prop.default : undefined
+    const description =
+      typeof prop.description === 'string' ? prop.description : undefined
+    const row: MergedFieldRow = {
+      kind: 'prod',
+      field: name,
+      type_label: jsonSchemaTypeLabel(prop),
+      prod_default: prodDefault,
+      current_default: prodDefault,
+      is_inherited: INHERITED_FIELDS.includes(name),
+      // Spec: required iff prod has no default. pydantic's json_schema puts
+      // the field in the top-level `required` array when it has no default;
+      // we cross-check both so schemas from non-pydantic sources still work.
+      is_required: !hasDefault || required.includes(name),
+      description,
+    }
+    prodIndex.set(name, mergedFields.length)
+    mergedFields.push(row)
+  }
+
+  // Apply persisted delta on top of prod baseline.
+  const persisted = Array.isArray(d.instructions_delta)
+    ? d.instructions_delta
+    : []
+  for (const item of persisted) {
+    if (item.op === 'modify') {
+      const idx = prodIndex.get(item.field)
+      if (idx === undefined) {
+        // Modify on a non-prod field — shouldn't happen, but tolerate by
+        // promoting to a variant row so the user still sees the entry.
+        console.warn(
+          `[variants] modify op references unknown field '${item.field}'; rendering as variant row.`,
+        )
+        mergedFields.push({
+          kind: 'variant',
+          field: item.field,
+          type_str: item.type_str ?? 'str',
+          default_json: JSON.stringify(item.default ?? null),
+        })
+        continue
+      }
+      const existing = mergedFields[idx]
+      if (existing.kind === 'prod') {
+        mergedFields[idx] = {
+          ...existing,
+          current_default: item.default,
+        }
+      }
+    } else if (item.op === 'add') {
+      mergedFields.push({
+        kind: 'variant',
+        field: item.field,
+        type_str: item.type_str ?? 'str',
+        default_json: JSON.stringify(item.default ?? null),
+      })
+    }
+  }
+
   return {
     name: v.name ?? '',
     description: v.description ?? '',
     model,
     systemPrompt,
     userPrompt,
-    instructionsDelta: Array.isArray(d.instructions_delta)
-      ? d.instructions_delta.map((i) => ({ ...i }))
-      : [],
+    mergedFields,
     variableDefinitions,
   }
 }
 
+/**
+ * Serialise the merged-rows state back into an `instructions_delta` payload
+ * by diffing against the prod baseline.
+ *
+ * - `prod` rows: emit `{op: 'modify', field, default}` ONLY if `current_default`
+ *   differs from `prod_default`. No `type_str` — backend re-uses the original
+ *   pydantic annotation (see delta.py:235-246).
+ * - Required prod rows with no current default: emit nothing (no modification,
+ *   state is identical to prod's "required" contract).
+ * - `variant` rows: emit `{op: 'add', field, type_str, default}` with the
+ *   parsed JSON default. Parse failures surface as row-level errors (caller
+ *   must gate Save on `mergedFieldsHaveErrors`).
+ */
 function editorStateToDelta(s: EditorState): VariantDelta {
+  const items: InstructionDeltaItem[] = []
+
+  for (const row of s.mergedFields) {
+    if (row.kind === 'prod') {
+      const prodDefined = row.prod_default !== undefined
+      const currDefined = row.current_default !== undefined
+      // Required prod field with no current default -> no modification.
+      if (!prodDefined && !currDefined) continue
+      // Unchanged -> no modification.
+      if (
+        prodDefined &&
+        currDefined &&
+        deepEqualJSON(row.prod_default, row.current_default)
+      ) {
+        continue
+      }
+      // Transition either way (required -> now has default, or default changed).
+      items.push({
+        op: 'modify',
+        field: row.field,
+        // type_str is omitted on the wire; required by the InstructionDeltaItem
+        // TS shape, so we cast. Backend handles the missing key as "preserve
+        // original pydantic annotation" (delta.py:236-246).
+        type_str: undefined as unknown as InstructionDeltaItem['type_str'],
+        default: row.current_default ?? null,
+      })
+    } else {
+      // variant-added: parse default_json. On failure we emit a placeholder
+      // entry of null so the caller's error-check logic fires before Save.
+      let parsed: unknown = null
+      try {
+        parsed = row.default_json.trim() === ''
+          ? null
+          : JSON.parse(row.default_json)
+      } catch {
+        parsed = null
+      }
+      items.push({
+        op: 'add',
+        field: row.field,
+        type_str: row.type_str as InstructionDeltaItem['type_str'],
+        default: parsed,
+      })
+    }
+  }
+
+  // Strip undefined type_str on modify ops before sending — JSON.stringify
+  // drops undefined keys in object values anyway, but be explicit so the
+  // wire payload never carries a key with an undefined value.
+  const wireItems = items.map((it) => {
+    if (it.op === 'modify' && it.type_str === undefined) {
+      const copy: Partial<InstructionDeltaItem> = { ...it }
+      delete copy.type_str
+      return copy as InstructionDeltaItem
+    }
+    return it
+  })
+
   return {
     model: s.model.trim() === '' ? null : s.model.trim(),
     system_prompt: s.systemPrompt === '' ? null : s.systemPrompt,
     user_prompt: s.userPrompt === '' ? null : s.userPrompt,
-    instructions_delta:
-      s.instructionsDelta.length === 0 ? null : s.instructionsDelta,
+    instructions_delta: wireItems.length === 0 ? null : wireItems,
     variable_definitions: writeVarDefs(s.variableDefinitions),
   }
+}
+
+/**
+ * Row-level validation: true when any variant row has an unparseable default.
+ * Empty string is treated as null (valid). Prod rows never fail validation
+ * here — their default is a native value, not a raw JSON string.
+ */
+function mergedFieldsHaveErrors(rows: MergedFieldRow[]): boolean {
+  for (const r of rows) {
+    if (r.kind !== 'variant') continue
+    if (r.default_json.trim() === '') continue
+    try {
+      JSON.parse(r.default_json)
+    } catch {
+      return true
+    }
+  }
+  return false
 }
 
 function statesEqual(a: EditorState, b: EditorState): boolean {
@@ -273,17 +565,19 @@ function statesEqual(a: EditorState, b: EditorState): boolean {
     a.userPrompt !== b.userPrompt
   )
     return false
-  if (a.instructionsDelta.length !== b.instructionsDelta.length) return false
-  for (let i = 0; i < a.instructionsDelta.length; i++) {
-    const x = a.instructionsDelta[i]
-    const y = b.instructionsDelta[i]
-    if (
-      x.op !== y.op ||
-      x.field !== y.field ||
-      x.type_str !== y.type_str ||
-      JSON.stringify(x.default ?? null) !== JSON.stringify(y.default ?? null)
-    )
-      return false
+  if (a.mergedFields.length !== b.mergedFields.length) return false
+  for (let i = 0; i < a.mergedFields.length; i++) {
+    const x = a.mergedFields[i]
+    const y = b.mergedFields[i]
+    if (x.kind !== y.kind) return false
+    if (x.kind === 'prod' && y.kind === 'prod') {
+      if (x.field !== y.field) return false
+      if (!deepEqualJSON(x.current_default, y.current_default)) return false
+    } else if (x.kind === 'variant' && y.kind === 'variant') {
+      if (x.field !== y.field) return false
+      if (x.type_str !== y.type_str) return false
+      if (x.default_json !== y.default_json) return false
+    }
   }
   // Record shape: order-independent JSON comparison is sufficient — both sides
   // are produced by `readVarDefs`/component updates which always emit stable
@@ -301,6 +595,7 @@ function useVariantEditor(
   variant: VariantItem | undefined,
   prod: ProdPromptsResponse | null | undefined,
   prodModel: ProdModelResponse | null | undefined,
+  prodSchema: SchemaResponse | null | undefined,
   prodReady: boolean,
 ) {
   const [state, setState] = useState<EditorState | null>(null)
@@ -308,12 +603,17 @@ function useVariantEditor(
 
   // sync from server when variant OR prod data change (only once prod has
   // resolved — otherwise we'd build a baseline without prefill and flip the
-  // editor to dirty as soon as prod arrives). `prodReady` gates both
-  // prod-prompts and prod-model so the baseline captures all prefills.
+  // editor to dirty as soon as prod arrives). `prodReady` gates prod-prompts,
+  // prod-model, AND prod-schema so the baseline captures all prefills.
   useEffect(() => {
     if (!variant) return
     if (!prodReady) return
-    const snap = variantToEditorState(variant, prod ?? null, prodModel ?? null)
+    const snap = variantToEditorState(
+      variant,
+      prod ?? null,
+      prodModel ?? null,
+      prodSchema ?? null,
+    )
     setState((prev) => (prev === null ? snap : prev))
     setBaseline(snap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -328,38 +628,68 @@ function useVariantEditor(
     setState((prev) => (prev ? { ...prev, ...p } : prev))
   }, [])
 
-  const addDeltaRow = useCallback(() => {
-    setState((prev) => {
-      if (!prev) return prev
-      if (prev.instructionsDelta.length >= MAX_DELTA_ENTRIES) return prev
-      return {
-        ...prev,
-        instructionsDelta: [
-          ...prev.instructionsDelta,
-          { op: 'add', field: '', type_str: 'str', default: null },
-        ],
-      }
-    })
-  }, [])
-
-  const updateDeltaRow = useCallback(
-    (idx: number, patch: Partial<InstructionDeltaItem>) => {
+  const updateMergedRow = useCallback(
+    (idx: number, p: Partial<MergedFieldRow>) => {
       setState((prev) => {
         if (!prev) return prev
-        const next = prev.instructionsDelta.slice()
-        next[idx] = { ...next[idx], ...patch }
-        return { ...prev, instructionsDelta: next }
+        const next = prev.mergedFields.slice()
+        const existing = next[idx]
+        if (!existing) return prev
+        // Narrow partial apply per kind — TS won't let us spread a cross-kind
+        // partial without a cast, and behavior is identical since we always
+        // pass same-kind patches.
+        if (existing.kind === 'prod') {
+          next[idx] = { ...existing, ...(p as Partial<typeof existing>) }
+        } else {
+          next[idx] = { ...existing, ...(p as Partial<typeof existing>) }
+        }
+        return { ...prev, mergedFields: next }
       })
     },
     [],
   )
 
-  const removeDeltaRow = useCallback((idx: number) => {
+  const addVariantRow = useCallback(() => {
     setState((prev) => {
       if (!prev) return prev
-      const next = prev.instructionsDelta.slice()
+      const current = prev.mergedFields
+      const variantCount = current.filter((r) => r.kind === 'variant').length
+      const modifiedCount = current.filter(
+        (r) =>
+          r.kind === 'prod' &&
+          !deepEqualJSON(r.current_default, r.prod_default),
+      ).length
+      if (variantCount + modifiedCount >= MAX_DELTA_ENTRIES) return prev
+      return {
+        ...prev,
+        mergedFields: [
+          ...current,
+          { kind: 'variant', field: '', type_str: 'str', default_json: '' },
+        ],
+      }
+    })
+  }, [])
+
+  const removeVariantRow = useCallback((idx: number) => {
+    setState((prev) => {
+      if (!prev) return prev
+      const next = prev.mergedFields.slice()
+      const row = next[idx]
+      // Only variant rows are removable — guard against stray calls.
+      if (!row || row.kind !== 'variant') return prev
       next.splice(idx, 1)
-      return { ...prev, instructionsDelta: next }
+      return { ...prev, mergedFields: next }
+    })
+  }, [])
+
+  const resetProdRow = useCallback((idx: number) => {
+    setState((prev) => {
+      if (!prev) return prev
+      const next = prev.mergedFields.slice()
+      const row = next[idx]
+      if (!row || row.kind !== 'prod') return prev
+      next[idx] = { ...row, current_default: row.prod_default }
+      return { ...prev, mergedFields: next }
     })
   }, [])
 
@@ -376,9 +706,10 @@ function useVariantEditor(
     baseline,
     dirty,
     patch,
-    addDeltaRow,
-    updateDeltaRow,
-    removeDeltaRow,
+    updateMergedRow,
+    addVariantRow,
+    removeVariantRow,
+    resetProdRow,
     setVarDefs,
     resetToBaseline,
   }
@@ -407,32 +738,33 @@ function ProdStepDefPanel({
   prodSystem,
   prodUser,
   prodModel,
+  prodSchema,
+  schemaLoading,
   isDark,
 }: {
   datasetId: number
   prodSystem: ProdPromptContent | null
   prodUser: ProdPromptContent | null
   prodModel: ProdModelResponse | null
+  prodSchema: SchemaResponse | null | undefined
+  schemaLoading: boolean
   isDark: boolean
 }) {
   const { data: dataset } = useDataset(datasetId)
-  const { data: schema, isLoading: schemaLoading } = useInputSchema(
-    dataset?.target_type ?? '',
-    dataset?.target_name ?? '',
-  )
 
   const outputProps = useMemo(() => {
-    const props = (schema?.output_schema?.properties ?? null) as
-      | Record<string, { type?: string; title?: string; description?: string }>
+    const props = (prodSchema?.output_schema?.properties ?? null) as
+      | Record<string, Record<string, unknown>>
       | null
     if (!props) return []
     return Object.entries(props).map(([name, p]) => ({
       name,
-      type: p.type ?? 'unknown',
-      title: p.title,
-      description: p.description,
+      type_label: jsonSchemaTypeLabel(p),
+      title: typeof p.title === 'string' ? p.title : undefined,
+      description:
+        typeof p.description === 'string' ? p.description : undefined,
     }))
-  }, [schema])
+  }, [prodSchema])
 
   // Read prod variable_definitions once per prompt side so the read-only
   // editor can still show hover info for {variable} tokens. readVarDefs
@@ -523,9 +855,9 @@ function ProdStepDefPanel({
                   <span className="font-mono font-medium">{f.name}</span>
                   <Badge
                     variant="outline"
-                    className="text-[10px] h-4 px-1 py-0"
+                    className="text-[10px] h-4 px-1 py-0 font-mono"
                   >
-                    {f.type}
+                    {f.type_label}
                   </Badge>
                   {f.description && (
                     <span className="text-muted-foreground ml-auto truncate max-w-[160px]">
@@ -613,76 +945,231 @@ function ProdStepDefPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Instruction delta editor row
+// Merged schema rows (prod + variant-added) for the right pane table
 // ---------------------------------------------------------------------------
 
-function DeltaRowEditor({
-  idx,
-  row,
-  onChange,
-  onRemove,
-  error,
-  typeOptions,
-  typesDisabled,
-}: {
-  idx: number
-  row: InstructionDeltaItem
-  onChange: (patch: Partial<InstructionDeltaItem>) => void
-  onRemove: () => void
-  error?: string
-  typeOptions: ReadonlyArray<string>
-  typesDisabled?: boolean
-}) {
-  const defaultStr = useMemo(() => {
-    if (row.default === undefined || row.default === null) return ''
-    if (typeof row.default === 'string') return row.default
-    try {
-      return JSON.stringify(row.default)
-    } catch {
-      return ''
-    }
-  }, [row.default])
+/**
+ * JSON-stringify a value for the prod-row default Input. `undefined` collapses
+ * to empty string so the placeholder ("required — no default") is visible.
+ */
+function prodDefaultToInput(v: unknown): string {
+  if (v === undefined) return ''
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return ''
+  }
+}
 
-  function onDefaultChange(raw: string) {
-    if (raw.trim() === '') {
-      onChange({ default: null })
+/**
+ * Inner controlled component for the prod row. We lift `current_default` into
+ * a local raw-string buffer so the user can type mid-parse values like `[1,`.
+ * The outer `ProdFieldRow` keys this component on `current_default` via a
+ * `JSON.stringify` key so external state mutations (Reset, Discard) remount
+ * the inner component with a fresh buffer — avoiding setState-in-effect.
+ */
+function ProdFieldRowInner({
+  row,
+  onChangeDefault,
+  backendErrorMsg,
+}: {
+  row: Extract<MergedFieldRow, { kind: 'prod' }>
+  onChangeDefault: (next: unknown | undefined) => void
+  backendErrorMsg?: string
+}) {
+  const [raw, setRaw] = useState(() => prodDefaultToInput(row.current_default))
+  const [parseError, setParseError] = useState<string | null>(null)
+
+  function handleChange(next: string) {
+    setRaw(next)
+    if (next.trim() === '') {
+      setParseError(null)
+      onChangeDefault(undefined)
       return
     }
-    // Parse as JSON; fall back to raw string on parse failure so user can
-    // keep typing. Backend validates via json.dumps round-trip anyway.
     try {
-      onChange({ default: JSON.parse(raw) })
-    } catch {
-      onChange({ default: raw })
+      const parsed = JSON.parse(next)
+      setParseError(null)
+      onChangeDefault(parsed)
+    } catch (e) {
+      setParseError(e instanceof Error ? e.message : 'Invalid JSON')
+      // Hold the parse-failed value in local `raw` only — don't push to state
+      // until the user types something valid. This keeps the diff clean.
     }
   }
 
-  const isInherited = INHERITED_FIELDS.includes(row.field.trim())
+  const modified = !deepEqualJSON(row.current_default, row.prod_default)
 
   return (
-    <div
-      className={`grid grid-cols-[90px_1fr_120px_1fr_32px] gap-2 items-start ${
-        error ? 'rounded border border-destructive/50 p-1' : ''
-      }`}
-    >
-      <div>
-        <Select
-          value={row.op}
-          onValueChange={(v) => onChange({ op: v as InstructionDeltaOp })}
+    <>
+      <Input
+        className="h-8 text-xs font-mono"
+        placeholder={
+          row.is_required && !modified
+            ? 'required — no default'
+            : 'JSON (e.g. "text", 1, true, null, [])'
+        }
+        value={raw}
+        onChange={(e) => handleChange(e.target.value)}
+      />
+      {parseError && (
+        <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
+          <AlertCircle className="size-3 shrink-0 mt-0.5" />
+          <span>{parseError}</span>
+        </p>
+      )}
+      {backendErrorMsg && (
+        <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
+          <AlertCircle className="size-3 shrink-0 mt-0.5" />
+          <span>{backendErrorMsg}</span>
+        </p>
+      )}
+      {row.description && (
+        <p className="text-[10px] text-muted-foreground mt-1 truncate">
+          {row.description}
+        </p>
+      )}
+    </>
+  )
+}
+
+function ProdFieldRow({
+  row,
+  idx,
+  onChangeDefault,
+  onReset,
+  backendErrorMsg,
+}: {
+  row: Extract<MergedFieldRow, { kind: 'prod' }>
+  idx: number
+  onChangeDefault: (next: unknown | undefined) => void
+  onReset: () => void
+  backendErrorMsg?: string
+}) {
+  const modified = !deepEqualJSON(row.current_default, row.prod_default)
+  // Key on the JSON-stringified current_default so external mutations
+  // (Reset, Discard) remount the inner buffer component.
+  const innerKey = JSON.stringify(row.current_default ?? null)
+
+  return (
+    <tr data-row-idx={idx} className="border-t align-top">
+      <td className="px-2 py-1.5 font-mono font-medium whitespace-nowrap">
+        {row.field}
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <Badge
+          variant="outline"
+          className="text-[10px] h-4 px-1 py-0 font-mono"
         >
-          <SelectTrigger size="sm" className="h-8 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {OP_CHOICES.map((op) => (
-              <SelectItem key={op} value={op} className="text-xs">
-                {op}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1">
+          {row.type_label}
+        </Badge>
+      </td>
+      <td className="px-2 py-1.5">
+        <ProdFieldRowInner
+          key={innerKey}
+          row={row}
+          onChangeDefault={onChangeDefault}
+          backendErrorMsg={backendErrorMsg}
+        />
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <div className="flex items-center gap-1">
+          {row.is_required && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] h-4 px-1 py-0 border-amber-500 text-amber-600"
+                  >
+                    required
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Setting a default makes this field optional in the variant.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {row.is_inherited && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] h-4 px-1 py-0 border-blue-500 text-blue-600"
+                  >
+                    inherited
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Inherited from LLMResultMixin — cannot be removed.
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {modified && (
+            <>
+              <Badge
+                variant="outline"
+                className="text-[9px] h-4 px-1 py-0 border-amber-500 text-amber-600"
+              >
+                modified
+              </Badge>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 w-6 p-0"
+                onClick={onReset}
+                title="Reset to production default"
+              >
+                <RotateCcw className="size-3" />
+              </Button>
+            </>
+          )}
+        </div>
+      </td>
+    </tr>
+  )
+}
+
+function VariantFieldRow({
+  row,
+  idx,
+  onChangeField,
+  onChangeType,
+  onChangeDefault,
+  onRemove,
+  typeOptions,
+  typesDisabled,
+  backendErrorMsg,
+}: {
+  row: Extract<MergedFieldRow, { kind: 'variant' }>
+  idx: number
+  onChangeField: (v: string) => void
+  onChangeType: (v: string) => void
+  onChangeDefault: (v: string) => void
+  onRemove: () => void
+  typeOptions: ReadonlyArray<string>
+  typesDisabled: boolean
+  backendErrorMsg?: string
+}) {
+  const isInherited = INHERITED_FIELDS.includes(row.field.trim())
+
+  // Parse check — display error without blocking typing. Save button is gated
+  // separately via `mergedFieldsHaveErrors`.
+  let parseError: string | null = null
+  if (row.default_json.trim() !== '') {
+    try {
+      JSON.parse(row.default_json)
+    } catch (e) {
+      parseError = e instanceof Error ? e.message : 'Invalid JSON'
+    }
+  }
+
+  return (
+    <tr data-row-idx={idx} className="border-t align-top bg-muted/20">
+      <td className="px-2 py-1.5">
         <Input
           className={`h-8 text-xs font-mono ${
             isInherited ? 'border-amber-500' : ''
@@ -690,19 +1177,19 @@ function DeltaRowEditor({
           placeholder="field_name"
           value={row.field}
           onChange={(e) =>
-            onChange({ field: e.target.value.trim().toLowerCase() })
+            onChangeField(e.target.value.trim().toLowerCase())
           }
         />
         {isInherited && (
-          <p className="text-[10px] text-amber-600">
-            Inherited field (LLMResultMixin) — can be modified but not removed.
+          <p className="text-[10px] text-amber-600 mt-1">
+            Inherited field — use the prod row above to modify it.
           </p>
         )}
-      </div>
-      <div>
+      </td>
+      <td className="px-2 py-1.5">
         <Select
           value={row.type_str}
-          onValueChange={(v) => onChange({ type_str: v as typeof row.type_str })}
+          onValueChange={onChangeType}
           disabled={typesDisabled}
         >
           <SelectTrigger size="sm" className="h-8 text-xs font-mono">
@@ -716,31 +1203,47 @@ function DeltaRowEditor({
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div>
+      </td>
+      <td className="px-2 py-1.5">
         <Input
           className="h-8 text-xs font-mono"
-          placeholder='default (JSON — e.g. "text", 1, true, null, [])'
-          value={defaultStr}
-          onChange={(e) => onDefaultChange(e.target.value)}
+          placeholder='JSON (e.g. "text", 1, true, null, [])'
+          value={row.default_json}
+          onChange={(e) => onChangeDefault(e.target.value)}
         />
-        {error && (
+        {parseError && (
           <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
             <AlertCircle className="size-3 shrink-0 mt-0.5" />
-            <span>{error}</span>
+            <span>{parseError}</span>
           </p>
         )}
-      </div>
-      <Button
-        size="sm"
-        variant="ghost"
-        className="h-8 w-8 p-0 text-destructive"
-        onClick={onRemove}
-        title={`Remove row ${idx + 1}`}
-      >
-        <Trash2 className="size-3" />
-      </Button>
-    </div>
+        {backendErrorMsg && (
+          <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
+            <AlertCircle className="size-3 shrink-0 mt-0.5" />
+            <span>{backendErrorMsg}</span>
+          </p>
+        )}
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <div className="flex items-center gap-1">
+          <Badge
+            variant="outline"
+            className="text-[9px] h-4 px-1 py-0 border-emerald-500 text-emerald-600"
+          >
+            added
+          </Badge>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0 text-destructive"
+            onClick={onRemove}
+            title="Remove variant-added field"
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        </div>
+      </td>
+    </tr>
   )
 }
 
@@ -751,28 +1254,44 @@ function DeltaRowEditor({
 function VariantDeltaPanel({
   state,
   patch,
-  addDeltaRow,
-  updateDeltaRow,
-  removeDeltaRow,
+  updateMergedRow,
+  addVariantRow,
+  removeVariantRow,
+  resetProdRow,
   setVarDefs,
-  fieldError,
+  backendFieldError,
   typeOptions,
   typesLoading,
   isDark,
 }: {
   state: EditorState
   patch: (p: Partial<EditorState>) => void
-  addDeltaRow: () => void
-  updateDeltaRow: (idx: number, p: Partial<InstructionDeltaItem>) => void
-  removeDeltaRow: (idx: number) => void
+  updateMergedRow: (idx: number, p: Partial<MergedFieldRow>) => void
+  addVariantRow: () => void
+  removeVariantRow: (idx: number) => void
+  resetProdRow: (idx: number) => void
   setVarDefs: (defs: VarDefs) => void
-  fieldError: { rowIdx: number | null; message: string } | null
+  backendFieldError: { rowIdx: number | null; message: string } | null
   typeOptions: ReadonlyArray<string>
   typesLoading: boolean
   isDark: boolean
 }) {
-  const nearCap = state.instructionsDelta.length >= MAX_DELTA_ENTRIES - 5
-  const atCap = state.instructionsDelta.length >= MAX_DELTA_ENTRIES
+  // Count only entries that contribute to instructions_delta payload:
+  // modified prod rows + all variant rows. Matches backend cap semantics.
+  const emittedCount = useMemo(() => {
+    let n = 0
+    for (const r of state.mergedFields) {
+      if (r.kind === 'variant') {
+        n++
+      } else if (!deepEqualJSON(r.current_default, r.prod_default)) {
+        n++
+      }
+    }
+    return n
+  }, [state.mergedFields])
+
+  const nearCap = emittedCount >= MAX_DELTA_ENTRIES - 5
+  const atCap = emittedCount >= MAX_DELTA_ENTRIES
 
   // Concatenate both prompts so the shared VariableDefinitionsEditor can
   // extract variables from either.
@@ -851,22 +1370,13 @@ function VariantDeltaPanel({
           />
         </div>
 
-        {/* Instructions delta */}
+        {/* Instructions schema (merged: prod fields + variant-added) */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <Label className="text-[10px] uppercase text-muted-foreground">
-              Instructions delta ({state.instructionsDelta.length}/
-              {MAX_DELTA_ENTRIES})
+              Instructions schema ({emittedCount}/{MAX_DELTA_ENTRIES} delta
+              entries)
             </Label>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs gap-1"
-              onClick={addDeltaRow}
-              disabled={atCap}
-            >
-              <Plus className="size-3" /> Add field
-            </Button>
           </div>
 
           {/* Info banner about inherited fields */}
@@ -875,56 +1385,95 @@ function VariantDeltaPanel({
             <span>
               Inherited fields from <code>LLMResultMixin</code> (
               <code>confidence_score</code>, <code>notes</code>) cannot be
-              removed in v2. You can use <code>modify</code> to change their
-              defaults, but <code>remove</code> is not supported (research/CEO
-              decision).
+              removed. Edit defaults inline; variant-added fields go at the
+              bottom.
             </span>
           </div>
 
-          {nearCap && !atCap && (
-            <p className="text-[10px] text-amber-600">
-              Approaching the {MAX_DELTA_ENTRIES}-entry cap.
-            </p>
-          )}
-          {atCap && (
-            <p className="text-[10px] text-destructive">
-              At the {MAX_DELTA_ENTRIES}-entry cap — remove entries to add more.
-            </p>
-          )}
-
-          {state.instructionsDelta.length === 0 ? (
+          {state.mergedFields.length === 0 ? (
             <p className="text-muted-foreground italic text-[11px]">
-              No instruction overrides. Click "Add field" to extend or modify
-              the step's output schema.
+              No typed output schema available for this step. Variant-added
+              fields can still be appended below.
             </p>
           ) : (
-            <div className="space-y-2">
-              <div className="grid grid-cols-[90px_1fr_120px_1fr_32px] gap-2 px-1 text-[10px] uppercase text-muted-foreground">
-                <span>Op</span>
-                <span>Field</span>
-                <span>Type</span>
-                <span>Default (JSON)</span>
-                <span />
-              </div>
-              {state.instructionsDelta.map((row, idx) => (
-                <DeltaRowEditor
-                  key={idx}
-                  idx={idx}
-                  row={row}
-                  onChange={(p) => updateDeltaRow(idx, p)}
-                  onRemove={() => removeDeltaRow(idx)}
-                  error={
-                    fieldError &&
-                    fieldError.rowIdx === idx
-                      ? fieldError.message
-                      : undefined
-                  }
-                  typeOptions={typeOptions}
-                  typesDisabled={typesLoading}
-                />
-              ))}
+            <div className="rounded border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40">
+                  <tr className="text-left text-[10px] uppercase text-muted-foreground">
+                    <th className="px-2 py-1.5 font-normal">Field</th>
+                    <th className="px-2 py-1.5 font-normal">Type</th>
+                    <th className="px-2 py-1.5 font-normal">Default (JSON)</th>
+                    <th className="px-2 py-1.5 font-normal" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {state.mergedFields.map((row, idx) => {
+                    const backendMsg =
+                      backendFieldError && backendFieldError.rowIdx === idx
+                        ? backendFieldError.message
+                        : undefined
+                    if (row.kind === 'prod') {
+                      return (
+                        <ProdFieldRow
+                          key={`prod-${row.field}`}
+                          row={row}
+                          idx={idx}
+                          onChangeDefault={(next) =>
+                            updateMergedRow(idx, { current_default: next })
+                          }
+                          onReset={() => resetProdRow(idx)}
+                          backendErrorMsg={backendMsg}
+                        />
+                      )
+                    }
+                    return (
+                      <VariantFieldRow
+                        key={`variant-${idx}`}
+                        row={row}
+                        idx={idx}
+                        onChangeField={(v) =>
+                          updateMergedRow(idx, { field: v })
+                        }
+                        onChangeType={(v) =>
+                          updateMergedRow(idx, { type_str: v })
+                        }
+                        onChangeDefault={(v) =>
+                          updateMergedRow(idx, { default_json: v })
+                        }
+                        onRemove={() => removeVariantRow(idx)}
+                        typeOptions={typeOptions}
+                        typesDisabled={typesLoading}
+                        backendErrorMsg={backendMsg}
+                      />
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
+
+          <div className="flex items-center justify-between">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1"
+              onClick={addVariantRow}
+              disabled={atCap}
+            >
+              <Plus className="size-3" /> Add field
+            </Button>
+            {nearCap && !atCap && (
+              <p className="text-[10px] text-amber-600">
+                Approaching the {MAX_DELTA_ENTRIES}-entry cap.
+              </p>
+            )}
+            {atCap && (
+              <p className="text-[10px] text-destructive">
+                At the {MAX_DELTA_ENTRIES}-entry cap — remove or reset entries
+                to add more.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Variable definitions */}
@@ -1015,11 +1564,41 @@ function VariantEditorPage() {
     }
   }, [prodModelErrored, prodModelError])
 
+  // Prod schema (output_schema.properties) drives the merged-schema table on
+  // the right pane AND the Instructions fields list on the left pane. Fetch
+  // gated on dataset having loaded its target_type/target_name.
+  const {
+    data: prodSchema,
+    isLoading: prodSchemaLoading,
+    isError: prodSchemaErrored,
+    error: prodSchemaError,
+  } = useInputSchema(
+    dataset?.target_type ?? '',
+    dataset?.target_name ?? '',
+  )
+  useEffect(() => {
+    if (prodSchemaErrored) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[variants] Failed to fetch prod schema; editor will open with no prod fields.',
+        prodSchemaError,
+      )
+    }
+  }, [prodSchemaErrored, prodSchemaError])
+
   // "ready" = we're no longer waiting on any pending prod fetch. Either data
   // landed OR the fetch errored (404/network/etc). Both paths build a
-  // baseline — the error path just builds one with `prod = null` /
-  // `prodModel = null`, matching prior behavior (no prefill).
-  const prodReady = !prodPromptsLoading && !prodModelLoading
+  // baseline — the error path just builds one with the missing bit as null,
+  // matching prior behavior (no prefill for that piece).
+  //
+  // Note: we also wait for `dataset` to have loaded since the schema fetch is
+  // gated on it — without the dataset, schema fetch is disabled and
+  // `prodSchemaLoading` is false-but-never-started.
+  const prodReady =
+    !prodPromptsLoading &&
+    !prodModelLoading &&
+    Boolean(dataset) &&
+    !prodSchemaLoading
 
   const updateVariantMut = useUpdateVariant(datasetId)
   const triggerRun = useTriggerEvalRun(datasetId)
@@ -1051,22 +1630,29 @@ function VariantEditorPage() {
     state,
     dirty,
     patch,
-    addDeltaRow,
-    updateDeltaRow,
-    removeDeltaRow,
+    updateMergedRow,
+    addVariantRow,
+    removeVariantRow,
+    resetProdRow,
     setVarDefs,
     resetToBaseline,
-  } = useVariantEditor(variant, prodPrompts, prodModel, prodReady)
+  } = useVariantEditor(variant, prodPrompts, prodModel, prodSchema, prodReady)
+
+  // Save is blocked on unparseable variant-row defaults.
+  const hasRowErrors = useMemo(
+    () => (state ? mergedFieldsHaveErrors(state.mergedFields) : false),
+    [state],
+  )
 
   // Backend 422 error surfacing
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [fieldError, setFieldError] = useState<
+  const [backendFieldError, setBackendFieldError] = useState<
     { rowIdx: number | null; message: string } | null
   >(null)
 
   function parseBackendFieldError(
     msg: string,
-    delta: InstructionDeltaItem[],
+    rows: MergedFieldRow[],
   ): { rowIdx: number | null; message: string } {
     // Backend messages commonly include the offending field name verbatim
     // quoted (e.g. "field name '__class__' is invalid"). Map to row index by
@@ -1076,8 +1662,8 @@ function VariantEditorPage() {
     // wrapping quotes, if candidates were sorted insertion-order).
     let bestIdx: number | null = null
     let bestLen = -1
-    for (let i = 0; i < delta.length; i++) {
-      const f = delta[i].field
+    for (let i = 0; i < rows.length; i++) {
+      const f = rows[i].field
       if (!f) continue
       if (msg.includes(`'${f}'`) && f.length > bestLen) {
         bestIdx = i
@@ -1089,8 +1675,9 @@ function VariantEditorPage() {
 
   async function handleSave() {
     if (!state || !variant) return
+    if (hasRowErrors) return
     setSaveError(null)
-    setFieldError(null)
+    setBackendFieldError(null)
     const delta = editorStateToDelta(state)
     try {
       await updateVariantMut.mutateAsync({
@@ -1103,8 +1690,8 @@ function VariantEditorPage() {
       if (err instanceof ApiError && err.status === 422) {
         const msg = err.detail || 'Validation failed'
         setSaveError(msg)
-        setFieldError(
-          parseBackendFieldError(msg, state.instructionsDelta),
+        setBackendFieldError(
+          parseBackendFieldError(msg, state.mergedFields),
         )
       } else {
         setSaveError(
@@ -1116,7 +1703,7 @@ function VariantEditorPage() {
 
   function handleDiscard() {
     setSaveError(null)
-    setFieldError(null)
+    setBackendFieldError(null)
     resetToBaseline()
   }
 
@@ -1220,8 +1807,15 @@ function VariantEditorPage() {
             <Button
               size="sm"
               className="h-8 text-xs"
-              disabled={!dirty || updateVariantMut.isPending}
+              disabled={
+                !dirty || updateVariantMut.isPending || hasRowErrors
+              }
               onClick={handleSave}
+              title={
+                hasRowErrors
+                  ? 'Fix JSON parse errors in variant-added fields before saving'
+                  : undefined
+              }
             >
               {updateVariantMut.isPending ? 'Saving...' : 'Save'}
             </Button>
@@ -1256,16 +1850,19 @@ function VariantEditorPage() {
             prodSystem={prodPrompts?.system ?? null}
             prodUser={prodPrompts?.user ?? null}
             prodModel={prodModel ?? null}
+            prodSchema={prodSchema ?? null}
+            schemaLoading={prodSchemaLoading}
             isDark={isDark}
           />
           <VariantDeltaPanel
             state={state}
             patch={patch}
-            addDeltaRow={addDeltaRow}
-            updateDeltaRow={updateDeltaRow}
-            removeDeltaRow={removeDeltaRow}
+            updateMergedRow={updateMergedRow}
+            addVariantRow={addVariantRow}
+            removeVariantRow={removeVariantRow}
+            resetProdRow={resetProdRow}
             setVarDefs={setVarDefs}
-            fieldError={fieldError}
+            backendFieldError={backendFieldError}
             typeOptions={typeOptions}
             typesLoading={typesLoading}
             isDark={isDark}
