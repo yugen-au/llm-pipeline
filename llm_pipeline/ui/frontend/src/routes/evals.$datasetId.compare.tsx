@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
+import { toast } from 'sonner'
 import {
   ArrowLeft,
   Check,
@@ -11,12 +12,14 @@ import {
   TrendingDown,
   ChevronRight,
   ChevronDown,
+  Download,
 } from 'lucide-react'
 import {
   useDataset,
   useDatasetProdModel,
   useDatasetProdPrompts,
   useEvalRun,
+  useInputSchema,
   useVariant,
 } from '@/api/evals'
 import type {
@@ -26,10 +29,26 @@ import type {
   RunDetail,
   VariableDefinitions,
   VariantDelta,
+  VariantItem,
 } from '@/api/evals'
+import { useAutoGenerateObjects } from '@/api/prompts'
+import type { AutoGenerateObject } from '@/api/prompts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import {
   Table,
   TableBody,
@@ -344,6 +363,441 @@ function buildAfter(
 }
 
 // ---------------------------------------------------------------------------
+// Export payload builders
+// ---------------------------------------------------------------------------
+
+interface ExportStats {
+  total: number
+  passed: number
+  failed: number
+  errored: number
+  pass_rate: number | null
+}
+
+interface ExportCaseResult {
+  case_name: string
+  passed: boolean
+  error_message: string | null
+  output_data: Record<string, unknown> | null
+  evaluator_scores: Record<string, unknown>
+}
+
+interface ExportRun {
+  id: number
+  stats: ExportStats
+  case_results: ExportCaseResult[]
+}
+
+interface ExportPayload {
+  step: {
+    name: string
+    target_type: string
+  }
+  prod_config: {
+    model: string | null
+    system_prompt: string | null
+    user_prompt: string | null
+    variable_definitions: Record<string, unknown> | null
+    instructions_schema: Record<string, unknown> | null
+    enum_catalog: Record<string, Array<{ name: string; value: string }>>
+  }
+  variant: {
+    id: number
+    name: string | null
+    description: string | null
+    delta: Record<string, unknown> | null
+  } | null
+  runs: {
+    baseline: ExportRun
+    variant: ExportRun
+  }
+  dataset_cases: Array<{
+    name: string
+    inputs: Record<string, unknown>
+    expected_output: Record<string, unknown> | null
+  }>
+}
+
+function toExportStats(run: RunDetail): ExportStats {
+  return {
+    total: run.total_cases,
+    passed: run.passed,
+    failed: run.failed,
+    errored: run.errored,
+    pass_rate: passRate(run),
+  }
+}
+
+function toExportCaseResult(r: CaseResultItem): ExportCaseResult {
+  return {
+    case_name: r.case_name,
+    passed: r.passed,
+    error_message: r.error_message,
+    output_data: r.output_data,
+    evaluator_scores: r.evaluator_scores,
+  }
+}
+
+function toExportRun(run: RunDetail): ExportRun {
+  return {
+    id: run.id,
+    stats: toExportStats(run),
+    case_results: run.case_results.map(toExportCaseResult),
+  }
+}
+
+function buildEnumCatalog(
+  objects: AutoGenerateObject[] | undefined,
+): Record<string, Array<{ name: string; value: string }>> {
+  const out: Record<string, Array<{ name: string; value: string }>> = {}
+  for (const o of objects ?? []) {
+    if (o.kind !== 'enum' || !o.members) continue
+    out[o.name] = o.members.map((m) => ({ name: m.name, value: m.value }))
+  }
+  return out
+}
+
+interface BuildPayloadArgs {
+  dataset: { target_name: string; target_type: string; cases: CaseItem[] }
+  prodModel: string | null
+  prodPrompts: ProdPromptsResponse | undefined
+  instructionsSchema: Record<string, unknown> | null
+  enumObjects: AutoGenerateObject[] | undefined
+  variant: VariantItem | undefined
+  variantId: number | null
+  baseRun: RunDetail
+  variantRun: RunDetail
+}
+
+function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
+  const {
+    dataset,
+    prodModel,
+    prodPrompts,
+    instructionsSchema,
+    enumObjects,
+    variant,
+    variantId,
+    baseRun,
+    variantRun,
+  } = args
+
+  return {
+    step: {
+      name: dataset.target_name,
+      target_type: dataset.target_type,
+    },
+    prod_config: {
+      model: prodModel,
+      system_prompt: prodPrompts?.system?.content ?? null,
+      user_prompt: prodPrompts?.user?.content ?? null,
+      variable_definitions: mergeProdVarDefs(prodPrompts) as
+        | Record<string, unknown>
+        | null,
+      instructions_schema: instructionsSchema,
+      enum_catalog: buildEnumCatalog(enumObjects),
+    },
+    variant:
+      variantId != null
+        ? {
+            id: variantId,
+            name: variant?.name ?? null,
+            description: variant?.description ?? null,
+            delta: (variant?.delta ?? null) as Record<string, unknown> | null,
+          }
+        : null,
+    runs: {
+      baseline: toExportRun(baseRun),
+      variant: toExportRun(variantRun),
+    },
+    dataset_cases: dataset.cases.map((c) => ({
+      name: c.name,
+      inputs: c.inputs,
+      expected_output: c.expected_output,
+    })),
+  }
+}
+
+// Meta-prompt prepended to markdown exports. JSON omits this.
+const META_PROMPT = `# Eval Variant Iteration Context
+
+You are helping iterate on a production LLM step. Given the context below,
+propose a variant delta that addresses the failing cases.
+
+## Response format
+Respond with a single JSON code block matching the VariantDelta shape:
+
+\`\`\`json
+{
+  "model": "<model_name>" or null,
+  "system_prompt": "<content>" or null,
+  "user_prompt": "<content>" or null,
+  "variable_definitions": {...} or null,
+  "instructions_delta": [{"op": "add|modify", "field": "...", "type_str": "...", "default": <any>}] or null
+}
+\`\`\`
+
+## Validation rules
+- \`type_str\` must be one of: \`str\`, \`int\`, \`float\`, \`bool\`, \`list\`, \`dict\`, \`Optional[<base>]\`, \`enum:<RegisteredName>\`
+- \`"modify"\` ops can omit \`type_str\` (backend preserves the original annotation — safest for complex types)
+- \`"add"\` ops require both \`type_str\` and \`default\`
+- \`default\` must be JSON-serialisable
+- Registered enums available below under "Registered enums"
+
+## Goal
+Minimal changes that are likely to improve the pass rate. Explain reasoning briefly, then provide the JSON.
+`
+
+function fenced(lang: string, body: string): string {
+  return '```' + lang + '\n' + body + '\n```'
+}
+
+function jsonFence(obj: unknown): string {
+  return fenced('json', JSON.stringify(obj, null, 2))
+}
+
+function formatCaseStatus(r: CaseResultItem | undefined): string {
+  if (!r) return 'n/a'
+  if (r.error_message) return 'errored'
+  return r.passed ? 'pass' : 'fail'
+}
+
+function formatDeltaTag(kind: DeltaKind): string {
+  switch (kind) {
+    case 'improved':
+      return 'improved'
+    case 'regressed':
+      return 'regressed'
+    case 'unchanged':
+      return 'unchanged'
+    default:
+      return 'n/a'
+  }
+}
+
+function outputOrError(r: CaseResultItem | undefined): string {
+  if (!r) return '_no result_'
+  if (r.error_message) {
+    return fenced('', `error: ${r.error_message}`)
+  }
+  if (r.output_data == null) return '_no output_'
+  return jsonFence(r.output_data)
+}
+
+interface MarkdownCaseInput {
+  inputs: Record<string, unknown>
+  expected_output: Record<string, unknown> | null
+}
+
+function caseMarkdownSection(
+  caseName: string,
+  caseDef: MarkdownCaseInput | undefined,
+  baseRes: CaseResultItem | undefined,
+  variantRes: CaseResultItem | undefined,
+): string {
+  const baseStatus = formatCaseStatus(baseRes)
+  const varStatus = formatCaseStatus(variantRes)
+  const kind = caseDelta(baseRes, variantRes)
+
+  // Collapse both-passed identical-output cases to a one-liner.
+  if (
+    baseStatus === 'pass' &&
+    varStatus === 'pass' &&
+    baseRes?.output_data &&
+    variantRes?.output_data &&
+    JSON.stringify(baseRes.output_data) === JSON.stringify(variantRes.output_data)
+  ) {
+    return `### \`${caseName}\` — both passed, outputs identical\n`
+  }
+
+  const header = `### \`${caseName}\` [baseline: ${baseStatus}] -> [variant: ${varStatus}] (${formatDeltaTag(kind)})`
+  const input = caseDef
+    ? `**Input:**\n${jsonFence(caseDef.inputs)}`
+    : `**Input:** _not available_`
+  const expected = caseDef?.expected_output
+    ? `**Expected:**\n${jsonFence(caseDef.expected_output)}`
+    : `**Expected:** _none defined_`
+  const baseOut = `**Baseline output:**\n${outputOrError(baseRes)}`
+  const varOut = `**Variant output:**\n${outputOrError(variantRes)}`
+
+  return `${header}\n\n${input}\n\n${expected}\n\n${baseOut}\n\n${varOut}\n`
+}
+
+function enumCatalogMarkdown(
+  catalog: Record<string, Array<{ name: string; value: string }>>,
+): string {
+  const keys = Object.keys(catalog)
+  if (keys.length === 0) return '_none registered_'
+  return keys
+    .map((k) => {
+      const members = catalog[k]
+        .map((m) => `${m.name} (${m.value})`)
+        .join(', ')
+      return `- \`${k}\`: [${members}]`
+    })
+    .join('\n')
+}
+
+function buildPayloadMarkdown(args: BuildPayloadArgs): string {
+  const payload = buildPayloadJSON(args)
+  const { step, prod_config, variant, runs, dataset_cases } = payload
+
+  // Order cases: regressed/errored first, then failing-on-variant, then others.
+  const caseByName = new Map(dataset_cases.map((c) => [c.name, c]))
+  const baseByName = new Map(
+    runs.baseline.case_results.map((r) => [r.case_name, r]),
+  )
+  const variantByName = new Map(
+    runs.variant.case_results.map((r) => [r.case_name, r]),
+  )
+  const allNames = Array.from(
+    new Set([...baseByName.keys(), ...variantByName.keys()]),
+  )
+
+  function priority(name: string): number {
+    const b = baseByName.get(name) as CaseResultItem | undefined
+    const v = variantByName.get(name) as CaseResultItem | undefined
+    const kind = caseDelta(b, v)
+    if (kind === 'regressed' || isErrored(b) || isErrored(v)) return 0
+    const varFailing = v ? v.error_message || !v.passed : false
+    if (varFailing) return 1
+    if (kind === 'improved') return 2
+    return 3
+  }
+
+  const sortedNames = allNames
+    .slice()
+    .sort((a, b) => priority(a) - priority(b) || a.localeCompare(b))
+
+  const perCase = sortedNames
+    .map((name) =>
+      caseMarkdownSection(
+        name,
+        caseByName.get(name),
+        baseByName.get(name) as CaseResultItem | undefined,
+        variantByName.get(name) as CaseResultItem | undefined,
+      ),
+    )
+    .join('\n')
+
+  const varDefsBlock = prod_config.variable_definitions
+    ? jsonFence(prod_config.variable_definitions)
+    : '_none_'
+  const instrBlock = prod_config.instructions_schema
+    ? jsonFence(prod_config.instructions_schema)
+    : '_not available_'
+  const modelLine = prod_config.model ? `\`${prod_config.model}\`` : '_not set_'
+  const sysBlock = prod_config.system_prompt
+    ? fenced('', prod_config.system_prompt)
+    : '_none_'
+  const userBlock = prod_config.user_prompt
+    ? fenced('', prod_config.user_prompt)
+    : '_none_'
+
+  const variantSection = variant
+    ? [
+        `## Current variant: ${variant.name ?? `#${variant.id}`}`,
+        variant.description ? variant.description : '_no description_',
+        '',
+        '### Delta',
+        variant.delta ? jsonFence(variant.delta) : '_empty delta_',
+      ].join('\n')
+    : '## Current variant\n_none — comparing two raw runs_'
+
+  const baseStats = runs.baseline.stats
+  const varStats = runs.variant.stats
+  const baseRate = formatPct(baseStats.pass_rate)
+  const varRate = formatPct(varStats.pass_rate)
+
+  return [
+    META_PROMPT,
+    '---',
+    '',
+    `## Step: ${step.name} (${step.target_type})`,
+    '',
+    '## Production configuration',
+    '',
+    '### Model',
+    modelLine,
+    '',
+    '### System prompt',
+    sysBlock,
+    '',
+    '### User prompt',
+    userBlock,
+    '',
+    '### Variable definitions',
+    varDefsBlock,
+    '',
+    '### Instructions schema',
+    instrBlock,
+    '',
+    '### Registered enums',
+    enumCatalogMarkdown(prod_config.enum_catalog),
+    '',
+    variantSection,
+    '',
+    '## Run results',
+    '',
+    `### Baseline (run #${runs.baseline.id})`,
+    `- Total: ${baseStats.total}, Passed: ${baseStats.passed}, Failed: ${baseStats.failed}, Errored: ${baseStats.errored}, Pass rate: ${baseRate}`,
+    '',
+    `### Variant (run #${runs.variant.id})`,
+    `- Total: ${varStats.total}, Passed: ${varStats.passed}, Failed: ${varStats.failed}, Errored: ${varStats.errored}, Pass rate: ${varRate}`,
+    '',
+    '## Per-case details',
+    '',
+    perCase,
+  ].join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Export UI helpers
+// ---------------------------------------------------------------------------
+
+const CLIPBOARD_WARNING_BYTES = 100 * 1024 // 100 KB
+
+function byteLength(s: string): number {
+  // TextEncoder gives UTF-8 byte count; clipboard limits are byte-based.
+  return new TextEncoder().encode(s).length
+}
+
+function formatKB(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} KB`
+}
+
+function downloadBlob(content: string, mime: string, filename: string) {
+  const blob = new Blob([content], { type: mime })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+async function writeClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+type ExportFormat = 'markdown' | 'json'
+
+interface PendingWarning {
+  format: ExportFormat
+  content: string
+  bytes: number
+  filename: string
+  mime: string
+}
+
+// ---------------------------------------------------------------------------
 // Stat card
 // ---------------------------------------------------------------------------
 
@@ -624,6 +1078,14 @@ function CompareRunsPage() {
   const prodPromptsQ = useDatasetProdPrompts(datasetId)
   const prodModelQ = useDatasetProdModel(datasetId)
 
+  // Export-context fetches. Non-blocking: export proceeds with nulls if
+  // these error/are still loading.
+  const inputSchemaQ = useInputSchema(
+    datasetQ.data?.target_type ?? '',
+    datasetQ.data?.target_name ?? '',
+  )
+  const autoGenQ = useAutoGenerateObjects()
+
   // Build dataset case map (by case name -> CaseItem). Empty when dataset
   // errored or hasn't loaded yet.
   const caseByName = useMemo(() => {
@@ -691,6 +1153,110 @@ function CompareRunsPage() {
 
   function collapseAll() {
     setExpanded(new Set())
+  }
+
+  // ---- Export state + handlers --------------------------------------------
+  const [exportOpen, setExportOpen] = useState(false)
+  const [warning, setWarning] = useState<PendingWarning | null>(null)
+
+  function exportFilename(ext: string): string {
+    return `eval-context-run${baseRunId}-vs-${variantRunId}.${ext}`
+  }
+
+  /** Gather args for payload builders; tolerates missing prod data. */
+  function buildArgs(): BuildPayloadArgs | null {
+    if (!datasetQ.data || !baseRun || !variantRun) return null
+    const outputSchema =
+      (inputSchemaQ.data?.output_schema as Record<string, unknown> | null) ??
+      null
+    return {
+      dataset: {
+        target_name: datasetQ.data.target_name,
+        target_type: datasetQ.data.target_type,
+        cases: datasetQ.data.cases,
+      },
+      prodModel: prodModelQ.data?.model ?? null,
+      prodPrompts: prodPromptsQ.data,
+      instructionsSchema: outputSchema,
+      enumObjects: autoGenQ.data?.objects,
+      variant: variantQ.data,
+      variantId: variantRun.variant_id ?? null,
+      baseRun,
+      variantRun,
+    }
+  }
+
+  async function copyWithWarning(
+    format: ExportFormat,
+    content: string,
+    filename: string,
+    mime: string,
+  ) {
+    const bytes = byteLength(content)
+    if (bytes > CLIPBOARD_WARNING_BYTES) {
+      setWarning({ format, content, bytes, filename, mime })
+      return
+    }
+    const ok = await writeClipboard(content)
+    if (ok) toast.success(`Copied ${format} to clipboard (${formatKB(bytes)})`)
+    else toast.error('Clipboard write failed — try downloading instead')
+  }
+
+  function handleCopyMarkdown() {
+    setExportOpen(false)
+    const args = buildArgs()
+    if (!args) return
+    const md = buildPayloadMarkdown(args)
+    void copyWithWarning('markdown', md, exportFilename('md'), 'text/markdown')
+  }
+
+  function handleCopyJSON() {
+    setExportOpen(false)
+    const args = buildArgs()
+    if (!args) return
+    const json = JSON.stringify(buildPayloadJSON(args), null, 2)
+    void copyWithWarning(
+      'json',
+      json,
+      exportFilename('json'),
+      'application/json',
+    )
+  }
+
+  function handleDownloadMarkdown() {
+    setExportOpen(false)
+    const args = buildArgs()
+    if (!args) return
+    const md = buildPayloadMarkdown(args)
+    downloadBlob(md, 'text/markdown', exportFilename('md'))
+    toast.success(`Downloaded ${exportFilename('md')}`)
+  }
+
+  function handleDownloadJSON() {
+    setExportOpen(false)
+    const args = buildArgs()
+    if (!args) return
+    const json = JSON.stringify(buildPayloadJSON(args), null, 2)
+    downloadBlob(json, 'application/json', exportFilename('json'))
+    toast.success(`Downloaded ${exportFilename('json')}`)
+  }
+
+  async function handleWarningCopyAnyway() {
+    if (!warning) return
+    const ok = await writeClipboard(warning.content)
+    if (ok)
+      toast.success(
+        `Copied ${warning.format} to clipboard (${formatKB(warning.bytes)})`,
+      )
+    else toast.error('Clipboard write failed — try downloading instead')
+    setWarning(null)
+  }
+
+  function handleWarningDownloadInstead() {
+    if (!warning) return
+    downloadBlob(warning.content, warning.mime, warning.filename)
+    toast.success(`Downloaded ${warning.filename}`)
+    setWarning(null)
   }
 
   // Early param validation
@@ -768,7 +1334,7 @@ function CompareRunsPage() {
   return (
     <ScrollArea className="h-full">
       <div className="mx-auto max-w-6xl space-y-6 p-6">
-        {/* Back + breadcrumb */}
+        {/* Back + breadcrumb + export */}
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon-sm" asChild>
             <Link to="/evals/$datasetId" params={{ datasetId: String(datasetId) }}>
@@ -785,6 +1351,50 @@ function CompareRunsPage() {
             </Link>
             <span>/</span>
             <span className="font-medium text-foreground">Compare runs</span>
+          </div>
+          <div className="ml-auto">
+            <Popover open={exportOpen} onOpenChange={setExportOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+                  <Download className="h-3.5 w-3.5" />
+                  Export
+                  <ChevronDown className="h-3 w-3 opacity-60" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-56 p-1">
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    onClick={handleCopyMarkdown}
+                    className="text-left text-xs px-2 py-1.5 rounded hover:bg-accent"
+                  >
+                    Copy as Markdown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyJSON}
+                    className="text-left text-xs px-2 py-1.5 rounded hover:bg-accent"
+                  >
+                    Copy as JSON
+                  </button>
+                  <div className="my-1 h-px bg-border" />
+                  <button
+                    type="button"
+                    onClick={handleDownloadMarkdown}
+                    className="text-left text-xs px-2 py-1.5 rounded hover:bg-accent"
+                  >
+                    Download as Markdown (.md)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadJSON}
+                    className="text-left text-xs px-2 py-1.5 rounded hover:bg-accent"
+                  >
+                    Download as JSON (.json)
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
@@ -981,6 +1591,34 @@ function CompareRunsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Clipboard size-warning dialog */}
+      <Dialog
+        open={warning != null}
+        onOpenChange={(open) => {
+          if (!open) setWarning(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Large payload</DialogTitle>
+            <DialogDescription>
+              Payload is {warning ? formatKB(warning.bytes) : ''}. Large content
+              may not copy cleanly on all systems (some browsers/OSes truncate
+              clipboard writes). Copy anyway, or download as a file?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWarning(null)}>
+              Cancel
+            </Button>
+            <Button variant="outline" onClick={handleWarningDownloadInstead}>
+              Download instead
+            </Button>
+            <Button onClick={handleWarningCopyAnyway}>Copy anyway</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ScrollArea>
   )
 }
