@@ -5,21 +5,28 @@ from a base class plus a JSON delta list. Used by the evals runner to produce
 variant instruction schemas for LLM step execution.
 
 Security constraints (ACE hygiene):
-- Type resolution uses a HARD-CODED WHITELIST. No eval/exec, no importlib,
-  no typing.get_type_hints, no dynamic resolution.
+- Type resolution uses a HARD-CODED WHITELIST for scalars plus a
+  REGISTRY-ONLY enum lookup (``enum:<Name>`` -> ``_AUTO_GENERATE_REGISTRY``).
+  No eval/exec, no importlib, no typing.get_type_hints, no dynamic class
+  resolution outside the trusted registry.
 - Field names must match ``^[a-z_][a-z0-9_]*$`` — dunder / traversal / attribute
   injection rejected.
+- Enum names must match ``^[A-Za-z_][A-Za-z0-9_]*$`` (Python identifier) and
+  then be present in ``_AUTO_GENERATE_REGISTRY`` as an ``enum.Enum`` subclass.
 - ``op`` must be ``add`` or ``modify`` — any other value raises ValueError.
   ``remove`` is explicitly NOT supported in this v2 (removing inherited fields
   from LLMResultMixin subclasses breaks pydantic-ai output validation and
   downstream evaluator assumptions).
-- Defaults must be JSON-serialisable scalars, flat lists of scalars, or flat
-  dicts of scalars. Callables, class references, nested objects rejected.
-- Length caps on delta list (50) and string fields (1000 chars) prevent
-  resource exhaustion from malicious payloads.
+- Defaults must be JSON-serialisable structures (scalars, or arbitrarily
+  nested lists/dicts with string keys). Callables, class references, sets,
+  and other non-JSON objects are rejected by the json.dumps round-trip.
+- Length caps on delta list (50), string fields (1000 chars), default
+  JSON-encoded length (2000 chars), and total nested node count in defaults
+  (1000) prevent resource exhaustion from malicious payloads.
 
 Architectural invariants for future Docker-sandbox relocation:
-- No I/O, no session, no global state.
+- No I/O, no session, no global state (``_AUTO_GENERATE_REGISTRY`` is a
+  trusted, process-local registry populated by the pipeline dev at startup).
 - Only JSON-serialisable inputs; the output class itself stays in-process but
   can be reconstructed in a sandbox from the delta + base-class module path.
 """
@@ -29,7 +36,7 @@ import json
 import re
 from typing import Any, Optional
 
-from pydantic import create_model
+from pydantic import Field, create_model
 
 
 # Whitelist of permitted type strings. Mapping to concrete Python type objects
@@ -52,18 +59,106 @@ _FIELD_NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 # Dunder names (e.g. __class__, __init__) match the identifier regex but
 # collide with Python's internal protocol slots. Reject separately.
 _DUNDER_RE = re.compile(r"^__.*__$")
+# Enum names may start with uppercase (PascalCase convention) and must be
+# valid Python identifiers before we touch the registry.
+_ENUM_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 _MAX_DELTA_ITEMS = 50
 _MAX_STRING_LEN = 1000
+_MAX_DEFAULT_LEN = 2000
+_MAX_DEFAULT_NODES = 1000
 
 _ALLOWED_OPS = frozenset({"add", "modify"})
 _SCALAR_TYPES = (str, int, float, bool, type(None))
 
 
-def _resolve_type(type_str: str) -> type:
-    """Resolve a whitelisted type string to a Python type.
+def _is_enum_type(field_type: Any) -> bool:
+    """True iff ``field_type`` is an enum class or ``Optional[enum]``.
 
-    Whitelist lookup ONLY. Never uses eval/exec/importlib/get_type_hints.
+    Used to decide whether to wrap the default in a ``Field(..., validate_default=True)``
+    so pydantic coerces the member value to the enum member and rejects
+    invalid values at class-creation time.
+    """
+    import enum as _enum
+    import typing as _t
+
+    if isinstance(field_type, type) and issubclass(field_type, _enum.Enum):
+        return True
+    # Optional[Enum] shows up as Union[Enum, None].
+    origin = _t.get_origin(field_type)
+    if origin is _t.Union:
+        return any(
+            isinstance(a, type) and issubclass(a, _enum.Enum)
+            for a in _t.get_args(field_type)
+        )
+    return False
+
+
+def _default_spec(field_type: Any, default_value: Any) -> Any:
+    """Return the per-field default suitable for ``pydantic.create_model``.
+
+    For enum-typed fields we wrap the default in ``Field(default=...,
+    validate_default=True)`` so pydantic coerces the string value to the
+    matching enum member at class creation (and raises ValidationError on
+    mismatch — re-wrapped as ValueError by the caller). For all other types
+    we pass the raw default through unchanged to preserve existing behaviour.
+    """
+    if _is_enum_type(field_type):
+        return Field(default=default_value, validate_default=True)
+    return default_value
+
+
+def _resolve_enum(name: str) -> type:
+    """Resolve an enum class from the auto_generate registry.
+
+    Security: registry-only lookup. No ``importlib.import_module``, no
+    ``getattr`` walks, no dynamic module resolution. The name must pass an
+    identifier regex before we touch the registry so malformed input never
+    reaches the lookup. Unknown names -> ValueError. Registered-but-not-enum
+    objects (e.g. bare constants) are explicitly rejected so ``enum:Foo``
+    can never resolve to a non-enum type.
+    """
+    # Lazy import avoids a module-level circular dependency risk between
+    # evals.delta and prompts.variables.
+    import enum as _enum
+
+    from llm_pipeline.prompts.variables import _AUTO_GENERATE_REGISTRY
+
+    if not _ENUM_NAME_RE.match(name):
+        raise ValueError(
+            f"enum name {name!r} is not a valid identifier. "
+            f"Must match {_ENUM_NAME_RE.pattern}"
+        )
+
+    obj = _AUTO_GENERATE_REGISTRY.get(name)
+    if obj is None:
+        raise ValueError(
+            f"enum type {name!r} not registered. "
+            f"Use register_auto_generate() or ensure llm_pipelines/enums/ "
+            f"discovery has run."
+        )
+    if not (isinstance(obj, type) and issubclass(obj, _enum.Enum)):
+        raise ValueError(
+            f"{name!r} is registered but is not an enum "
+            f"(got {type(obj).__name__})"
+        )
+    return obj
+
+
+def _resolve_type(type_str: str) -> type:
+    """Resolve a type string to a Python type.
+
+    Supported formats:
+    - Scalars: ``str``, ``int``, ``float``, ``bool``
+    - Generic containers: ``list``, ``dict``
+    - Optional scalar: ``Optional[str]``, ``Optional[int]``,
+      ``Optional[float]``, ``Optional[bool]``
+    - Enum (registry-resolved): ``enum:<RegisteredName>``
+    - Optional enum: ``Optional[enum:<RegisteredName>]``
+
+    Security: scalar forms use the hard-coded ``_TYPE_WHITELIST``; enum
+    forms go through :func:`_resolve_enum`, which does a registry-only
+    lookup (no eval/exec/importlib). Unknown strings -> ValueError.
     """
     if not isinstance(type_str, str):
         raise ValueError(
@@ -73,10 +168,23 @@ def _resolve_type(type_str: str) -> type:
         raise ValueError(
             f"type_str exceeds max length {_MAX_STRING_LEN}"
         )
+
+    # Optional[enum:<Name>] — unwrap then recurse on the inner form so the
+    # same enum resolution path runs for both bare and Optional enums.
+    if type_str.startswith("Optional[enum:") and type_str.endswith("]"):
+        inner = type_str[len("Optional["):-1]
+        return Optional[_resolve_type(inner)]  # type: ignore[return-value]
+
+    # enum:<Name> — registry-only lookup, no importlib.
+    if type_str.startswith("enum:"):
+        enum_name = type_str[len("enum:"):]
+        return _resolve_enum(enum_name)
+
     if type_str not in _TYPE_WHITELIST:
         raise ValueError(
             f"type_str {type_str!r} not in whitelist. "
-            f"Allowed: {sorted(_TYPE_WHITELIST)}"
+            f"Allowed: {sorted(_TYPE_WHITELIST)} (plus "
+            f"'enum:<RegisteredName>' / 'Optional[enum:<RegisteredName>]')"
         )
     return _TYPE_WHITELIST[type_str]
 
@@ -84,47 +192,72 @@ def _resolve_type(type_str: str) -> type:
 def _validate_default(default: Any) -> None:
     """Validate that a default value is safe to persist and apply.
 
-    JSON round-trip via ``json.dumps`` — rejects callables, class refs, and
-    any non-JSON-serialisable object. Additionally enforces: only scalars,
-    flat lists of scalars, or flat dicts of scalars.
+    Accepts arbitrary JSON-compatible structures: scalars, or nested lists
+    and dicts (string keys only) of any depth. Rejects anything else.
+
+    ACE safeguards:
+    - ``json.dumps`` round-trip rejects callables, class references, sets,
+      custom objects, and non-string dict keys (raises TypeError).
+    - Encoded-length cap (``_MAX_DEFAULT_LEN``, 2000 chars) bounds payload
+      size.
+    - Total node count cap (``_MAX_DEFAULT_NODES``, 1000) sums list items +
+      dict entries recursively, preventing pathological deeply-nested or
+      wide inputs.
+
+    Note: Python tuples are permitted as inputs and treated as lists; the
+    ``json.dumps`` round-trip serialises them identically to JSON arrays,
+    so downstream storage sees a list either way.
     """
-    # json.dumps rejects callables, sets, class refs, custom objects.
+    # json.dumps rejects callables, sets, class refs, custom objects, and
+    # non-string dict keys (e.g. {1: "a"} raises TypeError in strict mode).
     try:
         encoded = json.dumps(default)
     except (TypeError, ValueError) as exc:
         raise ValueError(f"default is not JSON-serialisable: {exc}") from exc
 
-    if len(encoded) > _MAX_STRING_LEN:
+    if len(encoded) > _MAX_DEFAULT_LEN:
         raise ValueError(
-            f"default JSON-encoded length exceeds max {_MAX_STRING_LEN}"
+            f"default JSON-encoded length {len(encoded)} exceeds max "
+            f"{_MAX_DEFAULT_LEN}"
         )
 
-    # Structural checks: scalar | flat list of scalars | flat dict of scalars.
-    if isinstance(default, _SCALAR_TYPES):
-        return
-    if isinstance(default, list):
-        for item in default:
-            if not isinstance(item, _SCALAR_TYPES):
+    # Iterative walk: scalars, lists (any depth), dicts with string keys
+    # (any depth). Anything else at any depth raises. Count every list item
+    # and every dict entry toward the node budget.
+    stack: list[Any] = [default]
+    node_count = 0
+    while stack:
+        node = stack.pop()
+        if isinstance(node, _SCALAR_TYPES):
+            continue
+        if isinstance(node, (list, tuple)):
+            node_count += len(node)
+            if node_count > _MAX_DEFAULT_NODES:
                 raise ValueError(
-                    "default list may only contain scalars "
-                    "(str, int, float, bool, None)"
+                    f"default nested node count exceeds max "
+                    f"{_MAX_DEFAULT_NODES}"
                 )
-        return
-    if isinstance(default, dict):
-        for key, value in default.items():
-            if not isinstance(key, str):
-                raise ValueError("default dict keys must be strings")
-            if not isinstance(value, _SCALAR_TYPES):
+            stack.extend(node)
+            continue
+        if isinstance(node, dict):
+            node_count += len(node)
+            if node_count > _MAX_DEFAULT_NODES:
                 raise ValueError(
-                    "default dict values must be scalars "
-                    "(str, int, float, bool, None)"
+                    f"default nested node count exceeds max "
+                    f"{_MAX_DEFAULT_NODES}"
                 )
-        return
-    # Anything else (tuples from json decode won't occur; nested containers fall here).
-    raise ValueError(
-        f"default must be a scalar, flat list of scalars, or flat dict of "
-        f"scalars; got {type(default).__name__}"
-    )
+            for key, value in node.items():
+                if not isinstance(key, str):
+                    # json.dumps catches this too, but be explicit — if
+                    # json.dumps ever changes, we still reject here.
+                    raise ValueError("default dict keys must be strings")
+                stack.append(value)
+            continue
+        raise ValueError(
+            f"default contains unsupported type {type(node).__name__}; "
+            f"only scalars, lists, and dicts (string keys) permitted "
+            f"at any depth"
+        )
 
 
 def _validate_field_name(field: Any) -> str:
@@ -162,11 +295,28 @@ def apply_instruction_delta(
             - ``op``: ``"add"`` or ``"modify"`` (required).
             - ``field``: target field name (required, must match identifier
               regex).
-            - ``type_str``: whitelisted type string. Required for ``add``;
-              optional for ``modify`` (preserves existing annotation if
-              omitted).
-            - ``default``: optional default value (JSON-scalar, flat list of
-              scalars, or flat dict of scalars).
+            - ``type_str``: type string. Required for ``add``; optional for
+              ``modify`` (preserves existing annotation if omitted). Supported:
+
+                * Scalars: ``str``, ``int``, ``float``, ``bool``
+                * Generics: ``list``, ``dict``
+                * Optional scalar: ``Optional[str|int|float|bool]``
+                * Enum (registry-resolved): ``enum:<RegisteredName>``
+                * Optional enum: ``Optional[enum:<RegisteredName>]``
+
+              Enum resolution is registry-only via
+              ``_AUTO_GENERATE_REGISTRY`` — no importlib, no dynamic class
+              lookup. Unknown or non-enum names raise ValueError.
+            - ``default``: optional default value. Must be JSON-serialisable:
+              a scalar (str/int/float/bool/None), or any nested structure of
+              lists and string-keyed dicts (any depth). For enum-typed fields,
+              pass the member value (e.g. ``"positive"``); the default is
+              wrapped in ``Field(validate_default=True)`` so pydantic coerces
+              the string to the matching enum member at model instantiation
+              and raises ``ValidationError`` (a ``ValueError`` subclass) on
+              mismatch. Callables, class refs, sets, and non-string dict
+              keys are rejected. Encoded length capped at 2000 chars; total
+              nested node count capped at 1000.
 
     Returns:
         A new pydantic BaseModel subclass named ``VariantInstructions`` (or
@@ -174,7 +324,8 @@ def apply_instruction_delta(
 
     Raises:
         ValueError: on any validation failure (unknown op, bad field name,
-            unknown type_str, non-JSON default, list too long, etc.).
+            unknown type_str, non-JSON default, list too long, enum default
+            not matching a registered member, etc.).
     """
     # Type check FIRST — reject non-list inputs (e.g. dict, str) before any
     # length-based early-return. An empty dict has ``len == 0`` and would
@@ -231,7 +382,9 @@ def apply_instruction_delta(
                 raise ValueError(
                     f"delta item {idx}: 'add' op requires a default value"
                 )
-            fields_dict[field_name] = (field_type, default_value)
+            fields_dict[field_name] = (
+                field_type, _default_spec(field_type, default_value),
+            )
         else:  # modify
             if type_str is not None:
                 field_type = _resolve_type(type_str)
@@ -248,15 +401,45 @@ def apply_instruction_delta(
                 raise ValueError(
                     f"delta item {idx}: 'modify' op requires a default value"
                 )
-            fields_dict[field_name] = (field_type, default_value)
+            fields_dict[field_name] = (
+                field_type, _default_spec(field_type, default_value),
+            )
 
     # pydantic.create_model builds a subclass; inherited methods
-    # (e.g. create_failure) are preserved.
-    return create_model(
-        "VariantInstructions",
-        __base__=base_cls,
-        **fields_dict,
-    )
+    # (e.g. create_failure) are preserved. We delegate default-vs-type
+    # validation (esp. enum member-value matching) to pydantic here —
+    # _validate_default is intentionally type-agnostic.
+    #
+    # Error-surface consistency: pydantic raises ValidationError (a
+    # ValueError subclass) for validate_default failures and PydanticUserError
+    # for schema-construction problems. We re-wrap both so callers get a
+    # single, human-readable ValueError regardless of which layer flagged the
+    # mismatch.
+    from pydantic import ValidationError as _PydValidationError
+
+    try:
+        return create_model(
+            "VariantInstructions",
+            __base__=base_cls,
+            **fields_dict,
+        )
+    except _PydValidationError as exc:
+        raise ValueError(
+            f"default value(s) failed type validation during variant "
+            f"instructions build: {exc}. For enum fields, the default must "
+            f"match a registered member value."
+        ) from exc
+    except ValueError:
+        # Any other ValueError (e.g. raised by our own helpers below the
+        # create_model call path, or future pydantic ValueError variants)
+        # bubbles up unchanged so existing test expectations still match.
+        raise
+    except Exception as exc:
+        raise ValueError(
+            f"failed to build VariantInstructions from delta: {exc}. "
+            f"Check that defaults match their declared types "
+            f"(e.g. enum defaults must be a registered member value)."
+        ) from exc
 
 
 def merge_variable_definitions(

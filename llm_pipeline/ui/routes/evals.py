@@ -1,7 +1,7 @@
 """Evaluation system endpoints - dataset and case CRUD."""
 import logging
 from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
@@ -189,6 +189,40 @@ class TypeWhitelistResponse(BaseModel):
     types: List[str]
 
 
+class ProdPromptContent(BaseModel):
+    """Resolved prod prompt payload surfaced to the variant editor."""
+
+    prompt_key: str
+    content: str
+    variable_definitions: Optional[dict | list] = None
+    version: Optional[str] = None
+
+
+class ProdPromptsResponse(BaseModel):
+    """Prod system + user prompts resolved for a dataset's step target.
+
+    Either side may be ``null`` when the corresponding key is not declared
+    (tier 1/2) and no matching active ``Prompt`` row exists (tier 3).
+    """
+
+    system: Optional[ProdPromptContent] = None
+    user: Optional[ProdPromptContent] = None
+
+
+class ProdModelResponse(BaseModel):
+    """Resolved prod model for a dataset's step target.
+
+    ``model`` is the effective string (e.g. ``openai:gpt-5``) after the
+    three-tier resolution. ``source`` indicates which tier produced it:
+    ``"db"`` (StepModelConfig override), ``"step_definition"``
+    (step_def.model), ``"pipeline_default"`` (pipeline-level default),
+    or ``"none"`` (no model configured at any tier — ``model`` is null).
+    """
+
+    model: Optional[str] = None
+    source: str
+
+
 # ---------------------------------------------------------------------------
 # Variant helpers
 # ---------------------------------------------------------------------------
@@ -238,6 +272,45 @@ def _dry_run_validate_delta(delta: Optional[dict]) -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _find_step_def_by_target(
+    target_step: str, introspection_registry: dict
+) -> tuple[Optional[Any], Optional[str], Optional[str]]:
+    """Walk registered pipelines for a step_def matching ``target_step``.
+
+    Returns ``(step_def, strategy_name, pipeline_name)`` — all ``None`` if
+    no match. First-match semantics (registry insertion order) mirror
+    ``EvalRunner._find_step_def``. ``strategy_name`` is surfaced for
+    tier-3 prompt auto-discovery; ``pipeline_name`` feeds the tier-2
+    model-resolver DB lookup.
+
+    Extracted so prod-prompts and prod-model share one iteration —
+    both endpoints need step_def + pipeline_name, and prod-prompts
+    additionally needs strategy_name.
+    """
+    for pipeline_name, pipeline_cls in introspection_registry.items():
+        strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
+        if strategies_cls is None:
+            continue
+        strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
+        for strategy_cls in strategy_classes:
+            try:
+                strategy_inst = strategy_cls()
+                for sd in strategy_inst.get_steps():
+                    if sd.step_name == target_step:
+                        return (
+                            sd,
+                            getattr(strategy_inst, "name", None),
+                            pipeline_name,
+                        )
+            except Exception:
+                logger.debug(
+                    "Failed to introspect strategy %s for step '%s'",
+                    strategy_cls.__name__, target_step, exc_info=True,
+                )
+                continue
+    return None, None, None
 
 
 def _last_run_pass_rate(db, dataset_id: int) -> Optional[float]:
@@ -406,6 +479,148 @@ def get_dataset(dataset_id: int, db: DBSession) -> DatasetDetail:
             for c in cases
         ],
     )
+
+
+@router.get(
+    "/{dataset_id}/prod-prompts", response_model=ProdPromptsResponse
+)
+def get_dataset_prod_prompts(
+    dataset_id: int,
+    request: Request,
+    db: DBSession,
+) -> ProdPromptsResponse:
+    """Return resolved prod (system, user) prompts for a dataset's step target.
+
+    Step-targeted only — pipeline-target variants are not supported in v2.
+    Uses the shared resolver so tier 1/2/3 keys are all surfaced, then
+    fetches Prompt rows for each non-None key. Either side returns null
+    when the key is unresolved OR the Prompt row doesn't exist.
+
+    Strategy resolution: walks registered pipelines in registry order and
+    returns on the first match (same convention as ``EvalRunner._find_step_def``).
+    Datasets don't store strategy_name, so the first-match strategy name
+    is what drives tier-3 lookup.
+    """
+    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
+
+    ds = db.exec(
+        select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
+    ).first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if ds.target_type != "step":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "prod-prompts endpoint supports step-targets only "
+                "(pipeline target variants are not supported in v2)"
+            ),
+        )
+
+    introspection_registry: dict = getattr(
+        request.app.state, "introspection_registry", {}
+    )
+
+    target_step = ds.target_name
+    step_def, strategy_name, _pipeline_name = _find_step_def_by_target(
+        target_step, introspection_registry
+    )
+
+    if step_def is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Step '{target_step}' not found in any registered pipeline"
+            ),
+        )
+
+    system_key, user_key = resolve_with_auto_discovery(
+        step_def, db, strategy_name
+    )
+
+    def _fetch(key: Optional[str], ptype: str) -> Optional[ProdPromptContent]:
+        if key is None:
+            return None
+        row = db.exec(
+            select(Prompt).where(
+                Prompt.prompt_key == key,
+                Prompt.prompt_type == ptype,
+            )
+        ).first()
+        if row is None:
+            return None
+        return ProdPromptContent(
+            prompt_key=row.prompt_key,
+            content=row.content,
+            variable_definitions=row.variable_definitions,
+            version=row.version,
+        )
+
+    return ProdPromptsResponse(
+        system=_fetch(system_key, "system"),
+        user=_fetch(user_key, "user"),
+    )
+
+
+@router.get(
+    "/{dataset_id}/prod-model", response_model=ProdModelResponse
+)
+def get_dataset_prod_model(
+    dataset_id: int,
+    request: Request,
+    db: DBSession,
+) -> ProdModelResponse:
+    """Return resolved prod model for a dataset's step target.
+
+    Step-targeted only — pipeline-target variants are not supported in v2.
+    Uses the shared model resolver so tier 1/2/3 all contribute. The
+    ``source`` field surfaces which tier produced the value; ``"none"``
+    means no model is configured at any tier.
+    """
+    from llm_pipeline.model.resolver import resolve_model_with_fallbacks
+
+    ds = db.exec(
+        select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
+    ).first()
+    if ds is None:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    if ds.target_type != "step":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "prod-model endpoint supports step-targets only "
+                "(pipeline target variants are not supported in v2)"
+            ),
+        )
+
+    introspection_registry: dict = getattr(
+        request.app.state, "introspection_registry", {}
+    )
+
+    target_step = ds.target_name
+    step_def, _strategy_name, pipeline_name = _find_step_def_by_target(
+        target_step, introspection_registry
+    )
+
+    if step_def is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Step '{target_step}' not found in any registered pipeline"
+            ),
+        )
+
+    pipeline_cls = introspection_registry.get(pipeline_name)
+    pipeline_default_model = getattr(pipeline_cls, "_default_model", None)
+
+    model, source = resolve_model_with_fallbacks(
+        step_def, db, pipeline_name or "", pipeline_default_model
+    )
+
+    return ProdModelResponse(model=model, source=source)
 
 
 @router.post("", response_model=DatasetDetail, status_code=201)

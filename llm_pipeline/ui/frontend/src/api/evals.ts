@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
+import { ApiError } from './types'
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -206,6 +207,52 @@ export interface DatasetListParams {
 }
 
 // ---------------------------------------------------------------------------
+// Prod prompts (prefill source for variant editor)
+// ---------------------------------------------------------------------------
+
+/**
+ * Single prod prompt payload returned from GET /evals/{dataset_id}/prod-prompts.
+ *
+ * `variable_definitions` is typed as the shared `VariableDefinitions | null`
+ * but the backend column is permissive (`dict | list`) so callers should feed
+ * the raw value through `readVarDefs` (or equivalent) before consuming.
+ */
+export interface ProdPromptContent {
+  prompt_key: string
+  content: string
+  variable_definitions: VariableDefinitions | null
+  version: string | null
+}
+
+export interface ProdPromptsResponse {
+  system: ProdPromptContent | null
+  user: ProdPromptContent | null
+}
+
+// ---------------------------------------------------------------------------
+// Prod model (prefill source for variant editor)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolution source for a dataset's prod model. Mirrors the backend literal
+ * union in GET /evals/{dataset_id}/prod-model:
+ *   - "db"               — user-saved StepModelConfig override
+ *   - "step_definition"  — model declared on the step's @step_definition
+ *   - "pipeline_default" — pipeline-level default model
+ *   - "none"             — no model resolvable (e.g. pipeline target, no config)
+ */
+export type ProdModelSource =
+  | 'db'
+  | 'step_definition'
+  | 'pipeline_default'
+  | 'none'
+
+export interface ProdModelResponse {
+  model: string | null
+  source: ProdModelSource
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -237,7 +284,12 @@ export function useDataset(id: number) {
 export function useEvalRuns(datasetId: number) {
   return useQuery({
     queryKey: queryKeys.evals.runs(datasetId),
-    queryFn: () => apiClient<RunListItem[]>(`/evals/${datasetId}/runs`),
+    queryFn: async () => {
+      const res = await apiClient<{ items: RunListItem[] }>(
+        `/evals/${datasetId}/runs`,
+      )
+      return res.items
+    },
     enabled: datasetId > 0,
   })
 }
@@ -247,6 +299,81 @@ export function useEvalRun(datasetId: number, runId: number) {
     queryKey: queryKeys.evals.run(datasetId, runId),
     queryFn: () => apiClient<RunDetail>(`/evals/${datasetId}/runs/${runId}`),
     enabled: datasetId > 0 && runId > 0,
+  })
+}
+
+/**
+ * Fetch the resolved prod (system, user) prompts for a dataset's step target.
+ *
+ * Returns `{ system: null, user: null }` when the backend returns 422 (which
+ * happens for pipeline-target datasets — the endpoint only supports
+ * step-targets in v2). Other errors propagate so TanStack Query can retry or
+ * surface them via the toast layer.
+ */
+export async function fetchDatasetProdPrompts(
+  datasetId: number,
+): Promise<ProdPromptsResponse> {
+  try {
+    return await apiClient<ProdPromptsResponse>(
+      `/evals/${datasetId}/prod-prompts`,
+      { silent: true },
+    )
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) {
+      return { system: null, user: null }
+    }
+    throw err
+  }
+}
+
+/**
+ * TanStack Query hook for dataset prod prompts. 5-minute stale time since
+ * prod prompts rarely change within a single editing session.
+ */
+export function useDatasetProdPrompts(datasetId: number) {
+  return useQuery({
+    queryKey: queryKeys.evals.prodPrompts(datasetId),
+    queryFn: () => fetchDatasetProdPrompts(datasetId),
+    enabled: Number.isFinite(datasetId) && datasetId > 0,
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+/**
+ * Fetch the resolved prod model for a dataset's step target.
+ *
+ * Returns `{ model: null, source: 'none' }` when the backend returns 422
+ * (pipeline-target datasets — endpoint only supports step-targets in v2),
+ * matching the fetchDatasetProdPrompts degradation pattern. Other errors
+ * propagate so TanStack Query can retry or surface via the toast layer.
+ */
+export async function fetchDatasetProdModel(
+  datasetId: number,
+): Promise<ProdModelResponse> {
+  try {
+    return await apiClient<ProdModelResponse>(
+      `/evals/${datasetId}/prod-model`,
+      { silent: true },
+    )
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) {
+      return { model: null, source: 'none' }
+    }
+    throw err
+  }
+}
+
+/**
+ * TanStack Query hook for dataset prod model. 5-minute stale time — matches
+ * prodPrompts cadence since StepModelConfig changes are rare within an
+ * editing session.
+ */
+export function useDatasetProdModel(datasetId: number) {
+  return useQuery({
+    queryKey: queryKeys.evals.prodModel(datasetId),
+    queryFn: () => fetchDatasetProdModel(datasetId),
+    enabled: Number.isFinite(datasetId) && datasetId > 0,
+    staleTime: 5 * 60 * 1000,
   })
 }
 

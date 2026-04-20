@@ -345,8 +345,11 @@ class EvalRunner:
         evaluator resolution so auto-evaluators cover variant-added fields.
         """
         from llm_pipeline.evals.delta import apply_instruction_delta
+        from llm_pipeline.model.resolver import resolve_model_with_fallbacks
 
-        step_def, input_data_cls, default_model = self._find_step_def(step_name)
+        step_def, input_data_cls, default_model, pipeline_name = (
+            self._find_step_def(step_name)
+        )
         if step_def is None:
             raise ValueError(
                 f"Step '{step_name}' not found in any registered pipeline"
@@ -367,14 +370,26 @@ class EvalRunner:
                 # pristine across concurrent eval runs).
                 step_def = dataclasses.replace(step_def, instructions=modified_cls)
 
-        # Variant model override takes precedence over `model` kwarg; then
-        # step_def default.
+        # Resolve base model honouring the full canonical tier order:
+        # StepModelConfig DB row > step_def.model > pipeline default.
+        # Previously skipped tier 2 — eval base runs now match prod runtime.
+        with Session(self.engine) as resolve_session:
+            base_model, _source = resolve_model_with_fallbacks(
+                step_def,
+                resolve_session,
+                pipeline_name or "",
+                default_model,
+            )
+
+        # Variant model override and explicit ``model=`` kwarg still layer on
+        # top of the resolved base — variant wins, then call-site kwarg, then
+        # the resolver's answer.
         variant_model = None
         if variant_delta:
             vm = variant_delta.get("model")
             if isinstance(vm, str) and vm.strip():
                 variant_model = vm
-        step_model = variant_model or model or default_model
+        step_model = variant_model or model or base_model
         if not step_model:
             raise ValueError(
                 f"No model configured for step '{step_name}'. "
@@ -398,10 +413,14 @@ class EvalRunner:
         task_fn = self._build_pipeline_task_fn(pipeline_name, model)
         return task_fn, None  # no evaluators for pipeline-level (uses case-level)
 
-    def _find_step_def(self, step_name: str) -> tuple[Optional[Any], Optional[Type], Optional[str]]:
-        """Find StepDefinition + INPUT_DATA cls + default model for a step.
+    def _find_step_def(
+        self, step_name: str
+    ) -> tuple[Optional[Any], Optional[Type], Optional[str], Optional[str]]:
+        """Find StepDefinition + INPUT_DATA cls + default model + pipeline name.
 
-        Returns (step_def, input_data_cls, default_model) or (None, None, None).
+        Returns a 4-tuple ``(step_def, input_data_cls, default_model, pipeline_name)``
+        or ``(None, None, None, None)``. ``pipeline_name`` is needed by the
+        model resolver for its tier-2 DB lookup.
         """
         for pipeline_name, pipeline_cls in self.introspection_registry.items():
             try:
@@ -414,14 +433,14 @@ class EvalRunner:
                         if sd.step_name == step_name:
                             input_data_cls = getattr(pipeline_cls, "INPUT_DATA", None)
                             default_model = getattr(pipeline_cls, "_default_model", None)
-                            return sd, input_data_cls, default_model
+                            return sd, input_data_cls, default_model, pipeline_name
             except Exception:
                 logger.debug(
                     "Failed to introspect '%s' for step '%s'",
                     pipeline_name, step_name, exc_info=True,
                 )
                 continue
-        return None, None, None
+        return None, None, None, None
 
     def _resolve_evaluators(self, step_def: Any) -> list | None:
         """Get evaluators from step_def or auto-generate from instructions."""

@@ -748,3 +748,572 @@ class TestDeltaTypeWhitelist:
             assert expected in types, f"{expected!r} missing from whitelist"
         # Sorted for stable client-side rendering.
         assert types == sorted(types)
+
+
+# ---------------------------------------------------------------------------
+# GET /evals/{dataset_id}/prod-prompts
+# ---------------------------------------------------------------------------
+
+
+class TestProdPrompts:
+    """Prod prompts endpoint: resolves (system, user) for a dataset's step.
+
+    Each test builds a tiny pipeline (one strategy, one step) in-module,
+    registers it on app.state.introspection_registry, seeds the Prompt table
+    and exercises the resolver tiers end-to-end.
+    """
+
+    @pytest.fixture
+    def prod_prompts_app(self):
+        """Build app with a pipeline that declares tier-1/2 keys on a step."""
+        from typing import ClassVar as _CV
+
+        from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+
+        class DeclaredInstructions(LLMResultMixin):
+            x: int = 0
+
+            example: _CV[dict] = {"x": 1, "notes": "ok"}
+
+        @step_definition(
+            instructions=DeclaredInstructions,
+            default_system_key="declared.system",
+            default_user_key="declared.user",
+        )
+        class DeclaredStep(LLMStep):
+            def prepare_calls(self):
+                return []
+
+        app, engine = _make_evals_app()
+        client = TestClient(app)
+
+        # Register pipeline after app creation
+        from llm_pipeline import (
+            PipelineConfig,
+            PipelineDatabaseRegistry,
+            PipelineStrategies,
+            PipelineStrategy,
+        )
+
+        class DeclaredTestStrategy(PipelineStrategy):
+            def can_handle(self, context):
+                return True
+
+            def get_steps(self):
+                return [DeclaredStep.create_definition()]
+
+        class DeclaredTestRegistry(PipelineDatabaseRegistry, models=[]):
+            pass
+
+        class DeclaredTestStrategies(
+            PipelineStrategies, strategies=[DeclaredTestStrategy]
+        ):
+            pass
+
+        class DeclaredTestPipeline(
+            PipelineConfig,
+            registry=DeclaredTestRegistry,
+            strategies=DeclaredTestStrategies,
+        ):
+            pass
+
+        app.state.introspection_registry["p1"] = DeclaredTestPipeline
+
+        # seed prompts for declared keys
+        from llm_pipeline.db.prompt import Prompt as _P_model
+
+        with Session(engine) as session:
+            session.add(
+                _P_model(
+                    prompt_key="declared.system",
+                    prompt_name="declared sys",
+                    prompt_type="system",
+                    content="SYS CONTENT",
+                    version="1.2",
+                )
+            )
+            session.add(
+                _P_model(
+                    prompt_key="declared.user",
+                    prompt_name="declared usr",
+                    prompt_type="user",
+                    content="USR CONTENT",
+                    version="1.2",
+                )
+            )
+            session.commit()
+
+        return client, engine, "declared"
+
+    def test_happy_path_declared_keys(self, prod_prompts_app):
+        client, engine, step_name = prod_prompts_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_declared",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["system"]["prompt_key"] == "declared.system"
+        assert data["system"]["content"] == "SYS CONTENT"
+        assert data["system"]["version"] == "1.2"
+        assert data["user"]["prompt_key"] == "declared.user"
+        assert data["user"]["content"] == "USR CONTENT"
+
+    def test_happy_path_auto_discovery(self, evals_app):
+        """Step declares no keys, DB has step-level prompts → tier-3 hit."""
+        from typing import ClassVar as _CV
+
+        from llm_pipeline import (
+            PipelineConfig,
+            PipelineDatabaseRegistry,
+            PipelineStrategies,
+            PipelineStrategy,
+        )
+        from llm_pipeline.db.prompt import Prompt as _P_model
+        from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+
+        client, engine = evals_app
+
+        class AutoDiscInstructions(LLMResultMixin):
+            x: int = 0
+
+            example: _CV[dict] = {"x": 1, "notes": "ok"}
+
+        @step_definition(instructions=AutoDiscInstructions)
+        class AutoDiscStep(LLMStep):
+            def prepare_calls(self):
+                return []
+
+        class AutoDiscTestStrategy(PipelineStrategy):
+            def can_handle(self, context):
+                return True
+
+            def get_steps(self):
+                return [AutoDiscStep.create_definition()]
+
+        class AutoTestRegistry(PipelineDatabaseRegistry, models=[]):
+            pass
+
+        class AutoTestStrategies(
+            PipelineStrategies, strategies=[AutoDiscTestStrategy]
+        ):
+            pass
+
+        class AutoTestPipeline(
+            PipelineConfig,
+            registry=AutoTestRegistry,
+            strategies=AutoTestStrategies,
+        ):
+            pass
+
+        client.app.state.introspection_registry["auto_pipeline"] = AutoTestPipeline
+
+        with Session(engine) as session:
+            session.add(
+                _P_model(
+                    prompt_key="auto_disc",
+                    prompt_name="auto disc sys",
+                    prompt_type="system",
+                    content="AUTO SYS",
+                    is_active=True,
+                )
+            )
+            session.add(
+                _P_model(
+                    prompt_key="auto_disc",
+                    prompt_name="auto disc usr",
+                    prompt_type="user",
+                    content="AUTO USR",
+                    is_active=True,
+                )
+            )
+            ds = EvaluationDataset(
+                name="ds_auto",
+                target_type="step",
+                target_name="auto_disc",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["system"]["prompt_key"] == "auto_disc"
+        assert data["system"]["content"] == "AUTO SYS"
+        assert data["user"]["prompt_key"] == "auto_disc"
+        assert data["user"]["content"] == "AUTO USR"
+
+    def test_only_system_declared_user_null_when_no_db_row(self, evals_app):
+        """Step declares only system_key, DB has no user row → user=null."""
+        from typing import ClassVar as _CV
+
+        from llm_pipeline import (
+            PipelineConfig,
+            PipelineDatabaseRegistry,
+            PipelineStrategies,
+            PipelineStrategy,
+        )
+        from llm_pipeline.db.prompt import Prompt as _P_model
+        from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+
+        client, engine = evals_app
+
+        class PartialInstructions(LLMResultMixin):
+            x: int = 0
+
+            example: _CV[dict] = {"x": 1, "notes": "ok"}
+
+        @step_definition(
+            instructions=PartialInstructions,
+            default_system_key="partial.system",
+        )
+        class PartialStep(LLMStep):
+            def prepare_calls(self):
+                return []
+
+        class PartialTestStrategy(PipelineStrategy):
+            def can_handle(self, context):
+                return True
+
+            def get_steps(self):
+                return [PartialStep.create_definition()]
+
+        class PartialTestRegistry(PipelineDatabaseRegistry, models=[]):
+            pass
+
+        class PartialTestStrategies(
+            PipelineStrategies, strategies=[PartialTestStrategy]
+        ):
+            pass
+
+        class PartialTestPipeline(
+            PipelineConfig,
+            registry=PartialTestRegistry,
+            strategies=PartialTestStrategies,
+        ):
+            pass
+
+        client.app.state.introspection_registry["partial_pipeline"] = PartialTestPipeline
+
+        with Session(engine) as session:
+            session.add(
+                _P_model(
+                    prompt_key="partial.system",
+                    prompt_name="sys",
+                    prompt_type="system",
+                    content="PARTIAL SYS",
+                )
+            )
+            ds = EvaluationDataset(
+                name="ds_partial",
+                target_type="step",
+                target_name="partial",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["system"]["prompt_key"] == "partial.system"
+        assert data["system"]["content"] == "PARTIAL SYS"
+        assert data["user"] is None
+
+    def test_dataset_not_found(self, evals_app):
+        client, _ = evals_app
+        resp = client.get("/api/evals/9999/prod-prompts")
+        assert resp.status_code == 404
+
+    def test_pipeline_target_returns_422(self, evals_app):
+        client, engine = evals_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_pipe",
+                target_type="pipeline",
+                target_name="some_pipeline",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "step-targets only" in detail
+
+    def test_step_not_found_in_any_pipeline(self, evals_app):
+        """Step target name that no registered pipeline defines → 404."""
+        client, engine = evals_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_missing",
+                target_type="step",
+                target_name="nonexistent_step",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
+        assert resp.status_code == 404
+        assert "nonexistent_step" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# GET /evals/{dataset_id}/prod-model
+# ---------------------------------------------------------------------------
+
+
+class TestProdModel:
+    """Prod model endpoint: resolves step model across the three tiers.
+
+    Same pipeline-registration pattern as TestProdPrompts.
+    """
+
+    def _register_pipeline(
+        self,
+        client,
+        *,
+        step_model: str | None,
+        default_model: str | None,
+        step_name: str = "prod_model_step",
+        pipeline_key: str = "pm_pipeline",
+    ):
+        """Register a 1-strategy, 1-step pipeline with configurable tiers.
+
+        Dynamically builds CamelCase step + instruction classes derived from
+        ``step_name`` so ``step_definition``'s naming-convention assertion
+        passes. Returns the snake_case step_name (matches sd.step_name).
+        """
+        from typing import ClassVar as _CV
+
+        from llm_pipeline import (
+            PipelineConfig,
+            PipelineDatabaseRegistry,
+            PipelineStrategies,
+            PipelineStrategy,
+        )
+        from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+
+        # CamelCase from snake_case: "foo_bar" -> "FooBar"
+        prefix = "".join(p.capitalize() for p in step_name.split("_"))
+
+        # Build instruction class via exec so the ClassVar annotation is
+        # parsed by Python's annotation machinery (type() with a raw
+        # __annotations__ dict doesn't trigger pydantic's ClassVar
+        # special-casing correctly).
+        ns: dict = {
+            "LLMResultMixin": LLMResultMixin,
+            "ClassVar": _CV,
+        }
+        exec(
+            f"class {prefix}Instructions(LLMResultMixin):\n"
+            f"    x: int = 0\n"
+            f"    example: ClassVar[dict] = {{'x': 1, 'notes': 'ok'}}\n",
+            ns,
+        )
+        InstrCls = ns[f"{prefix}Instructions"]
+
+        # Build step class with expected name "{Prefix}Step"
+        StepCls = type(
+            f"{prefix}Step",
+            (LLMStep,),
+            {
+                "prepare_calls": lambda self: [],
+                "__module__": __name__,
+            },
+        )
+
+        decorator_kwargs: dict = {"instructions": InstrCls}
+        if step_model is not None:
+            decorator_kwargs["model"] = step_model
+
+        StepCls = step_definition(**decorator_kwargs)(StepCls)
+
+        class _Strategy(PipelineStrategy):
+            def can_handle(self, context):
+                return True
+
+            def get_steps(self):
+                return [StepCls.create_definition()]
+
+        class _Registry(PipelineDatabaseRegistry, models=[]):
+            pass
+
+        class _Strategies(PipelineStrategies, strategies=[_Strategy]):
+            pass
+
+        class _Pipeline(
+            PipelineConfig,
+            registry=_Registry,
+            strategies=_Strategies,
+        ):
+            _default_model = default_model
+
+        client.app.state.introspection_registry[pipeline_key] = _Pipeline
+        return step_name
+
+    def test_step_definition_tier(self, evals_app):
+        """Step decorator declares model, no DB row, no pipeline default →
+        source == 'step_definition'."""
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model="gpt-step-def", default_model=None,
+            step_name="sd_step", pipeline_key="sd_pipeline",
+        )
+
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_sd",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] == "gpt-step-def"
+        assert data["source"] == "step_definition"
+
+    def test_db_override_tier(self, evals_app):
+        """StepModelConfig row beats step_def.model."""
+        from llm_pipeline.db.step_config import StepModelConfig
+
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model="gpt-step-def", default_model="pipe-default",
+            step_name="db_step", pipeline_key="db_pipeline",
+        )
+
+        with Session(engine) as session:
+            session.add(
+                StepModelConfig(
+                    pipeline_name="db_pipeline",
+                    step_name=step_name,
+                    model="gpt-db-override",
+                )
+            )
+            ds = EvaluationDataset(
+                name="ds_db",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] == "gpt-db-override"
+        assert data["source"] == "db"
+
+    def test_pipeline_default_tier(self, evals_app):
+        """Only pipeline _default_model is set → source 'pipeline_default'."""
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model=None, default_model="pipe-default",
+            step_name="pd_step", pipeline_key="pd_pipeline",
+        )
+
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_pd",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] == "pipe-default"
+        assert data["source"] == "pipeline_default"
+
+    def test_all_tiers_empty(self, evals_app):
+        """Nothing set anywhere → model null, source 'none'."""
+        client, engine = evals_app
+        step_name = self._register_pipeline(
+            client, step_model=None, default_model=None,
+            step_name="empty_step", pipeline_key="empty_pipeline",
+        )
+
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_empty",
+                target_type="step",
+                target_name=step_name,
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["model"] is None
+        assert data["source"] == "none"
+
+    def test_dataset_not_found(self, evals_app):
+        client, _ = evals_app
+        resp = client.get("/api/evals/9999/prod-model")
+        assert resp.status_code == 404
+
+    def test_pipeline_target_returns_422(self, evals_app):
+        client, engine = evals_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_pipe_m",
+                target_type="pipeline",
+                target_name="some_pipeline",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert "step-targets only" in detail
+
+    def test_step_not_found_in_any_pipeline(self, evals_app):
+        """Step target name that no registered pipeline defines → 404."""
+        client, engine = evals_app
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="ds_missing_m",
+                target_type="step",
+                target_name="nonexistent_step_m",
+            )
+            session.add(ds)
+            session.commit()
+            session.refresh(ds)
+            ds_id = ds.id
+
+        resp = client.get(f"/api/evals/{ds_id}/prod-model")
+        assert resp.status_code == 404
+        assert "nonexistent_step_m" in resp.json()["detail"]

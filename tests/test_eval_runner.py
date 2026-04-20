@@ -170,3 +170,147 @@ class TestEvalRunner:
             run = session.exec(select(EvaluationRun)).first()
             assert run.status == "failed"
             assert "step not found" in run.error_message
+
+
+class TestResolveStepTaskHonoursDBOverride:
+    """Regression coverage for the runner honouring StepModelConfig.
+
+    Previously ``_resolve_step_task`` only consulted ``step_def.model`` and
+    the pipeline default. After the shared resolver refactor, a DB row
+    for the step's (pipeline, step_name) must win — same as prod runtime.
+    """
+
+    def _fake_step_def(self, model: str | None):
+        from dataclasses import dataclass, field
+        from typing import Optional as _Opt
+
+        @dataclass
+        class _SD:
+            step_class: type = type("MyStep", (), {"__name__": "MyStep"})
+            system_instruction_key: _Opt[str] = None
+            user_prompt_key: _Opt[str] = None
+            instructions: _Opt[type] = None
+            evaluators: list = field(default_factory=list)
+            model: _Opt[str] = None
+
+            @property
+            def step_name(self) -> str:
+                return "my_step"
+
+        sd = _SD()
+        sd.model = model
+        return sd
+
+    def test_db_override_beats_step_def_model(self, engine):
+        """StepModelConfig row for the step pipeline+name wins."""
+        from llm_pipeline.db.step_config import StepModelConfig
+        from llm_pipeline.evals.runner import EvalRunner
+
+        with Session(engine) as session:
+            session.add(
+                StepModelConfig(
+                    pipeline_name="my_pipeline",
+                    step_name="my_step",
+                    model="db-override-model",
+                )
+            )
+            session.commit()
+
+        runner = EvalRunner(engine=engine)
+
+        captured: dict = {}
+
+        def stub_find(step_name):
+            return (
+                self._fake_step_def(model="step-def-model"),
+                None,
+                "pipeline-default",
+                "my_pipeline",
+            )
+
+        def stub_build(step_def, input_data_cls, step_model, variant_delta=None):
+            captured["step_model"] = step_model
+
+            def task(inputs):  # pragma: no cover — not invoked here
+                return {}
+
+            return task
+
+        with patch.object(runner, "_find_step_def", side_effect=stub_find), \
+             patch.object(runner, "_build_step_task_fn", side_effect=stub_build):
+            runner._resolve_step_task("my_step", model=None, variant_delta=None)
+
+        assert captured["step_model"] == "db-override-model"
+
+    def test_no_db_row_uses_step_def_model(self, engine):
+        """No DB override → still falls through to step_def.model."""
+        from llm_pipeline.evals.runner import EvalRunner
+
+        runner = EvalRunner(engine=engine)
+        captured: dict = {}
+
+        def stub_find(step_name):
+            return (
+                self._fake_step_def(model="step-def-model"),
+                None,
+                "pipeline-default",
+                "my_pipeline",
+            )
+
+        def stub_build(step_def, input_data_cls, step_model, variant_delta=None):
+            captured["step_model"] = step_model
+
+            def task(inputs):  # pragma: no cover
+                return {}
+
+            return task
+
+        with patch.object(runner, "_find_step_def", side_effect=stub_find), \
+             patch.object(runner, "_build_step_task_fn", side_effect=stub_build):
+            runner._resolve_step_task("my_step", model=None, variant_delta=None)
+
+        assert captured["step_model"] == "step-def-model"
+
+    def test_variant_model_beats_db_override(self, engine):
+        """Variant override is applied on top of the resolved base."""
+        from llm_pipeline.db.step_config import StepModelConfig
+        from llm_pipeline.evals.runner import EvalRunner
+
+        with Session(engine) as session:
+            session.add(
+                StepModelConfig(
+                    pipeline_name="my_pipeline",
+                    step_name="my_step",
+                    model="db-override-model",
+                )
+            )
+            session.commit()
+
+        runner = EvalRunner(engine=engine)
+        captured: dict = {}
+
+        def stub_find(step_name):
+            return (
+                self._fake_step_def(model="step-def-model"),
+                None,
+                "pipeline-default",
+                "my_pipeline",
+            )
+
+        def stub_build(step_def, input_data_cls, step_model, variant_delta=None):
+            captured["step_model"] = step_model
+
+            def task(inputs):  # pragma: no cover
+                return {}
+
+            return task
+
+        with patch.object(runner, "_find_step_def", side_effect=stub_find), \
+             patch.object(runner, "_build_step_task_fn", side_effect=stub_build):
+            runner._resolve_step_task(
+                "my_step",
+                model=None,
+                variant_delta={"model": "variant-model"},
+            )
+
+        assert captured["step_model"] == "variant-model"

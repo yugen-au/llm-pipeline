@@ -132,6 +132,13 @@ class PipelineIntrospector:
         for step_def in step_defs:
             step_cls = step_def.step_class
             step_name = self._step_name(step_cls)
+            # system_key / user_key reflect tier-1 (explicit) + tier-2
+            # (``@step_definition`` defaults) — both are populated on
+            # ``step_def`` at construction time. Tier-3 DB auto-discovery
+            # is a runtime-only concern (needs a Session) and is NOT
+            # surfaced here; resolve via
+            # ``llm_pipeline.prompts.resolver.resolve_with_auto_discovery``
+            # when DB access is available.
             step_entry: Dict[str, Any] = {
                 "step_name": step_name,
                 "class_name": step_cls.__name__,
