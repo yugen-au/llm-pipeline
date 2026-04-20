@@ -1390,3 +1390,243 @@ class TestRunnerVariantIntegration:
             ).one()
             assert run.variant_id is None
             assert run.delta_snapshot is None
+
+
+# ---------------------------------------------------------------------------
+# Step 4 — enum type resolution via _AUTO_GENERATE_REGISTRY.
+# ---------------------------------------------------------------------------
+from enum import Enum  # noqa: E402
+from typing import Optional as _Optional  # noqa: E402
+from typing import get_args as _get_args  # noqa: E402
+from typing import get_origin as _get_origin  # noqa: E402
+from typing import Union as _Union  # noqa: E402
+
+from llm_pipeline.prompts.variables import (  # noqa: E402
+    _AUTO_GENERATE_REGISTRY,
+    register_auto_generate,
+)
+
+
+class _TestEnum(str, Enum):
+    """Sample enum used by TestEnumTypeResolution."""
+    FOO = "foo"
+    BAR = "bar"
+
+
+class _NonEnumConstant:
+    """Arbitrary non-enum object registered to exercise the 'not an enum' guard."""
+    value = 42
+
+
+class TestEnumTypeResolution:
+    """enum:<Name> + Optional[enum:<Name>] resolution via the auto_generate registry.
+
+    Registry-only lookup — never imports modules. Must reject unknown names,
+    non-identifier names, and registered-but-non-enum objects. Defaults for
+    enum fields are validated by pydantic at class creation.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _registry_setup(self):
+        # Stash any pre-existing entries so we restore them after the test.
+        # Tests across this class share names "TestEnum" / "TheConstant".
+        names = ("TestEnum", "TheConstant")
+        saved = {n: _AUTO_GENERATE_REGISTRY.get(n) for n in names}
+        try:
+            register_auto_generate("TestEnum", _TestEnum)
+            register_auto_generate("TheConstant", _NonEnumConstant)
+            yield
+        finally:
+            for name, prev in saved.items():
+                if prev is None:
+                    _AUTO_GENERATE_REGISTRY.pop(name, None)
+                else:
+                    _AUTO_GENERATE_REGISTRY[name] = prev
+
+    # --- happy path: _resolve_type -----------------------------------------
+
+    def test_resolve_enum_returns_registered_class(self):
+        assert _resolve_type("enum:TestEnum") is _TestEnum
+
+    def test_resolve_optional_enum_returns_optional_wrapper(self):
+        resolved = _resolve_type("Optional[enum:TestEnum]")
+        # Optional[X] is Union[X, None].
+        assert _get_origin(resolved) is _Union
+        args = _get_args(resolved)
+        assert _TestEnum in args
+        assert type(None) in args
+
+    # --- happy path: apply_instruction_delta -------------------------------
+
+    def test_add_enum_field_default_coerces_to_member(self):
+        delta = [
+            {
+                "op": "add",
+                "field": "sentiment",
+                "type_str": "enum:TestEnum",
+                "default": "foo",
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        assert "sentiment" in cls.model_fields
+        assert cls.model_fields["sentiment"].annotation is _TestEnum
+        # validate_default=True wrap coerces raw string to enum member.
+        instance = cls()
+        assert instance.sentiment is _TestEnum.FOO
+
+    def test_add_enum_field_instance_roundtrip(self):
+        delta = [
+            {
+                "op": "add",
+                "field": "sentiment",
+                "type_str": "enum:TestEnum",
+                "default": "foo",
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        # Explicit instantiation with the member value still yields the
+        # enum member — standard pydantic coercion.
+        assert cls(sentiment="bar").sentiment is _TestEnum.BAR
+        assert cls(sentiment="foo").sentiment is _TestEnum.FOO
+
+    def test_add_optional_enum_field_default_none(self):
+        delta = [
+            {
+                "op": "add",
+                "field": "maybe_sent",
+                "type_str": "Optional[enum:TestEnum]",
+                "default": None,
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        assert cls().maybe_sent is None
+
+    def test_add_optional_enum_field_default_member_value(self):
+        delta = [
+            {
+                "op": "add",
+                "field": "maybe_sent",
+                "type_str": "Optional[enum:TestEnum]",
+                "default": "bar",
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        assert cls().maybe_sent is _TestEnum.BAR
+
+    # --- rejection: registry lookup ---------------------------------------
+
+    def test_unknown_enum_name_raises(self):
+        with pytest.raises(ValueError, match="not registered"):
+            _resolve_type("enum:UnknownEnum")
+
+    def test_identifier_like_malicious_name_still_fails_registry_lookup(self):
+        # __class__ is a valid identifier but is NEVER in the trusted registry.
+        with pytest.raises(ValueError, match="not registered"):
+            _resolve_type("enum:__class__")
+
+    def test_dunder_import_name_rejected_by_registry(self):
+        # __import__ passes the identifier regex but will not be registered —
+        # this asserts the ACE-surface property: even identifier-looking
+        # builtins can't reach any dynamic resolution because there's none.
+        with pytest.raises(ValueError, match="not registered"):
+            _resolve_type("enum:__import__")
+
+    def test_non_identifier_enum_name_rejected(self):
+        with pytest.raises(ValueError, match="valid identifier"):
+            _resolve_type("enum:bad-name-with-dash")
+
+    def test_non_identifier_enum_name_with_dots_rejected(self):
+        with pytest.raises(ValueError, match="valid identifier"):
+            _resolve_type("enum:some.module.Name")
+
+    def test_non_enum_registered_object_rejected(self):
+        with pytest.raises(ValueError, match="not an enum"):
+            _resolve_type("enum:TheConstant")
+
+    # --- rejection: default mismatches ------------------------------------
+
+    def test_enum_default_not_a_member_raises(self):
+        """Invalid enum default surfaces as ValueError on instantiation.
+
+        Pydantic's validate_default check fires at model instantiation (not at
+        create_model time), so we trigger it by constructing the class.
+        ValidationError is a ValueError subclass, so tests using
+        pytest.raises(ValueError) catch it — matching the module-level
+        contract that all failure modes raise ValueError.
+        """
+        delta = [
+            {
+                "op": "add",
+                "field": "sentiment",
+                "type_str": "enum:TestEnum",
+                "default": "nonexistent",
+            }
+        ]
+        cls = apply_instruction_delta(_DemoInstructions, delta)
+        with pytest.raises(ValueError, match="enum|foo|bar"):
+            cls()
+
+    # --- security: no importlib in the enum resolution path ---------------
+
+    def test_no_importlib_in_enum_resolution_codepath(self):
+        """The resolver must not call importlib at any point in enum handling.
+
+        Code-inspection via AST: parse llm_pipeline/evals/delta.py and confirm
+        no `import importlib` / `importlib.import_module(...)` appears. The
+        positive-lookup path is already covered by the happy-path tests; this
+        protects against future regressions that might re-introduce dynamic
+        module loading.
+        """
+        import ast
+        from pathlib import Path
+
+        src = Path(
+            "llm_pipeline/evals/delta.py"
+        ).read_text(encoding="utf-8")
+        tree = ast.parse(src)
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    assert alias.name != "importlib", (
+                        "delta.py must not import importlib"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                assert node.module != "importlib", (
+                    "delta.py must not import from importlib"
+                )
+            elif isinstance(node, ast.Attribute):
+                # Catches `importlib.import_module(...)` written without an
+                # explicit import (e.g. via an aliased stdlib namespace).
+                if (
+                    isinstance(node.value, ast.Name)
+                    and node.value.id == "importlib"
+                ):
+                    raise AssertionError(
+                        "delta.py references importlib attribute access"
+                    )
+
+    # --- modify path preserves annotation on enum fields ------------------
+
+    def test_modify_existing_enum_field_preserves_annotation(self):
+        """Omitting type_str on modify preserves the base's enum annotation."""
+
+        class _BaseWithEnum(LLMResultMixin):
+            existing: _TestEnum = _TestEnum.FOO
+            example: ClassVar[dict] = {
+                "existing": "foo",
+                "confidence_score": 0.95,
+                "notes": None,
+            }
+
+        delta = [
+            {"op": "modify", "field": "existing", "default": "bar"}
+        ]
+        cls = apply_instruction_delta(_BaseWithEnum, delta)
+
+        # Annotation carried over from base class.
+        assert cls.model_fields["existing"].annotation is _TestEnum
+        # validate_default wrap coerces the new default to the member.
+        assert cls().existing is _TestEnum.BAR
+        # Roundtrip.
+        assert cls(existing="foo").existing is _TestEnum.FOO
