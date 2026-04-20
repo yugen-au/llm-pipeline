@@ -34,3 +34,20 @@
 [2026-04-20 22:28:14] [WARN] WARNING: Agent 'Python/SQLModel versioning research' reports complete but output file missing: research\step-3-pythonsqlmodel-versioning-research.md. Keeping status as in-progress for easier respawn.
 [2026-04-20 22:28:14] [DEBUG] STATE.md atomic write complete
 [2026-04-20 22:29:12] [DEBUG] STATE.md atomic write complete
+[2026-04-20 22:29:23] [ERROR] BLOCKED: Cannot commit research-A: missing output files
+[2026-04-20 22:29:38] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-20 22:34:55] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: d:\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\adhoc-20260420-versioning-snapshots\research\step-3-pythonsqlmodel-versioning-research.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-20 22:34:56] [ERROR] BLOCKED: Write not allowed in task dir
+[2026-04-20 22:35:08] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-20 22:35:16] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-20 22:35:24] [ERROR] BLOCKED: Invalid Task description format
+[2026-04-20 22:35:36] [ERROR] BLOCKED: Expected one of ['database-design:database-architect', 'backend-development:backend-architect', 'python-development:python-pro']. Got: general-purpose
+[2026-04-20 22:35:52] [INFO] Task call: python-development:python-pro (phase: research)
+[2026-04-20 22:35:52] [INFO] Incremented Revisions: 0 -> 1
+[2026-04-20 22:35:52] [DEBUG] STATE.md atomic write complete
