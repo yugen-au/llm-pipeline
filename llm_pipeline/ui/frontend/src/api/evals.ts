@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
+import { ApiError } from './types'
 
 // ---------------------------------------------------------------------------
 // Interfaces
@@ -206,6 +207,29 @@ export interface DatasetListParams {
 }
 
 // ---------------------------------------------------------------------------
+// Prod prompts (prefill source for variant editor)
+// ---------------------------------------------------------------------------
+
+/**
+ * Single prod prompt payload returned from GET /evals/{dataset_id}/prod-prompts.
+ *
+ * `variable_definitions` is typed as the shared `VariableDefinitions | null`
+ * but the backend column is permissive (`dict | list`) so callers should feed
+ * the raw value through `readVarDefs` (or equivalent) before consuming.
+ */
+export interface ProdPromptContent {
+  prompt_key: string
+  content: string
+  variable_definitions: VariableDefinitions | null
+  version: string | null
+}
+
+export interface ProdPromptsResponse {
+  system: ProdPromptContent | null
+  user: ProdPromptContent | null
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -247,6 +271,43 @@ export function useEvalRun(datasetId: number, runId: number) {
     queryKey: queryKeys.evals.run(datasetId, runId),
     queryFn: () => apiClient<RunDetail>(`/evals/${datasetId}/runs/${runId}`),
     enabled: datasetId > 0 && runId > 0,
+  })
+}
+
+/**
+ * Fetch the resolved prod (system, user) prompts for a dataset's step target.
+ *
+ * Returns `{ system: null, user: null }` when the backend returns 422 (which
+ * happens for pipeline-target datasets — the endpoint only supports
+ * step-targets in v2). Other errors propagate so TanStack Query can retry or
+ * surface them via the toast layer.
+ */
+export async function fetchDatasetProdPrompts(
+  datasetId: number,
+): Promise<ProdPromptsResponse> {
+  try {
+    return await apiClient<ProdPromptsResponse>(
+      `/evals/${datasetId}/prod-prompts`,
+      { silent: true },
+    )
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 422) {
+      return { system: null, user: null }
+    }
+    throw err
+  }
+}
+
+/**
+ * TanStack Query hook for dataset prod prompts. 5-minute stale time since
+ * prod prompts rarely change within a single editing session.
+ */
+export function useDatasetProdPrompts(datasetId: number) {
+  return useQuery({
+    queryKey: queryKeys.evals.prodPrompts(datasetId),
+    queryFn: () => fetchDatasetProdPrompts(datasetId),
+    enabled: Number.isFinite(datasetId) && datasetId > 0,
+    staleTime: 5 * 60 * 1000,
   })
 }
 

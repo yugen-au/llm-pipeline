@@ -8,10 +8,13 @@ import {
   useUpdateVariant,
   useTriggerEvalRun,
   useDeltaTypeWhitelist,
+  useDatasetProdPrompts,
 } from '@/api/evals'
 import type {
   InstructionDeltaItem,
   InstructionDeltaOp,
+  ProdPromptContent,
+  ProdPromptsResponse,
   VariableDefinitions,
   VariantDelta,
   VariantItem,
@@ -152,23 +155,84 @@ function writeVarDefs(defs: VarDefs): VariableDefinitions | null {
   return out
 }
 
-function variantToEditorState(v: VariantItem): EditorState {
+/**
+ * Merge two `VarDefs` records. Variant wins on key collision — matches
+ * backend runner behavior where variant `variable_definitions` override prod
+ * at sandbox-merge time.
+ */
+function mergeVarDefs(a: VarDefs, b: VarDefs): VarDefs {
+  return { ...a, ...b }
+}
+
+/**
+ * Build the editor baseline from a variant + (optional) prod prompts.
+ *
+ * Prefill rules:
+ * - `systemPrompt` / `userPrompt`: if the variant delta has no override AND
+ *   prod content is available, use prod content as the baseline.
+ * - `variableDefinitions`: if the variant has none AND prod has any, use the
+ *   MERGED prod system + user defs (runner merges both prod prompts anyway,
+ *   so one combined set on the variant matches runtime behavior).
+ *
+ * The baseline MUST capture the prefilled content — `statesEqual(state,
+ * baseline)` is how dirty-tracking works, so returning a baseline without the
+ * prefill would make the editor open in a perpetually-dirty state.
+ */
+function variantToEditorState(
+  v: VariantItem,
+  prod: ProdPromptsResponse | null | undefined,
+): EditorState {
   const d: VariantDelta = (v.delta ?? {
     model: null,
     system_prompt: null,
     user_prompt: null,
     instructions_delta: null,
   }) as VariantDelta
+
+  const variantSystem = d.system_prompt ?? ''
+  const variantUser = d.user_prompt ?? ''
+  const prodSystem = prod?.system?.content ?? ''
+  const prodUser = prod?.user?.content ?? ''
+
+  // Prefill prompt content only when variant is empty AND prod exists.
+  const systemPrompt = variantSystem === '' && prodSystem !== ''
+    ? prodSystem
+    : variantSystem
+  const userPrompt = variantUser === '' && prodUser !== ''
+    ? prodUser
+    : variantUser
+
+  // Variable definitions: variant override wins wholesale when present.
+  const variantDefs = readVarDefs(d.variable_definitions)
+  const hasVariantDefs = Object.keys(variantDefs).length > 0
+  let variableDefinitions: VarDefs = variantDefs
+  if (!hasVariantDefs) {
+    const prodSysDefs = readVarDefs(
+      (prod?.system?.variable_definitions ?? null) as
+        | VariableDefinitions
+        | null,
+    )
+    const prodUserDefs = readVarDefs(
+      (prod?.user?.variable_definitions ?? null) as
+        | VariableDefinitions
+        | null,
+    )
+    const merged = mergeVarDefs(prodSysDefs, prodUserDefs)
+    if (Object.keys(merged).length > 0) {
+      variableDefinitions = merged
+    }
+  }
+
   return {
     name: v.name ?? '',
     description: v.description ?? '',
     model: d.model ?? '',
-    systemPrompt: d.system_prompt ?? '',
-    userPrompt: d.user_prompt ?? '',
+    systemPrompt,
+    userPrompt,
     instructionsDelta: Array.isArray(d.instructions_delta)
       ? d.instructions_delta.map((i) => ({ ...i }))
       : [],
-    variableDefinitions: readVarDefs(d.variable_definitions),
+    variableDefinitions,
   }
 }
 
@@ -216,18 +280,25 @@ function statesEqual(a: EditorState, b: EditorState): boolean {
   return true
 }
 
-function useVariantEditor(variant: VariantItem | undefined) {
+function useVariantEditor(
+  variant: VariantItem | undefined,
+  prod: ProdPromptsResponse | null | undefined,
+  prodReady: boolean,
+) {
   const [state, setState] = useState<EditorState | null>(null)
   const [baseline, setBaseline] = useState<EditorState | null>(null)
 
-  // sync from server when variant changes
+  // sync from server when variant OR prod prompts change (only once prod has
+  // resolved — otherwise we'd build a baseline without prefill and flip the
+  // editor to dirty as soon as prod arrives).
   useEffect(() => {
     if (!variant) return
-    const snap = variantToEditorState(variant)
+    if (!prodReady) return
+    const snap = variantToEditorState(variant, prod ?? null)
     setState((prev) => (prev === null ? snap : prev))
     setBaseline(snap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [variant?.id, variant?.updated_at])
+  }, [variant?.id, variant?.updated_at, prodReady])
 
   const dirty = useMemo(() => {
     if (!state || !baseline) return false
@@ -300,8 +371,14 @@ function useVariantEditor(variant: VariantItem | undefined) {
 
 function ProdStepDefPanel({
   datasetId,
+  prodSystem,
+  prodUser,
+  isDark,
 }: {
   datasetId: number
+  prodSystem: ProdPromptContent | null
+  prodUser: ProdPromptContent | null
+  isDark: boolean
 }) {
   const { data: dataset } = useDataset(datasetId)
   const { data: schema, isLoading: schemaLoading } = useInputSchema(
@@ -321,6 +398,28 @@ function ProdStepDefPanel({
       description: p.description,
     }))
   }, [schema])
+
+  // Read prod variable_definitions once per prompt side so the read-only
+  // editor can still show hover info for {variable} tokens. readVarDefs
+  // tolerates both map and list shapes from the backend.
+  const prodSystemVarDefs = useMemo<VarDefs>(
+    () =>
+      readVarDefs(
+        (prodSystem?.variable_definitions ?? null) as
+          | VariableDefinitions
+          | null,
+      ),
+    [prodSystem],
+  )
+  const prodUserVarDefs = useMemo<VarDefs>(
+    () =>
+      readVarDefs(
+        (prodUser?.variable_definitions ?? null) as
+          | VariableDefinitions
+          | null,
+      ),
+    [prodUser],
+  )
 
   return (
     <Card className="h-full">
@@ -381,14 +480,59 @@ function ProdStepDefPanel({
 
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground">
-            Model / prompts
+            Production system prompt
+            {prodSystem?.version && (
+              <span className="ml-2 font-mono normal-case text-muted-foreground">
+                v{prodSystem.version}
+              </span>
+            )}
           </Label>
-          <p className="text-muted-foreground">
-            Production model and prompt content are inherited at run time.
-            Override them in the delta panel on the right. Leave blank to use
-            the production value unchanged.
-          </p>
+          {prodSystem ? (
+            <PromptContentEditor
+              value={prodSystem.content}
+              onChange={() => {}}
+              varDefs={prodSystemVarDefs}
+              isDark={isDark}
+              height="180px"
+              readOnly
+            />
+          ) : (
+            <p className="text-muted-foreground italic">
+              No production system prompt.
+            </p>
+          )}
         </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px] uppercase text-muted-foreground">
+            Production user prompt
+            {prodUser?.version && (
+              <span className="ml-2 font-mono normal-case text-muted-foreground">
+                v{prodUser.version}
+              </span>
+            )}
+          </Label>
+          {prodUser ? (
+            <PromptContentEditor
+              value={prodUser.content}
+              onChange={() => {}}
+              varDefs={prodUserVarDefs}
+              isDark={isDark}
+              height="180px"
+              readOnly
+            />
+          ) : (
+            <p className="text-muted-foreground italic">
+              No production user prompt.
+            </p>
+          )}
+        </div>
+
+        <p className="text-muted-foreground text-[11px]">
+          Production content shown read-only. Edit the right-hand panel to
+          override — leave a field at its prefilled prod value to keep it in
+          sync with production.
+        </p>
       </CardContent>
     </Card>
   )
@@ -756,6 +900,33 @@ function VariantEditorPage() {
   } = useVariant(datasetId, variantId)
   const { data: dataset } = useDataset(datasetId)
 
+  // Prod prompts power two things:
+  //   1. Prefill empty variant overrides so the editor opens with a copy of
+  //      the prod prompt the user can edit (instead of blank text).
+  //   2. Populate the read-only left pane so the user can compare.
+  // Failures degrade gracefully — we still let the editor open, just with no
+  // prefill (matching prior behavior).
+  const {
+    data: prodPrompts,
+    isLoading: prodPromptsLoading,
+    isError: prodPromptsErrored,
+    error: prodPromptsError,
+  } = useDatasetProdPrompts(datasetId)
+  useEffect(() => {
+    if (prodPromptsErrored) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[variants] Failed to fetch prod prompts; editor will open without prefill.',
+        prodPromptsError,
+      )
+    }
+  }, [prodPromptsErrored, prodPromptsError])
+  // "ready" = we're no longer waiting on a pending fetch. Either data landed
+  // OR the fetch errored (404/network/etc). Both paths build a baseline —
+  // the error path just builds one with `prod = null`, matching prior
+  // behavior (empty prompts, no prefill).
+  const prodReady = !prodPromptsLoading
+
   const updateVariantMut = useUpdateVariant(datasetId)
   const triggerRun = useTriggerEvalRun(datasetId)
 
@@ -791,7 +962,7 @@ function VariantEditorPage() {
     removeDeltaRow,
     setVarDefs,
     resetToBaseline,
-  } = useVariantEditor(variant)
+  } = useVariantEditor(variant, prodPrompts, prodReady)
 
   // Backend 422 error surfacing
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -875,10 +1046,14 @@ function VariantEditorPage() {
     }
   }
 
-  if (variantLoading) {
+  if (variantLoading || !prodReady) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">Loading variant...</p>
+        <p className="text-muted-foreground">
+          {variantLoading
+            ? 'Loading variant...'
+            : 'Loading production prompts...'}
+        </p>
       </div>
     )
   }
@@ -982,7 +1157,12 @@ function VariantEditorPage() {
 
         {/* Split-pane layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ProdStepDefPanel datasetId={datasetId} />
+          <ProdStepDefPanel
+            datasetId={datasetId}
+            prodSystem={prodPrompts?.system ?? null}
+            prodUser={prodPrompts?.user ?? null}
+            isDark={isDark}
+          />
           <VariantDeltaPanel
             state={state}
             patch={patch}
