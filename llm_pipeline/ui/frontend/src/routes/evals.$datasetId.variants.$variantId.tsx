@@ -59,6 +59,7 @@ import {
   ModelCombobox,
   formatModel,
 } from '@/components/pipelines/ModelCombobox'
+import { TypedValueEditor } from '@/components/shared/TypedValueEditor'
 
 export const Route = createFileRoute('/evals/$datasetId/variants/$variantId')({
   component: VariantEditorPage,
@@ -136,11 +137,12 @@ export type MergedFieldRow =
       /** type_str from the whitelist; always defined. */
       type_str: string
       /**
-       * Raw JSON string the user types for the default. Parsed on save;
-       * parse-on-save (not parse-on-change) lets the user type mid-edits
-       * like `[1,` without losing focus. Parse failure disables save.
+       * Parsed default value. `TypedValueEditor` yields structured values
+       * directly so we store them natively — serialisation to the delta
+       * payload happens at save time via `JSON.stringify` (implicit in the
+       * wire format). Initial value from persisted delta is `item.default`.
        */
-      default_json: string
+      default: unknown
     }
 
 interface EditorState {
@@ -219,6 +221,33 @@ function jsonSchemaTypeLabel(schema: unknown): string {
   }
 
   return 'unknown'
+}
+
+/**
+ * Seed value for a freshly-picked whitelist type_str. Keeps the TypedValueEditor
+ * widget fed a value of the right shape when the user changes a variant row's
+ * type. Mirrors defaultForBase() inside TypedValueEditor but keyed off the
+ * wire-level type_str (which can include Optional[X]).
+ */
+function variantDefaultForType(type_str: string): unknown {
+  const t = (type_str ?? '').trim()
+  if (t.startsWith('Optional[')) return null
+  switch (t) {
+    case 'str':
+      return ''
+    case 'int':
+      return 0
+    case 'float':
+      return 0
+    case 'bool':
+      return false
+    case 'list':
+      return []
+    case 'dict':
+      return {}
+    default:
+      return null
+  }
 }
 
 function deepEqualJSON(a: unknown, b: unknown): boolean {
@@ -425,7 +454,7 @@ function variantToEditorState(
           kind: 'variant',
           field: item.field,
           type_str: item.type_str ?? 'str',
-          default_json: JSON.stringify(item.default ?? null),
+          default: item.default ?? null,
         })
         continue
       }
@@ -441,7 +470,7 @@ function variantToEditorState(
         kind: 'variant',
         field: item.field,
         type_str: item.type_str ?? 'str',
-        default_json: JSON.stringify(item.default ?? null),
+        default: item.default ?? null,
       })
     }
   }
@@ -498,21 +527,14 @@ function editorStateToDelta(s: EditorState): VariantDelta {
         default: row.current_default ?? null,
       })
     } else {
-      // variant-added: parse default_json. On failure we emit a placeholder
-      // entry of null so the caller's error-check logic fires before Save.
-      let parsed: unknown = null
-      try {
-        parsed = row.default_json.trim() === ''
-          ? null
-          : JSON.parse(row.default_json)
-      } catch {
-        parsed = null
-      }
+      // variant-added: `default` is already a parsed native value — the
+      // TypedValueEditor hands us structured values directly (no JSON string
+      // buffer). Wire payload encodes via JSON.stringify implicitly.
       items.push({
         op: 'add',
         field: row.field,
         type_str: row.type_str as InstructionDeltaItem['type_str'],
-        default: parsed,
+        default: row.default ?? null,
       })
     }
   }
@@ -538,24 +560,6 @@ function editorStateToDelta(s: EditorState): VariantDelta {
   }
 }
 
-/**
- * Row-level validation: true when any variant row has an unparseable default.
- * Empty string is treated as null (valid). Prod rows never fail validation
- * here — their default is a native value, not a raw JSON string.
- */
-function mergedFieldsHaveErrors(rows: MergedFieldRow[]): boolean {
-  for (const r of rows) {
-    if (r.kind !== 'variant') continue
-    if (r.default_json.trim() === '') continue
-    try {
-      JSON.parse(r.default_json)
-    } catch {
-      return true
-    }
-  }
-  return false
-}
-
 function statesEqual(a: EditorState, b: EditorState): boolean {
   if (
     a.name !== b.name ||
@@ -576,7 +580,7 @@ function statesEqual(a: EditorState, b: EditorState): boolean {
     } else if (x.kind === 'variant' && y.kind === 'variant') {
       if (x.field !== y.field) return false
       if (x.type_str !== y.type_str) return false
-      if (x.default_json !== y.default_json) return false
+      if (!deepEqualJSON(x.default, y.default)) return false
     }
   }
   // Record shape: order-independent JSON comparison is sufficient — both sides
@@ -664,7 +668,7 @@ function useVariantEditor(
         ...prev,
         mergedFields: [
           ...current,
-          { kind: 'variant', field: '', type_str: 'str', default_json: '' },
+          { kind: 'variant', field: '', type_str: 'str', default: '' },
         ],
       }
     })
@@ -757,13 +761,22 @@ function ProdStepDefPanel({
       | Record<string, Record<string, unknown>>
       | null
     if (!props) return []
-    return Object.entries(props).map(([name, p]) => ({
-      name,
-      type_label: jsonSchemaTypeLabel(p),
-      title: typeof p.title === 'string' ? p.title : undefined,
-      description:
-        typeof p.description === 'string' ? p.description : undefined,
-    }))
+    const required = Array.isArray(prodSchema?.output_schema?.required)
+      ? (prodSchema!.output_schema!.required as string[])
+      : []
+    return Object.entries(props).map(([name, p]) => {
+      const hasDefault = Object.prototype.hasOwnProperty.call(p, 'default')
+      return {
+        name,
+        type_label: jsonSchemaTypeLabel(p),
+        title: typeof p.title === 'string' ? p.title : undefined,
+        description:
+          typeof p.description === 'string' ? p.description : undefined,
+        prod_default: hasDefault ? p.default : undefined,
+        is_required: !hasDefault || required.includes(name),
+        is_inherited: INHERITED_FIELDS.includes(name),
+      }
+    })
   }, [prodSchema])
 
   // Read prod variable_definitions once per prompt side so the read-only
@@ -837,7 +850,7 @@ function ProdStepDefPanel({
 
         <div className="space-y-1">
           <Label className="text-[10px] uppercase text-muted-foreground">
-            Instructions fields
+            Instructions schema
           </Label>
           {schemaLoading ? (
             <p className="text-muted-foreground">Loading schema...</p>
@@ -846,26 +859,89 @@ function ProdStepDefPanel({
               No typed output schema available for this step.
             </p>
           ) : (
-            <div className="rounded border bg-muted/30 divide-y">
-              {outputProps.map((f) => (
-                <div
-                  key={f.name}
-                  className="px-2 py-1.5 flex items-start gap-2"
-                >
-                  <span className="font-mono font-medium">{f.name}</span>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] h-4 px-1 py-0 font-mono"
-                  >
-                    {f.type_label}
-                  </Badge>
-                  {f.description && (
-                    <span className="text-muted-foreground ml-auto truncate max-w-[160px]">
-                      {f.description}
-                    </span>
-                  )}
-                </div>
-              ))}
+            <div className="rounded border overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40">
+                  <tr className="text-left text-[10px] uppercase text-muted-foreground">
+                    <th className="px-2 py-1.5 font-normal">Name</th>
+                    <th className="px-2 py-1.5 font-normal">Type</th>
+                    <th className="px-2 py-1.5 font-normal">Default</th>
+                    <th className="px-2 py-1.5 font-normal">Description</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {outputProps.map((f) => (
+                    <tr key={f.name} className="border-t align-top">
+                      <td className="px-2 py-1.5 font-mono font-medium whitespace-nowrap">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span>{f.name}</span>
+                          {f.is_required && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] h-4 px-1 py-0 border-amber-500 text-amber-600"
+                                  >
+                                    required
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Required field with no production default.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                          {f.is_inherited && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] h-4 px-1 py-0 border-blue-500 text-blue-600"
+                                  >
+                                    inherited
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Inherited from LLMResultMixin.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] h-4 px-1 py-0 font-mono"
+                        >
+                          {f.type_label}
+                        </Badge>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <TypedValueEditor
+                          readOnly
+                          type_str={f.type_label}
+                          value={f.prod_default}
+                          placeholder={
+                            f.is_required && f.prod_default === undefined
+                              ? 'required — no default'
+                              : undefined
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
+                        {f.description ? (
+                          <span className="line-clamp-2">{f.description}</span>
+                        ) : (
+                          <span className="text-muted-foreground/50">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -949,90 +1025,10 @@ function ProdStepDefPanel({
 // ---------------------------------------------------------------------------
 
 /**
- * JSON-stringify a value for the prod-row default Input. `undefined` collapses
- * to empty string so the placeholder ("required — no default") is visible.
+ * Editable prod-row entry in the merged-schema table. Uses TypedValueEditor
+ * for the default value so structural edits (list/dict trees, scalars) match
+ * the read-only prod panel's display exactly.
  */
-function prodDefaultToInput(v: unknown): string {
-  if (v === undefined) return ''
-  try {
-    return JSON.stringify(v)
-  } catch {
-    return ''
-  }
-}
-
-/**
- * Inner controlled component for the prod row. We lift `current_default` into
- * a local raw-string buffer so the user can type mid-parse values like `[1,`.
- * The outer `ProdFieldRow` keys this component on `current_default` via a
- * `JSON.stringify` key so external state mutations (Reset, Discard) remount
- * the inner component with a fresh buffer — avoiding setState-in-effect.
- */
-function ProdFieldRowInner({
-  row,
-  onChangeDefault,
-  backendErrorMsg,
-}: {
-  row: Extract<MergedFieldRow, { kind: 'prod' }>
-  onChangeDefault: (next: unknown | undefined) => void
-  backendErrorMsg?: string
-}) {
-  const [raw, setRaw] = useState(() => prodDefaultToInput(row.current_default))
-  const [parseError, setParseError] = useState<string | null>(null)
-
-  function handleChange(next: string) {
-    setRaw(next)
-    if (next.trim() === '') {
-      setParseError(null)
-      onChangeDefault(undefined)
-      return
-    }
-    try {
-      const parsed = JSON.parse(next)
-      setParseError(null)
-      onChangeDefault(parsed)
-    } catch (e) {
-      setParseError(e instanceof Error ? e.message : 'Invalid JSON')
-      // Hold the parse-failed value in local `raw` only — don't push to state
-      // until the user types something valid. This keeps the diff clean.
-    }
-  }
-
-  const modified = !deepEqualJSON(row.current_default, row.prod_default)
-
-  return (
-    <>
-      <Input
-        className="h-8 text-xs font-mono"
-        placeholder={
-          row.is_required && !modified
-            ? 'required — no default'
-            : 'JSON (e.g. "text", 1, true, null, [])'
-        }
-        value={raw}
-        onChange={(e) => handleChange(e.target.value)}
-      />
-      {parseError && (
-        <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
-          <AlertCircle className="size-3 shrink-0 mt-0.5" />
-          <span>{parseError}</span>
-        </p>
-      )}
-      {backendErrorMsg && (
-        <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
-          <AlertCircle className="size-3 shrink-0 mt-0.5" />
-          <span>{backendErrorMsg}</span>
-        </p>
-      )}
-      {row.description && (
-        <p className="text-[10px] text-muted-foreground mt-1 truncate">
-          {row.description}
-        </p>
-      )}
-    </>
-  )
-}
-
 function ProdFieldRow({
   row,
   idx,
@@ -1047,33 +1043,13 @@ function ProdFieldRow({
   backendErrorMsg?: string
 }) {
   const modified = !deepEqualJSON(row.current_default, row.prod_default)
-  // Key on the JSON-stringified current_default so external mutations
-  // (Reset, Discard) remount the inner buffer component.
-  const innerKey = JSON.stringify(row.current_default ?? null)
+  const isRequiredNoDefault = row.is_required && row.current_default === undefined
 
   return (
     <tr data-row-idx={idx} className="border-t align-top">
       <td className="px-2 py-1.5 font-mono font-medium whitespace-nowrap">
-        {row.field}
-      </td>
-      <td className="px-2 py-1.5 whitespace-nowrap">
-        <Badge
-          variant="outline"
-          className="text-[10px] h-4 px-1 py-0 font-mono"
-        >
-          {row.type_label}
-        </Badge>
-      </td>
-      <td className="px-2 py-1.5">
-        <ProdFieldRowInner
-          key={innerKey}
-          row={row}
-          onChangeDefault={onChangeDefault}
-          backendErrorMsg={backendErrorMsg}
-        />
-      </td>
-      <td className="px-2 py-1.5 whitespace-nowrap">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 flex-wrap">
+          <span>{row.field}</span>
           {row.is_required && (
             <TooltipProvider>
               <Tooltip>
@@ -1109,25 +1085,53 @@ function ProdFieldRow({
             </TooltipProvider>
           )}
           {modified && (
-            <>
-              <Badge
-                variant="outline"
-                className="text-[9px] h-4 px-1 py-0 border-amber-500 text-amber-600"
-              >
-                modified
-              </Badge>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0"
-                onClick={onReset}
-                title="Reset to production default"
-              >
-                <RotateCcw className="size-3" />
-              </Button>
-            </>
+            <Badge
+              variant="outline"
+              className="text-[9px] h-4 px-1 py-0 border-amber-500 text-amber-600"
+            >
+              modified
+            </Badge>
           )}
         </div>
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        <Badge
+          variant="outline"
+          className="text-[10px] h-4 px-1 py-0 font-mono"
+        >
+          {row.type_label}
+        </Badge>
+      </td>
+      <td className="px-2 py-1.5">
+        <TypedValueEditor
+          type_str={row.type_label}
+          value={row.current_default}
+          onChange={(v) => onChangeDefault(v)}
+          placeholder={
+            isRequiredNoDefault ? 'required — no default' : undefined
+          }
+          error={backendErrorMsg}
+        />
+      </td>
+      <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
+        {row.description ? (
+          <span className="line-clamp-2">{row.description}</span>
+        ) : (
+          <span className="text-muted-foreground/50">—</span>
+        )}
+      </td>
+      <td className="px-2 py-1.5 whitespace-nowrap">
+        {modified && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-6 w-6 p-0"
+            onClick={onReset}
+            title="Reset to production default"
+          >
+            <RotateCcw className="size-3" />
+          </Button>
+        )}
       </td>
     </tr>
   )
@@ -1148,7 +1152,7 @@ function VariantFieldRow({
   idx: number
   onChangeField: (v: string) => void
   onChangeType: (v: string) => void
-  onChangeDefault: (v: string) => void
+  onChangeDefault: (v: unknown) => void
   onRemove: () => void
   typeOptions: ReadonlyArray<string>
   typesDisabled: boolean
@@ -1156,30 +1160,27 @@ function VariantFieldRow({
 }) {
   const isInherited = INHERITED_FIELDS.includes(row.field.trim())
 
-  // Parse check — display error without blocking typing. Save button is gated
-  // separately via `mergedFieldsHaveErrors`.
-  let parseError: string | null = null
-  if (row.default_json.trim() !== '') {
-    try {
-      JSON.parse(row.default_json)
-    } catch (e) {
-      parseError = e instanceof Error ? e.message : 'Invalid JSON'
-    }
-  }
-
   return (
     <tr data-row-idx={idx} className="border-t align-top bg-muted/20">
       <td className="px-2 py-1.5">
-        <Input
-          className={`h-8 text-xs font-mono ${
-            isInherited ? 'border-amber-500' : ''
-          }`}
-          placeholder="field_name"
-          value={row.field}
-          onChange={(e) =>
-            onChangeField(e.target.value.trim().toLowerCase())
-          }
-        />
+        <div className="flex items-center gap-1 flex-wrap">
+          <Input
+            className={`h-8 text-xs font-mono ${
+              isInherited ? 'border-amber-500' : ''
+            }`}
+            placeholder="field_name"
+            value={row.field}
+            onChange={(e) =>
+              onChangeField(e.target.value.trim().toLowerCase())
+            }
+          />
+          <Badge
+            variant="outline"
+            className="text-[9px] h-4 px-1 py-0 border-emerald-500 text-emerald-600"
+          >
+            added
+          </Badge>
+        </div>
         {isInherited && (
           <p className="text-[10px] text-amber-600 mt-1">
             Inherited field — use the prod row above to modify it.
@@ -1205,43 +1206,26 @@ function VariantFieldRow({
         </Select>
       </td>
       <td className="px-2 py-1.5">
-        <Input
-          className="h-8 text-xs font-mono"
-          placeholder='JSON (e.g. "text", 1, true, null, [])'
-          value={row.default_json}
-          onChange={(e) => onChangeDefault(e.target.value)}
+        <TypedValueEditor
+          type_str={row.type_str}
+          value={row.default}
+          onChange={onChangeDefault}
+          error={backendErrorMsg}
         />
-        {parseError && (
-          <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
-            <AlertCircle className="size-3 shrink-0 mt-0.5" />
-            <span>{parseError}</span>
-          </p>
-        )}
-        {backendErrorMsg && (
-          <p className="text-[10px] text-destructive mt-1 flex items-start gap-1">
-            <AlertCircle className="size-3 shrink-0 mt-0.5" />
-            <span>{backendErrorMsg}</span>
-          </p>
-        )}
+      </td>
+      <td className="px-2 py-1.5 text-[11px] text-muted-foreground">
+        <span className="text-muted-foreground/50">—</span>
       </td>
       <td className="px-2 py-1.5 whitespace-nowrap">
-        <div className="flex items-center gap-1">
-          <Badge
-            variant="outline"
-            className="text-[9px] h-4 px-1 py-0 border-emerald-500 text-emerald-600"
-          >
-            added
-          </Badge>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 w-6 p-0 text-destructive"
-            onClick={onRemove}
-            title="Remove variant-added field"
-          >
-            <Trash2 className="size-3" />
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 w-6 p-0 text-destructive"
+          onClick={onRemove}
+          title="Remove variant-added field"
+        >
+          <Trash2 className="size-3" />
+        </Button>
       </td>
     </tr>
   )
@@ -1365,9 +1349,10 @@ function VariantDeltaPanel({
               <table className="w-full text-xs">
                 <thead className="bg-muted/40">
                   <tr className="text-left text-[10px] uppercase text-muted-foreground">
-                    <th className="px-2 py-1.5 font-normal">Field</th>
+                    <th className="px-2 py-1.5 font-normal">Name</th>
                     <th className="px-2 py-1.5 font-normal">Type</th>
-                    <th className="px-2 py-1.5 font-normal">Default (JSON)</th>
+                    <th className="px-2 py-1.5 font-normal">Default</th>
+                    <th className="px-2 py-1.5 font-normal">Description</th>
                     <th className="px-2 py-1.5 font-normal" />
                   </tr>
                 </thead>
@@ -1400,10 +1385,15 @@ function VariantDeltaPanel({
                           updateMergedRow(idx, { field: v })
                         }
                         onChangeType={(v) =>
-                          updateMergedRow(idx, { type_str: v })
+                          // Reset default when type changes so the new widget
+                          // isn't fed a stale value of the wrong type.
+                          updateMergedRow(idx, {
+                            type_str: v,
+                            default: variantDefaultForType(v),
+                          })
                         }
                         onChangeDefault={(v) =>
-                          updateMergedRow(idx, { default_json: v })
+                          updateMergedRow(idx, { default: v })
                         }
                         onRemove={() => removeVariantRow(idx)}
                         typeOptions={typeOptions}
@@ -1621,12 +1611,6 @@ function VariantEditorPage() {
     resetToBaseline,
   } = useVariantEditor(variant, prodPrompts, prodModel, prodSchema, prodReady)
 
-  // Save is blocked on unparseable variant-row defaults.
-  const hasRowErrors = useMemo(
-    () => (state ? mergedFieldsHaveErrors(state.mergedFields) : false),
-    [state],
-  )
-
   // Backend 422 error surfacing
   const [saveError, setSaveError] = useState<string | null>(null)
   const [backendFieldError, setBackendFieldError] = useState<
@@ -1658,7 +1642,6 @@ function VariantEditorPage() {
 
   async function handleSave() {
     if (!state || !variant) return
-    if (hasRowErrors) return
     setSaveError(null)
     setBackendFieldError(null)
     const delta = editorStateToDelta(state)
@@ -1790,15 +1773,8 @@ function VariantEditorPage() {
             <Button
               size="sm"
               className="h-8 text-xs"
-              disabled={
-                !dirty || updateVariantMut.isPending || hasRowErrors
-              }
+              disabled={!dirty || updateVariantMut.isPending}
               onClick={handleSave}
-              title={
-                hasRowErrors
-                  ? 'Fix JSON parse errors in variant-added fields before saving'
-                  : undefined
-              }
             >
               {updateVariantMut.isPending ? 'Saving...' : 'Save'}
             </Button>
