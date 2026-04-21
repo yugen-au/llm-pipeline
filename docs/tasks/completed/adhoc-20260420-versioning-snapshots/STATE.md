@@ -1,7 +1,7 @@
 ## Task: adhoc-20260420-versioning-snapshots
 ## Description: Dataset and prompt versioning with run-time snapshots (case_versions, prompt_versions, model_snapshot, instructions_schema_snapshot on EvaluationRun), soft delete (deleted_at), bidirectional YAML sync for datasets matching prompts pattern, and compare-view version-mismatch badge.
 
-## Phase: pending-merge
+## Phase: complete
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
