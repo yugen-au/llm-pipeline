@@ -9,7 +9,7 @@
 ## Plugins: database-design, backend-development, python-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [8,11]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
 ## Last Updated: 2026-04-21 11:28
@@ -35,4 +35,4 @@
 | Sandbox seed filter | python-development:python-pro | implementation | 11 | - | D | complete | 0 | aa743938edd9ee142 | a2e7bb49 | - |
 | API response shape for snapshots | backend-development:backend-architect | implementation | 12 | backend-development:api-design-principles | D | complete | 0 | abd0b630535fa2119 | fce91026,a2e7bb49 | /pydantic/pydantic |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a853d9e9be369184b | 40ab79c1 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | a1600c58d132342d2 | pending | - |
