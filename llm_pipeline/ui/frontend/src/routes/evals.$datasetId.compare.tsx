@@ -1076,14 +1076,14 @@ interface PendingWarning {
 function ComparisonStatCard({
   label,
   baseValue,
-  variantValue,
+  compareValue,
   color,
   invertColor = false,
   format = (v) => (v == null ? '-' : String(v)),
 }: {
   label: string
   baseValue: number | null
-  variantValue: number | null
+  compareValue: number | null
   color?: string
   invertColor?: boolean
   format?: (v: number | null) => string
@@ -1098,14 +1098,14 @@ function ComparisonStatCard({
             <p className={`text-xl font-bold ${color ?? ''}`}>{format(baseValue)}</p>
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase">Variant</p>
-            <p className={`text-xl font-bold ${color ?? ''}`}>{format(variantValue)}</p>
+            <p className="text-[10px] text-muted-foreground uppercase">Compare</p>
+            <p className={`text-xl font-bold ${color ?? ''}`}>{format(compareValue)}</p>
           </div>
         </div>
         <div>
           <DeltaBadge
             baseValue={baseValue}
-            variantValue={variantValue}
+            compareValue={compareValue}
             invertColor={invertColor}
           />
         </div>
@@ -1163,12 +1163,12 @@ function InputExpectedPanel({ caseDef }: { caseDef: CaseItem | undefined }) {
   )
 }
 
-function BaselineOutputPanel({ result }: { result: CaseResultItem | undefined }) {
+function BaseOutputPanel({ result }: { result: CaseResultItem | undefined }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
-          Baseline output
+          Base output
         </p>
         <PassFailBadge result={result} />
       </div>
@@ -1185,31 +1185,31 @@ function BaselineOutputPanel({ result }: { result: CaseResultItem | undefined })
   )
 }
 
-function VariantOutputPanel({
-  baselineResult,
-  variantResult,
+function CompareOutputPanel({
+  baseResult,
+  compareResult,
 }: {
-  baselineResult: CaseResultItem | undefined
-  variantResult: CaseResultItem | undefined
+  baseResult: CaseResultItem | undefined
+  compareResult: CaseResultItem | undefined
 }) {
-  const baseOut = baselineResult?.output_data ?? null
-  const varOut = variantResult?.output_data ?? null
+  const baseOut = baseResult?.output_data ?? null
+  const cmpOut = compareResult?.output_data ?? null
 
   let body: React.ReactNode
-  if (variantResult?.error_message) {
-    body = <ErrorBlock message={variantResult.error_message} />
-  } else if (varOut && baseOut && !isErrored(baselineResult)) {
-    // Both sides have outputs and baseline didn't error -- show diff
+  if (compareResult?.error_message) {
+    body = <ErrorBlock message={compareResult.error_message} />
+  } else if (cmpOut && baseOut && !isErrored(baseResult)) {
+    // Both sides have outputs and base didn't error -- show diff
     body = (
       <JsonScroll>
-        <JsonViewer before={baseOut} after={varOut} maxDepth={3} />
+        <JsonViewer before={baseOut} after={cmpOut} maxDepth={3} />
       </JsonScroll>
     )
-  } else if (varOut) {
-    // Variant produced output but baseline did not (or errored) -- fall back to plain view
+  } else if (cmpOut) {
+    // Compare produced output but base did not (or errored) -- fall back to plain view
     body = (
       <JsonScroll>
-        <JsonViewer data={varOut} maxDepth={3} />
+        <JsonViewer data={cmpOut} maxDepth={3} />
       </JsonScroll>
     )
   } else {
@@ -1220,9 +1220,9 @@ function VariantOutputPanel({
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
-          Variant output
+          Compare output
         </p>
-        <PassFailBadge result={variantResult} />
+        <PassFailBadge result={compareResult} />
       </div>
       {body}
     </div>
@@ -1231,22 +1231,22 @@ function VariantOutputPanel({
 
 function CaseDetailCard({
   caseDef,
-  baselineResult,
-  variantResult,
+  baseResult,
+  compareResult,
 }: {
   caseDef: CaseItem | undefined
-  baselineResult: CaseResultItem | undefined
-  variantResult: CaseResultItem | undefined
+  baseResult: CaseResultItem | undefined
+  compareResult: CaseResultItem | undefined
 }) {
   return (
     <Card className="bg-muted/20 border-0 rounded-none">
       <CardContent className="p-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <InputExpectedPanel caseDef={caseDef} />
-          <BaselineOutputPanel result={baselineResult} />
-          <VariantOutputPanel
-            baselineResult={baselineResult}
-            variantResult={variantResult}
+          <BaseOutputPanel result={baseResult} />
+          <CompareOutputPanel
+            baseResult={baseResult}
+            compareResult={compareResult}
           />
         </div>
       </CardContent>
@@ -1261,19 +1261,19 @@ function CaseDetailCard({
 function CaseRow({
   name,
   caseDef,
-  baselineResult,
-  variantResult,
+  baseResult,
+  compareResult,
   isExpanded,
   onToggle,
 }: {
   name: string
   caseDef: CaseItem | undefined
-  baselineResult: CaseResultItem | undefined
-  variantResult: CaseResultItem | undefined
+  baseResult: CaseResultItem | undefined
+  compareResult: CaseResultItem | undefined
   isExpanded: boolean
   onToggle: () => void
 }) {
-  const delta = caseDelta(baselineResult, variantResult)
+  const delta = caseDelta(baseResult, compareResult)
   return (
     <>
       <TableRow
@@ -1289,16 +1289,16 @@ function CaseRow({
         </TableCell>
         <TableCell className="font-medium text-sm">{name}</TableCell>
         <TableCell>
-          <PassFailBadge result={baselineResult} />
+          <PassFailBadge result={baseResult} />
         </TableCell>
         <TableCell>
-          <ScoresCell result={baselineResult} />
+          <ScoresCell result={baseResult} />
         </TableCell>
         <TableCell>
-          <PassFailBadge result={variantResult} />
+          <PassFailBadge result={compareResult} />
         </TableCell>
         <TableCell>
-          <ScoresCell result={variantResult} />
+          <ScoresCell result={compareResult} />
         </TableCell>
         <TableCell>
           <DeltaIndicator kind={delta} />
@@ -1309,8 +1309,8 @@ function CaseRow({
           <TableCell colSpan={7} className="p-0 border-b">
             <CaseDetailCard
               caseDef={caseDef}
-              baselineResult={baselineResult}
-              variantResult={variantResult}
+              baseResult={baseResult}
+              compareResult={compareResult}
             />
           </TableCell>
         </TableRow>
@@ -1329,18 +1329,18 @@ function CompareRunsPage() {
   const datasetId = Number(rawDatasetId)
 
   const baseRunQ = useEvalRun(datasetId, baseRunId)
-  const variantRunQ = useEvalRun(datasetId, compareRunId)
+  const compareRunQ = useEvalRun(datasetId, compareRunId)
   const datasetQ = useDataset(datasetId)
 
-  const isLoading = baseRunQ.isLoading || variantRunQ.isLoading || datasetQ.isLoading
+  const isLoading = baseRunQ.isLoading || compareRunQ.isLoading || datasetQ.isLoading
   // Dataset-fetch errors degrade gracefully (no inputs/expected); don't block.
-  const error = baseRunQ.error || variantRunQ.error
+  const error = baseRunQ.error || compareRunQ.error
 
   const baseRun = baseRunQ.data
-  const variantRun = variantRunQ.data
+  const compareRun = compareRunQ.data
 
-  // Look up variant name if variant run has variant_id
-  const variantIdForLookup = variantRun?.variant_id ?? 0
+  // Look up variant name if compare run has variant_id
+  const variantIdForLookup = compareRun?.variant_id ?? 0
   const variantQ = useVariant(datasetId, variantIdForLookup)
 
   // Prod-config fetches feed the Delta summary diff view. Non-blocking:
@@ -1368,16 +1368,16 @@ function CompareRunsPage() {
 
   // Build per-case run-result maps + union of all case names. Memoed so the
   // auto-expand initializer downstream is stable.
-  const { baseByName, variantByName, allCaseNames } = useMemo(() => {
+  const { baseByName, compareByName, allCaseNames } = useMemo(() => {
     const baseMap = new Map<string, CaseResultItem>()
-    const varMap = new Map<string, CaseResultItem>()
+    const cmpMap = new Map<string, CaseResultItem>()
     for (const r of baseRun?.case_results ?? []) baseMap.set(r.case_name, r)
-    for (const r of variantRun?.case_results ?? []) varMap.set(r.case_name, r)
+    for (const r of compareRun?.case_results ?? []) cmpMap.set(r.case_name, r)
     const names = Array.from(
-      new Set([...baseMap.keys(), ...varMap.keys()]),
+      new Set([...baseMap.keys(), ...cmpMap.keys()]),
     ).sort()
-    return { baseByName: baseMap, variantByName: varMap, allCaseNames: names }
-  }, [baseRun, variantRun])
+    return { baseByName: baseMap, compareByName: cmpMap, allCaseNames: names }
+  }, [baseRun, compareRun])
 
   // Seed expanded set with regressed + errored cases. useState initializer
   // runs once; when runs load async, we re-seed via useMemo + state merge in
@@ -1387,13 +1387,13 @@ function CompareRunsPage() {
     const s = new Set<string>()
     for (const name of allCaseNames) {
       const b = baseByName.get(name)
-      const v = variantByName.get(name)
+      const v = compareByName.get(name)
       if (caseDelta(b, v) === 'regressed' || isErrored(b) || isErrored(v)) {
         s.add(name)
       }
     }
     return s
-  }, [allCaseNames, baseByName, variantByName])
+  }, [allCaseNames, baseByName, compareByName])
 
   // Track which cases are expanded. Initialized from initialExpanded via a
   // useState initializer that references the memo; once user interacts we
@@ -1402,10 +1402,10 @@ function CompareRunsPage() {
   const [seededFor, setSeededFor] = useState<string>('')
 
   // Once run data has loaded, seed expanded set exactly once per (baseRun,
-  // variantRun) pair. Key on run ids so reloading a different compare URL
+  // compareRun) pair. Key on run ids so reloading a different compare URL
   // re-seeds correctly.
-  const seedKey = `${baseRun?.id ?? 0}-${variantRun?.id ?? 0}`
-  if (baseRun && variantRun && seedKey !== seededFor) {
+  const seedKey = `${baseRun?.id ?? 0}-${compareRun?.id ?? 0}`
+  if (baseRun && compareRun && seedKey !== seededFor) {
     setExpanded(new Set(initialExpanded))
     setSeededFor(seedKey)
   }
@@ -1437,7 +1437,7 @@ function CompareRunsPage() {
 
   /** Gather args for payload builders; tolerates missing prod data. */
   function buildArgs(): BuildPayloadArgs | null {
-    if (!datasetQ.data || !baseRun || !variantRun) return null
+    if (!datasetQ.data || !baseRun || !compareRun) return null
     const outputSchema =
       (inputSchemaQ.data?.output_schema as Record<string, unknown> | null) ??
       null
@@ -1452,9 +1452,9 @@ function CompareRunsPage() {
       instructionsSchema: outputSchema,
       enumObjects: autoGenQ.data?.objects,
       variant: variantQ.data,
-      variantId: variantRun.variant_id ?? null,
+      variantId: compareRun.variant_id ?? null,
       baseRun,
-      variantRun,
+      compareRun,
     }
   }
 
@@ -1558,7 +1558,7 @@ function CompareRunsPage() {
     )
   }
 
-  if (error || !baseRun || !variantRun) {
+  if (error || !baseRun || !compareRun) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="text-center space-y-2">
@@ -1577,9 +1577,9 @@ function CompareRunsPage() {
   }
 
   const basePassRate = passRate(baseRun)
-  const variantPassRate = passRate(variantRun)
+  const comparePassRate = passRate(compareRun)
 
-  const deltaSnapshot = variantRun.delta_snapshot
+  const deltaSnapshot = compareRun.delta_snapshot
   const allExpanded =
     allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
@@ -1674,16 +1674,16 @@ function CompareRunsPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Comparing runs</h1>
           <p className="text-xs text-muted-foreground">
-            Baseline run #{baseRun.id}{' '}
+            Base run #{baseRun.id}{' '}
             {baseRun.started_at && `(${new Date(baseRun.started_at).toLocaleString()})`}
-            {' vs '}Variant run #{variantRun.id}{' '}
-            {variantRun.started_at && `(${new Date(variantRun.started_at).toLocaleString()})`}
+            {' vs '}Compare run #{compareRun.id}{' '}
+            {compareRun.started_at && `(${new Date(compareRun.started_at).toLocaleString()})`}
           </p>
-          {variantRun.variant_id != null && (
+          {compareRun.variant_id != null && (
             <p className="text-xs text-muted-foreground">
               Variant:{' '}
               <span className="font-medium text-foreground">
-                {variantQ.data?.name ?? `#${variantRun.variant_id}`}
+                {variantQ.data?.name ?? `#${compareRun.variant_id}`}
               </span>
             </p>
           )}
@@ -1694,7 +1694,7 @@ function CompareRunsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">
-                Baseline{' '}
+                Base{' '}
                 <Link
                   to="/evals/$datasetId/runs/$runId"
                   params={{ datasetId: String(datasetId), runId: String(baseRun.id) }}
@@ -1716,21 +1716,21 @@ function CompareRunsPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">
-                Variant{' '}
+                Compare{' '}
                 <Link
                   to="/evals/$datasetId/runs/$runId"
-                  params={{ datasetId: String(datasetId), runId: String(variantRun.id) }}
+                  params={{ datasetId: String(datasetId), runId: String(compareRun.id) }}
                   className="font-mono text-muted-foreground hover:underline ml-1"
                 >
-                  #{variantRun.id}
+                  #{compareRun.id}
                 </Link>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0 space-y-1">
-              <Badge variant="outline" className="text-xs">{variantRun.status}</Badge>
+              <Badge variant="outline" className="text-xs">{compareRun.status}</Badge>
               <p className="text-xs text-muted-foreground">
-                {variantRun.started_at
-                  ? new Date(variantRun.started_at).toLocaleString()
+                {compareRun.started_at
+                  ? new Date(compareRun.started_at).toLocaleString()
                   : 'N/A'}
               </p>
             </CardContent>
@@ -1745,7 +1745,7 @@ function CompareRunsPage() {
           <CardContent>
             {deltaSnapshot == null ? (
               <p className="text-xs text-muted-foreground">
-                No delta_snapshot recorded for this variant run.
+                No delta_snapshot recorded for this compare run.
               </p>
             ) : summaryReady && summaryBefore && summaryAfter ? (
               <div className="rounded border bg-background p-2 max-h-[400px] overflow-auto">
@@ -1774,20 +1774,20 @@ function CompareRunsPage() {
           <ComparisonStatCard
             label="Passed"
             baseValue={baseRun.passed}
-            variantValue={variantRun.passed}
+            compareValue={compareRun.passed}
             color="text-green-600"
           />
           <ComparisonStatCard
             label="Failed"
             baseValue={baseRun.failed}
-            variantValue={variantRun.failed}
+            compareValue={compareRun.failed}
             color="text-red-600"
             invertColor
           />
           <ComparisonStatCard
             label="Errored"
             baseValue={baseRun.errored}
-            variantValue={variantRun.errored}
+            compareValue={compareRun.errored}
             color="text-yellow-600"
             invertColor
           />
@@ -1800,14 +1800,14 @@ function CompareRunsPage() {
                   <p className="text-xl font-bold">{formatPct(basePassRate)}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-muted-foreground uppercase">Variant</p>
-                  <p className="text-xl font-bold">{formatPct(variantPassRate)}</p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Compare</p>
+                  <p className="text-xl font-bold">{formatPct(comparePassRate)}</p>
                 </div>
               </div>
               <div>
                 <DeltaPctBadge
                   baseValue={basePassRate}
-                  variantValue={variantPassRate}
+                  compareValue={comparePassRate}
                 />
               </div>
             </CardContent>
@@ -1838,10 +1838,10 @@ function CompareRunsPage() {
                   <TableRow>
                     <TableHead className="w-8" />
                     <TableHead>Case</TableHead>
-                    <TableHead>Baseline</TableHead>
-                    <TableHead>Baseline scores</TableHead>
-                    <TableHead>Variant</TableHead>
-                    <TableHead>Variant scores</TableHead>
+                    <TableHead>Base</TableHead>
+                    <TableHead>Base scores</TableHead>
+                    <TableHead>Compare</TableHead>
+                    <TableHead>Compare scores</TableHead>
                     <TableHead>Delta</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1851,8 +1851,8 @@ function CompareRunsPage() {
                       key={name}
                       name={name}
                       caseDef={caseByName.get(name)}
-                      baselineResult={baseByName.get(name)}
-                      variantResult={variantByName.get(name)}
+                      baseResult={baseByName.get(name)}
+                      compareResult={compareByName.get(name)}
                       isExpanded={expanded.has(name)}
                       onToggle={() => toggleCase(name)}
                     />
