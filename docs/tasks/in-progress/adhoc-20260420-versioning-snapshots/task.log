@@ -262,3 +262,18 @@ To proceed, either:
 [2026-04-21 11:28:00] [INFO] Auto-updated agent statuses: Architecture review: pending -> in-progress
 [2026-04-21 11:28:00] [INFO] Deleted 1 old contract file(s)
 [2026-04-21 11:28:00] [DEBUG] STATE.md atomic write complete
+[2026-04-21 11:28:35] [INFO] Task call: comprehensive-review:architect-review (phase: review)
+[2026-04-21 11:33:57] [INFO] WARNING: No active agent found for 'comprehensive-review:architect-review'
+[2026-04-21 11:43:32] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-21 11:43:49] [ERROR] BLOCKED: Cannot enter fix loop 'fixing-review': steps_to_fix not set
+[2026-04-21 11:44:06] [ERROR] BLOCKED: Invalid STATE.md field 'steps_to_fix': Expected [1,2] format or 'none', got '8,11'
+[2026-04-21 11:44:16] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-04-21 11:44:21] [ERROR] BLOCKED: Cannot transition from review-A
+[2026-04-21 11:44:37] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-04-21 11:44:45] [INFO] Committed review-A: ['REVIEW.md'] -> c7ee3364
+[2026-04-21 11:44:47] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-21 11:44:47] [INFO] Updated Commits for 'Architecture review': c7ee3364
+[2026-04-21 11:44:47] [INFO] Auto-set Current Group -> C (entering fixing-review)
+[2026-04-21 11:44:47] [INFO] Auto-updated agent statuses: EvaluationCase read/write sites: complete -> in-progress, Sandbox seed filter: complete -> pending, Architecture review: complete -> pending
+[2026-04-21 11:44:47] [INFO] Deleted 1 old contract file(s)
+[2026-04-21 11:44:47] [DEBUG] STATE.md atomic write complete
