@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260421-generic-run-comparison
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-7-delta-summary-snapshot-diff.md (if already exists, APPEND to file)
+- Output Files: implementation\step-8-export-neutral-meta-prompt.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 7 - implement ONLY this step, not others
+- Step: 8 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-7-delta-summary-snapshot-diff.md
+4. Document decisions in implementation\step-8-export-neutral-meta-prompt.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 7: DELTA SUMMARY SNAPSHOT DIFF
+# IMPLEMENTATION - STEP 8: EXPORT NEUTRAL META-PROMPT
 **Status:** [completed/failed/blocked]
 
 ## Summary
@@ -72,7 +72,7 @@ description of changes made to this file
 ~~~
 Status: [in-progress/complete/fixing/needs-input]
 Issues: [one-line description or 'none']
-Created: implementation\step-[step]-[slug].md
+Created: implementation\step-8-export-neutral-meta-prompt.md
 Modified: [file paths or 'none']
 Deleted: [file paths or 'none']
 Commit: [commit hash or 'none']
