@@ -17,5 +17,5 @@
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
 |-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|-------|
-| Frontend comparison UI research | frontend-mobile-development:frontend-developer | research | 1 | - | A | needs-input | 0 | a8ba5c2d48353bdbc | pending | - |
-| Backend comparison logic research | backend-development:backend-architect | research | 2 | - | A | needs-input | 0 | a36edd5e701e73d61 | pending | - |
+| Frontend comparison UI research | frontend-mobile-development:frontend-developer | research | 1 | - | A | complete | 0 | a8ba5c2d48353bdbc | pending | - |
+| Backend comparison logic research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a36edd5e701e73d61 | pending | - |
