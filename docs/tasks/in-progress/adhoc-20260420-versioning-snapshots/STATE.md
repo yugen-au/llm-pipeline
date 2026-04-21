@@ -30,7 +30,7 @@
 | Prompt read-site updates | backend-development:backend-architect | implementation | 6 | - | C | in-progress | 0 | - | pending | /websites/sqlmodel_tiangolo |
 | Prompt write-site + YAML sync | backend-development:backend-architect | implementation | 7 | backend-development:api-design-principles | C | complete | 0 | a5ee03bc57fd13815 | ac1e6160 | /websites/sqlmodel_tiangolo,/pydantic/pydantic |
 | EvaluationCase read/write sites | backend-development:backend-architect | implementation | 8 | - | C | in-progress | 0 | - | pending | /websites/sqlmodel_tiangolo |
-| Runner snapshot population | backend-development:backend-architect | implementation | 9 | backend-development:workflow-orchestration-patterns | C | in-progress | 0 | - | pending | /websites/pydantic_dev_validation |
+| Runner snapshot population | backend-development:backend-architect | implementation | 9 | backend-development:workflow-orchestration-patterns | C | complete | 0 | ae94878986ab150d4 | 340fca29 | /websites/pydantic_dev_validation |
 | Dataset YAML bidirectional sync | backend-development:backend-architect | implementation | 10 | - | D | pending | 0 | - | pending | /websites/sqlmodel_tiangolo |
 | Sandbox seed filter | python-development:python-pro | implementation | 11 | - | D | pending | 0 | - | pending | - |
 | API response shape for snapshots | backend-development:backend-architect | implementation | 12 | backend-development:api-design-principles | D | pending | 0 | - | pending | /pydantic/pydantic |
