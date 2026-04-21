@@ -1317,3 +1317,62 @@ class TestProdModel:
         resp = client.get(f"/api/evals/{ds_id}/prod-model")
         assert resp.status_code == 404
         assert "nonexistent_step_m" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Test #12: Run detail endpoint tolerates null snapshot columns
+# ---------------------------------------------------------------------------
+
+
+class TestRunDetailToleratesNullSnapshots:
+    """Legacy compat: runs created before snapshot columns exist have NULLs."""
+
+    def test_run_detail_null_snapshots_returns_200(self, seeded_dataset):
+        client, engine, dataset_id = seeded_dataset
+        now = datetime.now(timezone.utc)
+        with Session(engine) as session:
+            run = EvaluationRun(
+                dataset_id=dataset_id,
+                status="completed",
+                total_cases=1,
+                passed=1,
+                failed=0,
+                errored=0,
+                started_at=now,
+                completed_at=now,
+                # All snapshot cols left as None (legacy row)
+                case_versions=None,
+                prompt_versions=None,
+                model_snapshot=None,
+                instructions_schema_snapshot=None,
+            )
+            session.add(run)
+            session.commit()
+            session.refresh(run)
+            run_id = run.id
+
+        resp = client.get(f"/api/evals/{dataset_id}/runs/{run_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["case_versions"] is None
+        assert data["prompt_versions"] is None
+        assert data["model_snapshot"] is None
+        assert data["instructions_schema_snapshot"] is None
+
+    def test_list_runs_null_snapshots_returns_200(self, seeded_dataset):
+        client, engine, dataset_id = seeded_dataset
+        now = datetime.now(timezone.utc)
+        with Session(engine) as session:
+            run = EvaluationRun(
+                dataset_id=dataset_id,
+                status="completed",
+                total_cases=0,
+                started_at=now,
+            )
+            session.add(run)
+            session.commit()
+
+        resp = client.get(f"/api/evals/{dataset_id}/runs")
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) >= 1

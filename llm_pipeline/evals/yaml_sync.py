@@ -1,6 +1,6 @@
 """YAML-based eval dataset sync: YAML -> DB on startup, DB -> YAML on save.
 
-DB is source of truth. No version tracking -- YAML seeds DB, DB overwrites YAML.
+DB is source of truth. Version-based conflict resolution: newer version wins.
 """
 import logging
 import tempfile
@@ -9,7 +9,9 @@ from typing import Any
 
 import yaml
 
+from llm_pipeline.db.versioning import get_latest, save_new_version
 from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase
+from llm_pipeline.utils.versioning import compare_versions
 
 logger = logging.getLogger(__name__)
 
@@ -102,29 +104,52 @@ def sync_evals_yaml_to_db(engine: "Engine", scan_dirs: list[Path]) -> None:  # n
             else:
                 dataset = existing
 
-            # Insert cases if not exists (by dataset_id + case name)
+            # Insert/update cases via versioning helpers
             for case_data in cases:
                 case_name = case_data.get("name")
                 if not case_name:
                     continue
 
-                existing_case = session.exec(
-                    select(EvaluationCase).where(
-                        EvaluationCase.dataset_id == dataset.id,
-                        EvaluationCase.name == case_name,
-                    )
-                ).first()
+                yaml_version = str(case_data.get("version", "1.0"))
+                existing_case = get_latest(
+                    session, EvaluationCase,
+                    dataset_id=dataset.id, name=case_name,
+                )
 
                 if existing_case is None:
-                    case = EvaluationCase(
-                        dataset_id=dataset.id,
-                        name=case_name,
-                        inputs=case_data.get("inputs", {}),
-                        expected_output=case_data.get("expected_output"),
-                        metadata_=case_data.get("metadata"),
+                    # First-time insert
+                    save_new_version(
+                        session, EvaluationCase,
+                        key_filters={"dataset_id": dataset.id, "name": case_name},
+                        new_fields={
+                            "inputs": case_data.get("inputs", {}),
+                            "expected_output": case_data.get("expected_output"),
+                            "metadata_": case_data.get("metadata"),
+                        },
+                        version=yaml_version,
                     )
-                    session.add(case)
                     inserted_cases += 1
+                else:
+                    cmp = compare_versions(yaml_version, existing_case.version)
+                    if cmp > 0:
+                        # YAML is newer — insert new version
+                        save_new_version(
+                            session, EvaluationCase,
+                            key_filters={"dataset_id": dataset.id, "name": case_name},
+                            new_fields={
+                                "inputs": case_data.get("inputs", {}),
+                                "expected_output": case_data.get("expected_output"),
+                                "metadata_": case_data.get("metadata"),
+                            },
+                            version=yaml_version,
+                        )
+                        inserted_cases += 1
+                    else:
+                        logger.warning(
+                            "Eval case '%s' in dataset '%s': YAML version %s "
+                            "<= DB version %s, skipping",
+                            case_name, name, yaml_version, existing_case.version,
+                        )
 
         session.commit()
 
@@ -153,7 +178,11 @@ def write_dataset_to_yaml(engine: "Engine", dataset_id: int, target_dir: Path) -
 
         cases = session.exec(
             select(EvaluationCase)
-            .where(EvaluationCase.dataset_id == dataset_id)
+            .where(
+                EvaluationCase.dataset_id == dataset_id,
+                EvaluationCase.is_active == True,  # noqa: E712
+                EvaluationCase.is_latest == True,  # noqa: E712
+            )
             .order_by(EvaluationCase.id)
         ).all()
 
