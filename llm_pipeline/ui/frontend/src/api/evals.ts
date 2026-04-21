@@ -53,10 +53,15 @@ export interface RunListItem {
   completed_at: string | null
   variant_id: number | null
   delta_snapshot: Record<string, unknown> | null
+  case_versions: Record<string, string> | null
+  prompt_versions: Record<string, unknown> | null
+  model_snapshot: Record<string, unknown> | null
+  instructions_schema_snapshot: Record<string, unknown> | null
 }
 
 export interface CaseResultItem {
   id: number
+  case_id: number
   case_name: string
   passed: boolean
   evaluator_scores: Record<string, unknown>
