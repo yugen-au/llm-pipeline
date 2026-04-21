@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-21 18:10
+## Last Updated: 2026-04-21 18:16
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,6 +26,6 @@
 | Zod schema compareRunId + alias | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | a2bc6b43303ea9b16 | 8b48ccac,5b037a42 | /colinhacks/zod |
 | Rename labels Base/Compare | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | a60cf7843d0fd984e | aac9ca0a,5b037a42 | - |
 | Universal compare button + picker | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | ac0ed5da409f87dfd | e0509022 | - |
-| Case version matching logic | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | in-progress | 0 | - | pending | - |
+| Case version matching logic | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 0 | ad6bce4c62a996dc6 | 0da4c5a0 | - |
 | Delta summary snapshot diff | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | in-progress | 0 | - | pending | - |
 | Export neutral meta-prompt | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | - | pending | - |
