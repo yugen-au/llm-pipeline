@@ -392,15 +392,13 @@ interface ExportPayload {
     instructions_schema: Record<string, unknown> | null
     enum_catalog: Record<string, Array<{ name: string; value: string }>>
   }
-  variant: {
-    id: number
-    name: string | null
-    description: string | null
-    delta: Record<string, unknown> | null
-  } | null
+  comparison: {
+    base_run_id: number
+    compare_run_id: number
+  }
   runs: {
-    baseline: ExportRun
-    variant: ExportRun
+    base: ExportRun
+    compare: ExportRun
   }
   dataset_cases: Array<{
     name: string
@@ -454,8 +452,6 @@ interface BuildPayloadArgs {
   prodPrompts: ProdPromptsResponse | undefined
   instructionsSchema: Record<string, unknown> | null
   enumObjects: AutoGenerateObject[] | undefined
-  variant: VariantItem | undefined
-  variantId: number | null
   baseRun: RunDetail
   compareRun: RunDetail
 }
@@ -467,8 +463,6 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
     prodPrompts,
     instructionsSchema,
     enumObjects,
-    variant,
-    variantId,
     baseRun,
     compareRun,
   } = args
@@ -488,18 +482,13 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
       instructions_schema: instructionsSchema,
       enum_catalog: buildEnumCatalog(enumObjects),
     },
-    variant:
-      variantId != null
-        ? {
-            id: variantId,
-            name: variant?.name ?? null,
-            description: variant?.description ?? null,
-            delta: (variant?.delta ?? null) as Record<string, unknown> | null,
-          }
-        : null,
+    comparison: {
+      base_run_id: baseRun.id,
+      compare_run_id: compareRun.id,
+    },
     runs: {
-      baseline: toExportRun(baseRun),
-      variant: toExportRun(compareRun),
+      base: toExportRun(baseRun),
+      compare: toExportRun(compareRun),
     },
     dataset_cases: dataset.cases.map((c) => ({
       name: c.name,
@@ -510,33 +499,9 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
 }
 
 // Meta-prompt prepended to markdown exports. JSON omits this.
-const META_PROMPT = `# Eval Variant Iteration Context
+const META_PROMPT = `# Eval Run Comparison Context
 
-You are helping iterate on a production LLM step. Given the context below,
-propose a variant delta that addresses the failing cases.
-
-## Response format
-Respond with a single JSON code block matching the VariantDelta shape:
-
-\`\`\`json
-{
-  "model": "<model_name>" or null,
-  "system_prompt": "<content>" or null,
-  "user_prompt": "<content>" or null,
-  "variable_definitions": {...} or null,
-  "instructions_delta": [{"op": "add|modify", "field": "...", "type_str": "...", "default": <any>}] or null
-}
-\`\`\`
-
-## Validation rules
-- \`type_str\` must be one of: \`str\`, \`int\`, \`float\`, \`bool\`, \`list\`, \`dict\`, \`Optional[<base>]\`, \`enum:<RegisteredName>\`
-- \`"modify"\` ops can omit \`type_str\` (backend preserves the original annotation — safest for complex types)
-- \`"add"\` ops require both \`type_str\` and \`default\`
-- \`default\` must be JSON-serialisable
-- Registered enums available below under "Registered enums"
-
-## Goal
-Minimal changes that are likely to improve the pass rate. Explain reasoning briefly, then provide the JSON.
+You are analyzing differences between two evaluation runs of a production LLM step. Given the context below, identify patterns in the failing cases and suggest improvements.
 `
 
 function fenced(lang: string, body: string): string {
@@ -892,15 +857,15 @@ function aggregateComparisonTable(
 
 function buildPayloadMarkdown(args: BuildPayloadArgs): string {
   const payload = buildPayloadJSON(args)
-  const { step, prod_config, variant, runs, dataset_cases } = payload
+  const { step, prod_config, comparison, runs, dataset_cases } = payload
 
   // Order cases: regressed/errored first, then failing-on-compare, then others.
   const caseByName = new Map(dataset_cases.map((c) => [c.name, c]))
   const baseByName = new Map(
-    runs.baseline.case_results.map((r) => [r.case_name, r]),
+    runs.base.case_results.map((r) => [r.case_name, r]),
   )
   const compareByName = new Map(
-    runs.variant.case_results.map((r) => [r.case_name, r]),
+    runs.compare.case_results.map((r) => [r.case_name, r]),
   )
   const allNames = Array.from(
     new Set([...baseByName.keys(), ...compareByName.keys()]),
@@ -948,21 +913,13 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     ? fenced('', prod_config.user_prompt)
     : '*none*'
 
-  const variantSection = variant
-    ? [
-        `## Current variant: ${variant.name ?? `#${variant.id}`}`,
-        variant.description ? variant.description : '(no description)',
-        '',
-        '### Delta',
-        variant.delta ? jsonFence(variant.delta) : '*empty delta*',
-      ].join('\n')
-    : '## Current variant\n*none — comparing two raw runs*'
+  const comparisonSection = `## Comparison summary\nBase run #${comparison.base_run_id} vs Compare run #${comparison.compare_run_id}`
 
-  const baseStats = runs.baseline.stats
-  const compareStats = runs.variant.stats
+  const baseStats = runs.base.stats
+  const compareStats = runs.compare.stats
   const aggregateTable = aggregateComparisonTable(
-    runs.baseline.id,
-    runs.variant.id,
+    runs.base.id,
+    runs.compare.id,
     baseStats,
     compareStats,
   )
@@ -998,7 +955,7 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     '### Registered enums',
     enumCatalogMarkdown(prod_config.enum_catalog),
     '',
-    variantSection,
+    comparisonSection,
     '',
     '## Run results',
     '',
@@ -1482,8 +1439,6 @@ function CompareRunsPage() {
       prodPrompts: prodPromptsQ.data,
       instructionsSchema: outputSchema,
       enumObjects: autoGenQ.data?.objects,
-      variant: variantQ.data,
-      variantId: compareRun.variant_id ?? null,
       baseRun,
       compareRun,
     }
