@@ -1,7 +1,7 @@
 ## Task: adhoc-20260420-versioning-snapshots
 ## Description: Dataset and prompt versioning with run-time snapshots (case_versions, prompt_versions, model_snapshot, instructions_schema_snapshot on EvaluationRun), soft delete (deleted_at), bidirectional YAML sync for datasets matching prompts pattern, and compare-view version-mismatch badge.
 
-## Phase: testing
+## Phase: review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-21 11:22
+## Last Updated: 2026-04-21 11:28
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -34,4 +34,5 @@
 | Dataset YAML bidirectional sync | backend-development:backend-architect | implementation | 10 | - | D | complete | 0 | a185d4e99100f39a0 | a2e7bb49 | /websites/sqlmodel_tiangolo |
 | Sandbox seed filter | python-development:python-pro | implementation | 11 | - | D | complete | 0 | aa743938edd9ee142 | a2e7bb49 | - |
 | API response shape for snapshots | backend-development:backend-architect | implementation | 12 | backend-development:api-design-principles | D | complete | 0 | abd0b630535fa2119 | fce91026,a2e7bb49 | /pydantic/pydantic |
-| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a853d9e9be369184b | pending | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a853d9e9be369184b | 40ab79c1 | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | in-progress | 0 | pending | pending | - |
