@@ -277,3 +277,7 @@ To proceed, either:
 [2026-04-21 11:44:47] [INFO] Auto-updated agent statuses: EvaluationCase read/write sites: complete -> in-progress, Sandbox seed filter: complete -> pending, Architecture review: complete -> pending
 [2026-04-21 11:44:47] [INFO] Deleted 1 old contract file(s)
 [2026-04-21 11:44:47] [DEBUG] STATE.md atomic write complete
+[2026-04-21 11:45:21] [ERROR] BLOCKED: Invalid Task description format
+[2026-04-21 11:45:29] [INFO] Task call: backend-development:backend-architect (phase: fixing-review)
+[2026-04-21 11:45:29] [INFO] Incremented Revisions: 0 -> 1
+[2026-04-21 11:45:29] [DEBUG] STATE.md atomic write complete
