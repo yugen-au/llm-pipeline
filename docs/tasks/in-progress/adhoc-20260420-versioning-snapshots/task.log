@@ -88,3 +88,95 @@ To proceed, either:
 [2026-04-21 00:00:17] [DEBUG] STATE.md atomic write complete
 [2026-04-21 00:01:01] [INFO] Cleaned up stale semaphores: subagent, state, git
 [2026-04-21 00:01:36] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-21 10:38:23] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-21 10:39:33] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:39:34] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:39:35] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:39:57] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:40:14] [INFO] Task call: python-development:python-pro (phase: implementation)
+[2026-04-21 10:40:19] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:21] [INFO] Task call: database-design:database-architect (phase: implementation)
+[2026-04-21 10:40:26] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:29] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:30] [INFO] Task call: database-design:database-architect (phase: implementation)
+[2026-04-21 10:40:35] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:37] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:38] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:44] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:47] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:40:48] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-21 10:41:01] [ERROR] BLOCKED: To save context bloat, PM cannot directly read contract files (only check they exist). Provide contract files to agents to read.
+[2026-04-21 10:41:28] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\db\prompt.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:41:38] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\evals\models.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:41:59] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\utils\__init__.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:42:05] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\utils\versioning.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:42:33] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\evals\models.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:42:44] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:43:03] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:43:08] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\llm_pipeline\prompts\yaml_sync.py
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:43:10] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-21 10:43:33] [ERROR] BLOCKED: Write not allowed in task dir
+[2026-04-21 10:43:35] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\adhoc-20260420-versioning-snapshots\implementation\step-3-prompt-schema-updates.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:43:47] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:43:54] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:44:03] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:44:08] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-21 10:44:26] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:44:33] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:44:41] [ERROR] BLOCKED: PM cannot write files directly while on task branch.
+File: C:\Users\SamSG\Documents\claude-projects\llm-pipeline\docs\tasks\in-progress\adhoc-20260420-versioning-snapshots\implementation\step-4-evaluationcase-evaluationrun-schema.md
+
+To proceed, either:
+  1. Spawn the appropriate agent to create this file
+  2. Pause the task: set '## Status: paused' in STATE.md
+  3. Switch to a different branch
+[2026-04-21 10:44:42] [ERROR] BLOCKED: Write not allowed in task dir
+[2026-04-21 10:47:22] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-21 10:49:06] [INFO] Task call: python-development:python-pro (phase: implementation)
+[2026-04-21 10:50:52] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-21 10:51:01] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-21 10:51:26] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:51:31] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 10:52:11] [DEBUG] STATE.md atomic write complete
