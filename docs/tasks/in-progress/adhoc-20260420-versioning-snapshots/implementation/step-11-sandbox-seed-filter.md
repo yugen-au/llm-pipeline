@@ -23,3 +23,37 @@ Added `TestSandboxSeedFilters` class with `test_sandbox_seed_filters_is_latest_i
 [x] sandbox.py copy-through includes `is_latest=prompt.is_latest`
 [x] test_sandbox_seed_filters_is_latest_is_active passes
 [x] no duplicate test exists elsewhere
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Sandbox variant prompt queries omit is_active filter in _apply_variant_to_sandbox
+
+### Changes Made
+#### File: `llm_pipeline/evals/runner.py`
+Added `Prompt.is_active == True` filter to both prompt queries in `_apply_variant_to_sandbox` (system and user lookups) for defense-in-depth consistency.
+
+```
+# Before (line ~839)
+select(Prompt).where(
+    Prompt.prompt_key == system_key,
+    Prompt.prompt_type == "system",
+    Prompt.is_latest == True,
+)
+
+# After
+select(Prompt).where(
+    Prompt.prompt_key == system_key,
+    Prompt.prompt_type == "system",
+    Prompt.is_active == True,
+    Prompt.is_latest == True,
+)
+```
+
+Same pattern applied to user prompt query (~line 868).
+
+### Verification
+[x] All 4 prompt queries in runner.py now filter on both is_active and is_latest
+[x] Pattern matches existing queries at lines 684-685 and 766-767

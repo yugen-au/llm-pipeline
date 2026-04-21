@@ -836,6 +836,7 @@ def _apply_variant_to_sandbox(
                 select(Prompt).where(
                     Prompt.prompt_key == system_key,
                     Prompt.prompt_type == "system",
+                    Prompt.is_active == True,  # noqa: E712
                     Prompt.is_latest == True,  # noqa: E712
                 )
             ).first()
@@ -865,6 +866,7 @@ def _apply_variant_to_sandbox(
                 select(Prompt).where(
                     Prompt.prompt_key == user_key,
                     Prompt.prompt_type == "user",
+                    Prompt.is_active == True,  # noqa: E712
                     Prompt.is_latest == True,  # noqa: E712
                 )
             ).first()
