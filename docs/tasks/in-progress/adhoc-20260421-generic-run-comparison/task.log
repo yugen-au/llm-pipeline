@@ -55,3 +55,5 @@
 [2026-04-21 17:51:56] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-04-21 17:52:05] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
 [2026-04-21 17:52:24] [DEBUG] STATE.md atomic write complete
+[2026-04-21 17:52:30] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-21 17:53:38] [DEBUG] STATE.md atomic write complete
