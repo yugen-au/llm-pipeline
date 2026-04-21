@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260420-versioning-snapshots
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-7-prompt-write-site-yaml-sync.md (if already exists, APPEND to file)
+- Output Files: implementation\step-12-api-response-shape-for-snapshots.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 7 - implement ONLY this step, not others
+- Step: 12 - implement ONLY this step, not others
 - Skills to invoke: backend-development:api-design-principles
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /websites/sqlmodel_tiangolo,/pydantic/pydantic
+3. Context7 library IDs to query: /pydantic/pydantic
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-7-prompt-write-site-yaml-sync.md
+4. Document decisions in implementation\step-12-api-response-shape-for-snapshots.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 7: PROMPT WRITE-SITE + YAML SYNC
+# IMPLEMENTATION - STEP 12: API RESPONSE SHAPE FOR SNAPSHOTS
 **Status:** [completed/failed/blocked]
 
 ## Summary

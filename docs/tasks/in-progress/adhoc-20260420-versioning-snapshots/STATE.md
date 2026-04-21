@@ -3,7 +3,7 @@
 
 ## Phase: implementation
 ## Status: in-progress
-## Current Group: C
+## Current Group: D
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260420-versioning-snapshots
 ## Plugins: database-design, backend-development, python-development
@@ -27,10 +27,10 @@
 | EvaluationCase + EvaluationRun schema | database-design:database-architect | implementation | 4 | database-design:postgresql | A | complete | 0 | aed406fd9d4bdb977 | 0434a5a3 | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
 | Versioning helper module | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | B | complete | 0 | a757db5087b0ed70d | 78cbae7b | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
 | Migration + partial unique indexes | database-design:database-architect | implementation | 5 | database-design:postgresql | B | complete | 0 | aabd1595fb76071bc | 78cbae7b | /websites/sqlalchemy_en_20_core |
-| Prompt read-site updates | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | ac9a82e84080566e1 | cbea8c12 | /websites/sqlmodel_tiangolo |
-| Prompt write-site + YAML sync | backend-development:backend-architect | implementation | 7 | backend-development:api-design-principles | C | complete | 0 | a5ee03bc57fd13815 | ac1e6160 | /websites/sqlmodel_tiangolo,/pydantic/pydantic |
+| Prompt read-site updates | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | ac9a82e84080566e1 | cbea8c12,b8e0b72b | /websites/sqlmodel_tiangolo |
+| Prompt write-site + YAML sync | backend-development:backend-architect | implementation | 7 | backend-development:api-design-principles | C | complete | 0 | a5ee03bc57fd13815 | ac1e6160,b8e0b72b | /websites/sqlmodel_tiangolo,/pydantic/pydantic |
 | EvaluationCase read/write sites | backend-development:backend-architect | implementation | 8 | - | C | complete | 0 | aac386015be965cea | b8e0b72b | /websites/sqlmodel_tiangolo |
-| Runner snapshot population | backend-development:backend-architect | implementation | 9 | backend-development:workflow-orchestration-patterns | C | complete | 0 | ae94878986ab150d4 | 340fca29 | /websites/pydantic_dev_validation |
-| Dataset YAML bidirectional sync | backend-development:backend-architect | implementation | 10 | - | D | pending | 0 | - | pending | /websites/sqlmodel_tiangolo |
-| Sandbox seed filter | python-development:python-pro | implementation | 11 | - | D | pending | 0 | - | pending | - |
-| API response shape for snapshots | backend-development:backend-architect | implementation | 12 | backend-development:api-design-principles | D | pending | 0 | - | pending | /pydantic/pydantic |
+| Runner snapshot population | backend-development:backend-architect | implementation | 9 | backend-development:workflow-orchestration-patterns | C | complete | 0 | ae94878986ab150d4 | 340fca29,b8e0b72b | /websites/pydantic_dev_validation |
+| Dataset YAML bidirectional sync | backend-development:backend-architect | implementation | 10 | - | D | in-progress | 0 | - | pending | /websites/sqlmodel_tiangolo |
+| Sandbox seed filter | python-development:python-pro | implementation | 11 | - | D | in-progress | 0 | - | pending | - |
+| API response shape for snapshots | backend-development:backend-architect | implementation | 12 | backend-development:api-design-principles | D | in-progress | 0 | - | pending | /pydantic/pydantic |
