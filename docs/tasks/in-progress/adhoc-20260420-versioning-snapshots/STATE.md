@@ -12,7 +12,7 @@
 ## Steps to Fix: [8,11]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-21 11:45
+## Last Updated: 2026-04-21 11:47
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -29,7 +29,7 @@
 | Migration + partial unique indexes | database-design:database-architect | implementation | 5 | database-design:postgresql | B | complete | 0 | aabd1595fb76071bc | 78cbae7b | /websites/sqlalchemy_en_20_core |
 | Prompt read-site updates | backend-development:backend-architect | implementation | 6 | - | C | complete | 0 | ac9a82e84080566e1 | cbea8c12,b8e0b72b | /websites/sqlmodel_tiangolo |
 | Prompt write-site + YAML sync | backend-development:backend-architect | implementation | 7 | backend-development:api-design-principles | C | complete | 0 | a5ee03bc57fd13815 | ac1e6160,b8e0b72b | /websites/sqlmodel_tiangolo,/pydantic/pydantic |
-| EvaluationCase read/write sites | backend-development:backend-architect | implementation | 8 | - | C | in-progress | 1 | aac386015be965cea | b8e0b72b | /websites/sqlmodel_tiangolo |
+| EvaluationCase read/write sites | backend-development:backend-architect | implementation | 8 | - | C | complete | 1 | a3e970bfc7c35244c | b8e0b72b,61063bbc | /websites/sqlmodel_tiangolo |
 | Runner snapshot population | backend-development:backend-architect | implementation | 9 | backend-development:workflow-orchestration-patterns | C | complete | 0 | ae94878986ab150d4 | 340fca29,b8e0b72b | /websites/pydantic_dev_validation |
 | Dataset YAML bidirectional sync | backend-development:backend-architect | implementation | 10 | - | D | complete | 0 | a185d4e99100f39a0 | a2e7bb49 | /websites/sqlmodel_tiangolo |
 | Sandbox seed filter | python-development:python-pro | implementation | 11 | - | D | pending | 0 | aa743938edd9ee142 | a2e7bb49 | - |
