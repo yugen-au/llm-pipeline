@@ -1,0 +1,7 @@
+[2026-04-21 16:44:28] [INFO] ============================================================
+[2026-04-21 16:44:28] [INFO] TASK INITIALIZED: adhoc-20260421-generic-run-comparison
+[2026-04-21 16:44:28] [INFO] Base branch: dev
+[2026-04-21 16:44:28] [INFO] Task branch: sam/adhoc/20260421-generic-run-comparison
+[2026-04-21 16:44:28] [INFO] Created: STATE.md
+[2026-04-21 16:44:28] [INFO] ============================================================
+[2026-04-21 16:44:28] [DEBUG] STATE.md atomic write complete
