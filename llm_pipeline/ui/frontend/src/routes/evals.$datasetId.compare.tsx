@@ -64,10 +64,16 @@ import { JsonViewer } from '@/components/JsonViewer'
 // Search-param schema
 // ---------------------------------------------------------------------------
 
-const compareSearchSchema = z.object({
-  baseRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
-  variantRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
-})
+const compareSearchSchema = z
+  .object({
+    baseRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+    compareRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+    variantRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+  })
+  .transform(({ baseRunId, compareRunId, variantRunId }) => ({
+    baseRunId,
+    compareRunId: compareRunId || variantRunId || 0,
+  }))
 
 export const Route = createFileRoute('/evals/$datasetId/compare')({
   validateSearch: zodValidator(compareSearchSchema),
@@ -91,17 +97,17 @@ function formatPct(v: number | null): string {
 
 function DeltaBadge({
   baseValue,
-  variantValue,
+  compareValue,
   invertColor = false,
 }: {
   baseValue: number | null
-  variantValue: number | null
+  compareValue: number | null
   invertColor?: boolean
 }) {
-  if (baseValue == null || variantValue == null) {
+  if (baseValue == null || compareValue == null) {
     return <span className="text-xs text-muted-foreground">-</span>
   }
-  const delta = variantValue - baseValue
+  const delta = compareValue - baseValue
   if (delta === 0) {
     return <span className="text-xs text-muted-foreground font-mono">0</span>
   }
@@ -120,15 +126,15 @@ function DeltaBadge({
 
 function DeltaPctBadge({
   baseValue,
-  variantValue,
+  compareValue,
 }: {
   baseValue: number | null
-  variantValue: number | null
+  compareValue: number | null
 }) {
-  if (baseValue == null || variantValue == null) {
+  if (baseValue == null || compareValue == null) {
     return <span className="text-xs text-muted-foreground">-</span>
   }
-  const delta = variantValue - baseValue
+  const delta = compareValue - baseValue
   if (delta === 0) {
     return <span className="text-xs text-muted-foreground font-mono">0%</span>
   }
@@ -175,13 +181,13 @@ type DeltaKind = 'improved' | 'regressed' | 'unchanged' | 'n/a'
 
 function caseDelta(
   baseResult: CaseResultItem | undefined,
-  variantResult: CaseResultItem | undefined,
+  compareResult: CaseResultItem | undefined,
 ): DeltaKind {
-  if (!baseResult || !variantResult) return 'n/a'
+  if (!baseResult || !compareResult) return 'n/a'
   const basePassed = !baseResult.error_message && baseResult.passed
-  const variantPassed = !variantResult.error_message && variantResult.passed
-  if (basePassed === variantPassed) return 'unchanged'
-  return variantPassed ? 'improved' : 'regressed'
+  const comparePassed = !compareResult.error_message && compareResult.passed
+  if (basePassed === comparePassed) return 'unchanged'
+  return comparePassed ? 'improved' : 'regressed'
 }
 
 function isErrored(result: CaseResultItem | undefined): boolean {
@@ -466,7 +472,7 @@ interface BuildPayloadArgs {
   variant: VariantItem | undefined
   variantId: number | null
   baseRun: RunDetail
-  variantRun: RunDetail
+  compareRun: RunDetail
 }
 
 function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
@@ -479,7 +485,7 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
     variant,
     variantId,
     baseRun,
-    variantRun,
+    compareRun,
   } = args
 
   return {
@@ -508,7 +514,7 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
         : null,
     runs: {
       baseline: toExportRun(baseRun),
-      variant: toExportRun(variantRun),
+      variant: toExportRun(compareRun),
     },
     dataset_cases: dataset.cases.map((c) => ({
       name: c.name,
@@ -723,40 +729,40 @@ function caseMarkdownSection(
   caseName: string,
   caseDef: MarkdownCaseInput | undefined,
   baseRes: CaseResultItem | undefined,
-  variantRes: CaseResultItem | undefined,
+  compareRes: CaseResultItem | undefined,
 ): string {
   const baseStatus = formatCaseStatus(baseRes)
-  const varStatus = formatCaseStatus(variantRes)
-  const kind = caseDelta(baseRes, variantRes)
+  const compareStatus = formatCaseStatus(compareRes)
+  const kind = caseDelta(baseRes, compareRes)
 
   // Collapse both-passed identical-output cases to a one-liner.
   if (
     baseStatus === 'pass' &&
-    varStatus === 'pass' &&
+    compareStatus === 'pass' &&
     baseRes?.output_data &&
-    variantRes?.output_data &&
-    JSON.stringify(baseRes.output_data) === JSON.stringify(variantRes.output_data)
+    compareRes?.output_data &&
+    JSON.stringify(baseRes.output_data) === JSON.stringify(compareRes.output_data)
   ) {
     return `### \`${caseName}\` — both passed, outputs identical\n`
   }
 
-  const header = `### \`${caseName}\` [baseline: ${baseStatus}] -> [variant: ${varStatus}] (${formatDeltaTag(kind)})`
+  const header = `### \`${caseName}\` [base: ${baseStatus}] -> [compare: ${compareStatus}] (${formatDeltaTag(kind)})`
   const input = caseDef
     ? `**Input:**\n${jsonFence(caseDef.inputs)}`
     : `**Input:** *not available*`
   const expected = caseDef?.expected_output
     ? `**Expected:**\n${jsonFence(caseDef.expected_output)}`
     : `**Expected:** *none defined*`
-  const baseScores = evaluatorScoresBlock('Baseline', baseRes)
-  const varScores = evaluatorScoresBlock('Variant', variantRes)
-  const baseOut = `**Baseline output:**\n${outputOrError(baseRes)}`
-  const varOut = `**Variant output:**\n${outputOrError(variantRes)}`
+  const baseScores = evaluatorScoresBlock('Base', baseRes)
+  const compareScores = evaluatorScoresBlock('Compare', compareRes)
+  const baseOut = `**Base output:**\n${outputOrError(baseRes)}`
+  const compareOut = `**Compare output:**\n${outputOrError(compareRes)}`
 
   const parts = [header, input, expected]
   if (baseScores) parts.push(baseScores)
   parts.push(baseOut)
-  if (varScores) parts.push(varScores)
-  parts.push(varOut)
+  if (compareScores) parts.push(compareScores)
+  parts.push(compareOut)
   return parts.join('\n\n') + '\n'
 }
 
@@ -786,7 +792,7 @@ type CaseResultLike = Pick<CaseResultItem, 'passed' | 'error_message'>
 function failingSummaryBanner(
   allNames: string[],
   baseByName: Map<string, CaseResultLike>,
-  variantByName: Map<string, CaseResultLike>,
+  compareByName: Map<string, CaseResultLike>,
 ): string {
   // caseDelta/isErrored only touch `passed` + `error_message`; cast-through is
   // safe here and avoids threading a generic through both helpers.
@@ -794,12 +800,12 @@ function failingSummaryBanner(
     r as unknown as CaseResultItem | undefined
   if (allNames.length === 0) return ''
   const regressed: string[] = []
-  const erroredInVariant: string[] = []
+  const erroredInCompare: string[] = []
   for (const name of allNames) {
     const b = asFull(baseByName.get(name))
-    const v = asFull(variantByName.get(name))
+    const v = asFull(compareByName.get(name))
     if (caseDelta(b, v) === 'regressed') regressed.push(name)
-    if (isErrored(v)) erroredInVariant.push(name)
+    if (isErrored(v)) erroredInCompare.push(name)
   }
   const parts: string[] = []
   if (regressed.length > 0) {
@@ -807,11 +813,11 @@ function failingSummaryBanner(
     const more = regressed.length > 5 ? `, +${regressed.length - 5} more` : ''
     parts.push(`${regressed.length} regressed (${shown}${more})`)
   }
-  if (erroredInVariant.length > 0) {
-    const shown = erroredInVariant.slice(0, 5).map((n) => `\`${n}\``).join(', ')
+  if (erroredInCompare.length > 0) {
+    const shown = erroredInCompare.slice(0, 5).map((n) => `\`${n}\``).join(', ')
     const more =
-      erroredInVariant.length > 5 ? `, +${erroredInVariant.length - 5} more` : ''
-    parts.push(`${erroredInVariant.length} errored (${shown}${more})`)
+      erroredInCompare.length > 5 ? `, +${erroredInCompare.length - 5} more` : ''
+    parts.push(`${erroredInCompare.length} errored (${shown}${more})`)
   }
   if (parts.length === 0) return '**All cases passed.**'
   return `**Failing cases:** ${parts.join(', ')}`
@@ -822,9 +828,9 @@ function signedInt(n: number): string {
   return n > 0 ? `+${n}` : `${n}`
 }
 
-function signedPct(base: number | null, variant: number | null): string {
-  if (base == null || variant == null) return '—'
-  const delta = (variant - base) * 100
+function signedPct(base: number | null, compare: number | null): string {
+  if (base == null || compare == null) return '—'
+  const delta = (compare - base) * 100
   if (delta === 0) return '0.0%'
   const sign = delta > 0 ? '+' : ''
   return `${sign}${delta.toFixed(1)}%`
@@ -837,41 +843,41 @@ function padCell(s: string, w: number): string {
 
 function aggregateComparisonTable(
   baseRunId: number,
-  variantRunId: number,
+  compareRunId: number,
   baseStats: ExportStats,
-  varStats: ExportStats,
+  compareStats: ExportStats,
 ): string {
-  const passRateDelta = signedPct(baseStats.pass_rate, varStats.pass_rate)
+  const passRateDelta = signedPct(baseStats.pass_rate, compareStats.pass_rate)
   const rows: Array<[string, string, string, string]> = [
     [
       'Pass rate',
       formatPct(baseStats.pass_rate),
-      formatPct(varStats.pass_rate),
+      formatPct(compareStats.pass_rate),
       passRateDelta,
     ],
     [
       'Passed',
       `${baseStats.passed}/${baseStats.total}`,
-      `${varStats.passed}/${varStats.total}`,
-      signedInt(varStats.passed - baseStats.passed),
+      `${compareStats.passed}/${compareStats.total}`,
+      signedInt(compareStats.passed - baseStats.passed),
     ],
     [
       'Failed',
       String(baseStats.failed),
-      String(varStats.failed),
-      signedInt(varStats.failed - baseStats.failed),
+      String(compareStats.failed),
+      signedInt(compareStats.failed - baseStats.failed),
     ],
     [
       'Errored',
       String(baseStats.errored),
-      String(varStats.errored),
-      signedInt(varStats.errored - baseStats.errored),
+      String(compareStats.errored),
+      signedInt(compareStats.errored - baseStats.errored),
     ],
   ]
   const headers: [string, string, string, string] = [
     'Metric',
-    `Baseline (#${baseRunId})`,
-    `Variant (#${variantRunId})`,
+    `Base (#${baseRunId})`,
+    `Compare (#${compareRunId})`,
     'Δ',
   ]
   // Compute column widths for light padding
@@ -903,25 +909,25 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
   const payload = buildPayloadJSON(args)
   const { step, prod_config, variant, runs, dataset_cases } = payload
 
-  // Order cases: regressed/errored first, then failing-on-variant, then others.
+  // Order cases: regressed/errored first, then failing-on-compare, then others.
   const caseByName = new Map(dataset_cases.map((c) => [c.name, c]))
   const baseByName = new Map(
     runs.baseline.case_results.map((r) => [r.case_name, r]),
   )
-  const variantByName = new Map(
+  const compareByName = new Map(
     runs.variant.case_results.map((r) => [r.case_name, r]),
   )
   const allNames = Array.from(
-    new Set([...baseByName.keys(), ...variantByName.keys()]),
+    new Set([...baseByName.keys(), ...compareByName.keys()]),
   )
 
   function priority(name: string): number {
     const b = baseByName.get(name) as CaseResultItem | undefined
-    const v = variantByName.get(name) as CaseResultItem | undefined
+    const v = compareByName.get(name) as CaseResultItem | undefined
     const kind = caseDelta(b, v)
     if (kind === 'regressed' || isErrored(b) || isErrored(v)) return 0
-    const varFailing = v ? v.error_message || !v.passed : false
-    if (varFailing) return 1
+    const compareFailing = v ? v.error_message || !v.passed : false
+    if (compareFailing) return 1
     if (kind === 'improved') return 2
     return 3
   }
@@ -936,7 +942,7 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
         name,
         caseByName.get(name),
         baseByName.get(name) as CaseResultItem | undefined,
-        variantByName.get(name) as CaseResultItem | undefined,
+        compareByName.get(name) as CaseResultItem | undefined,
       ),
     )
     .join('\n')
@@ -1319,11 +1325,11 @@ function CaseRow({
 
 function CompareRunsPage() {
   const { datasetId: rawDatasetId } = Route.useParams()
-  const { baseRunId, variantRunId } = Route.useSearch()
+  const { baseRunId, compareRunId } = Route.useSearch()
   const datasetId = Number(rawDatasetId)
 
   const baseRunQ = useEvalRun(datasetId, baseRunId)
-  const variantRunQ = useEvalRun(datasetId, variantRunId)
+  const variantRunQ = useEvalRun(datasetId, compareRunId)
   const datasetQ = useDataset(datasetId)
 
   const isLoading = baseRunQ.isLoading || variantRunQ.isLoading || datasetQ.isLoading
@@ -1426,7 +1432,7 @@ function CompareRunsPage() {
   const [warning, setWarning] = useState<PendingWarning | null>(null)
 
   function exportFilename(ext: string): string {
-    return `eval-context-run${baseRunId}-vs-${variantRunId}.${ext}`
+    return `eval-context-run${baseRunId}-vs-${compareRunId}.${ext}`
   }
 
   /** Gather args for payload builders; tolerates missing prod data. */
@@ -1526,12 +1532,12 @@ function CompareRunsPage() {
   }
 
   // Early param validation
-  if (baseRunId === 0 || variantRunId === 0) {
+  if (baseRunId === 0 || compareRunId === 0) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="text-center space-y-2">
           <p className="text-destructive">
-            Invalid compare URL. Both baseRunId and variantRunId search params are required.
+            Invalid compare URL. Both baseRunId and compareRunId search params are required.
           </p>
           <Button variant="outline" asChild>
             <Link to="/evals/$datasetId" params={{ datasetId: String(datasetId) }}>

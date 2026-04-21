@@ -208,7 +208,7 @@ function EvalRunDetailPage() {
     navigate({
       to: '/evals/$datasetId/compare',
       params: { datasetId: String(datasetId) },
-      search: { baseRunId: baseline.id, variantRunId: runId },
+      search: { baseRunId: baseline.id, compareRunId: runId },
     })
   }
 
