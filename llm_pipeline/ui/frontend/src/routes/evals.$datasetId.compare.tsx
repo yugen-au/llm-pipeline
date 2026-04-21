@@ -28,7 +28,6 @@ import type {
   ProdPromptsResponse,
   RunDetail,
   VariableDefinitions,
-  VariantDelta,
   VariantItem,
 } from '@/api/evals'
 import { useAutoGenerateObjects } from '@/api/prompts'
@@ -177,6 +176,49 @@ function PassFailBadge({ result }: { result: CaseResultItem | undefined }) {
   )
 }
 
+type VersionBucket = 'matched' | 'drifted' | 'unmatched'
+
+/**
+ * Determine the version-match bucket for a case across two runs.
+ * - Missing on either side: unmatched
+ * - Both runs lack case_versions (legacy): matched (shared name = same case)
+ * - Only one run lacks case_versions: matched (can't determine, assume matched)
+ * - Otherwise: compare version strings from each run's case_versions map
+ */
+function computeCaseBucket(
+  _caseName: string,
+  baseResult: CaseResultItem | undefined,
+  compareResult: CaseResultItem | undefined,
+  baseRun: RunDetail,
+  compareRun: RunDetail,
+): VersionBucket {
+  if (!baseResult || !compareResult) return 'unmatched'
+  const baseCv = baseRun.case_versions
+  const compareCv = compareRun.case_versions
+  if (baseCv === null && compareCv === null) return 'matched'
+  if (baseCv === null || compareCv === null) return 'matched'
+  const baseVersion = baseCv[String(baseResult.case_id)]
+  const compareVersion = compareCv[String(compareResult.case_id)]
+  if (baseVersion === undefined || compareVersion === undefined) return 'unmatched'
+  return baseVersion === compareVersion ? 'matched' : 'drifted'
+}
+
+function VersionBucketBadge({ bucket }: { bucket: VersionBucket }) {
+  if (bucket === 'matched') return null
+  if (bucket === 'drifted') {
+    return (
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600">
+        drifted
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-muted text-muted-foreground">
+      unmatched
+    </Badge>
+  )
+}
+
 type DeltaKind = 'improved' | 'regressed' | 'unchanged' | 'n/a'
 
 function caseDelta(
@@ -269,21 +311,8 @@ function ScoresCell({ result }: { result: CaseResultItem | undefined }) {
 }
 
 // ---------------------------------------------------------------------------
-// Effective-config diff helpers (for Delta summary card)
+// Variable-definition helpers (used by export payload builder)
 // ---------------------------------------------------------------------------
-
-/**
- * Shape of the before/after objects fed to JsonViewer's diff mode. Keys must
- * match on both sides so unchanged fields render muted and overrides render
- * as CHANGE.
- */
-interface EffectiveConfig {
-  model: string | null
-  system_prompt: string | null
-  user_prompt: string | null
-  variable_definitions: VariableDefinitions | null
-  instructions_delta: unknown[]
-}
 
 /**
  * Tolerate both map and list shapes from the backend prompt column, matching
@@ -322,50 +351,6 @@ function mergeProdVarDefs(
   )
   if (!sys && !user) return null
   return { ...(sys ?? {}), ...(user ?? {}) }
-}
-
-/** Apply variant variable_definitions override on top of prod baseline. */
-function applyVarDefsDelta(
-  prodDefs: VariableDefinitions | null,
-  variantDefs: VariableDefinitions | null | undefined,
-): VariableDefinitions | null {
-  const v = normalizeVarDefs(variantDefs)
-  if (!prodDefs && !v) return null
-  if (!prodDefs) return v
-  if (!v) return prodDefs
-  return { ...prodDefs, ...v }
-}
-
-function buildBefore(
-  prodModel: string | null,
-  prod: ProdPromptsResponse | undefined,
-): EffectiveConfig {
-  return {
-    model: prodModel,
-    system_prompt: prod?.system?.content ?? null,
-    user_prompt: prod?.user?.content ?? null,
-    variable_definitions: mergeProdVarDefs(prod),
-    instructions_delta: [],
-  }
-}
-
-function buildAfter(
-  delta: VariantDelta | null | undefined,
-  before: EffectiveConfig,
-): EffectiveConfig {
-  const d = delta ?? null
-  return {
-    model: d?.model ?? before.model,
-    system_prompt: d?.system_prompt ?? before.system_prompt,
-    user_prompt: d?.user_prompt ?? before.user_prompt,
-    variable_definitions: applyVarDefsDelta(
-      before.variable_definitions,
-      d?.variable_definitions ?? null,
-    ),
-    instructions_delta: Array.isArray(d?.instructions_delta)
-      ? (d!.instructions_delta as unknown[])
-      : [],
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1263,6 +1248,7 @@ function CaseRow({
   caseDef,
   baseResult,
   compareResult,
+  bucket,
   isExpanded,
   onToggle,
 }: {
@@ -1270,6 +1256,7 @@ function CaseRow({
   caseDef: CaseItem | undefined
   baseResult: CaseResultItem | undefined
   compareResult: CaseResultItem | undefined
+  bucket: VersionBucket | undefined
   isExpanded: boolean
   onToggle: () => void
 }) {
@@ -1287,7 +1274,12 @@ function CaseRow({
             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
           )}
         </TableCell>
-        <TableCell className="font-medium text-sm">{name}</TableCell>
+        <TableCell className="font-medium text-sm">
+          <span className="inline-flex items-center gap-1.5">
+            {name}
+            {bucket && <VersionBucketBadge bucket={bucket} />}
+          </span>
+        </TableCell>
         <TableCell>
           <PassFailBadge result={baseResult} />
         </TableCell>
@@ -1343,15 +1335,10 @@ function CompareRunsPage() {
   const variantIdForLookup = compareRun?.variant_id ?? 0
   const variantQ = useVariant(datasetId, variantIdForLookup)
 
-  // Prod-config fetches feed the Delta summary diff view. Non-blocking:
-  // the main page and per-case table render regardless of these results;
-  // the Delta card falls back to the raw delta_snapshot render if either
-  // fetch errors.
+  // Prod-config + export-context fetches. Non-blocking: export proceeds
+  // with nulls if these error/are still loading.
   const prodPromptsQ = useDatasetProdPrompts(datasetId)
   const prodModelQ = useDatasetProdModel(datasetId)
-
-  // Export-context fetches. Non-blocking: export proceeds with nulls if
-  // these error/are still loading.
   const inputSchemaQ = useInputSchema(
     datasetQ.data?.target_type ?? '',
     datasetQ.data?.target_name ?? '',
@@ -1368,7 +1355,15 @@ function CompareRunsPage() {
 
   // Build per-case run-result maps + union of all case names. Memoed so the
   // auto-expand initializer downstream is stable.
-  const { baseByName, compareByName, allCaseNames } = useMemo(() => {
+  const {
+    baseByName,
+    compareByName,
+    allCaseNames,
+    bucketByName,
+    matchedCount,
+    driftedCount,
+    unmatchedCount,
+  } = useMemo(() => {
     const baseMap = new Map<string, CaseResultItem>()
     const cmpMap = new Map<string, CaseResultItem>()
     for (const r of baseRun?.case_results ?? []) baseMap.set(r.case_name, r)
@@ -1376,7 +1371,36 @@ function CompareRunsPage() {
     const names = Array.from(
       new Set([...baseMap.keys(), ...cmpMap.keys()]),
     ).sort()
-    return { baseByName: baseMap, compareByName: cmpMap, allCaseNames: names }
+
+    const buckets = new Map<string, VersionBucket>()
+    let matched = 0
+    let drifted = 0
+    let unmatched = 0
+    if (baseRun && compareRun) {
+      for (const name of names) {
+        const bucket = computeCaseBucket(
+          name,
+          baseMap.get(name),
+          cmpMap.get(name),
+          baseRun,
+          compareRun,
+        )
+        buckets.set(name, bucket)
+        if (bucket === 'matched') matched++
+        else if (bucket === 'drifted') drifted++
+        else unmatched++
+      }
+    }
+
+    return {
+      baseByName: baseMap,
+      compareByName: cmpMap,
+      allCaseNames: names,
+      bucketByName: buckets,
+      matchedCount: matched,
+      driftedCount: drifted,
+      unmatchedCount: unmatched,
+    }
   }, [baseRun, compareRun])
 
   // Seed expanded set with regressed + errored cases. useState initializer
@@ -1400,6 +1424,13 @@ function CompareRunsPage() {
   // keep their state (no resets on re-render).
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [seededFor, setSeededFor] = useState<string>('')
+  const [matchedOnly, setMatchedOnly] = useState(false)
+
+  // When matchedOnly is active, filter to only matched-bucket cases for stats
+  const filteredCaseNames = useMemo(() => {
+    if (!matchedOnly) return allCaseNames
+    return allCaseNames.filter((n) => bucketByName.get(n) === 'matched')
+  }, [allCaseNames, bucketByName, matchedOnly])
 
   // Once run data has loaded, seed expanded set exactly once per (baseRun,
   // compareRun) pair. Key on run ids so reloading a different compare URL
@@ -1576,32 +1607,76 @@ function CompareRunsPage() {
     )
   }
 
-  const basePassRate = passRate(baseRun)
-  const comparePassRate = passRate(compareRun)
+  // Compute filtered aggregate stats when matchedOnly is active
+  const { basePassRate, comparePassRate, filteredBaseStats, filteredCompareStats } =
+    useMemo(() => {
+      if (!matchedOnly) {
+        return {
+          basePassRate: passRate(baseRun),
+          comparePassRate: passRate(compareRun),
+          filteredBaseStats: null,
+          filteredCompareStats: null,
+        }
+      }
+      let bPassed = 0, bFailed = 0, bErrored = 0
+      let cPassed = 0, cFailed = 0, cErrored = 0
+      for (const name of filteredCaseNames) {
+        const br = baseByName.get(name)
+        const cr = compareByName.get(name)
+        if (br) {
+          if (br.error_message) bErrored++
+          else if (br.passed) bPassed++
+          else bFailed++
+        }
+        if (cr) {
+          if (cr.error_message) cErrored++
+          else if (cr.passed) cPassed++
+          else cFailed++
+        }
+      }
+      const bTotal = bPassed + bFailed + bErrored
+      const cTotal = cPassed + cFailed + cErrored
+      return {
+        basePassRate: bTotal > 0 ? bPassed / bTotal : null,
+        comparePassRate: cTotal > 0 ? cPassed / cTotal : null,
+        filteredBaseStats: { passed: bPassed, failed: bFailed, errored: bErrored, total: bTotal },
+        filteredCompareStats: { passed: cPassed, failed: cFailed, errored: cErrored, total: cTotal },
+      }
+    }, [matchedOnly, filteredCaseNames, baseByName, compareByName, baseRun, compareRun])
 
-  const deltaSnapshot = compareRun.delta_snapshot
+  const showScopeToggle = driftedCount + unmatchedCount > 0
+
+  const statBasePassed = filteredBaseStats?.passed ?? baseRun.passed
+  const statBaseFailed = filteredBaseStats?.failed ?? baseRun.failed
+  const statBaseErrored = filteredBaseStats?.errored ?? baseRun.errored
+  const statComparePassed = filteredCompareStats?.passed ?? compareRun.passed
+  const statCompareFailed = filteredCompareStats?.failed ?? compareRun.failed
+  const statCompareErrored = filteredCompareStats?.errored ?? compareRun.errored
+
   const allExpanded =
     allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
-  // Delta summary diff state. Prefer rendering the diff when at least one
-  // prod fetch settled (success or error) — a single failed prod fetch still
-  // yields an informative diff with nulls on the missing side. Only fall
-  // back to the raw snapshot when BOTH prod fetches errored.
-  const prodPromptsSettled =
-    !prodPromptsQ.isLoading && (prodPromptsQ.data !== undefined || prodPromptsQ.isError)
-  const prodModelSettled =
-    !prodModelQ.isLoading && (prodModelQ.data !== undefined || prodModelQ.isError)
-  const summaryLoading = !prodPromptsSettled || !prodModelSettled
-  const bothProdErrored = prodPromptsQ.isError && prodModelQ.isError
-  const summaryReady =
-    !summaryLoading && !bothProdErrored && deltaSnapshot != null
-
-  const summaryBefore: EffectiveConfig | null = summaryReady
-    ? buildBefore(prodModelQ.data?.model ?? null, prodPromptsQ.data)
-    : null
-  const summaryAfter: EffectiveConfig | null = summaryReady && summaryBefore
-    ? buildAfter(deltaSnapshot as unknown as VariantDelta | null, summaryBefore)
-    : null
+  // Delta summary: snapshot-based diff from both runs' prompt_versions +
+  // model_snapshot. Works for any two runs regardless of variant.
+  const baseConfig = useMemo(
+    () => ({
+      prompt_versions: baseRun.prompt_versions ?? null,
+      model_snapshot: baseRun.model_snapshot ?? null,
+    }),
+    [baseRun],
+  )
+  const compareConfig = useMemo(
+    () => ({
+      prompt_versions: compareRun.prompt_versions ?? null,
+      model_snapshot: compareRun.model_snapshot ?? null,
+    }),
+    [compareRun],
+  )
+  const hasSnapshotData =
+    baseConfig.prompt_versions != null ||
+    baseConfig.model_snapshot != null ||
+    compareConfig.prompt_versions != null ||
+    compareConfig.model_snapshot != null
 
   return (
     <ScrollArea className="h-full">
@@ -1737,57 +1812,73 @@ function CompareRunsPage() {
           </Card>
         </div>
 
-        {/* Delta summary */}
+        {/* Delta summary — snapshot diff between the two runs */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Delta summary</CardTitle>
+            <CardTitle className="text-base">Configuration diff</CardTitle>
           </CardHeader>
           <CardContent>
-            {deltaSnapshot == null ? (
-              <p className="text-xs text-muted-foreground">
-                No delta_snapshot recorded for this compare run.
-              </p>
-            ) : summaryReady && summaryBefore && summaryAfter ? (
+            {hasSnapshotData ? (
               <div className="rounded border bg-background p-2 max-h-[400px] overflow-auto">
                 <JsonViewer
-                  before={summaryBefore as unknown as Record<string, unknown>}
-                  after={summaryAfter as unknown as Record<string, unknown>}
+                  before={baseConfig as unknown as Record<string, unknown>}
+                  after={compareConfig as unknown as Record<string, unknown>}
                   maxDepth={3}
                 />
               </div>
-            ) : summaryLoading ? (
-              <p className="text-xs text-muted-foreground">Loading diff...</p>
             ) : (
-              // Both prod fetches errored — fall back to raw snapshot view.
-              <div className="rounded border bg-background p-2">
-                <JsonViewer
-                  data={deltaSnapshot as Record<string, unknown>}
-                  maxDepth={3}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground">
+                No snapshot data recorded for either run.
+              </p>
             )}
           </CardContent>
         </Card>
 
         {/* Stats comparison */}
+        {showScopeToggle && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Aggregate scope:</span>
+            <div className="inline-flex rounded-md border">
+              <Button
+                variant={matchedOnly ? 'ghost' : 'secondary'}
+                size="sm"
+                className="h-7 text-xs rounded-r-none border-0"
+                onClick={() => setMatchedOnly(false)}
+              >
+                All cases
+              </Button>
+              <Button
+                variant={matchedOnly ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 text-xs rounded-l-none border-0"
+                onClick={() => setMatchedOnly(true)}
+              >
+                Matched only
+              </Button>
+            </div>
+            <span className="text-[10px] text-muted-foreground">
+              {matchedCount} matched, {driftedCount} drifted, {unmatchedCount} unmatched
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <ComparisonStatCard
             label="Passed"
-            baseValue={baseRun.passed}
-            compareValue={compareRun.passed}
+            baseValue={statBasePassed}
+            compareValue={statComparePassed}
             color="text-green-600"
           />
           <ComparisonStatCard
             label="Failed"
-            baseValue={baseRun.failed}
-            compareValue={compareRun.failed}
+            baseValue={statBaseFailed}
+            compareValue={statCompareFailed}
             color="text-red-600"
             invertColor
           />
           <ComparisonStatCard
             label="Errored"
-            baseValue={baseRun.errored}
-            compareValue={compareRun.errored}
+            baseValue={statBaseErrored}
+            compareValue={statCompareErrored}
             color="text-yellow-600"
             invertColor
           />
@@ -1853,6 +1944,7 @@ function CompareRunsPage() {
                       caseDef={caseByName.get(name)}
                       baseResult={baseByName.get(name)}
                       compareResult={compareByName.get(name)}
+                      bucket={bucketByName.get(name)}
                       isExpanded={expanded.has(name)}
                       onToggle={() => toggleCase(name)}
                     />
