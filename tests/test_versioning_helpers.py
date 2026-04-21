@@ -291,3 +291,51 @@ class TestGetLatest:
         # Inactive excluded
         result2 = get_latest(session, Prompt, prompt_key="gl2", prompt_type="system")
         assert result2 is None
+
+
+class TestSandboxSeedFilters:
+    """Test #11: sandbox seed only copies active+latest prompts."""
+
+    def test_sandbox_seed_filters_is_latest_is_active(self):
+        """Seed DB with 3 versions of same prompt; sandbox gets only live+latest."""
+        from llm_pipeline.sandbox import create_sandbox_engine
+
+        prod_engine = create_engine("sqlite:///:memory:", echo=False)
+        SQLModel.metadata.create_all(prod_engine)
+
+        now = datetime.now(timezone.utc)
+
+        with Session(prod_engine) as sess:
+            # Row 1: active + latest (should be copied)
+            sess.add(Prompt(
+                prompt_key="sand", prompt_type="system",
+                prompt_name="Sand", content="latest",
+                version="1.2", is_active=True, is_latest=True,
+                created_at=now, updated_at=now,
+            ))
+            # Row 2: active + non-latest (historical, should NOT be copied)
+            sess.add(Prompt(
+                prompt_key="sand", prompt_type="system",
+                prompt_name="Sand", content="old",
+                version="1.1", is_active=True, is_latest=False,
+                created_at=now, updated_at=now,
+            ))
+            # Row 3: inactive + latest (soft-deleted, should NOT be copied)
+            sess.add(Prompt(
+                prompt_key="sand2", prompt_type="system",
+                prompt_name="Sand2", content="deleted",
+                version="1.0", is_active=False, is_latest=True,
+                created_at=now, updated_at=now,
+            ))
+            sess.commit()
+
+        sandbox_engine = create_sandbox_engine(prod_engine)
+
+        with Session(sandbox_engine) as sess:
+            rows = sess.exec(select(Prompt)).all()
+            assert len(rows) == 1
+            assert rows[0].prompt_key == "sand"
+            assert rows[0].version == "1.2"
+            assert rows[0].content == "latest"
+            assert rows[0].is_latest is True
+            assert rows[0].is_active is True

@@ -700,6 +700,7 @@ def create_dataset(
 def update_dataset(
     dataset_id: int,
     body: DatasetUpdateRequest,
+    request: Request,
     db: WritableDBSession,
 ) -> DatasetDetail:
     """Update dataset name and/or description."""
@@ -736,6 +737,9 @@ def update_dataset(
         )
         .order_by(EvaluationCase.id)
     ).all()
+
+    # DB -> YAML writeback
+    _trigger_evals_writeback(request, dataset_id)
 
     return DatasetDetail(
         id=ds.id,

@@ -198,6 +198,7 @@ def write_dataset_to_yaml(engine: "Engine", dataset_id: int, target_dir: Path) -
     for c in cases:
         entry: dict[str, Any] = {
             "name": c.name,
+            "version": c.version,
             "inputs": c.inputs,
         }
         if c.expected_output is not None:
