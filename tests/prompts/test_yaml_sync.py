@@ -8,8 +8,8 @@ from sqlmodel import Session, create_engine, select
 
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.utils.versioning import compare_versions
 from llm_pipeline.prompts.yaml_sync import (
-    compare_versions,
     parse_prompt_yaml,
     discover_yaml_prompts,
     sync_yaml_to_db,

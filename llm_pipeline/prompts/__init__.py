@@ -16,8 +16,8 @@ from llm_pipeline.prompts.variables import (
     set_auto_generate_base_path,
     clear_auto_generate_registry,
 )
+from llm_pipeline.utils.versioning import compare_versions
 from llm_pipeline.prompts.yaml_sync import (
-    compare_versions,
     parse_prompt_yaml,
     discover_yaml_prompts,
     sync_yaml_to_db,
