@@ -974,15 +974,15 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     : '## Current variant\n*none — comparing two raw runs*'
 
   const baseStats = runs.baseline.stats
-  const varStats = runs.variant.stats
+  const compareStats = runs.variant.stats
   const aggregateTable = aggregateComparisonTable(
     runs.baseline.id,
     runs.variant.id,
     baseStats,
-    varStats,
+    compareStats,
   )
 
-  const banner = failingSummaryBanner(sortedNames, baseByName, variantByName)
+  const banner = failingSummaryBanner(sortedNames, baseByName, compareByName)
   const perCaseSection = banner
     ? `## Per-case details\n\n${banner}\n\n${perCase}`
     : `## Per-case details\n\n${perCase}`
