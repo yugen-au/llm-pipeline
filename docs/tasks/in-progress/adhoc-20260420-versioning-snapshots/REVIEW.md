@@ -84,3 +84,59 @@ None
 ## Recommendation
 **Decision:** APPROVE
 Implementation is architecturally sound with consistent patterns across all 20+ call sites. The single medium issue (case rename) is an edge case that surfaces as a 500 rather than silent data corruption — acceptable for current iteration. All core review concerns from the task description are satisfied: is_latest filtering complete, flush-before-insert correct, partial unique indexes properly specified, soft-delete semantics consistent, snapshot pre-pass handles both target types.
+
+---
+
+# Architecture Review (Follow-up)
+
+## Overall Assessment
+**Status:** complete
+
+Both medium issues from the initial review have been fixed correctly. The case rename now returns a clean 409 Conflict on name collision, and the sandbox variant prompt queries include `is_active == True` for defense-in-depth consistency. No regressions detected.
+
+## Fix Verification
+
+### Issue 1: Case rename bypasses partial unique index validation
+**Commit:** 61063bbc
+**Fix:** Added `get_latest(db, EvaluationCase, dataset_id=dataset_id, name=body.name)` check before mutating `case.name`. Returns 409 with descriptive message on conflict.
+**Verdict:** Correct. `get_latest` already applies `is_active == True` and `is_latest == True` internally, so this catches active name collisions. If the check fails and raises HTTPException, the `WritableDBSession` context manager rolls back the already-flushed `save_new_version` row. No orphan risk.
+
+### Issue 2: Sandbox variant prompt queries omit `is_active` filter
+**Commit:** 89eab9da
+**Fix:** Added `Prompt.is_active == True` filter to both system and user prompt queries in `_apply_variant_to_sandbox` (runner.py L839, L869).
+**Verdict:** Correct. Consistent with all other prompt query sites. `# noqa: E712` comment preserved for linter compliance.
+
+## Issues Found
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+None
+
+## Review Checklist
+[x] Architecture patterns followed
+[x] Code quality and maintainability
+[x] Error handling present
+[x] No hardcoded values
+[x] Project conventions followed
+[x] Security considerations
+[x] Properly scoped (DRY, YAGNI, no over-engineering)
+
+## Files Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/evals.py | pass | 409 conflict guard before rename, correct use of get_latest |
+| llm_pipeline/evals/runner.py | pass | is_active filter added to both prompt queries in _apply_variant_to_sandbox |
+
+## New Issues Introduced
+- None detected
+
+## Recommendation
+**Decision:** APPROVE
+Both fixes are minimal, correct, and consistent with project patterns. No new issues introduced. Implementation is ready to proceed.
