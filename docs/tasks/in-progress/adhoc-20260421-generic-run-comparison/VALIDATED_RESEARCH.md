@@ -2,7 +2,18 @@
 
 ## Executive Summary
 
-Both research documents (frontend UI + backend logic) are accurate against the current codebase. All major claims verified by reading source. Key confirmed gaps: CaseResultItem missing `case_id`, frontend TS types stale (missing 4 snapshot fields), compare button variant-gated. Two additional gaps discovered: run status filtering for picker, legacy-run version matching semantics, and aggregate toggle UX. Nine questions consolidated for CEO.
+Both research documents (frontend UI + backend logic) are accurate against the current codebase. All major claims verified by reading source. Key confirmed gaps: CaseResultItem missing `case_id`, frontend TS types stale (missing 4 snapshot fields), compare button variant-gated. Two additional gaps discovered: run status filtering for picker, legacy-run version matching semantics, and aggregate toggle UX. Nine questions consolidated for CEO and all answered -- decisions locked below.
+
+**Locked Decisions:**
+- URL params: `baseRunId`/`compareRunId` (accept `variantRunId` as fallback alias for `compareRunId`)
+- Labels: "Base" / "Compare" throughout UI
+- Delta summary: snapshot diff always (prompt_versions + model_snapshot), not variant-gated
+- Export META_PROMPT: neutral comparison prompt ("analyze differences between these two runs")
+- Run picker: completed runs only
+- Cross-dataset: deferred (same dataset only for now)
+- Architecture: client-side matching, no new backend endpoint
+- Legacy runs: assume matched when both case_versions null (shared case_names = matched)
+- Aggregate scope toggle: only visible when drifted/unmatched > 0
 
 ## Domain Findings
 
@@ -42,7 +53,15 @@ Both research documents (frontend UI + backend logic) are accurate against the c
 ## Q&A History
 | Question | Answer | Impact |
 | --- | --- | --- |
-| (pending CEO input) | | |
+| Q1: Rename URL params to leftRunId/rightRunId? | Keep `baseRunId`/`compareRunId`. Accept `variantRunId` as fallback alias for `compareRunId`. | Smaller rename scope than left/right. Semantic naming ("base" = reference, "compare" = target). Backward compat via alias. |
+| Q2: What labels replace Baseline/Variant? | "Base" / "Compare" | ~194 string replacements in compare.tsx. Labels capture semantic relationship clearly. |
+| Q3: Delta summary card for non-variant comparisons? | Snapshot diff always -- use `prompt_versions` + `model_snapshot` to show config diffs between ANY two runs. | Remove variant-gating on delta card. Generalizes to all comparison types. |
+| Q4: Export META_PROMPT for non-variant comparisons? | Neutral prompt: "analyze differences between these two runs". | Rewrite existing variant-specific META_PROMPT. Single code path, no branching. |
+| Q5: Run picker -- completed only or also failed/partial? | Completed runs only. | Simpler picker, no partial-result confusion. Filter by run status in picker query. |
+| Q6: Cross-dataset comparison? | Defer. Same dataset only for now. | Add dataset guard to picker/URL validation. Significant scope reduction. |
+| Q7: Client-side matching vs backend endpoint? | Client-side. Frontend computes matched/drifted/unmatched from two RunDetail responses. No new backend endpoint. | No backend work beyond CaseResultItem fix. All matching logic in frontend. |
+| Q8: Legacy runs (both case_versions=null) -- matched or unknown bucket? | Assume matched. Shared case_names treated as matched when both null. | No "unknown" fourth bucket needed. Preserves current behavior for old data. Simplifies UI. |
+| Q9: Aggregate scope toggle -- always visible or conditional? | Only show when drifted/unmatched > 0. | Reduces UI noise. Toggle hidden when all cases match. |
 
 ## Assumptions Validated
 - [x] CaseResultItem backend Pydantic model lacks case_id (confirmed routes/evals.py line 101-107)
@@ -55,22 +74,18 @@ Both research documents (frontend UI + backend logic) are accurate against the c
 - [x] All comparison logic is client-side (confirmed - two RunDetail fetches, client joins)
 
 ## Open Items
-- Q1: Rename `baseRunId`/`variantRunId` to `leftRunId`/`rightRunId`? If yes, accept old params as fallback for bookmarked URLs?
-- Q2: What labels replace "Baseline"/"Variant"? Options: (a) "Run A"/"Run B", (b) "Left"/"Right", (c) "Older"/"Newer" by started_at, (d) configurable
-- Q3: Delta summary card for non-variant comparisons: (a) show model_snapshot + prompt_versions diff, (b) hide entirely, (c) simplified "config diff"?
-- Q4: Export META_PROMPT for non-variant comparisons: (a) neutral comparison prompt, (b) skip meta-prompt, (c) detect and branch?
-- Q5: Run picker - show only completed runs or also failed/partial results?
-- Q6: Cross-dataset comparison - defer? Both research docs recommend deferring.
-- Q7: Client-side matching (Option A) vs backend endpoint? Both docs recommend client-side for v1. Backend endpoint only if perf becomes issue.
-- Q8: Legacy runs (case_versions=null) - when BOTH runs lack case_versions, treat shared-name cases as "matched" (preserving current behavior) or show separate "unknown" bucket? Affects aggregate scoping.
-- Q9: Aggregate scope toggle - always visible or only when drifted/unmatched cases > 0? When all cases match, the toggle is noise.
+- Cross-dataset comparison deferred to future iteration (CEO decision Q6). Will need dataset guard in picker/URL validation when implemented.
+- All 9 CEO questions resolved -- no remaining ambiguities for planning phase.
 
 ## Recommendations for Planning
 1. **Fix CaseResultItem first** - add `case_id: int` to both backend Pydantic model and frontend TS type. Prerequisite for all version matching work.
 2. **Sync frontend TS types** - add 4 missing snapshot fields to RunListItem. Independent of comparison work, reduces tech debt.
-3. **Consider case_name_versions redundant dict** (backend Option C) as insurance - simpler client derivation, negligible storage cost. Not blocking but reduces frontend complexity.
-4. **Defer cross-dataset** - both docs agree, significant scope expansion for marginal v1 value.
-5. **Client-side matching (Option A)** for v1 - no new endpoints, minimal backend changes, frontend already handles case joining.
-6. **URL param rename** - if renaming, implement accept-both strategy (check leftRunId first, fall back to baseRunId) to avoid breaking bookmarks.
-7. **Run picker should filter to completed runs by default** with option to include failed - partial results comparison is confusing without clear UX.
-8. **Aggregate toggle conditional** - only show when there are actually drifted or unmatched cases to avoid UI noise.
+3. **Rename URL params** - `baseRunId`/`compareRunId` with `variantRunId` accepted as fallback alias. Zod schema update + accept-both strategy.
+4. **Rename labels** - "Base"/"Compare" replacing all ~194 "Baseline"/"Variant" occurrences in compare.tsx and related components.
+5. **Generalize delta summary card** - remove variant-gating, use `prompt_versions` + `model_snapshot` snapshot diff for all run pairs.
+6. **Rewrite META_PROMPT** - neutral comparison prompt ("analyze differences between these two runs"), not variant-specific.
+7. **Client-side matching** - frontend computes matched/drifted/unmatched from two RunDetail responses. No new backend endpoint.
+8. **Run picker: completed only** - filter picker to completed runs. No failed/partial.
+9. **Legacy run handling** - when both `case_versions` null, treat shared `case_name` as matched. No "unknown" bucket.
+10. **Aggregate toggle conditional** - only render when drifted/unmatched > 0.
+11. **Defer cross-dataset** - same-dataset constraint for v1. Guard in picker/validation.
