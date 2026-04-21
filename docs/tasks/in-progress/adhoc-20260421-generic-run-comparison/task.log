@@ -47,3 +47,11 @@
 [2026-04-21 17:49:29] [INFO] Auto-updated agent statuses: Add case_id to CaseResultItem: pending -> in-progress, Sync frontend TS types: pending -> in-progress
 [2026-04-21 17:49:29] [INFO] Deleted 1 old contract file(s)
 [2026-04-21 17:49:29] [DEBUG] STATE.md atomic write complete
+[2026-04-21 17:49:50] [INFO] Task call: backend-development:backend-architect (phase: implementation)
+[2026-04-21 17:49:58] [INFO] Task call: frontend-mobile-development:frontend-developer (phase: implementation)
+[2026-04-21 17:50:59] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 17:51:06] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 17:51:54] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-21 17:51:56] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 17:52:05] [ERROR] BLOCKED: Cannot create a new task while on an existing task directory
+[2026-04-21 17:52:24] [DEBUG] STATE.md atomic write complete
