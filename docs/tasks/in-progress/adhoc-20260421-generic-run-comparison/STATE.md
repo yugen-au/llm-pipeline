@@ -21,3 +21,11 @@
 | Backend comparison logic research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a36edd5e701e73d61 | 2c9b329b | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a20d56ad5a3832e24 | a4bde376 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a60feb2cf2494a2ea | pending | - |
+| Add case_id to CaseResultItem | backend-development:backend-architect | implementation | 1 | - | A | pending | 0 | - | pending | - |
+| Sync frontend TS types | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | pending | 0 | - | pending | - |
+| Zod schema compareRunId + alias | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | - | pending | /colinhacks/zod |
+| Rename labels Base/Compare | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | pending | 0 | - | pending | - |
+| Universal compare button + picker | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | pending | 0 | - | pending | - |
+| Case version matching logic | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | pending | 0 | - | pending | - |
+| Delta summary snapshot diff | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | - | pending | - |
+| Export neutral meta-prompt | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | pending | 0 | - | pending | - |
