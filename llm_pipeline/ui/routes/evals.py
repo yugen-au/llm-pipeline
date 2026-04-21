@@ -9,7 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import select
 
-from llm_pipeline.db.versioning import save_new_version, soft_delete_latest
+from llm_pipeline.db.versioning import get_latest, save_new_version, soft_delete_latest
 from llm_pipeline.evals import apply_instruction_delta, get_type_whitelist
 from llm_pipeline.evals.models import (
     EvaluationCase,
@@ -888,11 +888,14 @@ def update_case(
             "metadata_": old_case.metadata_,
         },
     )
-    # If name changed, the new version has the old name in key_filters;
-    # update name on the new row directly (name is part of the key, so
-    # a rename means this is effectively a new logical case). For simplicity
-    # we keep the same key and just carry the name forward.
+    # If name changed, check for conflicts before renaming.
     if body.name is not None and body.name != old_case.name:
+        existing = get_latest(db, EvaluationCase, dataset_id=dataset_id, name=body.name)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A case named '{body.name}' already exists in this dataset.",
+            )
         case.name = body.name
         db.add(case)
         db.flush()

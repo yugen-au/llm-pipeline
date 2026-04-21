@@ -51,3 +51,38 @@ Test #18: test_delete_case_triggers_yaml_writeback
 [x] tests/ui/test_evals_routes.py: 47 passed
 [x] tests/test_versioning_helpers.py + tests/prompts/test_yaml_sync.py: all passed
 [x] grep audit: no missed select(EvaluationCase) sites (cascade delete intentionally unfiltered)
+
+## Review Fix Iteration 0
+**Issues Source:** [REVIEW.md]
+**Status:** fixed
+
+### Issues Addressed
+[x] Case rename via direct mutation bypasses partial unique index validation
+
+### Changes Made
+#### File: `llm_pipeline/ui/routes/evals.py`
+Added get_latest import and 409 Conflict guard before case rename to prevent IntegrityError.
+
+```
+# Before
+    if body.name is not None and body.name != old_case.name:
+        case.name = body.name
+        db.add(case)
+        db.flush()
+
+# After
+    if body.name is not None and body.name != old_case.name:
+        existing = get_latest(db, EvaluationCase, dataset_id=dataset_id, name=body.name)
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"A case named '{body.name}' already exists in this dataset.",
+            )
+        case.name = body.name
+        db.add(case)
+        db.flush()
+```
+
+### Verification
+[x] get_latest checks is_active+is_latest, matching partial unique index semantics
+[x] 409 returned with clear message before DB flush
