@@ -97,12 +97,28 @@ class EvalRunner:
 
             cases = session.exec(
                 select(EvaluationCase)
-                .where(EvaluationCase.dataset_id == dataset_id)
+                .where(
+                    EvaluationCase.dataset_id == dataset_id,
+                    EvaluationCase.is_active == True,  # noqa: E712
+                    EvaluationCase.is_latest == True,  # noqa: E712
+                )
                 .order_by(EvaluationCase.id)
             ).all()
 
             if not cases:
                 raise ValueError(f"Dataset '{dataset.name}' has no cases")
+
+            # Build run snapshots before creating the run row
+            case_versions, prompt_versions, model_snapshot, instr_schema_snapshot = (
+                _build_run_snapshot(
+                    runner=self,
+                    session=session,
+                    dataset=dataset,
+                    cases=cases,
+                    variant_delta=variant_delta,
+                    model_kwarg=model,
+                )
+            )
 
             # Create run row
             run = EvaluationRun(
@@ -111,6 +127,10 @@ class EvalRunner:
                 total_cases=len(cases),
                 variant_id=variant_id,
                 delta_snapshot=variant_snapshot,
+                case_versions=case_versions,
+                prompt_versions=prompt_versions,
+                model_snapshot=model_snapshot,
+                instructions_schema_snapshot=instr_schema_snapshot,
             )
             session.add(run)
             session.commit()
@@ -585,6 +605,195 @@ class EvalRunner:
 
 
 # ---------------------------------------------------------------------------
+# Internal helper: build run snapshots
+# ---------------------------------------------------------------------------
+
+
+def _build_run_snapshot(
+    runner: EvalRunner,
+    session: Session,
+    dataset: Any,
+    cases: list,
+    variant_delta: dict | None,
+    model_kwarg: str | None,
+) -> tuple[dict, dict, dict, dict]:
+    """Return (case_versions, prompt_versions, model_snapshot,
+    instructions_schema_snapshot) for a run about to be created.
+
+    Walks step_def(s) based on dataset.target_type. Resolves models and
+    instructions classes eagerly so snapshots are deterministic and committed
+    atomically with the EvaluationRun row.
+    """
+    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.model.resolver import resolve_model_with_fallbacks
+    from llm_pipeline.prompts.resolver import resolve_from_step_def
+
+    # case_versions is the same regardless of target_type
+    case_versions = {str(c.id): c.version for c in cases}
+
+    if dataset.target_type == "step":
+        return _build_step_target_snapshot(
+            runner, session, dataset, cases, case_versions,
+            variant_delta, model_kwarg,
+        )
+    elif dataset.target_type == "pipeline":
+        return _build_pipeline_target_snapshot(
+            runner, session, dataset, cases, case_versions, model_kwarg,
+        )
+    else:
+        # Unknown target_type — return empty snapshots
+        return case_versions, {}, {}, {}
+
+
+def _build_step_target_snapshot(
+    runner: EvalRunner,
+    session: Session,
+    dataset: Any,
+    cases: list,
+    case_versions: dict,
+    variant_delta: dict | None,
+    model_kwarg: str | None,
+) -> tuple[dict, dict, dict, dict]:
+    """Build snapshot dicts for a step-target dataset."""
+    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.evals.delta import apply_instruction_delta
+    from llm_pipeline.model.resolver import resolve_model_with_fallbacks
+    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
+
+    step_def, _input_data_cls, default_model, pipeline_name = (
+        runner._find_step_def(dataset.target_name)
+    )
+
+    prompt_versions: dict = {}
+    model_snapshot: dict = {}
+    instr_schema: dict = {}
+
+    if step_def is None:
+        return case_versions, prompt_versions, model_snapshot, instr_schema
+
+    # Resolve prompt keys via auto-discovery (same as _resolve_step_task)
+    system_key, user_key = resolve_with_auto_discovery(step_def, session, None)
+
+    # Collect prompt versions from DB
+    for key in (system_key, user_key):
+        if key is None:
+            continue
+        rows = session.exec(
+            select(Prompt).where(
+                Prompt.prompt_key == key,
+                Prompt.is_active == True,  # noqa: E712
+                Prompt.is_latest == True,  # noqa: E712
+            )
+        ).all()
+        for row in rows:
+            prompt_versions.setdefault(row.prompt_key, {})[row.prompt_type] = row.version
+
+    # Resolve model
+    base_model, _source = resolve_model_with_fallbacks(
+        step_def, session, pipeline_name or "", default_model,
+    )
+    # Variant model override and explicit model kwarg layer on top
+    variant_model = None
+    if variant_delta:
+        vm = variant_delta.get("model")
+        if isinstance(vm, str) and vm.strip():
+            variant_model = vm
+    resolved_model = variant_model or model_kwarg or base_model
+    if resolved_model:
+        model_snapshot = {dataset.target_name: resolved_model}
+
+    # Instructions schema
+    instructions_cls = step_def.instructions
+    if variant_delta:
+        instructions_delta = variant_delta.get("instructions_delta")
+        if instructions_delta and instructions_cls is not None:
+            instructions_cls = apply_instruction_delta(
+                instructions_cls, instructions_delta
+            )
+    if instructions_cls is not None and hasattr(instructions_cls, "model_json_schema"):
+        instr_schema = instructions_cls.model_json_schema()
+
+    return case_versions, prompt_versions, model_snapshot, instr_schema
+
+
+def _build_pipeline_target_snapshot(
+    runner: EvalRunner,
+    session: Session,
+    dataset: Any,
+    cases: list,
+    case_versions: dict,
+    model_kwarg: str | None,
+) -> tuple[dict, dict, dict, dict]:
+    """Build snapshot dicts for a pipeline-target dataset."""
+    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.model.resolver import resolve_model_with_fallbacks
+    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
+
+    pipeline_name = dataset.target_name
+    pipeline_cls = runner.introspection_registry.get(pipeline_name)
+
+    prompt_versions: dict = {}
+    model_snapshot: dict = {}
+    instr_schema: dict = {}
+
+    if pipeline_cls is None:
+        return case_versions, prompt_versions, model_snapshot, instr_schema
+
+    default_model = getattr(pipeline_cls, "_default_model", None)
+
+    # Walk all steps across all strategies
+    try:
+        strategies_cls = pipeline_cls.STRATEGIES
+        if strategies_cls is None:
+            return case_versions, prompt_versions, model_snapshot, instr_schema
+
+        for strategy_cls in strategies_cls.STRATEGIES:
+            strategy = strategy_cls()
+            for sd in strategy.get_steps():
+                step_name = sd.step_name
+
+                # Prompt versions for this step
+                system_key, user_key = resolve_with_auto_discovery(
+                    sd, session, None
+                )
+                step_prompts: dict = {}
+                for key in (system_key, user_key):
+                    if key is None:
+                        continue
+                    rows = session.exec(
+                        select(Prompt).where(
+                            Prompt.prompt_key == key,
+                            Prompt.is_active == True,  # noqa: E712
+                            Prompt.is_latest == True,  # noqa: E712
+                        )
+                    ).all()
+                    for row in rows:
+                        step_prompts.setdefault(row.prompt_key, {})[row.prompt_type] = row.version
+                if step_prompts:
+                    prompt_versions[step_name] = step_prompts
+
+                # Model for this step
+                resolved_model, _source = resolve_model_with_fallbacks(
+                    sd, session, pipeline_name, default_model,
+                )
+                effective_model = model_kwarg or resolved_model
+                if effective_model:
+                    model_snapshot[step_name] = effective_model
+
+                # Instructions schema for this step
+                if sd.instructions is not None and hasattr(sd.instructions, "model_json_schema"):
+                    instr_schema[step_name] = sd.instructions.model_json_schema()
+
+    except Exception:
+        logger.debug(
+            "Failed to introspect pipeline '%s' for snapshot",
+            pipeline_name, exc_info=True,
+        )
+
+    return case_versions, prompt_versions, model_snapshot, instr_schema
+
+
+# ---------------------------------------------------------------------------
 # Internal helper: apply variant delta to sandbox engine
 # ---------------------------------------------------------------------------
 
@@ -627,6 +836,7 @@ def _apply_variant_to_sandbox(
                 select(Prompt).where(
                     Prompt.prompt_key == system_key,
                     Prompt.prompt_type == "system",
+                    Prompt.is_latest == True,  # noqa: E712
                 )
             ).first()
             if prompt is not None:
@@ -655,6 +865,7 @@ def _apply_variant_to_sandbox(
                 select(Prompt).where(
                     Prompt.prompt_key == user_key,
                     Prompt.prompt_type == "user",
+                    Prompt.is_latest == True,  # noqa: E712
                 )
             ).first()
             if prompt is not None:

@@ -9,6 +9,7 @@ import sqlalchemy as sa
 from sqlalchemy import func
 from sqlmodel import select
 
+from llm_pipeline.db.versioning import save_new_version, soft_delete_latest
 from llm_pipeline.evals import apply_instruction_delta, get_type_whitelist
 from llm_pipeline.evals.models import (
     EvaluationCase,
@@ -118,6 +119,10 @@ class RunListItem(BaseModel):
     completed_at: Optional[datetime] = None
     variant_id: Optional[int] = None
     delta_snapshot: Optional[dict] = None
+    case_versions: Optional[dict] = None
+    prompt_versions: Optional[dict] = None
+    model_snapshot: Optional[dict] = None
+    instructions_schema_snapshot: Optional[dict] = None
 
 
 class RunListResponse(BaseModel):
@@ -274,6 +279,25 @@ def _dry_run_validate_delta(delta: Optional[dict]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _trigger_evals_writeback(request: Request, dataset_id: int) -> None:
+    """Fire DB -> YAML writeback for a dataset if evals_dir is configured."""
+    from pathlib import Path
+    from llm_pipeline.evals.yaml_sync import write_dataset_to_yaml
+
+    evals_dir = getattr(request.app.state, "evals_dir", None)
+    if evals_dir is None:
+        return
+    try:
+        write_dataset_to_yaml(
+            request.app.state.engine, dataset_id, Path(evals_dir)
+        )
+    except Exception:
+        logger.warning(
+            "Evals YAML writeback failed for dataset %d", dataset_id,
+            exc_info=True,
+        )
+
+
 def _find_step_def_by_target(
     target_step: str, introspection_registry: dict
 ) -> tuple[Optional[Any], Optional[str], Optional[str]]:
@@ -339,11 +363,15 @@ def list_datasets(
     offset: int = Query(0, ge=0),
 ) -> DatasetListResponse:
     """List evaluation datasets with case counts and last run pass rates."""
-    # case count subquery
+    # case count subquery (active + latest only)
     case_count_sq = (
         select(
             EvaluationCase.dataset_id,
             func.count(EvaluationCase.id).label("case_count"),
+        )
+        .where(
+            EvaluationCase.is_active == True,  # noqa: E712
+            EvaluationCase.is_latest == True,  # noqa: E712
         )
         .group_by(EvaluationCase.dataset_id)
         .subquery()
@@ -454,7 +482,11 @@ def get_dataset(dataset_id: int, db: DBSession) -> DatasetDetail:
 
     cases = db.exec(
         select(EvaluationCase)
-        .where(EvaluationCase.dataset_id == dataset_id)
+        .where(
+            EvaluationCase.dataset_id == dataset_id,
+            EvaluationCase.is_active == True,  # noqa: E712
+            EvaluationCase.is_latest == True,  # noqa: E712
+        )
         .order_by(EvaluationCase.id)
     ).all()
 
@@ -547,6 +579,8 @@ def get_dataset_prod_prompts(
             select(Prompt).where(
                 Prompt.prompt_key == key,
                 Prompt.prompt_type == ptype,
+                Prompt.is_active == True,  # noqa: E712
+                Prompt.is_latest == True,  # noqa: E712
             )
         ).first()
         if row is None:
@@ -695,7 +729,11 @@ def update_dataset(
 
     cases = db.exec(
         select(EvaluationCase)
-        .where(EvaluationCase.dataset_id == dataset_id)
+        .where(
+            EvaluationCase.dataset_id == dataset_id,
+            EvaluationCase.is_active == True,  # noqa: E712
+            EvaluationCase.is_latest == True,  # noqa: E712
+        )
         .order_by(EvaluationCase.id)
     ).all()
 
@@ -774,6 +812,7 @@ def delete_dataset(dataset_id: int, db: WritableDBSession) -> None:
 def create_case(
     dataset_id: int,
     body: CaseCreateRequest,
+    request: Request,
     db: WritableDBSession,
 ) -> CaseItem:
     """Add a case to a dataset."""
@@ -783,19 +822,23 @@ def create_case(
     if not ds:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
-    case = EvaluationCase(
-        dataset_id=dataset_id,
-        name=body.name,
-        inputs=body.inputs,
-        expected_output=body.expected_output,
-        metadata_=body.metadata_,
+    case = save_new_version(
+        db, EvaluationCase,
+        key_filters={"dataset_id": dataset_id, "name": body.name},
+        new_fields={
+            "inputs": body.inputs,
+            "expected_output": body.expected_output,
+            "metadata_": body.metadata_,
+        },
     )
-    db.add(case)
     # bump dataset updated_at
     ds.updated_at = datetime.now(timezone.utc)
     db.add(ds)
     db.commit()
     db.refresh(case)
+
+    # DB -> YAML writeback
+    _trigger_evals_writeback(request, dataset_id)
 
     return CaseItem(
         id=case.id,
@@ -811,25 +854,45 @@ def update_case(
     dataset_id: int,
     case_id: int,
     body: CaseUpdateRequest,
+    request: Request,
     db: WritableDBSession,
 ) -> CaseItem:
-    """Update a case's fields."""
-    case = db.exec(
+    """Update a case's fields by creating a new version."""
+    old_case = db.exec(
         select(EvaluationCase)
-        .where(EvaluationCase.id == case_id)
-        .where(EvaluationCase.dataset_id == dataset_id)
+        .where(
+            EvaluationCase.id == case_id,
+            EvaluationCase.dataset_id == dataset_id,
+            EvaluationCase.is_active == True,  # noqa: E712
+            EvaluationCase.is_latest == True,  # noqa: E712
+        )
     ).first()
-    if not case:
+    if not old_case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    if body.name is not None:
-        case.name = body.name
-    if body.inputs is not None:
-        case.inputs = body.inputs
-    if body.expected_output is not None:
-        case.expected_output = body.expected_output
+    # Build new fields from existing + overrides
+    new_name = body.name if body.name is not None else old_case.name
+    new_inputs = body.inputs if body.inputs is not None else old_case.inputs
+    new_expected = body.expected_output if body.expected_output is not None else old_case.expected_output
 
-    db.add(case)
+    case = save_new_version(
+        db, EvaluationCase,
+        key_filters={"dataset_id": dataset_id, "name": old_case.name},
+        new_fields={
+            "inputs": new_inputs,
+            "expected_output": new_expected,
+            "metadata_": old_case.metadata_,
+        },
+    )
+    # If name changed, the new version has the old name in key_filters;
+    # update name on the new row directly (name is part of the key, so
+    # a rename means this is effectively a new logical case). For simplicity
+    # we keep the same key and just carry the name forward.
+    if body.name is not None and body.name != old_case.name:
+        case.name = body.name
+        db.add(case)
+        db.flush()
+
     # bump dataset updated_at
     ds = db.exec(
         select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
@@ -839,6 +902,9 @@ def update_case(
         db.add(ds)
     db.commit()
     db.refresh(case)
+
+    # DB -> YAML writeback
+    _trigger_evals_writeback(request, dataset_id)
 
     return CaseItem(
         id=case.id,
@@ -853,18 +919,26 @@ def update_case(
 def delete_case(
     dataset_id: int,
     case_id: int,
+    request: Request,
     db: WritableDBSession,
 ) -> None:
-    """Delete a case from a dataset."""
+    """Soft-delete a case from a dataset."""
+    # Verify the case exists and is active+latest
     case = db.exec(
         select(EvaluationCase)
-        .where(EvaluationCase.id == case_id)
-        .where(EvaluationCase.dataset_id == dataset_id)
+        .where(
+            EvaluationCase.id == case_id,
+            EvaluationCase.dataset_id == dataset_id,
+            EvaluationCase.is_active == True,  # noqa: E712
+            EvaluationCase.is_latest == True,  # noqa: E712
+        )
     ).first()
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
-    db.delete(case)
+    soft_delete_latest(
+        db, EvaluationCase, dataset_id=dataset_id, name=case.name
+    )
     # bump dataset updated_at
     ds = db.exec(
         select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
@@ -873,6 +947,9 @@ def delete_case(
         ds.updated_at = datetime.now(timezone.utc)
         db.add(ds)
     db.commit()
+
+    # DB -> YAML writeback
+    _trigger_evals_writeback(request, dataset_id)
 
 
 # ---------------------------------------------------------------------------
@@ -907,6 +984,10 @@ def list_eval_runs(
                 completed_at=r.completed_at,
                 variant_id=r.variant_id,
                 delta_snapshot=r.delta_snapshot,
+                case_versions=r.case_versions,
+                prompt_versions=r.prompt_versions,
+                model_snapshot=r.model_snapshot,
+                instructions_schema_snapshot=r.instructions_schema_snapshot,
             )
             for r in rows
         ]
