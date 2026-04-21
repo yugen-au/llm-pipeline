@@ -24,7 +24,8 @@ class PromptService:
         stmt = select(Prompt).where(
             Prompt.prompt_key == prompt_key,
             Prompt.prompt_type == prompt_type,
-            Prompt.is_active == True
+            Prompt.is_active == True,  # noqa: E712
+            Prompt.is_latest == True,  # noqa: E712
         )
 
         if context:
@@ -79,7 +80,8 @@ class PromptService:
         return self.session.exec(
             select(Prompt).where(
                 Prompt.prompt_key == prompt_key,
-                Prompt.is_active == True
+                Prompt.is_active == True,  # noqa: E712
+                Prompt.is_latest == True,  # noqa: E712
             )
         ).first() is not None
 

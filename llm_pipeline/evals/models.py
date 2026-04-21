@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Index
+from sqlalchemy import Index, text
 from sqlmodel import SQLModel, Field, Column, JSON
 
 
@@ -37,10 +37,25 @@ class EvaluationCase(SQLModel, table=True):
     inputs: dict = Field(sa_column=Column(JSON))
     expected_output: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     metadata_: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    version: str = Field(default="1.0", max_length=20)
+    is_active: bool = Field(default=True)
+    is_latest: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     __table_args__ = (
+        Index(
+            "uq_eval_cases_active_latest",
+            "dataset_id", "name",
+            unique=True,
+            sqlite_where=text("is_active = 1 AND is_latest = 1"),
+            postgresql_where=text("is_active = true AND is_latest = true"),
+        ),
         Index("ix_eval_cases_dataset", "dataset_id"),
+        Index("ix_eval_cases_dataset_live",
+              "dataset_id", "is_active", "is_latest"),
+        Index("ix_eval_cases_dataset_name_version",
+              "dataset_id", "name", "version"),
     )
 
 
@@ -61,6 +76,10 @@ class EvaluationRun(SQLModel, table=True):
     completed_at: Optional[datetime] = Field(default=None)
     variant_id: Optional[int] = Field(default=None, foreign_key="eval_variants.id")
     delta_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    case_versions: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    prompt_versions: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    model_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    instructions_schema_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSON))
 
     __table_args__ = (
         Index("ix_eval_runs_dataset", "dataset_id"),

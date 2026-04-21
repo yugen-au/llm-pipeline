@@ -8,8 +8,8 @@ from sqlmodel import Session, create_engine, select
 
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.utils.versioning import compare_versions
 from llm_pipeline.prompts.yaml_sync import (
-    compare_versions,
     parse_prompt_yaml,
     discover_yaml_prompts,
     sync_yaml_to_db,
@@ -209,9 +209,11 @@ class TestSyncYamlToDb:
         sync_yaml_to_db(engine, tmp_path)
 
         with Session(engine) as s:
+            # New version-aware sync inserts a new row; query latest
             p = s.exec(select(Prompt).where(
                 Prompt.prompt_key == "test_prompt",
                 Prompt.prompt_type == "system",
+                Prompt.is_latest == True,  # noqa: E712
             )).first()
             assert p.version == "1.2"
             assert "role" in p.content
@@ -266,6 +268,64 @@ class TestSyncYamlToDb:
             )).first()
             assert p.variable_definitions is not None
             assert "role" in p.variable_definitions
+
+    def test_yaml_newer_inserts_version_and_flips_prior(self, tmp_path, engine):
+        """Test #13: YAML newer version creates new row and flips prior is_latest."""
+        with Session(engine) as s:
+            s.add(Prompt(
+                prompt_key="test_prompt", prompt_type="system",
+                prompt_name="Old", content="old content",
+                version="1.0", is_active=True, is_latest=True,
+            ))
+            s.commit()
+
+        _write_yaml(tmp_path, "test_prompt.yaml", VALID_YAML_BOTH)
+        sync_yaml_to_db(engine, tmp_path)
+
+        with Session(engine) as s:
+            all_rows = s.exec(select(Prompt).where(
+                Prompt.prompt_key == "test_prompt",
+                Prompt.prompt_type == "system",
+            )).all()
+            # Should have 2 rows: old (is_latest=False) + new (is_latest=True)
+            assert len(all_rows) == 2
+            latest = [r for r in all_rows if r.is_latest]
+            not_latest = [r for r in all_rows if not r.is_latest]
+            assert len(latest) == 1
+            assert len(not_latest) == 1
+            assert latest[0].version == "1.2"
+            assert not_latest[0].version == "1.0"
+
+    def test_yaml_older_or_equal_logs_warning_noop(self, tmp_path, engine, caplog):
+        """Test #14: YAML same/older version logs WARNING and does nothing."""
+        import logging
+
+        with Session(engine) as s:
+            s.add(Prompt(
+                prompt_key="test_prompt", prompt_type="system",
+                prompt_name="Newer", content="db content",
+                version="2.0", is_active=True, is_latest=True,
+            ))
+            s.commit()
+
+        _write_yaml(tmp_path, "test_prompt.yaml", VALID_YAML_BOTH)
+
+        with caplog.at_level(logging.WARNING, logger="llm_pipeline.prompts.yaml_sync"):
+            sync_yaml_to_db(engine, tmp_path)
+
+        # Verify WARNING was logged
+        assert any("skipping" in r.message.lower() for r in caplog.records)
+        assert any("test_prompt" in r.message for r in caplog.records)
+
+        # Verify DB unchanged - still single row
+        with Session(engine) as s:
+            rows = s.exec(select(Prompt).where(
+                Prompt.prompt_key == "test_prompt",
+                Prompt.prompt_type == "system",
+            )).all()
+            assert len(rows) == 1
+            assert rows[0].version == "2.0"
+            assert rows[0].content == "db content"
 
 
 # ---------------------------------------------------------------------------

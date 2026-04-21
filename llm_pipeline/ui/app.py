@@ -177,7 +177,10 @@ def _sync_variable_definitions(engine: Engine) -> None:
 
     try:
         with Session(engine) as session:
-            stmt = select(Prompt).where(Prompt.variable_definitions.isnot(None))
+            stmt = select(Prompt).where(
+                Prompt.variable_definitions.isnot(None),
+                Prompt.is_latest == True,  # noqa: E712
+            )
             prompts = session.exec(stmt).all()
             for p in prompts:
                 if isinstance(p.variable_definitions, dict):

@@ -54,6 +54,7 @@ def _lookup_prompt_key(
             Prompt.prompt_key == key,
             Prompt.prompt_type == prompt_type,
             Prompt.is_active == True,  # noqa: E712 - SQLModel requires `==`
+            Prompt.is_latest == True,  # noqa: E712
         )
     ).first()
     return row.prompt_key if row else None

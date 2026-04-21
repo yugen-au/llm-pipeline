@@ -225,7 +225,11 @@ def get_step_prompts(
             pipeline_name=name, step_name=step_name, prompts=[]
         )
 
-    stmt = select(Prompt).where(Prompt.prompt_key.in_(declared_keys))  # type: ignore[union-attr]
+    stmt = select(Prompt).where(
+        Prompt.prompt_key.in_(declared_keys),  # type: ignore[union-attr]
+        Prompt.is_active == True,  # noqa: E712
+        Prompt.is_latest == True,  # noqa: E712
+    )
     prompts = db.exec(stmt).all()
 
     return StepPromptsResponse(

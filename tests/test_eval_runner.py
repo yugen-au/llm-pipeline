@@ -314,3 +314,250 @@ class TestResolveStepTaskHonoursDBOverride:
             )
 
         assert captured["step_model"] == "variant-model"
+
+
+class TestRunSnapshotPopulation:
+    """Tests for _build_run_snapshot and snapshot fields on EvaluationRun."""
+
+    def _make_step_def(self, step_name="mock_step", model=None, instructions=None):
+        """Create a minimal fake StepDefinition."""
+        from dataclasses import dataclass, field
+        from typing import Optional as _Opt
+
+        @dataclass
+        class _SD:
+            step_class: type = type("MockStep", (), {"__name__": "MockStep"})
+            system_instruction_key: _Opt[str] = None
+            user_prompt_key: _Opt[str] = None
+            instructions: _Opt[type] = None
+            evaluators: list = field(default_factory=list)
+            model: _Opt[str] = None
+
+            @property
+            def step_name(self) -> str:
+                return step_name
+
+        sd = _SD()
+        sd.model = model
+        sd.instructions = instructions
+        return sd
+
+    def test_run_populates_snapshots_step_target(self, engine):
+        """Step-target run populates all four snapshot columns with correct shapes."""
+        from pydantic import BaseModel
+        from llm_pipeline.db.prompt import Prompt
+
+        # Create instructions model
+        class MockInstructions(BaseModel):
+            sentiment: str = ""
+            confidence: float = 0.0
+
+        # Seed prompt rows
+        with Session(engine) as session:
+            session.add(Prompt(
+                prompt_key="mock_step",
+                prompt_name="Mock System",
+                prompt_type="system",
+                content="Analyze sentiment",
+                version="2.1",
+                is_active=True,
+                is_latest=True,
+            ))
+            session.add(Prompt(
+                prompt_key="mock_step",
+                prompt_name="Mock User",
+                prompt_type="user",
+                content="Input: {text}",
+                version="1.3",
+                is_active=True,
+                is_latest=True,
+            ))
+            session.commit()
+
+        # Seed dataset + cases
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="snap_step_ds",
+                target_type="step",
+                target_name="mock_step",
+            )
+            session.add(ds)
+            session.flush()
+            session.add(EvaluationCase(
+                dataset_id=ds.id,
+                name="case_a",
+                inputs={"text": "hello"},
+                version="1.0",
+            ))
+            session.add(EvaluationCase(
+                dataset_id=ds.id,
+                name="case_b",
+                inputs={"text": "world"},
+                version="1.1",
+            ))
+            session.commit()
+            ds_id = ds.id
+
+        step_def = self._make_step_def(
+            step_name="mock_step",
+            model="gpt-4o",
+            instructions=MockInstructions,
+        )
+        step_def.system_instruction_key = "mock_step"
+        step_def.user_prompt_key = "mock_step"
+
+        def mock_task_fn(inputs: dict) -> dict:
+            return {"sentiment": "positive"}
+
+        runner = EvalRunner(engine=engine)
+
+        # Patch _find_step_def to return our fake step def
+        with patch.object(
+            runner, "_find_step_def",
+            return_value=(step_def, None, "gpt-4o", "test_pipeline"),
+        ), patch.object(
+            runner, "_resolve_task",
+            return_value=(mock_task_fn, None),
+        ):
+            run_id = runner.run_dataset(ds_id)
+
+        with Session(engine) as session:
+            run = session.exec(
+                select(EvaluationRun).where(EvaluationRun.id == run_id)
+            ).first()
+
+            # case_versions: {str_id: version_str}
+            assert run.case_versions is not None
+            assert all(isinstance(k, str) for k in run.case_versions.keys())
+            assert all("." in v for v in run.case_versions.values())
+            assert len(run.case_versions) == 2
+
+            # prompt_versions: flat {prompt_key: {prompt_type: version}}
+            assert run.prompt_versions is not None
+            assert "mock_step" in run.prompt_versions
+            assert run.prompt_versions["mock_step"]["system"] == "2.1"
+            assert run.prompt_versions["mock_step"]["user"] == "1.3"
+
+            # model_snapshot: {step_name: model_id} single-entry
+            assert run.model_snapshot is not None
+            assert run.model_snapshot == {"mock_step": "gpt-4o"}
+
+            # instructions_schema_snapshot: flat schema dict
+            assert run.instructions_schema_snapshot is not None
+            assert "properties" in run.instructions_schema_snapshot
+            assert "sentiment" in run.instructions_schema_snapshot["properties"]
+
+    def test_run_populates_snapshots_pipeline_target(self, engine):
+        """Pipeline-target run populates snapshots keyed by step_name."""
+        from pydantic import BaseModel
+        from llm_pipeline.db.prompt import Prompt
+
+        class StepAInstructions(BaseModel):
+            result_a: str = ""
+
+        class StepBInstructions(BaseModel):
+            result_b: int = 0
+
+        # Seed prompts for two steps
+        with Session(engine) as session:
+            session.add(Prompt(
+                prompt_key="step_a",
+                prompt_name="Step A System",
+                prompt_type="system",
+                content="Do step A",
+                version="1.0",
+                is_active=True,
+                is_latest=True,
+            ))
+            session.add(Prompt(
+                prompt_key="step_b",
+                prompt_name="Step B System",
+                prompt_type="system",
+                content="Do step B",
+                version="2.0",
+                is_active=True,
+                is_latest=True,
+            ))
+            session.commit()
+
+        # Seed dataset + case
+        with Session(engine) as session:
+            ds = EvaluationDataset(
+                name="snap_pipe_ds",
+                target_type="pipeline",
+                target_name="test_pipeline",
+            )
+            session.add(ds)
+            session.flush()
+            session.add(EvaluationCase(
+                dataset_id=ds.id,
+                name="pipe_case",
+                inputs={"x": 1},
+                version="1.0",
+            ))
+            session.commit()
+            ds_id = ds.id
+
+        # Build fake step defs
+        step_def_a = self._make_step_def(
+            step_name="step_a", model="gpt-4o", instructions=StepAInstructions
+        )
+        step_def_b = self._make_step_def(
+            step_name="step_b", model="claude-3", instructions=StepBInstructions
+        )
+        # Patch step_class.__name__ for auto-discovery
+        step_def_a.step_class = type("StepAStep", (), {"__name__": "StepAStep"})
+        step_def_b.step_class = type("StepBStep", (), {"__name__": "StepBStep"})
+
+        # Build a fake pipeline class with STRATEGIES
+        class FakeStrategy:
+            def get_steps(self):
+                return [step_def_a, step_def_b]
+
+        class FakeStrategies:
+            STRATEGIES = [FakeStrategy]
+
+        class FakePipelineCls:
+            STRATEGIES = FakeStrategies
+            _default_model = "default-model"
+
+        runner = EvalRunner(
+            engine=engine,
+            introspection_registry={"test_pipeline": FakePipelineCls},
+        )
+
+        def mock_task_fn(inputs: dict) -> dict:
+            return {"step_a": {"result_a": "ok"}, "step_b": {"result_b": 42}}
+
+        with patch.object(runner, "_resolve_task", return_value=(mock_task_fn, None)):
+            run_id = runner.run_dataset(ds_id)
+
+        with Session(engine) as session:
+            run = session.exec(
+                select(EvaluationRun).where(EvaluationRun.id == run_id)
+            ).first()
+
+            # case_versions
+            assert run.case_versions is not None
+            assert len(run.case_versions) == 1
+
+            # prompt_versions: {step_name: {prompt_key: {prompt_type: version}}}
+            assert run.prompt_versions is not None
+            assert "step_a" in run.prompt_versions
+            assert run.prompt_versions["step_a"]["step_a"]["system"] == "1.0"
+            assert "step_b" in run.prompt_versions
+            assert run.prompt_versions["step_b"]["step_b"]["system"] == "2.0"
+
+            # model_snapshot: {step_name: model_id} one entry per step
+            assert run.model_snapshot is not None
+            assert len(run.model_snapshot) == 2
+            assert run.model_snapshot["step_a"] == "gpt-4o"
+            assert run.model_snapshot["step_b"] == "claude-3"
+
+            # instructions_schema_snapshot: {step_name: schema_dict}
+            assert run.instructions_schema_snapshot is not None
+            assert "step_a" in run.instructions_schema_snapshot
+            assert "properties" in run.instructions_schema_snapshot["step_a"]
+            assert "result_a" in run.instructions_schema_snapshot["step_a"]["properties"]
+            assert "step_b" in run.instructions_schema_snapshot
+            assert "result_b" in run.instructions_schema_snapshot["step_b"]["properties"]

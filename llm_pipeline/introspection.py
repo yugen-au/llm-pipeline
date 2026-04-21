@@ -309,7 +309,8 @@ def enrich_with_prompt_readiness(metadata: dict, session) -> dict:
     if all_keys:
         stmt = select(Prompt.prompt_key, Prompt.prompt_type).where(
             Prompt.prompt_key.in_(all_keys),
-            Prompt.is_active == True,
+            Prompt.is_active == True,  # noqa: E712
+            Prompt.is_latest == True,  # noqa: E712
         )
         rows = session.exec(stmt).all()
         existing = {(row[0], row[1]) for row in rows}

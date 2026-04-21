@@ -1278,7 +1278,11 @@ class PipelineConfig(ABC):
         current_prompt_version = None
         if prompt_system_key:
             prompt = self.session.exec(
-                select(Prompt).where(Prompt.prompt_key == prompt_system_key)
+                select(Prompt).where(
+                    Prompt.prompt_key == prompt_system_key,
+                    Prompt.is_active == True,  # noqa: E712
+                    Prompt.is_latest == True,  # noqa: E712
+                )
             ).first()
             if prompt:
                 current_prompt_version = prompt.version
@@ -1365,7 +1369,11 @@ class PipelineConfig(ABC):
         prompt_version = None
         if prompt_system_key:
             prompt = self.session.exec(
-                select(Prompt).where(Prompt.prompt_key == prompt_system_key)
+                select(Prompt).where(
+                    Prompt.prompt_key == prompt_system_key,
+                    Prompt.is_active == True,  # noqa: E712
+                    Prompt.is_latest == True,  # noqa: E712
+                )
             ).first()
             if prompt:
                 prompt_version = prompt.version

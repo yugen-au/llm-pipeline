@@ -5,7 +5,7 @@ import hashlib
 import logging
 from typing import TYPE_CHECKING
 
-from sqlmodel import Session, SQLModel, select
+from sqlmodel import Session, SQLModel
 
 from llm_pipeline.db.prompt import Prompt
 
@@ -340,13 +340,15 @@ def _content_hash(content: str) -> str:
 def _seed_prompts(cls: type, engine: "Engine") -> None:
     """Create GenerationRecord table and upsert seed prompts.
 
-    Inserts new prompts and updates existing ones if content has changed.
+    Inserts new prompts via save_new_version if missing, or if content hash
+    differs from existing latest version. No-op when content unchanged.
 
     Args:
         cls: The pipeline class (used for logging context only).
         engine: SQLAlchemy engine for DB operations.
     """
     from llm_pipeline.creator.models import GenerationRecord
+    from llm_pipeline.db.versioning import get_latest, save_new_version
 
     SQLModel.metadata.create_all(engine, tables=[GenerationRecord.__table__])
 
@@ -354,18 +356,27 @@ def _seed_prompts(cls: type, engine: "Engine") -> None:
     updated = 0
     with Session(engine) as session:
         for prompt_data in ALL_PROMPTS:
-            existing = session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == prompt_data["prompt_key"],
-                    Prompt.prompt_type == prompt_data["prompt_type"],
-                )
-            ).first()
+            key_filters = {
+                "prompt_key": prompt_data["prompt_key"],
+                "prompt_type": prompt_data["prompt_type"],
+            }
+            existing = get_latest(session, Prompt, **key_filters)
+
             if existing is None:
-                session.add(Prompt(**prompt_data))
+                new_fields = {
+                    k: v for k, v in prompt_data.items()
+                    if k not in ("prompt_key", "prompt_type", "version",
+                                 "is_active", "is_latest", "created_at", "updated_at")
+                }
+                save_new_version(session, Prompt, key_filters, new_fields)
                 inserted += 1
             elif _content_hash(existing.content) != _content_hash(prompt_data["content"]):
-                for key, value in prompt_data.items():
-                    setattr(existing, key, value)
+                new_fields = {
+                    k: v for k, v in prompt_data.items()
+                    if k not in ("prompt_key", "prompt_type", "version",
+                                 "is_active", "is_latest", "created_at", "updated_at")
+                }
+                save_new_version(session, Prompt, key_filters, new_fields)
                 updated += 1
         session.commit()
     logger.info(

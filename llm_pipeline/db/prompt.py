@@ -4,7 +4,7 @@ Prompt model for LLM pipeline prompt storage.
 from datetime import datetime, timezone
 from typing import Optional, List
 from sqlmodel import SQLModel, Field, Column, JSON
-from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import Index, text
 
 
 class Prompt(SQLModel, table=True):
@@ -36,15 +36,25 @@ class Prompt(SQLModel, table=True):
     description: Optional[str] = None
     version: str = Field(default="1.0", max_length=20)
     is_active: bool = Field(default=True)
+    is_latest: bool = Field(default=True, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: Optional[str] = Field(default=None, max_length=100)
 
     # Indexes and constraints
     __table_args__ = (
-        UniqueConstraint('prompt_key', 'prompt_type', name='uq_prompts_key_type'),
+        Index(
+            "uq_prompts_active_latest",
+            "prompt_key", "prompt_type",
+            unique=True,
+            sqlite_where=text("is_active = 1 AND is_latest = 1"),
+            postgresql_where=text("is_active = true AND is_latest = true"),
+        ),
+        Index("ix_prompts_key_type_live",
+              "prompt_key", "prompt_type", "is_active", "is_latest"),
         Index("ix_prompts_category_step", "category", "step_name"),
-        Index("ix_prompts_active", "is_active"),
+        Index("ix_prompts_key_type_version",
+              "prompt_key", "prompt_type", "version"),
     )
 
     def __repr__(self) -> str:
