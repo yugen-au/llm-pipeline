@@ -21,6 +21,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -165,25 +172,6 @@ function ExpandableDetail({ result }: { result: CaseResultItem }) {
 // Page
 // ---------------------------------------------------------------------------
 
-function findMostRecentBaseline(
-  runs: RunListItem[] | undefined,
-  currentRunId: number,
-): RunListItem | null {
-  if (!runs) return null
-  // Runs endpoint typically returns in chronological order; filter variant_id==null
-  // excluding the current run itself. Pick the one with the latest started_at.
-  const baselines = runs.filter(
-    (r) => r.variant_id == null && r.id !== currentRunId,
-  )
-  if (baselines.length === 0) return null
-  return baselines.reduce((best, r) => {
-    if (!best) return r
-    const bestTs = best.started_at ? Date.parse(best.started_at) : 0
-    const rTs = r.started_at ? Date.parse(r.started_at) : 0
-    return rTs > bestTs ? r : best
-  }, null as RunListItem | null)
-}
-
 function EvalRunDetailPage() {
   const { datasetId: rawDatasetId, runId: rawRunId } = Route.useParams()
   const datasetId = Number(rawDatasetId)
@@ -191,24 +179,23 @@ function EvalRunDetailPage() {
   const { data: run, isLoading, error } = useEvalRun(datasetId, runId)
   const navigate = useNavigate()
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [pickerOpen, setPickerOpen] = useState(false)
 
-  // Only load run list when current run is a variant run. We use `enabled`
-  // semantics indirectly: the hook is keyed by datasetId and safe to mount
-  // unconditionally; filtering logic ignores it when run is not a variant.
   const runsQ = useEvalRuns(datasetId)
-  const isVariantRun = run?.variant_id != null
-  const baseline = isVariantRun
-    ? findMostRecentBaseline(runsQ.data, runId)
-    : null
-  const canCompare = isVariantRun && baseline != null
-  const compareDisabled = isVariantRun && !canCompare
+  const completedRuns = (runsQ.data ?? [])
+    .filter((r) => r.status === 'completed' && r.id !== runId)
+    .sort((a, b) => {
+      const aTs = a.started_at ? Date.parse(a.started_at) : 0
+      const bTs = b.started_at ? Date.parse(b.started_at) : 0
+      return bTs - aTs
+    })
 
-  function handleCompare() {
-    if (!baseline) return
+  function handlePickRun(selectedRunId: number) {
+    setPickerOpen(false)
     navigate({
       to: '/evals/$datasetId/compare',
       params: { datasetId: String(datasetId) },
-      search: { baseRunId: baseline.id, compareRunId: runId },
+      search: { baseRunId: selectedRunId, compareRunId: runId },
     })
   }
 
@@ -282,38 +269,36 @@ function EvalRunDetailPage() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {isVariantRun && (
-              compareDisabled ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled
-                          className="gap-1.5"
-                        >
-                          <GitCompare className="h-4 w-4" />
-                          Compare with baseline
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>No baseline run available</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCompare}
-                  disabled={runsQ.isLoading || !baseline}
-                  className="gap-1.5"
-                >
-                  <GitCompare className="h-4 w-4" />
-                  Compare with baseline
-                </Button>
-              )
+            {completedRuns.length === 0 ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        className="gap-1.5"
+                      >
+                        <GitCompare className="h-4 w-4" />
+                        Compare
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>No other completed runs to compare</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPickerOpen(true)}
+                disabled={runsQ.isLoading}
+                className="gap-1.5"
+              >
+                <GitCompare className="h-4 w-4" />
+                Compare
+              </Button>
             )}
             <Badge variant={statusVariant(run.status)} className="gap-1.5">
               <span className={`h-2 w-2 rounded-full ${statusColor(run.status)}`} />
@@ -399,7 +384,89 @@ function EvalRunDetailPage() {
           </Card>
         )}
       </div>
+
+      <RunPickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        runs={completedRuns}
+        onSelect={handlePickRun}
+      />
     </ScrollArea>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Run picker dialog
+// ---------------------------------------------------------------------------
+
+function RunPickerDialog({
+  open,
+  onOpenChange,
+  runs,
+  onSelect,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  runs: RunListItem[]
+  onSelect: (runId: number) => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Select a run to compare</DialogTitle>
+          <DialogDescription>
+            Pick a completed run as the base reference for comparison.
+          </DialogDescription>
+        </DialogHeader>
+        <ScrollArea className="max-h-80">
+          <div className="space-y-1 pr-3">
+            {runs.map((r) => {
+              const passRate =
+                r.total_cases > 0
+                  ? `${r.passed}/${r.total_cases}`
+                  : '--'
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-medium">
+                      Run #{r.id}
+                      {r.variant_id != null && (
+                        <span className="ml-1.5 text-xs text-muted-foreground">
+                          (variant #{r.variant_id})
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {r.started_at
+                        ? new Date(r.started_at).toLocaleString()
+                        : 'N/A'}
+                      {' -- '}
+                      pass rate {passRate}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onSelect(r.id)}
+                  >
+                    Select
+                  </Button>
+                </div>
+              )
+            })}
+            {runs.length === 0 && (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                No completed runs available.
+              </p>
+            )}
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
   )
 }
 
