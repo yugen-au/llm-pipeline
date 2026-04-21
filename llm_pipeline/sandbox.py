@@ -50,7 +50,12 @@ def create_sandbox_engine(prod_engine: Engine) -> Engine:
     init_pipeline_db(sandbox_engine)
 
     with Session(prod_engine) as src, Session(sandbox_engine) as dst:
-        for prompt in src.exec(select(Prompt)).all():
+        for prompt in src.exec(
+            select(Prompt).where(
+                Prompt.is_active == True,  # noqa: E712
+                Prompt.is_latest == True,  # noqa: E712
+            )
+        ).all():
             dst.add(Prompt(
                 prompt_key=prompt.prompt_key,
                 prompt_name=prompt.prompt_name,
@@ -63,6 +68,7 @@ def create_sandbox_engine(prod_engine: Engine) -> Engine:
                 description=prompt.description,
                 version=prompt.version,
                 is_active=prompt.is_active,
+                is_latest=prompt.is_latest,
                 created_at=prompt.created_at,
                 updated_at=prompt.updated_at,
             ))

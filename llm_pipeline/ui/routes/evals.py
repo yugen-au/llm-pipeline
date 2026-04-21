@@ -1028,6 +1028,10 @@ def get_eval_run(
         completed_at=run.completed_at,
         variant_id=run.variant_id,
         delta_snapshot=run.delta_snapshot,
+        case_versions=run.case_versions,
+        prompt_versions=run.prompt_versions,
+        model_snapshot=run.model_snapshot,
+        instructions_schema_snapshot=run.instructions_schema_snapshot,
         case_results=[
             CaseResultItem(
                 id=cr.id,

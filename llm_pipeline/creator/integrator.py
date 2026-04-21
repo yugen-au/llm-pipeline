@@ -15,8 +15,6 @@ import shutil
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from sqlmodel import select
-
 from llm_pipeline.creator import ast_modifier
 from llm_pipeline.creator.models import GeneratedStep, IntegrationResult
 from llm_pipeline.creator.sandbox import CodeSecurityValidator
@@ -196,19 +194,26 @@ class StepIntegrator:
         return self._insert_prompts(all_prompts)
 
     def _insert_prompts(self, prompt_list: list[dict]) -> int:
-        """Idempotent insert: skip existing (prompt_key, prompt_type) pairs."""
+        """Idempotent insert via save_new_version: skip if latest already exists."""
+        from llm_pipeline.db.versioning import get_latest, save_new_version
+
         inserted = 0
         for prompt_data in prompt_list:
             key = prompt_data.get("prompt_key", "")
             ptype = prompt_data.get("prompt_type", "")
-            existing = self.session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == key,
-                    Prompt.prompt_type == ptype,
-                )
-            ).first()
+            key_filters = {"prompt_key": key, "prompt_type": ptype}
+
+            existing = get_latest(self.session, Prompt, **key_filters)
             if existing is None:
-                self.session.add(Prompt(**prompt_data))
+                new_fields = {
+                    k: v for k, v in prompt_data.items()
+                    if k not in ("prompt_key", "prompt_type", "version",
+                                 "is_active", "is_latest", "created_at", "updated_at")
+                }
+                save_new_version(
+                    self.session, Prompt, key_filters, new_fields,
+                    version=prompt_data.get("version", "1.0"),
+                )
                 inserted += 1
         return inserted
 

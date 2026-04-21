@@ -122,10 +122,12 @@ def sync_yaml_to_db(engine: "Engine", prompts_dirs: "Path | list[Path]") -> None
     """Sync YAML prompt files into the database.
 
     Accepts a single Path or list of Paths. For each variant: insert if
-    missing, update if YAML version is newer, skip if same or older.
+    missing, insert new version if YAML version is newer, skip with WARNING
+    if same or older.
     """
-    from sqlmodel import Session, select
+    from sqlmodel import Session
     from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.db.versioning import get_latest, save_new_version
     from llm_pipeline.prompts.variables import rebuild_from_db
 
     if isinstance(prompts_dirs, Path):
@@ -143,15 +145,27 @@ def sync_yaml_to_db(engine: "Engine", prompts_dirs: "Path | list[Path]") -> None
 
     with Session(engine) as session:
         for v in variants:
-            existing = session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == v["prompt_key"],
-                    Prompt.prompt_type == v["prompt_type"],
-                )
-            ).first()
+            key_filters = {
+                "prompt_key": v["prompt_key"],
+                "prompt_type": v["prompt_type"],
+            }
+            existing = get_latest(session, Prompt, **key_filters)
+
+            # Fields that go into new_fields (exclude key_filters and version)
+            new_fields = {
+                k: v[k] for k in (
+                    "prompt_name", "content", "description",
+                    "variable_definitions", "required_variables",
+                    "category", "step_name", "created_by",
+                ) if k in v
+            }
 
             if existing is None:
-                session.add(Prompt(**v))
+                # First-time insert
+                save_new_version(
+                    session, Prompt, key_filters, new_fields,
+                    version=v.get("version"),
+                )
                 inserted += 1
                 if v.get("variable_definitions"):
                     rebuild_from_db(
@@ -160,21 +174,24 @@ def sync_yaml_to_db(engine: "Engine", prompts_dirs: "Path | list[Path]") -> None
             else:
                 cmp = compare_versions(v["version"], existing.version)
                 if cmp > 0:
-                    # YAML is newer — update DB
-                    for field in (
-                        "content", "description", "version",
-                        "variable_definitions", "required_variables",
-                        "prompt_name", "category", "step_name",
-                    ):
-                        if field in v:
-                            setattr(existing, field, v[field])
-                    existing.updated_at = datetime.now(timezone.utc)
+                    # YAML is newer — insert new version row
+                    save_new_version(
+                        session, Prompt, key_filters, new_fields,
+                        version=v["version"],
+                    )
                     updated += 1
                     if v.get("variable_definitions"):
                         rebuild_from_db(
                             v["prompt_key"], v["prompt_type"],
                             v["variable_definitions"],
                         )
+                else:
+                    # Same or older — no-op with WARNING per A8
+                    logger.warning(
+                        "YAML prompt %s/%s version %s <= DB version %s, skipping",
+                        v["prompt_key"], v["prompt_type"],
+                        v["version"], existing.version,
+                    )
 
         session.commit()
 
@@ -206,8 +223,11 @@ def write_prompt_to_yaml(
     """Write updated prompt data back to its YAML file.
 
     Creates new files if they don't exist. Creates the directory if needed.
+    Uses atomic temp-file + Path.replace to avoid partial-write corruption.
     Returns True if file was written.
     """
+    import tempfile
+
     prompts_dir.mkdir(parents=True, exist_ok=True)
     yaml_path = prompts_dir / f"{prompt_key}.yaml"
 
@@ -238,13 +258,22 @@ def write_prompt_to_yaml(
 
     doc[prompt_type] = section
 
-    with open(yaml_path, "w", encoding="utf-8") as f:
-        yaml.dump(
-            doc, f,
-            default_flow_style=False,
-            allow_unicode=True,
-            sort_keys=False,
-        )
+    # Atomic write: temp file in same dir then replace
+    fd, tmp_path = tempfile.mkstemp(
+        dir=str(prompts_dir), suffix=".yaml.tmp",
+    )
+    try:
+        with open(fd, "w", encoding="utf-8") as f:
+            yaml.dump(
+                doc, f,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
+        Path(tmp_path).replace(yaml_path)
+    except BaseException:
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
 
     logger.debug("Wrote back %s/%s to %s", prompt_key, prompt_type, yaml_path)
     return True

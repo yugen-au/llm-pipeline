@@ -9,10 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.prompts.utils import (
-    _increment_version,
-    extract_variables_from_content,
-)
+from llm_pipeline.db.versioning import save_new_version, soft_delete_latest
+from llm_pipeline.prompts.utils import extract_variables_from_content
 from llm_pipeline.prompts.variables import (
     get_code_prompt_variables,
     rebuild_from_db,
@@ -146,6 +144,8 @@ def _apply_filters(stmt, params: PromptListParams):
         stmt = stmt.where(Prompt.prompt_type == params.prompt_type)
     if params.is_active is not None:
         stmt = stmt.where(Prompt.is_active == params.is_active)
+    # Default: only show latest versions in list view
+    stmt = stmt.where(Prompt.is_latest == True)  # noqa: E712
     return stmt
 
 
@@ -228,21 +228,25 @@ def create_prompt(
             for v in required_variables
         }
 
-    prompt = Prompt(
-        prompt_key=body.prompt_key,
-        prompt_name=body.prompt_name,
-        prompt_type=body.prompt_type,
-        content=body.content,
-        category=body.category,
-        step_name=body.step_name,
-        description=body.description,
-        version=body.version,
-        created_by=body.created_by,
-        required_variables=required_variables,
-        variable_definitions=var_defs,
-    )
+    key_filters = {
+        "prompt_key": body.prompt_key,
+        "prompt_type": body.prompt_type,
+    }
+    new_fields = {
+        "prompt_name": body.prompt_name,
+        "content": body.content,
+        "category": body.category,
+        "step_name": body.step_name,
+        "description": body.description,
+        "created_by": body.created_by,
+        "required_variables": required_variables,
+        "variable_definitions": var_defs,
+    }
+
     try:
-        db.add(prompt)
+        prompt = save_new_version(
+            db, Prompt, key_filters, new_fields, version=body.version,
+        )
         db.commit()
         db.refresh(prompt)
     except IntegrityError:
@@ -263,45 +267,51 @@ def update_prompt(
     db: WritableDBSession,
     request: Request,
 ) -> PromptItem:
-    """Update an existing prompt."""
-    stmt = select(Prompt).where(
-        Prompt.prompt_key == prompt_key,
-        Prompt.prompt_type == prompt_type,
-    )
-    prompt = db.exec(stmt).first()
-    if not prompt:
+    """Update an existing prompt (creates new version row)."""
+    from llm_pipeline.db.versioning import get_latest
+
+    existing = get_latest(db, Prompt, prompt_key=prompt_key, prompt_type=prompt_type)
+    if not existing:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
     updates = body.model_dump(exclude_unset=True)
 
+    # Build new_fields from existing row, overlaying updates
+    content = updates.get("content", existing.content)
+    required_variables = extract_variables_from_content(content)
+
     # Track whether variable_definitions changed
     var_defs_changed = "variable_definitions" in updates
+    var_defs = updates.get("variable_definitions", existing.variable_definitions)
 
-    for field, value in updates.items():
-        setattr(prompt, field, value)
+    # Sync variable_definitions if content changed but var_defs not explicitly provided
+    if "content" in updates and not var_defs_changed:
+        new_vars = set(required_variables or [])
+        existing_defs = dict(var_defs) if isinstance(var_defs, dict) else {}
+        for v in new_vars:
+            if v not in existing_defs:
+                existing_defs[v] = {"type": "str", "description": ""}
+        existing_defs = {k: v for k, v in existing_defs.items() if k in new_vars}
+        var_defs = existing_defs or None
+        var_defs_changed = True
 
-    # Re-extract variables if content changed
-    if "content" in updates:
-        prompt.required_variables = extract_variables_from_content(prompt.content)
+    key_filters = {"prompt_key": prompt_key, "prompt_type": prompt_type}
+    new_fields = {
+        "prompt_name": updates.get("prompt_name", existing.prompt_name),
+        "content": content,
+        "category": updates.get("category", existing.category),
+        "step_name": updates.get("step_name", existing.step_name),
+        "description": updates.get("description", existing.description),
+        "created_by": updates.get("created_by", existing.created_by),
+        "required_variables": required_variables,
+        "variable_definitions": var_defs,
+    }
 
-        # Sync variable_definitions if not explicitly provided
-        if not var_defs_changed:
-            new_vars = set(prompt.required_variables or [])
-            existing_defs = dict(prompt.variable_definitions) if isinstance(prompt.variable_definitions, dict) else {}
-            # Add new variables with defaults
-            for v in new_vars:
-                if v not in existing_defs:
-                    existing_defs[v] = {"type": "str", "description": ""}
-            # Remove variables no longer in content
-            existing_defs = {k: v for k, v in existing_defs.items() if k in new_vars}
-            prompt.variable_definitions = existing_defs or None
-            var_defs_changed = True
-
-    # Auto-increment version if not explicitly provided
-    if "version" not in updates:
-        prompt.version = _increment_version(prompt.version)
-
-    prompt.updated_at = datetime.now(timezone.utc)
+    # Explicit version in body forces that version; otherwise auto-bump
+    explicit_version = updates.get("version")
+    prompt = save_new_version(
+        db, Prompt, key_filters, new_fields, version=explicit_version,
+    )
     db.commit()
     db.refresh(prompt)
 
@@ -332,16 +342,10 @@ def delete_prompt(
     db: WritableDBSession,
 ) -> dict:
     """Soft-delete (deactivate) a prompt."""
-    stmt = select(Prompt).where(
-        Prompt.prompt_key == prompt_key,
-        Prompt.prompt_type == prompt_type,
-    )
-    prompt = db.exec(stmt).first()
-    if not prompt:
+    row = soft_delete_latest(db, Prompt, prompt_key=prompt_key, prompt_type=prompt_type)
+    if not row:
         raise HTTPException(status_code=404, detail="Prompt not found")
 
-    prompt.is_active = False
-    prompt.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"detail": "Prompt deactivated"}
 
@@ -355,6 +359,7 @@ def get_prompt_variable_schema(
     stmt = select(Prompt).where(
         Prompt.prompt_key == prompt_key,
         Prompt.prompt_type == prompt_type,
+        Prompt.is_latest == True,  # noqa: E712
     )
     prompt = db.exec(stmt).first()
     raw_defs = prompt.variable_definitions if prompt else None
