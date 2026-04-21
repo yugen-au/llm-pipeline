@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-21 10:52
+## Last Updated: 2026-04-21 10:54
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -24,7 +24,7 @@
 | Plan | planning | planning | 1 | - | A | complete | 0 | ada764be7e14da977 | 3d1fc724 | - |
 | Move compare_versions to utils | python-development:python-pro | implementation | 1 | - | A | complete | 0 | ad5e5876729095fb4 | pending | /pydantic/pydantic |
 | Prompt schema updates | database-design:database-architect | implementation | 3 | database-design:postgresql | A | in-progress | 0 | - | pending | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_core |
-| EvaluationCase + EvaluationRun schema | database-design:database-architect | implementation | 4 | database-design:postgresql | A | in-progress | 0 | - | pending | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
+| EvaluationCase + EvaluationRun schema | database-design:database-architect | implementation | 4 | database-design:postgresql | A | complete | 0 | aed406fd9d4bdb977 | pending | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
 | Versioning helper module | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | B | pending | 0 | - | pending | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
 | Migration + partial unique indexes | database-design:database-architect | implementation | 5 | database-design:postgresql | B | pending | 0 | - | pending | /websites/sqlalchemy_en_20_core |
 | Prompt read-site updates | backend-development:backend-architect | implementation | 6 | - | C | pending | 0 | - | pending | /websites/sqlmodel_tiangolo |
