@@ -322,3 +322,5 @@ To proceed, either:
 [2026-04-21 11:55:40] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
 [2026-04-21 11:55:40] [INFO] Deleted 1 old contract file(s)
 [2026-04-21 11:55:40] [DEBUG] STATE.md atomic write complete
+[2026-04-21 11:55:58] [INFO] Task call: code-documentation:docs-architect (phase: summary)
+[2026-04-21 12:04:00] [ERROR] BLOCKED: Invalid commit message format
