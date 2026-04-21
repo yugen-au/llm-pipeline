@@ -4,9 +4,9 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260421-generic-run-comparison
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-2-sync-frontend-ts-types.md (if already exists, APPEND to file)
+- Output Files: implementation\step-4-rename-labels-basecompare.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 2 - implement ONLY this step, not others
+- Step: 4 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-2-sync-frontend-ts-types.md
+4. Document decisions in implementation\step-4-rename-labels-basecompare.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 2: SYNC FRONTEND TS TYPES
+# IMPLEMENTATION - STEP 4: RENAME LABELS BASE/COMPARE
 **Status:** [completed/failed/blocked]
 
 ## Summary

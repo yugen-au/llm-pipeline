@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260421-generic-run-comparison
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-1-add-caseid-to-caseresultitem.md (if already exists, APPEND to file)
+- Output Files: implementation\step-3-zod-schema-comparerunid-alias.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 1 - implement ONLY this step, not others
+- Step: 3 - implement ONLY this step, not others
 - [custom.skills_to_invoke]
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /colinhacks/zod
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-1-add-caseid-to-caseresultitem.md
+4. Document decisions in implementation\step-3-zod-schema-comparerunid-alias.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 1: ADD CASE_ID TO CASERESULTITEM
+# IMPLEMENTATION - STEP 3: ZOD SCHEMA COMPARERUNID + ALIAS
 **Status:** [completed/failed/blocked]
 
 ## Summary
