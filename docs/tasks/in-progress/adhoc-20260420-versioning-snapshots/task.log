@@ -315,3 +315,10 @@ To proceed, either:
 [2026-04-21 11:54:56] [ERROR] BLOCKED: Invalid commit message format
 [2026-04-21 11:55:01] [ERROR] BLOCKED: Invalid commit message format
 [2026-04-21 11:55:17] [DEBUG] STATE.md atomic write complete
+[2026-04-21 11:55:38] [INFO] Already committed review-A: ['REVIEW.md']
+[2026-04-21 11:55:40] [INFO] STATE.md updated: phase=summary, status=in-progress
+[2026-04-21 11:55:40] [INFO] Updated Commits for 'Architecture review': 8a7fd4f4
+[2026-04-21 11:55:40] [INFO] Auto-filled agent rows: Create summary
+[2026-04-21 11:55:40] [INFO] Auto-updated agent statuses: Create summary: pending -> in-progress
+[2026-04-21 11:55:40] [INFO] Deleted 1 old contract file(s)
+[2026-04-21 11:55:40] [DEBUG] STATE.md atomic write complete
