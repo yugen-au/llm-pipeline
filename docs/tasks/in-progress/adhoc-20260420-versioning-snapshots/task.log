@@ -283,3 +283,8 @@ To proceed, either:
 [2026-04-21 11:45:29] [DEBUG] STATE.md atomic write complete
 [2026-04-21 11:46:55] [ERROR] BLOCKED: Invalid commit message format
 [2026-04-21 11:47:11] [DEBUG] STATE.md atomic write complete
+[2026-04-21 11:47:29] [INFO] Already committed fixing-review-C: ['step-6-prompt-read-site-updates.md', 'step-7-prompt-write-site-yaml-sync.md', 'step-8-evaluationcase-readwrite-sites.md', 'step-9-runner-snapshot-population.md']
+[2026-04-21 11:47:31] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-21 11:47:31] [INFO] Auto-updated agent statuses: Sandbox seed filter: pending -> in-progress
+[2026-04-21 11:47:31] [INFO] Deleted 1 old contract file(s)
+[2026-04-21 11:47:31] [DEBUG] STATE.md atomic write complete

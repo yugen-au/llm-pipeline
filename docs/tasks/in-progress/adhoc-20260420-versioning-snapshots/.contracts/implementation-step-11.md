@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260420-versioning-snapshots
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-8-evaluationcase-readwrite-sites.md (if already exists, APPEND to file)
+- Output Files: implementation\step-11-sandbox-seed-filter.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 8
+- Step to fix: 11
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /websites/sqlmodel_tiangolo
+3. [custom.context7_docs]
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 8
+1. Read REVIEW.md for issues assigned to Step 11
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-8-evaluationcase-readwrite-sites.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-11-sandbox-seed-filter.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown
