@@ -12,7 +12,7 @@
 ## Steps to Fix: none
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-21 10:55
+## Last Updated: 2026-04-21 11:00
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -26,7 +26,7 @@
 | Prompt schema updates | database-design:database-architect | implementation | 3 | database-design:postgresql | A | complete | 0 | a8bbbad352da681c4 | 44a7b796,0434a5a3 | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_core |
 | EvaluationCase + EvaluationRun schema | database-design:database-architect | implementation | 4 | database-design:postgresql | A | complete | 0 | aed406fd9d4bdb977 | 0434a5a3 | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
 | Versioning helper module | python-development:python-pro | implementation | 2 | python-development:python-testing-patterns | B | in-progress | 0 | - | pending | /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_orm |
-| Migration + partial unique indexes | database-design:database-architect | implementation | 5 | database-design:postgresql | B | in-progress | 0 | - | pending | /websites/sqlalchemy_en_20_core |
+| Migration + partial unique indexes | database-design:database-architect | implementation | 5 | database-design:postgresql | B | complete | 0 | aabd1595fb76071bc | 78cbae7b | /websites/sqlalchemy_en_20_core |
 | Prompt read-site updates | backend-development:backend-architect | implementation | 6 | - | C | pending | 0 | - | pending | /websites/sqlmodel_tiangolo |
 | Prompt write-site + YAML sync | backend-development:backend-architect | implementation | 7 | backend-development:api-design-principles | C | pending | 0 | - | pending | /websites/sqlmodel_tiangolo,/pydantic/pydantic |
 | EvaluationCase read/write sites | backend-development:backend-architect | implementation | 8 | - | C | pending | 0 | - | pending | /websites/sqlmodel_tiangolo |
