@@ -1,9 +1,9 @@
 ## Task: adhoc-20260421-generic-run-comparison
 ## Description: Generic eval run comparison — replace baseline-only compare with any-two-runs picker, case-level version matching (matched/drifted/unmatched buckets), scoped aggregates. Modify existing comparison page to support any run-to-run comparison.
 
-## Phase: implementation
+## Phase: testing
 ## Status: in-progress
-## Current Group: E
+## Current Group: A
 ## Base Branch: dev
 ## Task Branch: sam/adhoc/20260421-generic-run-comparison
 ## Plugins: frontend-mobile-development, backend-development
@@ -29,3 +29,4 @@
 | Case version matching logic | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 0 | ad6bce4c62a996dc6 | 0da4c5a0,febfdd6a | - |
 | Delta summary snapshot diff | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 0 | ae04cab6675148f8a | febfdd6a | - |
 | Export neutral meta-prompt | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | accaa787bd57e47f7 | e22de50e | - |
+| Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | in-progress | 0 | pending | pending | - |
