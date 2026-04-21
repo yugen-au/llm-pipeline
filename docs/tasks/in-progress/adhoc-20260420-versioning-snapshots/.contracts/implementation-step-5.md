@@ -4,27 +4,27 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260420-versioning-snapshots
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-3-prompt-schema-updates.md (if already exists, APPEND to file)
+- Output Files: implementation\step-5-migration-partial-unique-indexes.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 3 - implement ONLY this step, not others
+- Step: 5 - implement ONLY this step, not others
 - Skills to invoke: database-design:postgresql
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. Context7 library IDs to query: /websites/sqlmodel_tiangolo,/websites/sqlalchemy_en_20_core
+3. Context7 library IDs to query: /websites/sqlalchemy_en_20_core
 4. If skills listed: invoke each with Skill(skill='[plugin:skill]') BEFORE implementation
 
 ## Instructions
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-3-prompt-schema-updates.md
+4. Document decisions in implementation\step-5-migration-partial-unique-indexes.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 3: PROMPT SCHEMA UPDATES
+# IMPLEMENTATION - STEP 5: MIGRATION + PARTIAL UNIQUE INDEXES
 **Status:** [completed/failed/blocked]
 
 ## Summary

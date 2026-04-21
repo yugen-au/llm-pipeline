@@ -4,10 +4,10 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260420-versioning-snapshots
 - Graphiti group_id: llm-pipeline
 - Phase: implementation
-- Output Files: implementation\step-4-evaluationcase-evaluationrun-schema.md (if already exists, APPEND to file)
+- Output Files: implementation\step-2-versioning-helper-module.md (if already exists, APPEND to file)
 - Plan: PLAN.md
-- Step: 4 - implement ONLY this step, not others
-- Skills to invoke: database-design:postgresql
+- Step: 2 - implement ONLY this step, not others
+- Skills to invoke: python-development:python-testing-patterns
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
@@ -19,12 +19,12 @@
 1. Read plan for full context
 2. Implement ONLY the specified step (not others)
 3. Write all code to appropriate project locations
-4. Document decisions in implementation\step-4-evaluationcase-evaluationrun-schema.md
+4. Document decisions in implementation\step-2-versioning-helper-module.md
 5. Failure handling: after 3 attempts at same issue, document in ISSUES.md and return Status: needs-input
 
 ## Output Document Format
 ~~~markdown
-# IMPLEMENTATION - STEP 4: EVALUATIONCASE + EVALUATIONRUN SCHEMA
+# IMPLEMENTATION - STEP 2: VERSIONING HELPER MODULE
 **Status:** [completed/failed/blocked]
 
 ## Summary
