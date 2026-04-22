@@ -3,34 +3,39 @@ target_type: step
 target_name: sentiment_analysis
 description: Evaluate sentiment classification accuracy on labeled examples
 cases:
-  - name: clear_positive
-    inputs:
-      text: "I absolutely loved this product, best purchase this year!"
-    expected_output:
-      sentiment: positive
-  - name: clear_negative
-    inputs:
-      text: "Terrible experience, the product broke after one day."
-    expected_output:
-      sentiment: negative
-  - name: sarcasm_negative
-    inputs:
-      text: "Oh great, another software update that broke my workflow."
-    expected_output:
-      sentiment: negative
-    metadata:
-      difficulty: hard
-      category: sarcasm
-  - name: neutral_factual
-    inputs:
-      text: "The package arrived on Tuesday."
-    expected_output:
-      sentiment: neutral
-  - name: mixed_signals
-    inputs:
-      text: "The food was amazing but the service was terrible and slow."
-    expected_output:
-      sentiment: negative
-    metadata:
-      difficulty: medium
-      category: mixed
+- name: clear_positive
+  version: '1.0'
+  inputs:
+    text: I absolutely loved this product, best purchase this year!
+  expected_output:
+    sentiment: positive
+- name: clear_negative
+  version: '1.0'
+  inputs:
+    text: Terrible experience, the product broke after one day.
+  expected_output:
+    sentiment: negative
+- name: sarcasm_negative
+  version: '1.0'
+  inputs:
+    text: Oh great, another software update that broke my workflow.
+  expected_output:
+    sentiment: negative
+  metadata:
+    difficulty: hard
+    category: sarcasm
+- name: neutral_factual
+  version: '1.0'
+  inputs:
+    text: The package arrived on Tuesday.
+  expected_output:
+    sentiment: neutral
+- name: mixed_signals
+  version: '1.1'
+  inputs:
+    text: The food was amazing but the service was terrible and slow.
+  expected_output:
+    sentiment: mixed
+  metadata:
+    difficulty: medium
+    category: mixed
