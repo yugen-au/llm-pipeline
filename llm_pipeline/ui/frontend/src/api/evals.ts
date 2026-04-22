@@ -53,10 +53,22 @@ export interface RunListItem {
   completed_at: string | null
   variant_id: number | null
   delta_snapshot: Record<string, unknown> | null
+  case_versions: Record<string, string> | null
+  prompt_versions: Record<string, unknown> | null
+  model_snapshot: Record<string, unknown> | null
+  instructions_schema_snapshot: Record<string, unknown> | null
 }
 
 export interface CaseResultItem {
   id: number
+  /**
+   * DB id of the eval case, or null when the runner could not resolve the
+   * case name to a case row (see backend `runner.py` lines 222, 237 —
+   * `name_to_id.get(name, 0)`; the 0 sentinel is mapped to null by the
+   * route handler). Consumers that key into `RunListItem.case_versions`
+   * by `case_id` must treat null as "unmatched".
+   */
+  case_id: number | null
   case_name: string
   passed: boolean
   evaluator_scores: Record<string, unknown>
