@@ -101,3 +101,45 @@ None related to this work. All 16 failures are pre-existing:
 1. Add backend test asserting `case_id` is non-zero on `CaseResultItem` response for a run with known case IDs
 2. Add frontend unit test (Vitest) for `computeCaseBucket` with matched/drifted/unmatched scenarios
 3. Consider adding E2E test (Playwright) for the run picker dialog flow once test infra is set up
+
+---
+
+# Testing Results — Re-run (Post Review Fixes)
+
+## Summary
+**Status:** passed
+Re-verification after 5 review fixes (commits 0ceffc3d, 72fa5f09, e16d48a2, 634e9d72, Step 7 via 634e9d72). One additional ESLint error found and fixed: `react-hooks/set-state-in-effect` triggered by the Step 6 `useEffect`/setState pattern. Fixed by replacing `seededFor` useState + useEffect with combined `expandedState` object updated during render. Pytest: 16 failures matching pre-existing baseline, 0 new regressions.
+
+## Automated Testing
+
+### Test Execution
+**Pass Rate:** 1553/1569 backend tests (16 pre-existing failures, 0 regressions)
+
+```
+TSC: no errors (clean)
+ESLint (modified files): no errors after fix (0 problems)
+pytest: 16 failed, 1553 passed, 6 skipped
+```
+
+### Failed Tests
+None related to this work. All 16 pre-existing:
+- `tests/creator/test_sandbox.py` — 6 failures (Docker mock)
+- `tests/test_evaluators.py` — 7 failures (FieldMatchEvaluator)
+- `tests/ui/test_cli.py::TestDevModeWithFrontend::test_atexit_registered_with_cleanup_vite` — pre-existing
+- `tests/ui/test_runs.py::TestTriggerRun::test_returns_422_when_no_model_configured` — pre-existing
+- `tests/ui/test_websocket.py::TestLiveStream::test_live_stream_multiple_clients` — pre-existing
+
+## Build Verification
+- [x] `uv run pytest` — 16 pre-existing failures, 0 new regressions
+- [x] `npx tsc --noEmit` — clean
+- [x] `npx eslint` on all 4 modified files — clean after fix
+
+## Issues Found
+
+### setState-in-effect ESLint error in compare.tsx
+**Severity:** medium
+**Step:** Step 6
+**Details:** The `useEffect` that seeded expanded set by calling `setExpanded` + `setSeededFor` triggered `react-hooks/set-state-in-effect` from `recommended-latest` ruleset. Fixed by combining both into a single `expandedState: { key, set }` state object updated synchronously during render (setState-during-render pattern), removing the effect entirely. Commit: `ede9bc70`.
+
+## Recommendations
+1. No further automated fixes needed — all review fix commits verified clean
