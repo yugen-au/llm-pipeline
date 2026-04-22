@@ -62,6 +62,10 @@ import { JsonViewer } from '@/components/JsonViewer'
 // Search-param schema
 // ---------------------------------------------------------------------------
 
+// Note: variantRunId is accepted as a backward-compat alias for compareRunId.
+// The .transform() drops variantRunId from the resolved shape, so TanStack
+// Router will rewrite the URL (stripping variantRunId) on the next navigation.
+// This is intentional - bookmarks continue to work on initial load.
 const compareSearchSchema = z
   .object({
     baseRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
