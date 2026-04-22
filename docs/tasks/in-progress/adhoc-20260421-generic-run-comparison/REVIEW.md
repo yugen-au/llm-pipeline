@@ -97,3 +97,78 @@ None
 **Decision:** APPROVE
 
 All success criteria from PLAN.md are met, backend tests pass (0 new regressions from 16 pre-existing failures), TypeScript is clean, ESLint is clean, and the architecture decisions locked before implementation are faithfully executed. The medium/low issues are quality-of-implementation concerns, not correctness defects — they warrant follow-up tickets but do not block this merge. The setState-during-render and JsonViewer-cast patterns should be cleaned up in a follow-up pass, and the accessibility gaps on the run picker should be addressed before the picker is used on larger datasets. Unit tests for `computeCaseBucket` (flagged as a recommendation in TESTING.md) are the single most valuable next step to lock in the matching semantics.
+
+---
+
+# Re-Review (Post-Fix Verification)
+
+## Overall Assessment
+**Status:** complete
+
+All 7 issues from the original review addressed across 4 fix commits (`0ceffc3d`, `72fa5f09`, `634e9d72`, `e16d48a2`) and 1 test-automator ESLint fix (`ede9bc70`). TypeScript compile clean, ESLint clean on all modified files, backend tests pass (7 pre-existing failures, all unrelated to evals routes — creator/sandbox + test_wal + test_runs). One nuanced architectural comment: `ede9bc70` intentionally reverted the useEffect seed from `634e9d72` to a setState-during-render pattern to satisfy the `react-hooks/set-state-in-effect` rule. This is the officially supported React pattern ("Adjusting state while rendering", React docs), gated by a key comparison, so both approaches were defensible — the test-automator's pick is valid.
+
+## Fix Verification
+
+| Issue # | Original Severity | Fix Commit | Status | Notes |
+| --- | --- | --- | --- | --- |
+| 1 (setState during render) | Medium | `634e9d72` then refactored by `ede9bc70` | fixed | `634e9d72` introduced `useEffect`; `ede9bc70` refactored to setState-during-render with a key-gate (valid React pattern per official docs) to satisfy `react-hooks/set-state-in-effect` lint rule. The pattern is idiomatic and documented. |
+| 2 (JsonViewer null-cast) | Medium | `634e9d72` | fixed | `baseConfig`/`compareConfig` now built via filtered-inclusion (Option A from original review). Both are typed `Record<string, unknown>`, no `as unknown as` cast at call site. `hasSnapshotData` rewritten to `Object.keys(...).length > 0`. |
+| 3 (case_id=0 sentinel) | Medium | `0ceffc3d` | fixed | Backend `CaseResultItem.case_id: Optional[int] = None` with docstring explaining the runner.py sentinel mapping. Detail handler maps `cr.case_id if cr.case_id else None`. TS type `case_id: number \| null` with explanatory TSDoc. `computeCaseBucket` adds an explicit null guard at line 200. |
+| 4 (aria-label on Select buttons) | Medium | `e16d48a2` | fixed | Each Select button now has `aria-label={`Select run #${r.id}${variantLabel} started ${startedLabel} with pass rate ${passRate}`}`. Variant label is conditional. Visible text unchanged (refactored to share `startedLabel`/`variantLabel` locals). |
+| 5 (Zod URL rewrite comment) | Low | `72fa5f09` | fixed | 3-line explanatory comment at lines 65-68 of `compare.tsx` explaining `variantRunId` backward-compat alias and URL rewrite behavior. |
+| 6 (case_id Optional convention) | Low | `0ceffc3d` | fixed | Subsumed by fix #3; now consistent with other `Optional[T] = None` fields on the run models. |
+| 7 (Unused `_caseName` param) | Low | `634e9d72` | fixed | Parameter removed from `computeCaseBucket` signature and the single call site at line 1343. |
+
+## New Issues Found
+
+### Critical
+None
+
+### High
+None
+
+### Medium
+None
+
+### Low
+#### setState-during-render seed: expanded derivation uses fresh Set but toggleCase closes over stored set
+**Step:** 6 (post-fix refactor in `ede9bc70`)
+**Details:** In `compare.tsx` lines 1389-1407, the derived `expanded` variable for the "seed render" uses `new Set(initialExpanded)` while `setExpandedState` is scheduled to store the same value. Within that same render, `toggleCase`/`setExpanded` wrappers call `setExpandedState((prev) => ...)` which reads `prev.set` — on the seed render, `prev.set` is still the stale empty set, not `expanded`. React's batching and commit cycle make this effectively unobservable (setState-in-render causes an immediate re-render before any handler can fire), but a future refactor that exposes `expanded` to a ref-mutating child, or a synchronous useMemo dependency on `expanded` combined with a side-effect, could surface the discrepancy. Recommend adding a short comment at line 1394 noting that `expanded` during seed is transitional and re-rendered within the same commit. Non-blocking.
+
+#### Defensive `if cr.case_id else None` also maps truthy-false like 0 to None but ORM column is non-null int ≥ 1 in practice
+**Step:** 1 (post-fix in `0ceffc3d`)
+**Details:** Backend detail handler at `evals.py:1051` uses `cr.case_id if cr.case_id else None`. Since `EvaluationCaseResult.case_id` is a non-null int column and DB autoincrement starts at 1, the sentinel 0 is the only falsy value possible. Correct behavior. However, `if cr.case_id` also treats `None` as None (would short-circuit but column is non-null), so the expression is technically `cr.case_id if (cr.case_id != 0 and cr.case_id is not None) else None`. For clarity and to match the comment, consider `cr.case_id if cr.case_id != 0 else None`. Very minor readability improvement; not a defect.
+
+## Review Checklist (Re-Review)
+[x] All 7 original issues have verifiable fixes in the codebase
+[x] Fix commits touch only the files identified in the original issues
+[x] TypeScript compiles clean (`tsc --noEmit` — no output = no errors)
+[x] ESLint clean on `compare.tsx`, `runs.$runId.tsx`, `api/evals.ts`
+[x] Backend tests: 7 pre-existing failures (creator/sandbox, test_runs, test_wal), none from evals routes
+[x] No new hardcoded values introduced
+[x] No new hook-rule violations
+[x] case_id null propagation verified end-to-end (runner sentinel 0 -> backend maps to None -> TS `number | null` -> `computeCaseBucket` null-guard at line 200 -> returns `'unmatched'`)
+[x] aria-label template interpolates real runtime values (id, variant, started_at, pass rate)
+[x] Zod `.transform()` comment accurately describes TanStack Router URL-rewrite behavior
+[x] Option A (filtered configs) removes the need for `as unknown as Record<string, unknown>` force-cast
+[x] `hasSnapshotData` semantics preserved (base or compare has at least one populated snapshot field)
+
+## Files Re-Reviewed
+| File | Status | Notes |
+| --- | --- | --- |
+| llm_pipeline/ui/routes/evals.py | pass | `CaseResultItem.case_id` now `Optional[int] = None` with comment; detail handler maps 0 sentinel to None at line 1051 |
+| llm_pipeline/ui/frontend/src/api/evals.ts | pass | `case_id: number \| null` with TSDoc explaining null semantics |
+| llm_pipeline/ui/frontend/src/routes/evals.$datasetId.compare.tsx | pass | Zod comment added; `computeCaseBucket` drops `_caseName` param and adds null guard; `baseConfig`/`compareConfig` use Option A filtered construction; JsonViewer call site no longer casts; `hasSnapshotData` rewritten; seed pattern uses valid setState-during-render with key gate |
+| llm_pipeline/ui/frontend/src/routes/evals.$datasetId.runs.$runId.tsx | pass | Select button gains contextual `aria-label`; `startedLabel`/`variantLabel` shared between aria-label and visible text |
+
+## Regression Scan
+- No new issues introduced by the 5 fix commits.
+- The `ede9bc70` refactor (test-automator) is a legitimate lint-rule-satisfying pattern; worth a one-line comment for future maintainers but not a defect.
+- Backend regression count unchanged (7 pre-existing, 0 new).
+- TypeScript clean.
+- ESLint clean.
+
+## Recommendation (Re-Review)
+**Decision:** APPROVE
+
+All 4 medium and 3 low issues from the original review have been addressed with appropriate, verified fixes. The test-automator's lint fix is valid (React's official setState-during-render pattern). Two very minor Low observations noted above are non-blocking readability notes. Task is ready to exit review phase.
