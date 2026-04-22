@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
@@ -189,7 +189,6 @@ type VersionBucket = 'matched' | 'drifted' | 'unmatched'
  * - Otherwise: compare version strings from each run's case_versions map
  */
 function computeCaseBucket(
-  _caseName: string,
   baseResult: CaseResultItem | undefined,
   compareResult: CaseResultItem | undefined,
   baseRun: RunDetail,
@@ -1342,7 +1341,6 @@ function CompareRunsPage() {
     if (baseRun && compareRun) {
       for (const name of names) {
         const bucket = computeCaseBucket(
-          name,
           baseMap.get(name),
           cmpMap.get(name),
           baseRun,
@@ -1399,10 +1397,12 @@ function CompareRunsPage() {
   // compareRun) pair. Key on run ids so reloading a different compare URL
   // re-seeds correctly.
   const seedKey = `${baseRun?.id ?? 0}-${compareRun?.id ?? 0}`
-  if (baseRun && compareRun && seedKey !== seededFor) {
-    setExpanded(new Set(initialExpanded))
-    setSeededFor(seedKey)
-  }
+  useEffect(() => {
+    if (baseRun && compareRun && seedKey !== seededFor) {
+      setExpanded(new Set(initialExpanded))
+      setSeededFor(seedKey)
+    }
+  }, [seedKey, seededFor, initialExpanded, baseRun, compareRun])
 
   function toggleCase(name: string) {
     setExpanded((prev) => {
@@ -1564,20 +1564,18 @@ function CompareRunsPage() {
   // Delta summary: snapshot-based diff from both runs' prompt_versions +
   // model_snapshot. Works for any two runs regardless of variant.
   // Must be before early returns to satisfy rules-of-hooks.
-  const baseConfig = useMemo(
-    () => ({
-      prompt_versions: baseRun?.prompt_versions ?? null,
-      model_snapshot: baseRun?.model_snapshot ?? null,
-    }),
-    [baseRun],
-  )
-  const compareConfig = useMemo(
-    () => ({
-      prompt_versions: compareRun?.prompt_versions ?? null,
-      model_snapshot: compareRun?.model_snapshot ?? null,
-    }),
-    [compareRun],
-  )
+  const baseConfig = useMemo<Record<string, unknown>>(() => {
+    const cfg: Record<string, unknown> = {}
+    if (baseRun?.prompt_versions != null) cfg.prompt_versions = baseRun.prompt_versions
+    if (baseRun?.model_snapshot != null) cfg.model_snapshot = baseRun.model_snapshot
+    return cfg
+  }, [baseRun])
+  const compareConfig = useMemo<Record<string, unknown>>(() => {
+    const cfg: Record<string, unknown> = {}
+    if (compareRun?.prompt_versions != null) cfg.prompt_versions = compareRun.prompt_versions
+    if (compareRun?.model_snapshot != null) cfg.model_snapshot = compareRun.model_snapshot
+    return cfg
+  }, [compareRun])
 
   // Early param validation
   if (baseRunId === 0 || compareRunId === 0) {
@@ -1636,11 +1634,12 @@ function CompareRunsPage() {
   const allExpanded =
     allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
+  // Renders if either side has any snapshot field. Partial nulls (e.g. base
+  // has data, compare has none) still render — the filtered-config approach
+  // means the missing side shows as `{}`, so the diff clearly highlights the
+  // added/removed fields.
   const hasSnapshotData =
-    baseConfig.prompt_versions != null ||
-    baseConfig.model_snapshot != null ||
-    compareConfig.prompt_versions != null ||
-    compareConfig.model_snapshot != null
+    Object.keys(baseConfig).length > 0 || Object.keys(compareConfig).length > 0
 
   return (
     <ScrollArea className="h-full">
@@ -1785,8 +1784,8 @@ function CompareRunsPage() {
             {hasSnapshotData ? (
               <div className="rounded border bg-background p-2 max-h-[400px] overflow-auto">
                 <JsonViewer
-                  before={baseConfig as unknown as Record<string, unknown>}
-                  after={compareConfig as unknown as Record<string, unknown>}
+                  before={baseConfig}
+                  after={compareConfig}
                   maxDepth={3}
                 />
               </div>
