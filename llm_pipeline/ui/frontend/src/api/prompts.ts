@@ -76,6 +76,55 @@ export function usePromptDetail(promptKey: string) {
   })
 }
 
+/**
+ * A prompt row fetched by (prompt_key, prompt_type, version), including
+ * non-latest historical rows.
+ *
+ * Used by the compare page to resolve the exact prompt content used by a
+ * past run. Prompt versioning is append-only, so a past run's
+ * ``prompt_versions`` entry may reference a row that is no longer latest.
+ */
+export interface HistoricalPromptItem {
+  id: number
+  prompt_key: string
+  prompt_name: string
+  prompt_type: string
+  category: string | null
+  step_name: string | null
+  content: string
+  required_variables: string[] | null
+  variable_definitions: Record<string, unknown> | null
+  description: string | null
+  version: string
+  is_active: boolean
+  is_latest: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * Fetch a prompt row by (key, type, version), including non-latest rows.
+ *
+ * Prompt rows are immutable once persisted (append-only versioning), so
+ * results are cached indefinitely. Used on the compare page to resolve the
+ * exact prompt content used by a past run.
+ */
+export function useHistoricalPrompt(
+  promptKey: string,
+  promptType: string,
+  version: string,
+) {
+  return useQuery({
+    queryKey: queryKeys.prompts.historical(promptKey, promptType, version),
+    queryFn: () =>
+      apiClient<HistoricalPromptItem>(
+        `/prompts/${promptKey}/${promptType}/versions/${version}`,
+      ),
+    enabled: Boolean(promptKey) && Boolean(promptType) && Boolean(version),
+    staleTime: Infinity,
+  })
+}
+
 /** Create a new prompt. */
 export function useCreatePrompt() {
   const qc = useQueryClient()

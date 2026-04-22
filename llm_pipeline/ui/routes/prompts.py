@@ -58,6 +58,31 @@ class PromptDetailResponse(BaseModel):
     variants: List[PromptVariant]
 
 
+class HistoricalPromptItem(BaseModel):
+    """A prompt row fetched by (key, type, version), including non-latest rows.
+
+    Used by the compare page to resolve the exact prompt content used by a
+    past run. Prompt versioning is append-only, so historical rows (with
+    ``is_latest=False``) are preserved and can be looked up by version.
+    """
+
+    id: int
+    prompt_key: str
+    prompt_name: str
+    prompt_type: str
+    category: Optional[str] = None
+    step_name: Optional[str] = None
+    content: str
+    required_variables: Optional[List[str]] = None
+    variable_definitions: Optional[Dict] = None
+    description: Optional[str] = None
+    version: str
+    is_active: bool
+    is_latest: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 # ---------------------------------------------------------------------------
 # Request models (CRUD)
 # ---------------------------------------------------------------------------
@@ -348,6 +373,51 @@ def delete_prompt(
 
     db.commit()
     return {"detail": "Prompt deactivated"}
+
+
+@router.get(
+    "/{prompt_key}/{prompt_type}/versions/{version}",
+    response_model=HistoricalPromptItem,
+)
+def get_historical_prompt(
+    prompt_key: str,
+    prompt_type: str,
+    version: str,
+    db: DBSession,
+) -> HistoricalPromptItem:
+    """Return the prompt row for ``(prompt_key, prompt_type, version)``.
+
+    Prompt versioning is append-only: updating a prompt creates a new row
+    with a new primary key and bumps the version. Past runs record the
+    version used via ``EvaluationRun.prompt_versions``. This endpoint
+    resolves any row -- active or inactive, latest or historical -- so
+    callers can reconstruct the prompt content used by a past run.
+    """
+    stmt = select(Prompt).where(
+        Prompt.prompt_key == prompt_key,
+        Prompt.prompt_type == prompt_type,
+        Prompt.version == version,
+    )
+    row = db.exec(stmt).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Prompt version not found")
+    return HistoricalPromptItem(
+        id=row.id,
+        prompt_key=row.prompt_key,
+        prompt_name=row.prompt_name,
+        prompt_type=row.prompt_type,
+        category=row.category,
+        step_name=row.step_name,
+        content=row.content,
+        required_variables=row.required_variables,
+        variable_definitions=row.variable_definitions,
+        description=row.description,
+        version=row.version,
+        is_active=row.is_active,
+        is_latest=row.is_latest,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 @router.get("/{prompt_key}/{prompt_type}/variables")

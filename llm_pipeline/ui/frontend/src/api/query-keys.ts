@@ -25,6 +25,8 @@ export const queryKeys = {
     all: ['prompts'] as const,
     list: (filters: Partial<PromptListParams>) => ['prompts', filters] as const,
     detail: (key: string) => ['prompts', key] as const,
+    historical: (key: string, type: string, version: string) =>
+      ['prompts', key, type, 'versions', version] as const,
   },
   pipelines: {
     all: ['pipelines'] as const,
