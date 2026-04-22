@@ -4,19 +4,19 @@
 - Task folder: docs\tasks\in-progress\adhoc-20260421-generic-run-comparison
 - Graphiti group_id: llm-pipeline
 - Phase: fixing-review
-- Output Files: implementation\step-1-add-caseid-to-caseresultitem.md (if already exists, APPEND to file)
+- Output Files: implementation\step-3-zod-schema-comparerunid-alias.md (if already exists, APPEND to file)
 - Issues source: REVIEW.md
-- Step to fix: 1
+- Step to fix: 3
 
 ## BEFORE Reading Codebase
 1. Query Graphiti memory MCP (group_id above) for existing codebase context
 2. Check Context7 MCP for latest library/framework docs based on tech stack
-3. [custom.context7_docs]
+3. Context7 library IDs to query: /colinhacks/zod
 
 ## Instructions
-1. Read REVIEW.md for issues assigned to Step 1
+1. Read REVIEW.md for issues assigned to Step 3
 2. Fix each issue for this step only
-3. APPEND fix documentation to implementation\step-1-add-caseid-to-caseresultitem.md (do not replace existing content)
+3. APPEND fix documentation to implementation\step-3-zod-schema-comparerunid-alias.md (do not replace existing content)
 
 ## Output Document Format
 ~~~markdown

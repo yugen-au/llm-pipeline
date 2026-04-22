@@ -141,3 +141,8 @@
 [2026-04-22 10:49:31] [DEBUG] STATE.md atomic write complete
 [2026-04-22 10:53:02] [ERROR] BLOCKED: Invalid commit message format
 [2026-04-22 10:53:38] [DEBUG] STATE.md atomic write complete
+[2026-04-22 10:53:49] [INFO] Already committed fixing-review-A: ['step-1-add-caseid-to-caseresultitem.md', 'step-2-sync-frontend-ts-types.md']
+[2026-04-22 10:53:51] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-22 10:53:51] [INFO] Auto-updated agent statuses: Zod schema compareRunId + alias: pending -> in-progress
+[2026-04-22 10:53:51] [INFO] Deleted 1 old contract file(s)
+[2026-04-22 10:53:51] [DEBUG] STATE.md atomic write complete
