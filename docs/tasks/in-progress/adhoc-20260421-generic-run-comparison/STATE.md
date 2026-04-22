@@ -1,7 +1,7 @@
 ## Task: adhoc-20260421-generic-run-comparison
 ## Description: Generic eval run comparison — replace baseline-only compare with any-two-runs picker, case-level version matching (matched/drifted/unmatched buckets), scoped aggregates. Modify existing comparison page to support any run-to-run comparison.
 
-## Phase: review
+## Phase: summary
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -12,7 +12,7 @@
 ## Steps to Fix: [1,3,5,6,7]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-22 11:16
+## Last Updated: 2026-04-22 11:17
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -30,4 +30,5 @@
 | Delta summary snapshot diff | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 1 | a96f5908eaf046902 | febfdd6a,26454a48 | - |
 | Export neutral meta-prompt | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | accaa787bd57e47f7 | e22de50e | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 1 | a598dc485fc8484c5 | fae357b1,fef4f306 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | a9ba998dcaad741f3 | 3bbee64d | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 1 | a9ba998dcaad741f3 | 3bbee64d,1a59a585 | - |
+| Create summary | code-documentation:docs-architect | summary | 1 | - | A | in-progress | 0 | pending | pending | - |
