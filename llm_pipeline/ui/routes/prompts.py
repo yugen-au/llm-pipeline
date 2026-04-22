@@ -79,8 +79,10 @@ class HistoricalPromptItem(BaseModel):
     version: str
     is_active: bool
     is_latest: bool
-    created_at: datetime
-    updated_at: datetime
+    # Nullable -- legacy rows predating the versioning-snapshots migration
+    # may lack these timestamps.
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 # ---------------------------------------------------------------------------

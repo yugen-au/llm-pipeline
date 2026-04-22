@@ -102,8 +102,10 @@ export interface HistoricalCaseItem {
   inputs: Record<string, unknown>
   expected_output: Record<string, unknown> | null
   metadata_: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
+  // Nullable -- legacy rows predating the versioning-snapshots migration
+  // may lack these timestamps.
+  created_at: string | null
+  updated_at: string | null
 }
 
 export interface SchemaResponse {

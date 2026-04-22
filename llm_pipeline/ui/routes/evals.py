@@ -110,8 +110,10 @@ class HistoricalCaseItem(BaseModel):
     inputs: dict
     expected_output: Optional[dict] = None
     metadata_: Optional[dict] = None
-    created_at: str
-    updated_at: str
+    # Nullable -- legacy rows predating the versioning-snapshots migration
+    # may lack these timestamps.
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -576,8 +578,8 @@ def get_historical_case(
         inputs=case.inputs,
         expected_output=case.expected_output,
         metadata_=case.metadata_,
-        created_at=case.created_at.isoformat(),
-        updated_at=case.updated_at.isoformat(),
+        created_at=case.created_at.isoformat() if case.created_at else None,
+        updated_at=case.updated_at.isoformat() if case.updated_at else None,
     )
 
 

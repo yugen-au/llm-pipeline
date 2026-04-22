@@ -98,8 +98,10 @@ export interface HistoricalPromptItem {
   version: string
   is_active: boolean
   is_latest: boolean
-  created_at: string
-  updated_at: string
+  // Nullable -- legacy rows predating the versioning-snapshots migration
+  // may lack these timestamps.
+  created_at: string | null
+  updated_at: string | null
 }
 
 /**
