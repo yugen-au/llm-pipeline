@@ -2,7 +2,12 @@
  * TanStack Query hooks for the Evals API.
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  useQueries,
+  useQuery,
+  useMutation,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
@@ -353,6 +358,40 @@ export function useHistoricalCase(datasetId: number, caseId: number | null) {
     enabled: datasetId > 0 && id > 0,
     staleTime: Infinity,
   })
+}
+
+/**
+ * Batch-fetch historical cases by id. Used by the compare page export to
+ * resolve every case row referenced by either run in one pass. Returns a
+ * map keyed by case_id, plus an overall loading flag.
+ */
+export function useHistoricalCases(
+  datasetId: number,
+  caseIds: number[],
+): { byId: Map<number, HistoricalCaseItem>; isLoading: boolean } {
+  const dedupedSorted = Array.from(new Set(caseIds.filter((id) => id > 0))).sort(
+    (a, b) => a - b,
+  )
+  const results = useQueries({
+    queries: dedupedSorted.map((id) => ({
+      queryKey: queryKeys.evals.historicalCase(datasetId, id),
+      queryFn: () =>
+        apiClient<HistoricalCaseItem>(
+          `/evals/${datasetId}/cases/${id}/historical`,
+        ),
+      enabled: datasetId > 0,
+      staleTime: Infinity,
+    })),
+  })
+  const byId = new Map<number, HistoricalCaseItem>()
+  dedupedSorted.forEach((id, i) => {
+    const data = results[i].data
+    if (data) byId.set(id, data)
+  })
+  return {
+    byId,
+    isLoading: results.some((r) => r.isLoading),
+  }
 }
 
 /**

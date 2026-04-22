@@ -18,6 +18,7 @@ import {
   useDataset,
   useEvalRun,
   useHistoricalCase,
+  useHistoricalCases,
   useVariant,
 } from '@/api/evals'
 import type {
@@ -26,9 +27,8 @@ import type {
   HistoricalCaseItem,
   RunDetail,
 } from '@/api/evals'
-import { useAutoGenerateObjects, useRunPrompts } from '@/api/prompts'
+import { useRunPrompts } from '@/api/prompts'
 import type {
-  AutoGenerateObject,
   FlatPromptVersion,
   HistoricalPromptItem,
 } from '@/api/prompts'
@@ -360,14 +360,6 @@ interface ExportStats {
   pass_rate: number | null
 }
 
-interface ExportCaseResult {
-  case_name: string
-  passed: boolean
-  error_message: string | null
-  output_data: Record<string, unknown> | null
-  evaluator_scores: Record<string, unknown>
-}
-
 interface ExportRunPrompt {
   /** Pipeline step that owns this prompt (pipeline-target runs only); null
    * for step-target runs where the whole run is a single step. */
@@ -398,15 +390,50 @@ interface ExportRunContext {
 interface ExportRun {
   id: number
   stats: ExportStats
-  case_results: ExportCaseResult[]
   context: ExportRunContext
 }
 
-interface ExportCaseDrift {
-  case_name: string
-  base_version: string | null
-  compare_version: string | null
+/** A case row at a specific version — the exact test definition a run used. */
+interface ExportCaseVersion {
+  case_id: number
+  version: string
+  inputs: Record<string, unknown>
+  expected_output: Record<string, unknown> | null
+  metadata_: Record<string, unknown> | null
+}
+
+/** A run's observed behavior on a case — what it produced, whether the
+ * evaluation concluded pass/fail/error. Per the consistency principle we
+ * intentionally omit named evaluator scores (e.g. `SentimentLabelEvaluator:
+ * true`) because the reader has no definition of what each evaluator
+ * checks; the aggregate pass/fail + actual output is enough to reason
+ * about why a case did or didn't satisfy its criteria. */
+interface ExportCaseRunResult {
+  run_id: number
+  passed: boolean
+  output_data: Record<string, unknown> | null
+  error_message: string | null
+}
+
+/** Everything about a single case across both runs — the version(s) of the
+ * test definition each run used, and each run's observed behavior. Always
+ * rendered in full regardless of whether there's a delta. */
+interface ExportCase {
+  name: string
+  /** 'matched' = both runs used the same case version. 'drifted' = different
+   * versions (a real content change between runs). 'unmatched' = the case
+   * existed in only one of the two runs. */
   bucket: 'matched' | 'drifted' | 'unmatched'
+  /** Pass/fail delta between base and compare (or 'n/a' when one side
+   * lacks a result). Derived from `passed` + `error_message` on each side. */
+  delta: 'improved' | 'regressed' | 'unchanged' | 'n/a'
+  /** The case version used by the base run. Null when the case wasn't
+   * present in the base run or the base result couldn't resolve a case id. */
+  base_version: ExportCaseVersion | null
+  /** The case version used by the compare run. Symmetric to base_version. */
+  compare_version: ExportCaseVersion | null
+  base_result: ExportCaseRunResult | null
+  compare_result: ExportCaseRunResult | null
 }
 
 interface ExportPayload {
@@ -419,11 +446,6 @@ interface ExportPayload {
     name: string
     description: string | null
   }
-  /** Distinct evaluator names observed across both runs' case results. Lets
-   * the reader see what scoring was applied without mining each case. */
-  evaluators: string[]
-  /** Runtime-registered enum catalog (referenced by instructions schemas). */
-  registered_enums: Record<string, Array<{ name: string; value: string }>>
   comparison: {
     base_run_id: number
     compare_run_id: number
@@ -432,14 +454,9 @@ interface ExportPayload {
     base: ExportRun
     compare: ExportRun
   }
-  /** Per-case version drift between the two runs. Empty when both runs used
-   * the same case versions. */
-  case_drift: ExportCaseDrift[]
-  dataset_cases: Array<{
-    name: string
-    inputs: Record<string, unknown>
-    expected_output: Record<string, unknown> | null
-  }>
+  /** Every case that appears in either run, with full test-definition and
+   * result data for each side. Sorted by interest (regressed/errored first). */
+  cases: ExportCase[]
 }
 
 function toExportStats(run: RunDetail): ExportStats {
@@ -449,16 +466,6 @@ function toExportStats(run: RunDetail): ExportStats {
     failed: run.failed,
     errored: run.errored,
     pass_rate: passRate(run),
-  }
-}
-
-function toExportCaseResult(r: CaseResultItem): ExportCaseResult {
-  return {
-    case_name: r.case_name,
-    passed: r.passed,
-    error_message: r.error_message,
-    output_data: r.output_data,
-    evaluator_scores: r.evaluator_scores,
   }
 }
 
@@ -515,9 +522,103 @@ function toExportRun(run: RunDetail, prompts: ExportRunPrompt[]): ExportRun {
   return {
     id: run.id,
     stats: toExportStats(run),
-    case_results: run.case_results.map(toExportCaseResult),
     context: toExportRunContext(run, prompts),
   }
+}
+
+function toExportCaseVersion(
+  row: HistoricalCaseItem | undefined,
+): ExportCaseVersion | null {
+  if (!row) return null
+  return {
+    case_id: row.id,
+    version: row.version,
+    inputs: row.inputs,
+    expected_output: row.expected_output,
+    metadata_: row.metadata_,
+  }
+}
+
+function toExportCaseRunResult(
+  runId: number,
+  r: CaseResultItem | undefined,
+): ExportCaseRunResult | null {
+  if (!r) return null
+  return {
+    run_id: runId,
+    passed: r.passed,
+    output_data: r.output_data,
+    error_message: r.error_message,
+  }
+}
+
+/** Build the unified per-case export data. For each case that appeared in
+ * either run, resolve the exact historical version each run used, pair it
+ * with the run's observed result, and label the bucket + delta. */
+function buildCases(
+  baseRun: RunDetail,
+  compareRun: RunDetail,
+  historicalCases: Map<number, HistoricalCaseItem>,
+): ExportCase[] {
+  const baseByName = new Map(
+    baseRun.case_results.map((r) => [r.case_name, r]),
+  )
+  const compareByName = new Map(
+    compareRun.case_results.map((r) => [r.case_name, r]),
+  )
+  const names = Array.from(
+    new Set([...baseByName.keys(), ...compareByName.keys()]),
+  )
+
+  const out: ExportCase[] = []
+  for (const name of names) {
+    const b = baseByName.get(name)
+    const c = compareByName.get(name)
+    const baseRow = b?.case_id != null ? historicalCases.get(b.case_id) : undefined
+    const compareRow =
+      c?.case_id != null ? historicalCases.get(c.case_id) : undefined
+    const baseVersion = toExportCaseVersion(baseRow)
+    const compareVersion = toExportCaseVersion(compareRow)
+
+    let bucket: ExportCase['bucket']
+    if (!b || !c) {
+      bucket = 'unmatched'
+    } else if (baseRow && compareRow) {
+      bucket = baseRow.version === compareRow.version ? 'matched' : 'drifted'
+    } else {
+      // Missing historical data on at least one side; treat as matched if
+      // both have the same case id, otherwise unmatched.
+      bucket = b?.case_id === c?.case_id ? 'matched' : 'drifted'
+    }
+
+    const delta = caseDelta(b, c)
+    out.push({
+      name,
+      bucket,
+      delta,
+      base_version: baseVersion,
+      compare_version: compareVersion,
+      base_result: toExportCaseRunResult(baseRun.id, b),
+      compare_result: toExportCaseRunResult(compareRun.id, c),
+    })
+  }
+
+  // Stable sort: regressed/errored first, then failing-in-compare, then
+  // improved, then the rest. Alpha tiebreaker.
+  function priority(ec: ExportCase): number {
+    const k = ec.delta
+    if (k === 'regressed') return 0
+    if (ec.base_result?.error_message || ec.compare_result?.error_message)
+      return 0
+    const compareFailing = ec.compare_result
+      ? !!ec.compare_result.error_message || !ec.compare_result.passed
+      : false
+    if (compareFailing) return 1
+    if (k === 'improved') return 2
+    return 3
+  }
+  out.sort((a, b) => priority(a) - priority(b) || a.name.localeCompare(b.name))
+  return out
 }
 
 /** A base/compare prompt pair, keyed by step+key+type. Either side may be
@@ -576,71 +677,6 @@ function pairRunPrompts(
   return Array.from(pairs.values())
 }
 
-/** Collect distinct evaluator names across both runs' case results. */
-function collectEvaluatorNames(
-  baseRun: RunDetail,
-  compareRun: RunDetail,
-): string[] {
-  const names = new Set<string>()
-  for (const r of [...baseRun.case_results, ...compareRun.case_results]) {
-    for (const k of Object.keys(r.evaluator_scores ?? {})) {
-      names.add(k)
-    }
-  }
-  return Array.from(names).sort()
-}
-
-/** Build the case-drift list for the export payload. Uses case_versions on
- * each run and the case_id embedded in each case result to key into them. */
-function computeCaseDrift(
-  baseRun: RunDetail,
-  compareRun: RunDetail,
-): ExportCaseDrift[] {
-  const baseCv = baseRun.case_versions ?? {}
-  const compareCv = compareRun.case_versions ?? {}
-  const baseByName = new Map(
-    baseRun.case_results.map((r) => [r.case_name, r]),
-  )
-  const compareByName = new Map(
-    compareRun.case_results.map((r) => [r.case_name, r]),
-  )
-  const names = Array.from(
-    new Set([...baseByName.keys(), ...compareByName.keys()]),
-  ).sort()
-  const out: ExportCaseDrift[] = []
-  for (const name of names) {
-    const b = baseByName.get(name)
-    const c = compareByName.get(name)
-    const baseVersion =
-      b?.case_id != null ? (baseCv[String(b.case_id)] ?? null) : null
-    const compareVersion =
-      c?.case_id != null ? (compareCv[String(c.case_id)] ?? null) : null
-    let bucket: ExportCaseDrift['bucket']
-    if (!b || !c) bucket = 'unmatched'
-    else if (baseVersion == null && compareVersion == null) bucket = 'matched'
-    else if (baseVersion === compareVersion) bucket = 'matched'
-    else bucket = 'drifted'
-    out.push({
-      case_name: name,
-      base_version: baseVersion,
-      compare_version: compareVersion,
-      bucket,
-    })
-  }
-  return out
-}
-
-function buildEnumCatalog(
-  objects: AutoGenerateObject[] | undefined,
-): Record<string, Array<{ name: string; value: string }>> {
-  const out: Record<string, Array<{ name: string; value: string }>> = {}
-  for (const o of objects ?? []) {
-    if (o.kind !== 'enum' || !o.members) continue
-    out[o.name] = o.members.map((m) => ({ name: m.name, value: m.value }))
-  }
-  return out
-}
-
 interface BuildPayloadArgs {
   dataset: {
     id: number
@@ -648,23 +684,24 @@ interface BuildPayloadArgs {
     description: string | null
     target_name: string
     target_type: string
-    cases: CaseItem[]
   }
-  enumObjects: AutoGenerateObject[] | undefined
   baseRun: RunDetail
   compareRun: RunDetail
   basePrompts: ExportRunPrompt[]
   comparePrompts: ExportRunPrompt[]
+  /** Resolved historical case rows keyed by case_id. Populated by the
+   * compare page from every case_id referenced in either run's case_results. */
+  historicalCases: Map<number, HistoricalCaseItem>
 }
 
 function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
   const {
     dataset,
-    enumObjects,
     baseRun,
     compareRun,
     basePrompts,
     comparePrompts,
+    historicalCases,
   } = args
 
   return {
@@ -677,8 +714,6 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
       name: dataset.name,
       description: dataset.description,
     },
-    evaluators: collectEvaluatorNames(baseRun, compareRun),
-    registered_enums: buildEnumCatalog(enumObjects),
     comparison: {
       base_run_id: baseRun.id,
       compare_run_id: compareRun.id,
@@ -687,34 +722,20 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
       base: toExportRun(baseRun, basePrompts),
       compare: toExportRun(compareRun, comparePrompts),
     },
-    case_drift: computeCaseDrift(baseRun, compareRun),
-    dataset_cases: dataset.cases.map((c) => ({
-      name: c.name,
-      inputs: c.inputs,
-      expected_output: c.expected_output,
-    })),
+    cases: buildCases(baseRun, compareRun, historicalCases),
   }
 }
 
 // Meta-prompt prepended to markdown exports. JSON omits this.
-const META_PROMPT = `# Eval Run Comparison
+const META_PROMPT = `# Eval run comparison
 
-## Your task
+This document contains full data for two runs of an automated evaluation suite over a language-model step. Both runs execute the same suite of test cases; each test case has defined inputs, an expected output, and optional metadata. A pass/fail verdict is produced per case — the exact logic of that verdict is not included here, so treat ` + '`pass`' + ` and ` + '`fail`' + ` as opaque signals produced by the framework. Ask for the evaluator definition if the reasoning behind a verdict matters to your analysis.
 
-You are reviewing two runs of an automated evaluation suite for a language-model step. Each run executes the same set of test cases through the LLM step and scores the outputs using one or more evaluator functions. Your job is to analyze the differences between the two runs and recommend concrete changes that would improve results on the failing or regressed cases.
+Every case is shown in full regardless of whether its result changed between runs, because patterns can only be inferred from the complete picture. A proposed change that improves a failing case may break a currently-passing one; both must remain visible.
 
-## How to approach this
+**Version drift:** when a case's definition (inputs, expected output, or metadata) was edited between the two runs, that case is labeled *drifted* and both versions are shown side by side. An apparent "improvement" on a drifted case may reflect the test being rewritten rather than the model changing behavior — compare the two versions carefully before attributing progress.
 
-Look at the data as a pattern-matching exercise:
-
-1. **What changed between the two runs?** Compare the model, system prompt, user prompt, instructions schema, and any variant overrides. These are the knobs that were adjusted.
-2. **What changed in the cases themselves?** Cases may have been edited between runs (different inputs or different expected outputs). Any such changes are flagged in the "Case version drift" section; treat drifted cases cautiously — an apparent improvement may reflect the test changing, not the model getting better.
-3. **Where are the model's outputs wrong?** For failing or regressed cases, compare the actual output to the expected output and identify patterns (e.g. specific edge cases the prompt doesn't cover, schema fields the model misinterprets, formatting issues).
-4. **What can be tweaked to fix this?** The levers available are: the system prompt, the user prompt template, the instructions schema (including enum values), per-case expected outputs, and the underlying model. Recommend specific, actionable changes.
-
-## What to produce
-
-A summary of the patterns you see and a prioritized list of recommended changes, each naming the specific lever (system prompt, user prompt, schema, expected output, model) and the rationale.
+**What you can change:** the system prompt, the user prompt template, the instructions schema, per-case expected outputs, and the underlying model. Raise questions about anything else that would meaningfully inform your recommendations.
 `
 
 function fenced(lang: string, body: string): string {
@@ -725,271 +746,155 @@ function jsonFence(obj: unknown): string {
   return fenced('json', JSON.stringify(obj, null, 2))
 }
 
-function formatCaseStatus(r: CaseResultItem | undefined): string {
-  if (!r) return 'n/a'
-  if (r.error_message) return 'errored'
-  return r.passed ? 'pass' : 'fail'
-}
-
-function formatDeltaTag(kind: DeltaKind): string {
-  switch (kind) {
-    case 'improved':
-      return 'improved'
-    case 'regressed':
-      return 'regressed'
-    case 'unchanged':
-      return 'unchanged'
-    default:
-      return 'n/a'
-  }
-}
-
-function outputOrError(r: CaseResultItem | undefined): string {
-  if (!r) return '*no result*'
-  if (r.error_message) {
-    return fenced('', `error: ${r.error_message}`)
-  }
-  if (r.output_data == null) return '*no output*'
-  return jsonFence(r.output_data)
-}
-
-// --- YAML rendering for evaluator scores -----------------------------------
-
-/** Escape a string value for YAML flow-scalar use. Quotes if contains special chars. */
-function yamlString(s: string): string {
-  // Quote if contains control chars, colons, hashes, brackets, or leading/trailing
-  // whitespace — keeps things safe without full YAML spec compliance.
-  if (/[:#[\]{},&*!|>'"%@`\n\r\t]/.test(s) || /^\s|\s$/.test(s) || s === '') {
-    return JSON.stringify(s)
-  }
-  return s
-}
-
-function yamlScalar(v: unknown): string {
-  if (v === null || v === undefined) return 'null'
-  if (typeof v === 'boolean') return v ? 'true' : 'false'
-  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'null'
-  if (typeof v === 'string') return yamlString(v)
-  // Fallback: JSON-encode arrays/objects on one line
-  return JSON.stringify(v)
-}
-
-function isScalar(v: unknown): boolean {
-  return (
-    v === null ||
-    v === undefined ||
-    typeof v === 'boolean' ||
-    typeof v === 'number' ||
-    typeof v === 'string'
+/** Render a single case version's full content (inputs, expected, metadata). */
+function renderCaseVersion(v: ExportCaseVersion): string {
+  const parts: string[] = []
+  parts.push(`**Inputs:**\n${jsonFence(v.inputs)}`)
+  parts.push(
+    v.expected_output
+      ? `**Expected output:**\n${jsonFence(v.expected_output)}`
+      : `**Expected output:** *none defined*`,
   )
+  parts.push(
+    v.metadata_ && Object.keys(v.metadata_).length > 0
+      ? `**Metadata:**\n${jsonFence(v.metadata_)}`
+      : `**Metadata:** *none*`,
+  )
+  return parts.join('\n\n')
 }
 
-/** Render an object as YAML, indented by `indent` spaces per level. */
-function yamlObject(obj: Record<string, unknown>, indent = 0): string {
-  const pad = ' '.repeat(indent)
-  const lines: string[] = []
-  for (const [k, v] of Object.entries(obj)) {
-    const key = yamlString(k)
-    if (isScalar(v)) {
-      lines.push(`${pad}${key}: ${yamlScalar(v)}`)
-    } else if (Array.isArray(v)) {
-      if (v.length === 0) {
-        lines.push(`${pad}${key}: []`)
-      } else {
-        lines.push(`${pad}${key}:`)
-        for (const item of v) {
-          if (isScalar(item)) {
-            lines.push(`${pad}  - ${yamlScalar(item)}`)
-          } else if (item && typeof item === 'object') {
-            const sub = yamlObject(item as Record<string, unknown>, indent + 4)
-            // Push first key onto the "- " line for readability
-            const subLines = sub.split('\n')
-            if (subLines.length > 0) {
-              lines.push(`${pad}  - ${subLines[0].trimStart()}`)
-              for (let i = 1; i < subLines.length; i++) lines.push(subLines[i])
-            }
-          }
-        }
-      }
-    } else if (v && typeof v === 'object') {
-      const entries = Object.keys(v as Record<string, unknown>)
-      if (entries.length === 0) {
-        lines.push(`${pad}${key}: {}`)
-      } else {
-        lines.push(`${pad}${key}:`)
-        lines.push(yamlObject(v as Record<string, unknown>, indent + 2))
-      }
-    } else {
-      lines.push(`${pad}${key}: ${yamlScalar(v)}`)
-    }
-  }
-  return lines.join('\n')
-}
-
-/**
- * Render evaluator_scores map as YAML. Handles nested shapes flexibly:
- * - scalar value -> `key: value`
- * - `{value: X}` -> `key: X`
- * - `{value: X, reason: Y}` -> `key: X  # Y`
- * - other object -> nested YAML block
- */
-function evaluatorScoresYaml(raw: Record<string, unknown>): string {
-  const lines: string[] = []
-  for (const [k, v] of Object.entries(raw)) {
-    const key = yamlString(k)
-    if (isScalar(v)) {
-      lines.push(`${key}: ${yamlScalar(v)}`)
-      continue
-    }
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const obj = v as Record<string, unknown>
-      const keys = Object.keys(obj)
-      if ('value' in obj && isScalar(obj.value)) {
-        const inline = `${key}: ${yamlScalar(obj.value)}`
-        const reason = obj.reason
-        const onlyValueAndMaybeReason = keys.every((kk) => kk === 'value' || kk === 'reason')
-        if (onlyValueAndMaybeReason && typeof reason === 'string' && reason) {
-          // Inline comment — strip newlines so comment stays single-line
-          const safeReason = reason.replace(/[\r\n]+/g, ' ').trim()
-          lines.push(`${inline}  # ${safeReason}`)
-        } else if (onlyValueAndMaybeReason) {
-          lines.push(inline)
-        } else {
-          // Has extra keys — fall through to nested render
-          lines.push(`${key}:`)
-          lines.push(yamlObject(obj, 2))
-        }
-      } else {
-        lines.push(`${key}:`)
-        lines.push(yamlObject(obj, 2))
-      }
-    } else if (Array.isArray(v)) {
-      lines.push(`${key}: ${JSON.stringify(v)}`)
-    } else {
-      lines.push(`${key}: ${yamlScalar(v)}`)
-    }
-  }
-  return lines.join('\n')
-}
-
-/** Build evaluator-scores markdown block for a single side, or empty string. */
-function evaluatorScoresBlock(
+/** Render a run's observed result on a case: status line + output or error. */
+function renderCaseRunResult(
   label: string,
-  r: CaseResultItem | undefined,
+  runId: number,
+  r: ExportCaseRunResult | null,
 ): string {
-  if (!r || !r.evaluator_scores) return ''
-  const scores = r.evaluator_scores as Record<string, unknown>
-  if (Object.keys(scores).length === 0) return ''
-  return `**${label} evaluator scores:**\n${fenced('yaml', evaluatorScoresYaml(scores))}`
+  if (!r) {
+    return `**${label} run (#${runId}):** *case not present in this run*`
+  }
+  const status = r.error_message ? 'errored' : r.passed ? 'pass' : 'fail'
+  const header = `**${label} run (#${runId}) — ${status}:**`
+  if (r.error_message) {
+    return `${header}\n${fenced('', `error: ${r.error_message}`)}`
+  }
+  if (r.output_data == null) {
+    return `${header}\n*no output recorded*`
+  }
+  return `${header}\n${jsonFence(r.output_data)}`
 }
 
-interface MarkdownCaseInput {
-  inputs: Record<string, unknown>
-  expected_output: Record<string, unknown> | null
-}
+/** Render a single case section in full detail.
+ *
+ * Structure:
+ *   ### header (case name, base/compare status, delta, version drift tag)
+ *   <case definition block — either a single version when matched, or both
+ *    versions side by side when drifted/unmatched>
+ *   <base run result: output or error>
+ *   <compare run result: output or error>
+ */
+function renderCase(c: ExportCase, baseRunId: number, compareRunId: number): string {
+  const baseStatus = c.base_result
+    ? c.base_result.error_message
+      ? 'errored'
+      : c.base_result.passed
+        ? 'pass'
+        : 'fail'
+    : 'n/a'
+  const compareStatus = c.compare_result
+    ? c.compare_result.error_message
+      ? 'errored'
+      : c.compare_result.passed
+        ? 'pass'
+        : 'fail'
+    : 'n/a'
 
-function caseMarkdownSection(
-  caseName: string,
-  caseDef: MarkdownCaseInput | undefined,
-  baseRes: CaseResultItem | undefined,
-  compareRes: CaseResultItem | undefined,
-  drift: ExportCaseDrift | undefined,
-): string {
-  const baseStatus = formatCaseStatus(baseRes)
-  const compareStatus = formatCaseStatus(compareRes)
-  const kind = caseDelta(baseRes, compareRes)
+  // Version tag appended to the header.
+  let versionTag = ''
+  if (c.bucket === 'drifted') {
+    versionTag = ` [drifted v${c.base_version?.version ?? '?'} -> v${c.compare_version?.version ?? '?'}]`
+  } else if (c.bucket === 'unmatched') {
+    if (c.base_version && !c.compare_version) {
+      versionTag = ` [only in base (v${c.base_version.version})]`
+    } else if (c.compare_version && !c.base_version) {
+      versionTag = ` [only in compare (v${c.compare_version.version})]`
+    } else {
+      versionTag = ` [unmatched]`
+    }
+  } else if (c.base_version) {
+    versionTag = ` [both runs used v${c.base_version.version}]`
+  }
 
-  // Build the drift annotation appended to headers (e.g. "drifted v1.0 -> v1.1"
-  // or "only in base (v1.0)"). Empty string when matched.
-  let driftTag = ''
-  if (drift) {
-    if (drift.bucket === 'drifted') {
-      driftTag = ` [drifted v${drift.base_version ?? '?'} -> v${drift.compare_version ?? '?'}]`
-    } else if (drift.bucket === 'unmatched') {
-      if (drift.base_version && !drift.compare_version) {
-        driftTag = ` [only in base (v${drift.base_version})]`
-      } else if (drift.compare_version && !drift.base_version) {
-        driftTag = ` [only in compare (v${drift.compare_version})]`
-      } else {
-        driftTag = ` [unmatched]`
-      }
+  const header = `### \`${c.name}\` — base: ${baseStatus} → compare: ${compareStatus} (${c.delta})${versionTag}`
+
+  // Case-definition block: rules
+  //   matched  -> single block (the one version both runs used)
+  //   drifted  -> both base-version and compare-version blocks
+  //   unmatched-> single block for whichever side had it
+  const defParts: string[] = ['#### Case definition']
+  if (c.bucket === 'matched' && c.base_version) {
+    defParts.push(
+      `*Both runs used case version v${c.base_version.version}.*`,
+      renderCaseVersion(c.base_version),
+    )
+  } else if (c.bucket === 'drifted') {
+    if (c.base_version) {
+      defParts.push(
+        `##### Base used v${c.base_version.version}`,
+        renderCaseVersion(c.base_version),
+      )
+    } else {
+      defParts.push('##### Base', '*historical case data could not be resolved*')
+    }
+    if (c.compare_version) {
+      defParts.push(
+        `##### Compare used v${c.compare_version.version}`,
+        renderCaseVersion(c.compare_version),
+      )
+    } else {
+      defParts.push('##### Compare', '*historical case data could not be resolved*')
+    }
+  } else {
+    // unmatched
+    const present = c.base_version ?? c.compare_version
+    const side = c.base_version ? 'Base' : 'Compare'
+    if (present) {
+      defParts.push(
+        `*Case present only in ${side} at v${present.version}.*`,
+        renderCaseVersion(present),
+      )
+    } else {
+      defParts.push('*historical case data could not be resolved for either run*')
     }
   }
 
-  // Compress unchanged-passing cases to a one-liner regardless of whether the
-  // output strings match byte-for-byte — wording variations in explanations
-  // are noise when both evaluators agreed the case passed.
-  if (
-    kind === 'unchanged' &&
-    baseStatus === 'pass' &&
-    compareStatus === 'pass'
-  ) {
-    return `### \`${caseName}\` — both passed (unchanged)${driftTag}\n`
-  }
+  // Results block
+  const resultParts = [
+    '#### Results',
+    renderCaseRunResult('Base', baseRunId, c.base_result),
+    renderCaseRunResult('Compare', compareRunId, c.compare_result),
+  ]
 
-  const header = `### \`${caseName}\` [base: ${baseStatus}] -> [compare: ${compareStatus}] (${formatDeltaTag(kind)})${driftTag}`
-  const input = caseDef
-    ? `**Input:**\n${jsonFence(caseDef.inputs)}`
-    : `**Input:** *not available*`
-  const expected = caseDef?.expected_output
-    ? `**Expected:**\n${jsonFence(caseDef.expected_output)}`
-    : `**Expected:** *none defined*`
-  const baseScores = evaluatorScoresBlock('Base', baseRes)
-  const compareScores = evaluatorScoresBlock('Compare', compareRes)
-  const baseOut = `**Base output:**\n${outputOrError(baseRes)}`
-  const compareOut = `**Compare output:**\n${outputOrError(compareRes)}`
-
-  const parts = [header, input, expected]
-  if (baseScores) parts.push(baseScores)
-  parts.push(baseOut)
-  if (compareScores) parts.push(compareScores)
-  parts.push(compareOut)
-  return parts.join('\n\n') + '\n'
-}
-
-function enumCatalogMarkdown(
-  catalog: Record<string, Array<{ name: string; value: string }>>,
-): string {
-  const keys = Object.keys(catalog)
-  if (keys.length === 0) return '*none registered*'
-  return keys
-    .map((k) => {
-      const members = catalog[k]
-        .map((m) => `${m.name} (${m.value})`)
-        .join(', ')
-      return `- \`${k}\`: [${members}]`
-    })
-    .join('\n')
+  return [header, defParts.join('\n\n'), resultParts.join('\n\n')].join('\n\n') + '\n'
 }
 
 // ---------------------------------------------------------------------------
 // Failing-case summary banner + aggregate comparison table
 // ---------------------------------------------------------------------------
 
-// Minimal shape needed by caseDelta/isErrored — accepts both CaseResultItem and
-// ExportCaseResult since both expose `passed` + `error_message`.
-type CaseResultLike = Pick<CaseResultItem, 'passed' | 'error_message'>
-
-function caseSummaryBanner(
-  allNames: string[],
-  baseByName: Map<string, CaseResultLike>,
-  compareByName: Map<string, CaseResultLike>,
-): string {
-  // caseDelta/isErrored only touch `passed` + `error_message`; cast-through is
-  // safe here and avoids threading a generic through both helpers.
-  const asFull = (r: CaseResultLike | undefined) =>
-    r as unknown as CaseResultItem | undefined
-  if (allNames.length === 0) return ''
+/** Top-of-section banner summarizing per-case deltas and drift counts. */
+function caseSummaryBanner(cases: ExportCase[]): string {
+  if (cases.length === 0) return ''
   const regressed: string[] = []
   const improved: string[] = []
   const erroredInCompare: string[] = []
-  for (const name of allNames) {
-    const b = asFull(baseByName.get(name))
-    const v = asFull(compareByName.get(name))
-    const kind = caseDelta(b, v)
-    if (kind === 'regressed') regressed.push(name)
-    else if (kind === 'improved') improved.push(name)
-    if (isErrored(v)) erroredInCompare.push(name)
+  const drifted: string[] = []
+  const unmatched: string[] = []
+  for (const c of cases) {
+    if (c.delta === 'regressed') regressed.push(c.name)
+    else if (c.delta === 'improved') improved.push(c.name)
+    if (c.compare_result?.error_message) erroredInCompare.push(c.name)
+    if (c.bucket === 'drifted') drifted.push(c.name)
+    else if (c.bucket === 'unmatched') unmatched.push(c.name)
   }
   const formatList = (names: string[]): string => {
     const shown = names.slice(0, 5).map((n) => `\`${n}\``).join(', ')
@@ -1008,10 +913,20 @@ function caseSummaryBanner(
   if (improved.length > 0) {
     parts.push(`${improved.length} improved (${formatList(improved)})`)
   }
-  if (parts.length === 0) {
-    return '**No changes:** all cases passed with the same outcome in both runs.'
+  if (drifted.length > 0) {
+    parts.push(
+      `${drifted.length} case(s) drifted — the test definition changed between the two runs (${formatList(drifted)})`,
+    )
   }
-  return `**Changes:** ${parts.join('; ')}`
+  if (unmatched.length > 0) {
+    parts.push(
+      `${unmatched.length} case(s) unmatched — present in only one run (${formatList(unmatched)})`,
+    )
+  }
+  if (parts.length === 0) {
+    return '**No changes:** all cases passed with the same outcome in both runs; no case definitions drifted.'
+  }
+  return `**Summary:** ${parts.join('; ')}`
 }
 
 function signedInt(n: number): string {
@@ -1148,105 +1063,29 @@ function renderRunContextSection(
   ].join('\n')
 }
 
-function renderCaseDriftSection(drift: ExportCaseDrift[]): string {
-  const changed = drift.filter((d) => d.bucket !== 'matched')
-  if (changed.length === 0) {
-    return '## Case version drift\n\n*All cases used the same version in both runs.*'
-  }
-  const lines = changed.map((d) => {
-    if (d.bucket === 'drifted') {
-      return `- \`${d.case_name}\`: v${d.base_version ?? '?'} → v${d.compare_version ?? '?'} (drifted)`
-    }
-    if (d.base_version && !d.compare_version) {
-      return `- \`${d.case_name}\`: only in base (v${d.base_version})`
-    }
-    if (d.compare_version && !d.base_version) {
-      return `- \`${d.case_name}\`: only in compare (v${d.compare_version})`
-    }
-    return `- \`${d.case_name}\`: unmatched`
-  })
-  return `## Case version drift\n\n${lines.join('\n')}`
-}
-
 function buildPayloadMarkdown(args: BuildPayloadArgs): string {
   const payload = buildPayloadJSON(args)
-  const {
-    step,
-    dataset,
-    evaluators,
-    registered_enums,
-    comparison,
-    runs,
-    case_drift,
-    dataset_cases,
-  } = payload
+  const { step, dataset, comparison, runs, cases } = payload
 
-  // Build a drift lookup for per-case annotation.
-  const driftByName = new Map(case_drift.map((d) => [d.case_name, d]))
-
-  // Order cases: regressed/errored first, then failing-on-compare, then
-  // improved, then unchanged.
-  const caseByName = new Map(dataset_cases.map((c) => [c.name, c]))
-  const baseByName = new Map(
-    runs.base.case_results.map((r) => [r.case_name, r]),
-  )
-  const compareByName = new Map(
-    runs.compare.case_results.map((r) => [r.case_name, r]),
-  )
-  const allNames = Array.from(
-    new Set([...baseByName.keys(), ...compareByName.keys()]),
-  )
-
-  function priority(name: string): number {
-    const b = baseByName.get(name) as CaseResultItem | undefined
-    const v = compareByName.get(name) as CaseResultItem | undefined
-    const kind = caseDelta(b, v)
-    if (kind === 'regressed' || isErrored(b) || isErrored(v)) return 0
-    const compareFailing = v ? v.error_message || !v.passed : false
-    if (compareFailing) return 1
-    if (kind === 'improved') return 2
-    return 3
-  }
-
-  const sortedNames = allNames
-    .slice()
-    .sort((a, b) => priority(a) - priority(b) || a.localeCompare(b))
-
-  const perCase = sortedNames
-    .map((name) =>
-      caseMarkdownSection(
-        name,
-        caseByName.get(name),
-        baseByName.get(name) as CaseResultItem | undefined,
-        compareByName.get(name) as CaseResultItem | undefined,
-        driftByName.get(name),
-      ),
-    )
-    .join('\n')
-
-  const baseStats = runs.base.stats
-  const compareStats = runs.compare.stats
   const aggregateTable = aggregateComparisonTable(
     runs.base.id,
     runs.compare.id,
-    baseStats,
-    compareStats,
+    runs.base.stats,
+    runs.compare.stats,
   )
 
-  const banner = caseSummaryBanner(sortedNames, baseByName, compareByName)
+  const banner = caseSummaryBanner(cases)
+  const perCase = cases
+    .map((c) => renderCase(c, runs.base.id, runs.compare.id))
+    .join('\n')
   const perCaseSection = banner
-    ? `## Per-case details\n\n${banner}\n\n${perCase}`
-    : `## Per-case details\n\n${perCase}`
+    ? `## Per-case results (all cases, shown in full)\n\n${banner}\n\n${perCase}`
+    : `## Per-case results (all cases, shown in full)\n\n${perCase}`
 
   const datasetDescription =
     dataset.description && dataset.description.trim().length > 0
       ? dataset.description.trim()
       : '*No description provided.*'
-
-  const evaluatorsLine =
-    evaluators.length > 0
-      ? evaluators.map((n) => `\`${n}\``).join(', ')
-      : '*No evaluators recorded.*'
 
   return [
     META_PROMPT,
@@ -1260,8 +1099,6 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     '',
     datasetDescription,
     '',
-    `**Evaluators applied:** ${evaluatorsLine}`,
-    '',
     '## Comparison summary',
     '',
     `Base run \`#${comparison.base_run_id}\` vs Compare run \`#${comparison.compare_run_id}\`.`,
@@ -1270,17 +1107,11 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     '',
     renderRunContextSection('Compare configuration', runs.compare.id, runs.compare.context),
     '',
-    renderCaseDriftSection(case_drift),
-    '',
-    '## Run results',
+    '## Aggregate results',
     '',
     aggregateTable,
     '',
     perCaseSection,
-    '',
-    '## Registered enums (referenced by the instructions schema)',
-    '',
-    enumCatalogMarkdown(registered_enums),
   ].join('\n')
 }
 
@@ -2014,8 +1845,20 @@ function CompareRunsPage() {
   const basePromptsQ = useRunPrompts(baseRun?.prompt_versions)
   const comparePromptsQ = useRunPrompts(compareRun?.prompt_versions)
 
-  // Registered enums reference (static lookup for the export).
-  const autoGenQ = useAutoGenerateObjects()
+  // Resolve the exact case rows referenced by each run's case_results. Each
+  // result's case_id points at the specific (append-only) row used by that
+  // run, which may no longer be the latest version if the case has drifted.
+  const historicalCaseIds = useMemo(() => {
+    const ids: number[] = []
+    for (const r of baseRun?.case_results ?? []) {
+      if (r.case_id != null) ids.push(r.case_id)
+    }
+    for (const r of compareRun?.case_results ?? []) {
+      if (r.case_id != null) ids.push(r.case_id)
+    }
+    return ids
+  }, [baseRun?.case_results, compareRun?.case_results])
+  const historicalCasesQ = useHistoricalCases(datasetId, historicalCaseIds)
 
   // Build dataset case map (by case name -> CaseItem). Empty when dataset
   // errored or hasn't loaded yet.
@@ -2148,7 +1991,7 @@ function CompareRunsPage() {
     return `eval-context-run${baseRunId}-vs-${compareRunId}.${ext}`
   }
 
-  /** Gather args for payload builders; tolerates missing prod data. */
+  /** Gather args for payload builders. */
   function buildArgs(): BuildPayloadArgs | null {
     if (!datasetQ.data || !baseRun || !compareRun) return null
     return {
@@ -2158,9 +2001,7 @@ function CompareRunsPage() {
         description: datasetQ.data.description,
         target_name: datasetQ.data.target_name,
         target_type: datasetQ.data.target_type,
-        cases: datasetQ.data.cases,
       },
-      enumObjects: autoGenQ.data?.objects,
       baseRun,
       compareRun,
       basePrompts: toExportRunPrompts(
@@ -2171,6 +2012,7 @@ function CompareRunsPage() {
         comparePromptsQ.flat,
         comparePromptsQ.items,
       ),
+      historicalCases: historicalCasesQ.byId,
     }
   }
 
