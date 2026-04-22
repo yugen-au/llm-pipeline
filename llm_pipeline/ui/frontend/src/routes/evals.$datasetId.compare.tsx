@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { fallback, zodValidator } from '@tanstack/zod-adapter'
 import { z } from 'zod'
@@ -1383,8 +1383,28 @@ function CompareRunsPage() {
   // Track which cases are expanded. Initialized from initialExpanded via a
   // useState initializer that references the memo; once user interacts we
   // keep their state (no resets on re-render).
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
-  const [seededFor, setSeededFor] = useState<string>('')
+  // Seed expanded set with regressed+errored cases once per (baseRun,compareRun)
+  // pair. Store as [seededKey, expandedSet] so both update atomically without
+  // needing a useEffect setState (avoids react-hooks/set-state-in-effect).
+  const seedKey = `${baseRun?.id ?? 0}-${compareRun?.id ?? 0}`
+  const [expandedState, setExpandedState] = useState<{ key: string; set: Set<string> }>({
+    key: '',
+    set: new Set(),
+  })
+  const expanded =
+    baseRun && compareRun && expandedState.key !== seedKey
+      ? new Set(initialExpanded)
+      : expandedState.set
+  // Sync the stored key+set when runs first load for this seedKey
+  if (baseRun && compareRun && expandedState.key !== seedKey) {
+    setExpandedState({ key: seedKey, set: new Set(initialExpanded) })
+  }
+  const setExpanded = (updater: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setExpandedState((prev) => {
+      const next = typeof updater === 'function' ? updater(prev.set) : updater
+      return { key: prev.key, set: next }
+    })
+  }
   const [matchedOnly, setMatchedOnly] = useState(false)
 
   // When matchedOnly is active, filter to only matched-bucket cases for stats
@@ -1392,17 +1412,6 @@ function CompareRunsPage() {
     if (!matchedOnly) return allCaseNames
     return allCaseNames.filter((n) => bucketByName.get(n) === 'matched')
   }, [allCaseNames, bucketByName, matchedOnly])
-
-  // Once run data has loaded, seed expanded set exactly once per (baseRun,
-  // compareRun) pair. Key on run ids so reloading a different compare URL
-  // re-seeds correctly.
-  const seedKey = `${baseRun?.id ?? 0}-${compareRun?.id ?? 0}`
-  useEffect(() => {
-    if (baseRun && compareRun && seedKey !== seededFor) {
-      setExpanded(new Set(initialExpanded))
-      setSeededFor(seedKey)
-    }
-  }, [seedKey, seededFor, initialExpanded, baseRun, compareRun])
 
   function toggleCase(name: string) {
     setExpanded((prev) => {
