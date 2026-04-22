@@ -9,7 +9,7 @@
 ## Plugins: frontend-mobile-development, backend-development
 ## Graphiti Group ID: llm-pipeline
 ## Excluded Phases: none
-## Steps to Fix: none
+## Steps to Fix: [1,3,5,6,7]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
 ## Last Updated: 2026-04-22 10:44
