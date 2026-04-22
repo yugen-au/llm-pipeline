@@ -12,7 +12,7 @@
 ## Steps to Fix: [1,3,5,6,7]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-22 10:49
+## Last Updated: 2026-04-22 10:53
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,7 +21,7 @@
 | Backend comparison logic research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a36edd5e701e73d61 | 2c9b329b | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a20d56ad5a3832e24 | a4bde376 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a60feb2cf2494a2ea | c2e269ac | - |
-| Add case_id to CaseResultItem | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 1 | abaa93095c8b1019a | b8c76a6a,de2bff9d | - |
+| Add case_id to CaseResultItem | backend-development:backend-architect | implementation | 1 | - | A | complete | 1 | afaca1f080245dc19 | b8c76a6a,de2bff9d,0ceffc3d | - |
 | Sync frontend TS types | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a721761759d582a9b | 6249de3d,de2bff9d | - |
 | Zod schema compareRunId + alias | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | a2bc6b43303ea9b16 | 8b48ccac,5b037a42 | /colinhacks/zod |
 | Rename labels Base/Compare | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | a60cf7843d0fd984e | aac9ca0a,5b037a42 | - |
