@@ -19,6 +19,7 @@ import {
   useDatasetProdModel,
   useDatasetProdPrompts,
   useEvalRun,
+  useHistoricalCase,
   useInputSchema,
   useVariant,
 } from '@/api/evals'
@@ -208,18 +209,45 @@ function computeCaseBucket(
   return baseVersion === compareVersion ? 'matched' : 'drifted'
 }
 
-function VersionBucketBadge({ bucket }: { bucket: VersionBucket }) {
+function VersionBucketBadge({
+  bucket,
+  baseVersion,
+  compareVersion,
+}: {
+  bucket: VersionBucket
+  baseVersion?: string
+  compareVersion?: string
+}) {
   if (bucket === 'matched') return null
   if (bucket === 'drifted') {
+    const label =
+      baseVersion && compareVersion
+        ? `v${baseVersion} → v${compareVersion}`
+        : 'drifted'
     return (
-      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600">
-        drifted
+      <Badge
+        variant="outline"
+        className="text-[10px] px-1.5 py-0 border-amber-400 text-amber-600"
+        title="Case version differs between runs"
+      >
+        {label}
       </Badge>
     )
   }
+  // unmatched: indicate which side has the case when possible
+  const label =
+    baseVersion && !compareVersion
+      ? `only in base (v${baseVersion})`
+      : compareVersion && !baseVersion
+        ? `only in compare (v${compareVersion})`
+        : 'unmatched'
   return (
-    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-muted text-muted-foreground">
-      unmatched
+    <Badge
+      variant="outline"
+      className="text-[10px] px-1.5 py-0 border-muted text-muted-foreground"
+      title="Case is missing from one of the runs"
+    >
+      {label}
     </Badge>
   )
 }
@@ -1177,19 +1205,35 @@ function CompareOutputPanel({
 }
 
 function CaseDetailCard({
+  datasetId,
   caseDef,
   baseResult,
   compareResult,
+  bucket,
 }: {
+  datasetId: number
   caseDef: CaseItem | undefined
   baseResult: CaseResultItem | undefined
   compareResult: CaseResultItem | undefined
+  bucket: VersionBucket | undefined
 }) {
   return (
     <Card className="bg-muted/20 border-0 rounded-none">
-      <CardContent className="p-4">
+      <CardContent className="p-4 space-y-4">
+        {bucket === 'drifted' || bucket === 'unmatched' ? (
+          <CaseVersionDiffPanel
+            datasetId={datasetId}
+            baseCaseId={baseResult?.case_id ?? null}
+            compareCaseId={compareResult?.case_id ?? null}
+            bucket={bucket}
+          />
+        ) : null}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <InputExpectedPanel caseDef={caseDef} />
+          {bucket === 'drifted' || bucket === 'unmatched' ? (
+            <div /> /* Spacer: diff panel rendered above, skip single caseDef */
+          ) : (
+            <InputExpectedPanel caseDef={caseDef} />
+          )}
           <BaseOutputPanel result={baseResult} />
           <CompareOutputPanel
             baseResult={baseResult}
@@ -1201,24 +1245,198 @@ function CaseDetailCard({
   )
 }
 
+/**
+ * For drifted/unmatched cases, fetch the exact case row(s) used by each run
+ * and render a side-by-side diff (drifted) or single-sided view (unmatched).
+ *
+ * Case rows are append-only, so the historical endpoint resolves the exact
+ * content used by the past run even if the case has since been edited or
+ * soft-deleted.
+ */
+function CaseVersionDiffPanel({
+  datasetId,
+  baseCaseId,
+  compareCaseId,
+  bucket,
+}: {
+  datasetId: number
+  baseCaseId: number | null
+  compareCaseId: number | null
+  bucket: 'drifted' | 'unmatched'
+}) {
+  const baseQ = useHistoricalCase(datasetId, baseCaseId)
+  const compareQ = useHistoricalCase(datasetId, compareCaseId)
+
+  const baseCase = baseQ.data
+  const compareCase = compareQ.data
+
+  const loading =
+    (baseCaseId !== null && baseQ.isLoading) ||
+    (compareCaseId !== null && compareQ.isLoading)
+
+  if (loading) {
+    return (
+      <Card className="bg-background/60 border-dashed">
+        <CardContent className="p-3">
+          <p className="text-xs text-muted-foreground italic">
+            Loading case versions…
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const title =
+    bucket === 'drifted' ? 'Case drift detail' : 'Case availability detail'
+
+  return (
+    <Card className="bg-background/60 border-dashed">
+      <CardContent className="p-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+            {title}
+          </p>
+          {bucket === 'drifted' && baseCase && compareCase && (
+            <span className="text-[10px] text-muted-foreground">
+              v{baseCase.version} → v{compareCase.version}
+            </span>
+          )}
+        </div>
+        <CaseFieldDiff
+          field="inputs"
+          baseValue={baseCase?.inputs ?? null}
+          compareValue={compareCase?.inputs ?? null}
+          bucket={bucket}
+          baseAvailable={!!baseCase}
+        />
+        <CaseFieldDiff
+          field="expected_output"
+          baseValue={baseCase?.expected_output ?? null}
+          compareValue={compareCase?.expected_output ?? null}
+          bucket={bucket}
+          baseAvailable={!!baseCase}
+        />
+        <CaseFieldDiff
+          field="metadata_"
+          baseValue={baseCase?.metadata_ ?? null}
+          compareValue={compareCase?.metadata_ ?? null}
+          bucket={bucket}
+          baseAvailable={!!baseCase}
+        />
+      </CardContent>
+    </Card>
+  )
+}
+
+function CaseFieldDiff({
+  field,
+  baseValue,
+  compareValue,
+  bucket,
+  baseAvailable,
+}: {
+  field: 'inputs' | 'expected_output' | 'metadata_'
+  baseValue: Record<string, unknown> | null
+  compareValue: Record<string, unknown> | null
+  bucket: 'drifted' | 'unmatched'
+  baseAvailable: boolean
+}) {
+  const label =
+    field === 'inputs'
+      ? 'Input'
+      : field === 'expected_output'
+        ? 'Expected output'
+        : 'Metadata'
+
+  // Drifted: show before/after diff when both sides exist. If only one side has
+  // a value for this field, fall back to plain single-sided view.
+  if (bucket === 'drifted') {
+    if (baseValue && compareValue) {
+      return (
+        <div>
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+            {label}
+          </p>
+          <JsonScroll>
+            <JsonViewer before={baseValue} after={compareValue} maxDepth={3} />
+          </JsonScroll>
+        </div>
+      )
+    }
+    // One side has nothing for this field — show whichever is present
+    const present = baseValue ?? compareValue
+    return (
+      <div>
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+          {label}
+        </p>
+        {present ? (
+          <JsonScroll>
+            <JsonViewer data={present} maxDepth={3} />
+          </JsonScroll>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">
+            Not set in either version
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  // Unmatched: show whichever side has the case, labeled clearly.
+  const present = baseAvailable ? baseValue : compareValue
+  const presentLabel = baseAvailable ? 'Base only' : 'Compare only'
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-1">
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+          {label}
+        </p>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+          {presentLabel}
+        </Badge>
+      </div>
+      {present ? (
+        <JsonScroll>
+          <JsonViewer data={present} maxDepth={3} />
+        </JsonScroll>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">
+          {field === 'expected_output'
+            ? 'No expected output defined'
+            : field === 'metadata_'
+              ? 'No metadata'
+              : 'Not available'}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Case row
 // ---------------------------------------------------------------------------
 
 function CaseRow({
   name,
+  datasetId,
   caseDef,
   baseResult,
   compareResult,
   bucket,
+  baseVersion,
+  compareVersion,
   isExpanded,
   onToggle,
 }: {
   name: string
+  datasetId: number
   caseDef: CaseItem | undefined
   baseResult: CaseResultItem | undefined
   compareResult: CaseResultItem | undefined
   bucket: VersionBucket | undefined
+  baseVersion: string | undefined
+  compareVersion: string | undefined
   isExpanded: boolean
   onToggle: () => void
 }) {
@@ -1239,7 +1457,13 @@ function CaseRow({
         <TableCell className="font-medium text-sm">
           <span className="inline-flex items-center gap-1.5">
             {name}
-            {bucket && <VersionBucketBadge bucket={bucket} />}
+            {bucket && (
+              <VersionBucketBadge
+                bucket={bucket}
+                baseVersion={baseVersion}
+                compareVersion={compareVersion}
+              />
+            )}
           </span>
         </TableCell>
         <TableCell>
@@ -1262,9 +1486,11 @@ function CaseRow({
         <TableRow>
           <TableCell colSpan={7} className="p-0 border-b">
             <CaseDetailCard
+              datasetId={datasetId}
               caseDef={caseDef}
               baseResult={baseResult}
               compareResult={compareResult}
+              bucket={bucket}
             />
           </TableCell>
         </TableRow>
@@ -1909,18 +2135,33 @@ function CompareRunsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {allCaseNames.map((name) => (
-                    <CaseRow
-                      key={name}
-                      name={name}
-                      caseDef={caseByName.get(name)}
-                      baseResult={baseByName.get(name)}
-                      compareResult={compareByName.get(name)}
-                      bucket={bucketByName.get(name)}
-                      isExpanded={expanded.has(name)}
-                      onToggle={() => toggleCase(name)}
-                    />
-                  ))}
+                  {allCaseNames.map((name) => {
+                    const baseRes = baseByName.get(name)
+                    const compareRes = compareByName.get(name)
+                    const baseVersion =
+                      baseRes?.case_id != null && baseRun?.case_versions
+                        ? baseRun.case_versions[String(baseRes.case_id)]
+                        : undefined
+                    const compareVersion =
+                      compareRes?.case_id != null && compareRun?.case_versions
+                        ? compareRun.case_versions[String(compareRes.case_id)]
+                        : undefined
+                    return (
+                      <CaseRow
+                        key={name}
+                        name={name}
+                        datasetId={datasetId}
+                        caseDef={caseByName.get(name)}
+                        baseResult={baseRes}
+                        compareResult={compareRes}
+                        bucket={bucketByName.get(name)}
+                        baseVersion={baseVersion}
+                        compareVersion={compareVersion}
+                        isExpanded={expanded.has(name)}
+                        onToggle={() => toggleCase(name)}
+                      />
+                    )
+                  })}
                 </TableBody>
               </Table>
             )}

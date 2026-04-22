@@ -93,6 +93,27 @@ class CaseUpdateRequest(BaseModel):
     expected_output: Optional[dict] = None
 
 
+class HistoricalCaseItem(BaseModel):
+    """A case row fetched by id, including historical (is_latest=False) rows.
+
+    Used by the compare page to resolve the exact case content used by
+    a past run (EvaluationCaseResult.case_id points at the specific
+    version row, which may no longer be the latest).
+    """
+
+    id: int
+    dataset_id: int
+    name: str
+    version: str
+    is_active: bool
+    is_latest: bool
+    inputs: dict
+    expected_output: Optional[dict] = None
+    metadata_: Optional[dict] = None
+    created_at: str
+    updated_at: str
+
+
 # ---------------------------------------------------------------------------
 # Run response / request models
 # ---------------------------------------------------------------------------
@@ -515,6 +536,48 @@ def get_dataset(dataset_id: int, db: DBSession) -> DatasetDetail:
             )
             for c in cases
         ],
+    )
+
+
+@router.get(
+    "/{dataset_id}/cases/{case_id}/historical",
+    response_model=HistoricalCaseItem,
+)
+def get_historical_case(
+    dataset_id: int,
+    case_id: int,
+    db: DBSession,
+) -> HistoricalCaseItem:
+    """Return a case row by id, including historical (is_latest=False) rows.
+
+    Case versioning is append-only: updating a case creates a new row with
+    a new primary key. Past runs record the specific row id used via
+    EvaluationCaseResult.case_id, which may point at a non-latest row.
+    This endpoint resolves any row (active or inactive, latest or
+    historical) so callers can reconstruct the case content used by a
+    past run for comparison.
+    """
+    case = db.exec(
+        select(EvaluationCase)
+        .where(
+            EvaluationCase.id == case_id,
+            EvaluationCase.dataset_id == dataset_id,
+        )
+    ).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return HistoricalCaseItem(
+        id=case.id,
+        dataset_id=case.dataset_id,
+        name=case.name,
+        version=case.version,
+        is_active=case.is_active,
+        is_latest=case.is_latest,
+        inputs=case.inputs,
+        expected_output=case.expected_output,
+        metadata_=case.metadata_,
+        created_at=case.created_at.isoformat(),
+        updated_at=case.updated_at.isoformat(),
     )
 
 

@@ -80,6 +80,27 @@ export interface RunDetail extends RunListItem {
   case_results: CaseResultItem[]
 }
 
+/**
+ * A case row fetched by id, including historical (is_latest=False) rows.
+ *
+ * Used by the compare page to resolve the exact case content used by a past
+ * run. Case versioning is append-only, so EvaluationCaseResult.case_id may
+ * point at a row that is no longer the latest version.
+ */
+export interface HistoricalCaseItem {
+  id: number
+  dataset_id: number
+  name: string
+  version: string
+  is_active: boolean
+  is_latest: boolean
+  inputs: Record<string, unknown>
+  expected_output: Record<string, unknown> | null
+  metadata_: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+}
+
 export interface SchemaResponse {
   target_type: string
   target_name: string
@@ -311,6 +332,26 @@ export function useEvalRun(datasetId: number, runId: number) {
     queryKey: queryKeys.evals.run(datasetId, runId),
     queryFn: () => apiClient<RunDetail>(`/evals/${datasetId}/runs/${runId}`),
     enabled: datasetId > 0 && runId > 0,
+  })
+}
+
+/**
+ * Fetch a case row by id, including historical (non-latest) versions.
+ *
+ * Case rows are immutable once persisted (append-only versioning), so results
+ * are cached indefinitely. Used on the compare page to resolve the exact case
+ * content used by a past run when cases have drifted between runs.
+ */
+export function useHistoricalCase(datasetId: number, caseId: number | null) {
+  const id = caseId ?? 0
+  return useQuery({
+    queryKey: queryKeys.evals.historicalCase(datasetId, id),
+    queryFn: () =>
+      apiClient<HistoricalCaseItem>(
+        `/evals/${datasetId}/cases/${id}/historical`,
+      ),
+    enabled: datasetId > 0 && id > 0,
+    staleTime: Infinity,
   })
 }
 

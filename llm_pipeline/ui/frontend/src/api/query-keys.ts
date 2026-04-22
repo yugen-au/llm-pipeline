@@ -62,6 +62,8 @@ export const queryKeys = {
       ['evals', datasetId, 'prod-prompts'] as const,
     prodModel: (datasetId: number) =>
       ['evals', datasetId, 'prod-model'] as const,
+    historicalCase: (datasetId: number, caseId: number) =>
+      ['evals', datasetId, 'cases', caseId, 'historical'] as const,
   },
 } as const
 
