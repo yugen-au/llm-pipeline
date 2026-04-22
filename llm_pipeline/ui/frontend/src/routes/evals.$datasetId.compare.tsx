@@ -28,7 +28,6 @@ import type {
   ProdPromptsResponse,
   RunDetail,
   VariableDefinitions,
-  VariantItem,
 } from '@/api/evals'
 import { useAutoGenerateObjects } from '@/api/prompts'
 import type { AutoGenerateObject } from '@/api/prompts'
@@ -546,7 +545,7 @@ function outputOrError(r: CaseResultItem | undefined): string {
 function yamlString(s: string): string {
   // Quote if contains control chars, colons, hashes, brackets, or leading/trailing
   // whitespace — keeps things safe without full YAML spec compliance.
-  if (/[:#\[\]{},&*!|>'"%@`\n\r\t]/.test(s) || /^\s|\s$/.test(s) || s === '') {
+  if (/[:#[\]{},&*!|>'"%@`\n\r\t]/.test(s) || /^\s|\s$/.test(s) || s === '') {
     return JSON.stringify(s)
   }
   return s
@@ -1517,6 +1516,62 @@ function CompareRunsPage() {
     setWarning(null)
   }
 
+  // Compute filtered aggregate stats when matchedOnly is active.
+  // Must be before early returns to satisfy rules-of-hooks.
+  const { basePassRate, comparePassRate, filteredBaseStats, filteredCompareStats } =
+    useMemo(() => {
+      if (!matchedOnly) {
+        return {
+          basePassRate: passRate(baseRun),
+          comparePassRate: passRate(compareRun),
+          filteredBaseStats: null,
+          filteredCompareStats: null,
+        }
+      }
+      let bPassed = 0, bFailed = 0, bErrored = 0
+      let cPassed = 0, cFailed = 0, cErrored = 0
+      for (const name of filteredCaseNames) {
+        const br = baseByName.get(name)
+        const cr = compareByName.get(name)
+        if (br) {
+          if (br.error_message) bErrored++
+          else if (br.passed) bPassed++
+          else bFailed++
+        }
+        if (cr) {
+          if (cr.error_message) cErrored++
+          else if (cr.passed) cPassed++
+          else cFailed++
+        }
+      }
+      const bTotal = bPassed + bFailed + bErrored
+      const cTotal = cPassed + cFailed + cErrored
+      return {
+        basePassRate: bTotal > 0 ? bPassed / bTotal : null,
+        comparePassRate: cTotal > 0 ? cPassed / cTotal : null,
+        filteredBaseStats: { passed: bPassed, failed: bFailed, errored: bErrored, total: bTotal },
+        filteredCompareStats: { passed: cPassed, failed: cFailed, errored: cErrored, total: cTotal },
+      }
+    }, [matchedOnly, filteredCaseNames, baseByName, compareByName, baseRun, compareRun])
+
+  // Delta summary: snapshot-based diff from both runs' prompt_versions +
+  // model_snapshot. Works for any two runs regardless of variant.
+  // Must be before early returns to satisfy rules-of-hooks.
+  const baseConfig = useMemo(
+    () => ({
+      prompt_versions: baseRun?.prompt_versions ?? null,
+      model_snapshot: baseRun?.model_snapshot ?? null,
+    }),
+    [baseRun],
+  )
+  const compareConfig = useMemo(
+    () => ({
+      prompt_versions: compareRun?.prompt_versions ?? null,
+      model_snapshot: compareRun?.model_snapshot ?? null,
+    }),
+    [compareRun],
+  )
+
   // Early param validation
   if (baseRunId === 0 || compareRunId === 0) {
     return (
@@ -1562,43 +1617,6 @@ function CompareRunsPage() {
     )
   }
 
-  // Compute filtered aggregate stats when matchedOnly is active
-  const { basePassRate, comparePassRate, filteredBaseStats, filteredCompareStats } =
-    useMemo(() => {
-      if (!matchedOnly) {
-        return {
-          basePassRate: passRate(baseRun),
-          comparePassRate: passRate(compareRun),
-          filteredBaseStats: null,
-          filteredCompareStats: null,
-        }
-      }
-      let bPassed = 0, bFailed = 0, bErrored = 0
-      let cPassed = 0, cFailed = 0, cErrored = 0
-      for (const name of filteredCaseNames) {
-        const br = baseByName.get(name)
-        const cr = compareByName.get(name)
-        if (br) {
-          if (br.error_message) bErrored++
-          else if (br.passed) bPassed++
-          else bFailed++
-        }
-        if (cr) {
-          if (cr.error_message) cErrored++
-          else if (cr.passed) cPassed++
-          else cFailed++
-        }
-      }
-      const bTotal = bPassed + bFailed + bErrored
-      const cTotal = cPassed + cFailed + cErrored
-      return {
-        basePassRate: bTotal > 0 ? bPassed / bTotal : null,
-        comparePassRate: cTotal > 0 ? cPassed / cTotal : null,
-        filteredBaseStats: { passed: bPassed, failed: bFailed, errored: bErrored, total: bTotal },
-        filteredCompareStats: { passed: cPassed, failed: cFailed, errored: cErrored, total: cTotal },
-      }
-    }, [matchedOnly, filteredCaseNames, baseByName, compareByName, baseRun, compareRun])
-
   const showScopeToggle = driftedCount + unmatchedCount > 0
 
   const statBasePassed = filteredBaseStats?.passed ?? baseRun.passed
@@ -1611,22 +1629,6 @@ function CompareRunsPage() {
   const allExpanded =
     allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
-  // Delta summary: snapshot-based diff from both runs' prompt_versions +
-  // model_snapshot. Works for any two runs regardless of variant.
-  const baseConfig = useMemo(
-    () => ({
-      prompt_versions: baseRun.prompt_versions ?? null,
-      model_snapshot: baseRun.model_snapshot ?? null,
-    }),
-    [baseRun],
-  )
-  const compareConfig = useMemo(
-    () => ({
-      prompt_versions: compareRun.prompt_versions ?? null,
-      model_snapshot: compareRun.model_snapshot ?? null,
-    }),
-    [compareRun],
-  )
   const hasSnapshotData =
     baseConfig.prompt_versions != null ||
     baseConfig.model_snapshot != null ||
