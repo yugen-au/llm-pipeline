@@ -20,7 +20,6 @@ import {
   useDatasetProdPrompts,
   useEvalRun,
   useHistoricalCase,
-  useInputSchema,
   useVariant,
 } from '@/api/evals'
 import type {
@@ -407,10 +406,31 @@ interface ExportCaseResult {
   evaluator_scores: Record<string, unknown>
 }
 
+interface ExportRunContext {
+  /** Flat (step-target) or nested (pipeline-target) prompt version map. */
+  prompt_versions: Record<string, unknown> | null
+  /** Flat `{model: name}` (step-target) or nested `{step_name: {model: name}}`. */
+  model_snapshot: Record<string, unknown> | null
+  /** Full instructions JSON schema captured at run time. */
+  instructions_schema: Record<string, unknown> | null
+  /** Delta overrides applied by a variant run; null for non-variant runs. */
+  variant_delta: Record<string, unknown> | null
+  /** Variant id if run was a variant run, null otherwise. */
+  variant_id: number | null
+}
+
 interface ExportRun {
   id: number
   stats: ExportStats
   case_results: ExportCaseResult[]
+  context: ExportRunContext
+}
+
+interface ExportCaseDrift {
+  case_name: string
+  base_version: string | null
+  compare_version: string | null
+  bucket: 'matched' | 'drifted' | 'unmatched'
 }
 
 interface ExportPayload {
@@ -418,12 +438,14 @@ interface ExportPayload {
     name: string
     target_type: string
   }
-  prod_config: {
+  /** Current production configuration, fetched fresh at export time. Included
+   * as a reference for full prompt text — the runs only capture version ids.
+   * May differ from the prompts actually used by either run. */
+  prod_reference: {
     model: string | null
     system_prompt: string | null
     user_prompt: string | null
     variable_definitions: Record<string, unknown> | null
-    instructions_schema: Record<string, unknown> | null
     enum_catalog: Record<string, Array<{ name: string; value: string }>>
   }
   comparison: {
@@ -434,6 +456,9 @@ interface ExportPayload {
     base: ExportRun
     compare: ExportRun
   }
+  /** Per-case version drift between the two runs. Empty when both runs used
+   * the same case versions. */
+  case_drift: ExportCaseDrift[]
   dataset_cases: Array<{
     name: string
     inputs: Record<string, unknown>
@@ -461,12 +486,63 @@ function toExportCaseResult(r: CaseResultItem): ExportCaseResult {
   }
 }
 
+function toExportRunContext(run: RunDetail): ExportRunContext {
+  return {
+    prompt_versions: run.prompt_versions,
+    model_snapshot: run.model_snapshot,
+    instructions_schema: run.instructions_schema_snapshot,
+    variant_delta: run.delta_snapshot,
+    variant_id: run.variant_id,
+  }
+}
+
 function toExportRun(run: RunDetail): ExportRun {
   return {
     id: run.id,
     stats: toExportStats(run),
     case_results: run.case_results.map(toExportCaseResult),
+    context: toExportRunContext(run),
   }
+}
+
+/** Build the case-drift list for the export payload. Uses case_versions on
+ * each run and the case_id embedded in each case result to key into them. */
+function computeCaseDrift(
+  baseRun: RunDetail,
+  compareRun: RunDetail,
+): ExportCaseDrift[] {
+  const baseCv = baseRun.case_versions ?? {}
+  const compareCv = compareRun.case_versions ?? {}
+  const baseByName = new Map(
+    baseRun.case_results.map((r) => [r.case_name, r]),
+  )
+  const compareByName = new Map(
+    compareRun.case_results.map((r) => [r.case_name, r]),
+  )
+  const names = Array.from(
+    new Set([...baseByName.keys(), ...compareByName.keys()]),
+  ).sort()
+  const out: ExportCaseDrift[] = []
+  for (const name of names) {
+    const b = baseByName.get(name)
+    const c = compareByName.get(name)
+    const baseVersion =
+      b?.case_id != null ? (baseCv[String(b.case_id)] ?? null) : null
+    const compareVersion =
+      c?.case_id != null ? (compareCv[String(c.case_id)] ?? null) : null
+    let bucket: ExportCaseDrift['bucket']
+    if (!b || !c) bucket = 'unmatched'
+    else if (baseVersion == null && compareVersion == null) bucket = 'matched'
+    else if (baseVersion === compareVersion) bucket = 'matched'
+    else bucket = 'drifted'
+    out.push({
+      case_name: name,
+      base_version: baseVersion,
+      compare_version: compareVersion,
+      bucket,
+    })
+  }
+  return out
 }
 
 function buildEnumCatalog(
@@ -484,7 +560,6 @@ interface BuildPayloadArgs {
   dataset: { target_name: string; target_type: string; cases: CaseItem[] }
   prodModel: string | null
   prodPrompts: ProdPromptsResponse | undefined
-  instructionsSchema: Record<string, unknown> | null
   enumObjects: AutoGenerateObject[] | undefined
   baseRun: RunDetail
   compareRun: RunDetail
@@ -495,7 +570,6 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
     dataset,
     prodModel,
     prodPrompts,
-    instructionsSchema,
     enumObjects,
     baseRun,
     compareRun,
@@ -506,14 +580,13 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
       name: dataset.target_name,
       target_type: dataset.target_type,
     },
-    prod_config: {
+    prod_reference: {
       model: prodModel,
       system_prompt: prodPrompts?.system?.content ?? null,
       user_prompt: prodPrompts?.user?.content ?? null,
       variable_definitions: mergeProdVarDefs(prodPrompts) as
         | Record<string, unknown>
         | null,
-      instructions_schema: instructionsSchema,
       enum_catalog: buildEnumCatalog(enumObjects),
     },
     comparison: {
@@ -524,6 +597,7 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
       base: toExportRun(baseRun),
       compare: toExportRun(compareRun),
     },
+    case_drift: computeCaseDrift(baseRun, compareRun),
     dataset_cases: dataset.cases.map((c) => ({
       name: c.name,
       inputs: c.inputs,
@@ -535,7 +609,7 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
 // Meta-prompt prepended to markdown exports. JSON omits this.
 const META_PROMPT = `# Eval Run Comparison Context
 
-You are analyzing differences between two evaluation runs of a production LLM step. Given the context below, identify patterns in the failing cases and suggest improvements.
+You are analyzing differences between two evaluation runs of a production LLM step. Each run's configuration snapshot reflects what the run actually used at execution time. Case version drift is flagged per-case — when cases drift between runs, improvements or regressions may reflect changes to the test itself rather than the model's behavior. Focus on patterns in failing or changed cases, and suggest improvements that address root causes.
 `
 
 function fenced(lang: string, body: string): string {
@@ -714,23 +788,41 @@ function caseMarkdownSection(
   caseDef: MarkdownCaseInput | undefined,
   baseRes: CaseResultItem | undefined,
   compareRes: CaseResultItem | undefined,
+  drift: ExportCaseDrift | undefined,
 ): string {
   const baseStatus = formatCaseStatus(baseRes)
   const compareStatus = formatCaseStatus(compareRes)
   const kind = caseDelta(baseRes, compareRes)
 
-  // Collapse both-passed identical-output cases to a one-liner.
-  if (
-    baseStatus === 'pass' &&
-    compareStatus === 'pass' &&
-    baseRes?.output_data &&
-    compareRes?.output_data &&
-    JSON.stringify(baseRes.output_data) === JSON.stringify(compareRes.output_data)
-  ) {
-    return `### \`${caseName}\` — both passed, outputs identical\n`
+  // Build the drift annotation appended to headers (e.g. "drifted v1.0 -> v1.1"
+  // or "only in base (v1.0)"). Empty string when matched.
+  let driftTag = ''
+  if (drift) {
+    if (drift.bucket === 'drifted') {
+      driftTag = ` [drifted v${drift.base_version ?? '?'} -> v${drift.compare_version ?? '?'}]`
+    } else if (drift.bucket === 'unmatched') {
+      if (drift.base_version && !drift.compare_version) {
+        driftTag = ` [only in base (v${drift.base_version})]`
+      } else if (drift.compare_version && !drift.base_version) {
+        driftTag = ` [only in compare (v${drift.compare_version})]`
+      } else {
+        driftTag = ` [unmatched]`
+      }
+    }
   }
 
-  const header = `### \`${caseName}\` [base: ${baseStatus}] -> [compare: ${compareStatus}] (${formatDeltaTag(kind)})`
+  // Compress unchanged-passing cases to a one-liner regardless of whether the
+  // output strings match byte-for-byte — wording variations in explanations
+  // are noise when both evaluators agreed the case passed.
+  if (
+    kind === 'unchanged' &&
+    baseStatus === 'pass' &&
+    compareStatus === 'pass'
+  ) {
+    return `### \`${caseName}\` — both passed (unchanged)${driftTag}\n`
+  }
+
+  const header = `### \`${caseName}\` [base: ${baseStatus}] -> [compare: ${compareStatus}] (${formatDeltaTag(kind)})${driftTag}`
   const input = caseDef
     ? `**Input:**\n${jsonFence(caseDef.inputs)}`
     : `**Input:** *not available*`
@@ -773,7 +865,7 @@ function enumCatalogMarkdown(
 // ExportCaseResult since both expose `passed` + `error_message`.
 type CaseResultLike = Pick<CaseResultItem, 'passed' | 'error_message'>
 
-function failingSummaryBanner(
+function caseSummaryBanner(
   allNames: string[],
   baseByName: Map<string, CaseResultLike>,
   compareByName: Map<string, CaseResultLike>,
@@ -784,27 +876,37 @@ function failingSummaryBanner(
     r as unknown as CaseResultItem | undefined
   if (allNames.length === 0) return ''
   const regressed: string[] = []
+  const improved: string[] = []
   const erroredInCompare: string[] = []
   for (const name of allNames) {
     const b = asFull(baseByName.get(name))
     const v = asFull(compareByName.get(name))
-    if (caseDelta(b, v) === 'regressed') regressed.push(name)
+    const kind = caseDelta(b, v)
+    if (kind === 'regressed') regressed.push(name)
+    else if (kind === 'improved') improved.push(name)
     if (isErrored(v)) erroredInCompare.push(name)
+  }
+  const formatList = (names: string[]): string => {
+    const shown = names.slice(0, 5).map((n) => `\`${n}\``).join(', ')
+    const more = names.length > 5 ? `, +${names.length - 5} more` : ''
+    return `${shown}${more}`
   }
   const parts: string[] = []
   if (regressed.length > 0) {
-    const shown = regressed.slice(0, 5).map((n) => `\`${n}\``).join(', ')
-    const more = regressed.length > 5 ? `, +${regressed.length - 5} more` : ''
-    parts.push(`${regressed.length} regressed (${shown}${more})`)
+    parts.push(`${regressed.length} regressed (${formatList(regressed)})`)
   }
   if (erroredInCompare.length > 0) {
-    const shown = erroredInCompare.slice(0, 5).map((n) => `\`${n}\``).join(', ')
-    const more =
-      erroredInCompare.length > 5 ? `, +${erroredInCompare.length - 5} more` : ''
-    parts.push(`${erroredInCompare.length} errored (${shown}${more})`)
+    parts.push(
+      `${erroredInCompare.length} errored in compare (${formatList(erroredInCompare)})`,
+    )
   }
-  if (parts.length === 0) return '**All cases passed.**'
-  return `**Failing cases:** ${parts.join(', ')}`
+  if (improved.length > 0) {
+    parts.push(`${improved.length} improved (${formatList(improved)})`)
+  }
+  if (parts.length === 0) {
+    return '**No changes:** all cases passed with the same outcome in both runs.'
+  }
+  return `**Changes:** ${parts.join('; ')}`
 }
 
 function signedInt(n: number): string {
@@ -889,11 +991,87 @@ function aggregateComparisonTable(
   return [header, sep, body].join('\n')
 }
 
+/** Render the model snapshot. Step-target is `{model: name}`; pipeline-target
+ * is `{step_name: {model: name}}`. Returns a one-line string for step-target
+ * or a JSON fence for pipeline-target. */
+function renderModelSnapshot(
+  snap: Record<string, unknown> | null,
+): string {
+  if (!snap) return '*not recorded*'
+  const keys = Object.keys(snap)
+  if (keys.length === 1 && keys[0] === 'model' && typeof snap.model === 'string') {
+    return `\`${snap.model}\``
+  }
+  return jsonFence(snap)
+}
+
+/** Render prompt_versions. Step-target is flat `{prompt_key: version}`;
+ * pipeline-target is nested `{step_name: {prompt_key: version}}`. */
+function renderPromptVersions(
+  versions: Record<string, unknown> | null,
+): string {
+  if (!versions || Object.keys(versions).length === 0) return '*not recorded*'
+  return jsonFence(versions)
+}
+
+function renderRunContextSection(
+  label: string,
+  runId: number,
+  ctx: ExportRunContext,
+): string {
+  const variantLine = ctx.variant_id
+    ? `**Variant:** \`#${ctx.variant_id}\``
+    : '**Variant:** *none (baseline run)*'
+  const deltaBlock =
+    ctx.variant_delta && Object.keys(ctx.variant_delta).length > 0
+      ? `\n\n**Variant delta applied:**\n${jsonFence(ctx.variant_delta)}`
+      : ''
+  const instrBlock = ctx.instructions_schema
+    ? jsonFence(ctx.instructions_schema)
+    : '*not recorded*'
+  return [
+    `## ${label} context (run #${runId})`,
+    '',
+    `**Model:** ${renderModelSnapshot(ctx.model_snapshot)}`,
+    '',
+    `**Prompt versions:**\n${renderPromptVersions(ctx.prompt_versions)}`,
+    '',
+    variantLine + deltaBlock,
+    '',
+    `**Instructions schema:**\n${instrBlock}`,
+  ].join('\n')
+}
+
+function renderCaseDriftSection(drift: ExportCaseDrift[]): string {
+  const changed = drift.filter((d) => d.bucket !== 'matched')
+  if (changed.length === 0) {
+    return '## Case version drift\n\n*All cases used the same version in both runs.*'
+  }
+  const lines = changed.map((d) => {
+    if (d.bucket === 'drifted') {
+      return `- \`${d.case_name}\`: v${d.base_version ?? '?'} → v${d.compare_version ?? '?'} (drifted)`
+    }
+    if (d.base_version && !d.compare_version) {
+      return `- \`${d.case_name}\`: only in base (v${d.base_version})`
+    }
+    if (d.compare_version && !d.base_version) {
+      return `- \`${d.case_name}\`: only in compare (v${d.compare_version})`
+    }
+    return `- \`${d.case_name}\`: unmatched`
+  })
+  return `## Case version drift\n\n${lines.join('\n')}`
+}
+
 function buildPayloadMarkdown(args: BuildPayloadArgs): string {
   const payload = buildPayloadJSON(args)
-  const { step, prod_config, comparison, runs, dataset_cases } = payload
+  const { step, prod_reference, comparison, runs, case_drift, dataset_cases } =
+    payload
 
-  // Order cases: regressed/errored first, then failing-on-compare, then others.
+  // Build a drift lookup for per-case annotation.
+  const driftByName = new Map(case_drift.map((d) => [d.case_name, d]))
+
+  // Order cases: regressed/errored first, then failing-on-compare, then
+  // improved, then unchanged.
   const caseByName = new Map(dataset_cases.map((c) => [c.name, c]))
   const baseByName = new Map(
     runs.base.case_results.map((r) => [r.case_name, r]),
@@ -927,27 +1105,25 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
         caseByName.get(name),
         baseByName.get(name) as CaseResultItem | undefined,
         compareByName.get(name) as CaseResultItem | undefined,
+        driftByName.get(name),
       ),
     )
     .join('\n')
 
-  const varDefs = prod_config.variable_definitions
+  const varDefs = prod_reference.variable_definitions
   const varDefsBlock =
     varDefs && Object.keys(varDefs).length > 0
       ? jsonFence(varDefs)
       : '(none defined)'
-  const instrBlock = prod_config.instructions_schema
-    ? jsonFence(prod_config.instructions_schema)
-    : '*not available*'
-  const modelLine = prod_config.model ? `\`${prod_config.model}\`` : '*not set*'
-  const sysBlock = prod_config.system_prompt
-    ? fenced('', prod_config.system_prompt)
+  const modelLine = prod_reference.model
+    ? `\`${prod_reference.model}\``
+    : '*not set*'
+  const sysBlock = prod_reference.system_prompt
+    ? fenced('', prod_reference.system_prompt)
     : '*none*'
-  const userBlock = prod_config.user_prompt
-    ? fenced('', prod_config.user_prompt)
+  const userBlock = prod_reference.user_prompt
+    ? fenced('', prod_reference.user_prompt)
     : '*none*'
-
-  const comparisonSection = `## Comparison summary\nBase run #${comparison.base_run_id} vs Compare run #${comparison.compare_run_id}`
 
   const baseStats = runs.base.stats
   const compareStats = runs.compare.stats
@@ -958,7 +1134,7 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     compareStats,
   )
 
-  const banner = failingSummaryBanner(sortedNames, baseByName, compareByName)
+  const banner = caseSummaryBanner(sortedNames, baseByName, compareByName)
   const perCaseSection = banner
     ? `## Per-case details\n\n${banner}\n\n${perCase}`
     : `## Per-case details\n\n${perCase}`
@@ -969,33 +1145,38 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     '',
     `## Step: ${step.name} (${step.target_type})`,
     '',
-    '## Production configuration',
+    `## Comparison summary\nBase run #${comparison.base_run_id} vs Compare run #${comparison.compare_run_id}`,
     '',
-    '### Model',
-    modelLine,
+    renderRunContextSection('Base', runs.base.id, runs.base.context),
     '',
-    '### System prompt',
-    sysBlock,
+    renderRunContextSection('Compare', runs.compare.id, runs.compare.context),
     '',
-    '### User prompt',
-    userBlock,
-    '',
-    '### Variable definitions',
-    varDefsBlock,
-    '',
-    '### Instructions schema',
-    instrBlock,
-    '',
-    '### Registered enums',
-    enumCatalogMarkdown(prod_config.enum_catalog),
-    '',
-    comparisonSection,
+    renderCaseDriftSection(case_drift),
     '',
     '## Run results',
     '',
     aggregateTable,
     '',
     perCaseSection,
+    '',
+    '## Current production reference',
+    '',
+    '*Shown for prompt text the runs only capture as version ids. May differ from what either run actually used.*',
+    '',
+    '### Current model',
+    modelLine,
+    '',
+    '### Current system prompt',
+    sysBlock,
+    '',
+    '### Current user prompt',
+    userBlock,
+    '',
+    '### Variable definitions',
+    varDefsBlock,
+    '',
+    '### Registered enums',
+    enumCatalogMarkdown(prod_reference.enum_catalog),
   ].join('\n')
 }
 
@@ -1510,14 +1691,11 @@ function CompareRunsPage() {
   const variantIdForLookup = compareRun?.variant_id ?? 0
   const variantQ = useVariant(datasetId, variantIdForLookup)
 
-  // Prod-config + export-context fetches. Non-blocking: export proceeds
-  // with nulls if these error/are still loading.
+  // Prod-reference fetches for the export (prompt text the runs only capture
+  // as version ids). Non-blocking: export proceeds with nulls if these
+  // error/are still loading.
   const prodPromptsQ = useDatasetProdPrompts(datasetId)
   const prodModelQ = useDatasetProdModel(datasetId)
-  const inputSchemaQ = useInputSchema(
-    datasetQ.data?.target_type ?? '',
-    datasetQ.data?.target_name ?? '',
-  )
   const autoGenQ = useAutoGenerateObjects()
 
   // Build dataset case map (by case name -> CaseItem). Empty when dataset
@@ -1654,9 +1832,6 @@ function CompareRunsPage() {
   /** Gather args for payload builders; tolerates missing prod data. */
   function buildArgs(): BuildPayloadArgs | null {
     if (!datasetQ.data || !baseRun || !compareRun) return null
-    const outputSchema =
-      (inputSchemaQ.data?.output_schema as Record<string, unknown> | null) ??
-      null
     return {
       dataset: {
         target_name: datasetQ.data.target_name,
@@ -1665,7 +1840,6 @@ function CompareRunsPage() {
       },
       prodModel: prodModelQ.data?.model ?? null,
       prodPrompts: prodPromptsQ.data,
-      instructionsSchema: outputSchema,
       enumObjects: autoGenQ.data?.objects,
       baseRun,
       compareRun,
