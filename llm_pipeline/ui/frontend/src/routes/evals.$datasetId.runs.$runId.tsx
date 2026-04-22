@@ -426,6 +426,11 @@ function RunPickerDialog({
                 r.total_cases > 0
                   ? `${r.passed}/${r.total_cases}`
                   : '--'
+              const startedLabel = r.started_at
+                ? new Date(r.started_at).toLocaleString()
+                : 'N/A'
+              const variantLabel =
+                r.variant_id != null ? ` (variant #${r.variant_id})` : ''
               return (
                 <div
                   key={r.id}
@@ -441,9 +446,7 @@ function RunPickerDialog({
                       )}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {r.started_at
-                        ? new Date(r.started_at).toLocaleString()
-                        : 'N/A'}
+                      {startedLabel}
                       {' -- '}
                       pass rate {passRate}
                     </div>
@@ -452,6 +455,7 @@ function RunPickerDialog({
                     variant="outline"
                     size="sm"
                     onClick={() => onSelect(r.id)}
+                    aria-label={`Select run #${r.id}${variantLabel} started ${startedLabel} with pass rate ${passRate}`}
                   >
                     Select
                   </Button>

@@ -39,3 +39,75 @@ Replaced the variant-only compare button on the run detail page with a universal
 [x] Navigation uses compareRunId (not variantRunId)
 [x] Dialog imports from existing shadcn component
 [x] useState already imported
+
+---
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] ISSUE #4 (Medium) -- RunPickerDialog Select buttons lack aria-label with run context (screen readers announce "Select button" with no identifying info)
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/evals.$datasetId.runs.$runId.tsx`
+Added descriptive `aria-label` to each Select button inside RunPickerDialog so screen readers announce the run id, variant (if any), start time, and pass rate. Factored `startedLabel` and `variantLabel` out of JSX so the aria-label and visible text share the same formatted values.
+
+```
+# Before
+{runs.map((r) => {
+  const passRate =
+    r.total_cases > 0 ? `${r.passed}/${r.total_cases}` : '--'
+  return (
+    <div ...>
+      <div ...>
+        <div className="text-xs text-muted-foreground">
+          {r.started_at ? new Date(r.started_at).toLocaleString() : 'N/A'}
+          {' -- '}
+          pass rate {passRate}
+        </div>
+      </div>
+      <Button variant="outline" size="sm" onClick={() => onSelect(r.id)}>
+        Select
+      </Button>
+    </div>
+  )
+})}
+
+# After
+{runs.map((r) => {
+  const passRate =
+    r.total_cases > 0 ? `${r.passed}/${r.total_cases}` : '--'
+  const startedLabel = r.started_at
+    ? new Date(r.started_at).toLocaleString()
+    : 'N/A'
+  const variantLabel =
+    r.variant_id != null ? ` (variant #${r.variant_id})` : ''
+  return (
+    <div ...>
+      <div ...>
+        <div className="text-xs text-muted-foreground">
+          {startedLabel}
+          {' -- '}
+          pass rate {passRate}
+        </div>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => onSelect(r.id)}
+        aria-label={`Select run #${r.id}${variantLabel} started ${startedLabel} with pass rate ${passRate}`}
+      >
+        Select
+      </Button>
+    </div>
+  )
+})}
+```
+
+Row-level keyboard focus enhancement intentionally out of scope per fix directive (small lists, acceptable UX).
+
+### Verification
+- [x] aria-label template includes run id, optional variant id, formatted start time, and pass rate
+- [x] Visible text unchanged (startedLabel substituted for identical inline expression)
+- [x] No new imports required
