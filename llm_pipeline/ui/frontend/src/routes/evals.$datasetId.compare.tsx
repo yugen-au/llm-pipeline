@@ -16,8 +16,6 @@ import {
 } from 'lucide-react'
 import {
   useDataset,
-  useDatasetProdModel,
-  useDatasetProdPrompts,
   useEvalRun,
   useHistoricalCase,
   useVariant,
@@ -26,12 +24,14 @@ import type {
   CaseItem,
   CaseResultItem,
   HistoricalCaseItem,
-  ProdPromptsResponse,
   RunDetail,
-  VariableDefinitions,
 } from '@/api/evals'
-import { useAutoGenerateObjects } from '@/api/prompts'
-import type { AutoGenerateObject } from '@/api/prompts'
+import { useAutoGenerateObjects, useRunPrompts } from '@/api/prompts'
+import type {
+  AutoGenerateObject,
+  FlatPromptVersion,
+  HistoricalPromptItem,
+} from '@/api/prompts'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -347,44 +347,6 @@ function ScoresCell({ result }: { result: CaseResultItem | undefined }) {
 // Variable-definition helpers (used by export payload builder)
 // ---------------------------------------------------------------------------
 
-/**
- * Tolerate both map and list shapes from the backend prompt column, matching
- * the `readVarDefs` helper in the variant editor. Returns null for empty.
- */
-function normalizeVarDefs(
-  defs: VariableDefinitions | null | undefined,
-): VariableDefinitions | null {
-  if (!defs) return null
-  if (Array.isArray(defs)) {
-    const out: VariableDefinitions = {}
-    for (const d of defs as Array<Record<string, unknown>>) {
-      if (!d || typeof d !== 'object') continue
-      const name = typeof d.name === 'string' ? d.name : ''
-      if (!name) continue
-      const type = typeof d.type === 'string' ? d.type : 'str'
-      const entry: VariableDefinitions[string] = { type }
-      if (typeof d.description === 'string') entry.description = d.description
-      if (typeof d.auto_generate === 'string') entry.auto_generate = d.auto_generate
-      out[name] = entry
-    }
-    return Object.keys(out).length === 0 ? null : out
-  }
-  return Object.keys(defs).length === 0 ? null : defs
-}
-
-/** Union of prod system + user variable_definitions. Variant-editor uses same merge. */
-function mergeProdVarDefs(
-  prod: ProdPromptsResponse | undefined,
-): VariableDefinitions | null {
-  const sys = normalizeVarDefs(
-    (prod?.system?.variable_definitions ?? null) as VariableDefinitions | null,
-  )
-  const user = normalizeVarDefs(
-    (prod?.user?.variable_definitions ?? null) as VariableDefinitions | null,
-  )
-  if (!sys && !user) return null
-  return { ...(sys ?? {}), ...(user ?? {}) }
-}
 
 // ---------------------------------------------------------------------------
 // Export payload builders
@@ -406,11 +368,25 @@ interface ExportCaseResult {
   evaluator_scores: Record<string, unknown>
 }
 
+interface ExportRunPrompt {
+  /** Pipeline step that owns this prompt (pipeline-target runs only); null
+   * for step-target runs where the whole run is a single step. */
+  step_name: string | null
+  prompt_key: string
+  prompt_type: string
+  version: string
+  content: string
+  variable_definitions: Record<string, unknown> | null
+}
+
 interface ExportRunContext {
-  /** Flat (step-target) or nested (pipeline-target) prompt version map. */
-  prompt_versions: Record<string, unknown> | null
-  /** Flat `{model: name}` (step-target) or nested `{step_name: {model: name}}`. */
+  /** Resolved model name (e.g. "openai:gpt-5") or null when not recorded. */
+  model: string | null
+  /** Raw model snapshot from the run for pipeline-target shapes that carry
+   * multiple steps. For step-target this is just `{step_name: model}`. */
   model_snapshot: Record<string, unknown> | null
+  /** Fully resolved prompts that were actually used by this run. */
+  prompts: ExportRunPrompt[]
   /** Full instructions JSON schema captured at run time. */
   instructions_schema: Record<string, unknown> | null
   /** Delta overrides applied by a variant run; null for non-variant runs. */
@@ -438,16 +414,16 @@ interface ExportPayload {
     name: string
     target_type: string
   }
-  /** Current production configuration, fetched fresh at export time. Included
-   * as a reference for full prompt text — the runs only capture version ids.
-   * May differ from the prompts actually used by either run. */
-  prod_reference: {
-    model: string | null
-    system_prompt: string | null
-    user_prompt: string | null
-    variable_definitions: Record<string, unknown> | null
-    enum_catalog: Record<string, Array<{ name: string; value: string }>>
+  dataset: {
+    id: number
+    name: string
+    description: string | null
   }
+  /** Distinct evaluator names observed across both runs' case results. Lets
+   * the reader see what scoring was applied without mining each case. */
+  evaluators: string[]
+  /** Runtime-registered enum catalog (referenced by instructions schemas). */
+  registered_enums: Record<string, Array<{ name: string; value: string }>>
   comparison: {
     base_run_id: number
     compare_run_id: number
@@ -486,23 +462,132 @@ function toExportCaseResult(r: CaseResultItem): ExportCaseResult {
   }
 }
 
-function toExportRunContext(run: RunDetail): ExportRunContext {
+/** Extract the primary resolved model from a model_snapshot. Step-target
+ * snapshots are `{step_name: "model_string"}`; pipeline-target snapshots are
+ * `{step_name: {model: "model_string"}}`. Returns the first model string
+ * found, or null. */
+function resolveModelFromSnapshot(
+  snap: Record<string, unknown> | null | undefined,
+): string | null {
+  if (!snap) return null
+  for (const v of Object.values(snap)) {
+    if (typeof v === 'string') return v
+    if (v && typeof v === 'object') {
+      const inner = v as Record<string, unknown>
+      if (typeof inner.model === 'string') return inner.model
+    }
+  }
+  return null
+}
+
+function toExportRunPrompts(
+  flat: FlatPromptVersion[],
+  items: Array<HistoricalPromptItem | undefined>,
+): ExportRunPrompt[] {
+  return flat.map((f, i) => {
+    const item = items[i]
+    return {
+      step_name: f.step_name,
+      prompt_key: f.prompt_key,
+      prompt_type: f.prompt_type,
+      version: f.version,
+      content: item?.content ?? '',
+      variable_definitions: item?.variable_definitions ?? null,
+    }
+  })
+}
+
+function toExportRunContext(
+  run: RunDetail,
+  prompts: ExportRunPrompt[],
+): ExportRunContext {
   return {
-    prompt_versions: run.prompt_versions,
+    model: resolveModelFromSnapshot(run.model_snapshot),
     model_snapshot: run.model_snapshot,
+    prompts,
     instructions_schema: run.instructions_schema_snapshot,
     variant_delta: run.delta_snapshot,
     variant_id: run.variant_id,
   }
 }
 
-function toExportRun(run: RunDetail): ExportRun {
+function toExportRun(run: RunDetail, prompts: ExportRunPrompt[]): ExportRun {
   return {
     id: run.id,
     stats: toExportStats(run),
     case_results: run.case_results.map(toExportCaseResult),
-    context: toExportRunContext(run),
+    context: toExportRunContext(run, prompts),
   }
+}
+
+/** A base/compare prompt pair, keyed by step+key+type. Either side may be
+ * absent if one run didn't use that prompt. */
+interface PromptPair {
+  key: string
+  step_name: string | null
+  prompt_key: string
+  prompt_type: string
+  base: ExportRunPrompt | null
+  compare: ExportRunPrompt | null
+}
+
+function promptPairKey(p: {
+  step_name: string | null
+  prompt_key: string
+  prompt_type: string
+}): string {
+  return `${p.step_name ?? ''}::${p.prompt_key}::${p.prompt_type}`
+}
+
+/** Pair up prompts from both runs by (step_name, prompt_key, prompt_type).
+ * Returns a stable-ordered list with base-first then compare-only. */
+function pairRunPrompts(
+  base: ExportRunPrompt[],
+  compare: ExportRunPrompt[],
+): PromptPair[] {
+  const pairs = new Map<string, PromptPair>()
+  for (const p of base) {
+    const k = promptPairKey(p)
+    pairs.set(k, {
+      key: k,
+      step_name: p.step_name,
+      prompt_key: p.prompt_key,
+      prompt_type: p.prompt_type,
+      base: p,
+      compare: null,
+    })
+  }
+  for (const p of compare) {
+    const k = promptPairKey(p)
+    const existing = pairs.get(k)
+    if (existing) {
+      existing.compare = p
+    } else {
+      pairs.set(k, {
+        key: k,
+        step_name: p.step_name,
+        prompt_key: p.prompt_key,
+        prompt_type: p.prompt_type,
+        base: null,
+        compare: p,
+      })
+    }
+  }
+  return Array.from(pairs.values())
+}
+
+/** Collect distinct evaluator names across both runs' case results. */
+function collectEvaluatorNames(
+  baseRun: RunDetail,
+  compareRun: RunDetail,
+): string[] {
+  const names = new Set<string>()
+  for (const r of [...baseRun.case_results, ...compareRun.case_results]) {
+    for (const k of Object.keys(r.evaluator_scores ?? {})) {
+      names.add(k)
+    }
+  }
+  return Array.from(names).sort()
 }
 
 /** Build the case-drift list for the export payload. Uses case_versions on
@@ -557,22 +642,29 @@ function buildEnumCatalog(
 }
 
 interface BuildPayloadArgs {
-  dataset: { target_name: string; target_type: string; cases: CaseItem[] }
-  prodModel: string | null
-  prodPrompts: ProdPromptsResponse | undefined
+  dataset: {
+    id: number
+    name: string
+    description: string | null
+    target_name: string
+    target_type: string
+    cases: CaseItem[]
+  }
   enumObjects: AutoGenerateObject[] | undefined
   baseRun: RunDetail
   compareRun: RunDetail
+  basePrompts: ExportRunPrompt[]
+  comparePrompts: ExportRunPrompt[]
 }
 
 function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
   const {
     dataset,
-    prodModel,
-    prodPrompts,
     enumObjects,
     baseRun,
     compareRun,
+    basePrompts,
+    comparePrompts,
   } = args
 
   return {
@@ -580,22 +672,20 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
       name: dataset.target_name,
       target_type: dataset.target_type,
     },
-    prod_reference: {
-      model: prodModel,
-      system_prompt: prodPrompts?.system?.content ?? null,
-      user_prompt: prodPrompts?.user?.content ?? null,
-      variable_definitions: mergeProdVarDefs(prodPrompts) as
-        | Record<string, unknown>
-        | null,
-      enum_catalog: buildEnumCatalog(enumObjects),
+    dataset: {
+      id: dataset.id,
+      name: dataset.name,
+      description: dataset.description,
     },
+    evaluators: collectEvaluatorNames(baseRun, compareRun),
+    registered_enums: buildEnumCatalog(enumObjects),
     comparison: {
       base_run_id: baseRun.id,
       compare_run_id: compareRun.id,
     },
     runs: {
-      base: toExportRun(baseRun),
-      compare: toExportRun(compareRun),
+      base: toExportRun(baseRun, basePrompts),
+      compare: toExportRun(compareRun, comparePrompts),
     },
     case_drift: computeCaseDrift(baseRun, compareRun),
     dataset_cases: dataset.cases.map((c) => ({
@@ -607,9 +697,24 @@ function buildPayloadJSON(args: BuildPayloadArgs): ExportPayload {
 }
 
 // Meta-prompt prepended to markdown exports. JSON omits this.
-const META_PROMPT = `# Eval Run Comparison Context
+const META_PROMPT = `# Eval Run Comparison
 
-You are analyzing differences between two evaluation runs of a production LLM step. Each run's configuration snapshot reflects what the run actually used at execution time. Case version drift is flagged per-case — when cases drift between runs, improvements or regressions may reflect changes to the test itself rather than the model's behavior. Focus on patterns in failing or changed cases, and suggest improvements that address root causes.
+## Your task
+
+You are reviewing two runs of an automated evaluation suite for a language-model step. Each run executes the same set of test cases through the LLM step and scores the outputs using one or more evaluator functions. Your job is to analyze the differences between the two runs and recommend concrete changes that would improve results on the failing or regressed cases.
+
+## How to approach this
+
+Look at the data as a pattern-matching exercise:
+
+1. **What changed between the two runs?** Compare the model, system prompt, user prompt, instructions schema, and any variant overrides. These are the knobs that were adjusted.
+2. **What changed in the cases themselves?** Cases may have been edited between runs (different inputs or different expected outputs). Any such changes are flagged in the "Case version drift" section; treat drifted cases cautiously — an apparent improvement may reflect the test changing, not the model getting better.
+3. **Where are the model's outputs wrong?** For failing or regressed cases, compare the actual output to the expected output and identify patterns (e.g. specific edge cases the prompt doesn't cover, schema fields the model misinterprets, formatting issues).
+4. **What can be tweaked to fix this?** The levers available are: the system prompt, the user prompt template, the instructions schema (including enum values), per-case expected outputs, and the underlying model. Recommend specific, actionable changes.
+
+## What to produce
+
+A summary of the patterns you see and a prioritized list of recommended changes, each naming the specific lever (system prompt, user prompt, schema, expected output, model) and the rationale.
 `
 
 function fenced(lang: string, body: string): string {
@@ -991,27 +1096,19 @@ function aggregateComparisonTable(
   return [header, sep, body].join('\n')
 }
 
-/** Render the model snapshot. Step-target is `{model: name}`; pipeline-target
- * is `{step_name: {model: name}}`. Returns a one-line string for step-target
- * or a JSON fence for pipeline-target. */
-function renderModelSnapshot(
-  snap: Record<string, unknown> | null,
-): string {
-  if (!snap) return '*not recorded*'
-  const keys = Object.keys(snap)
-  if (keys.length === 1 && keys[0] === 'model' && typeof snap.model === 'string') {
-    return `\`${snap.model}\``
+/** Render a resolved prompt (with full text) as a markdown section. */
+function renderPrompt(p: ExportRunPrompt): string {
+  const parts: string[] = []
+  const stepPrefix = p.step_name ? `${p.step_name} · ` : ''
+  parts.push(
+    `**${stepPrefix}${p.prompt_key} (${p.prompt_type}) — v${p.version}**`,
+  )
+  parts.push(fenced('', p.content || '(empty)'))
+  if (p.variable_definitions && Object.keys(p.variable_definitions).length > 0) {
+    parts.push('*Variable definitions:*')
+    parts.push(jsonFence(p.variable_definitions))
   }
-  return jsonFence(snap)
-}
-
-/** Render prompt_versions. Step-target is flat `{prompt_key: version}`;
- * pipeline-target is nested `{step_name: {prompt_key: version}}`. */
-function renderPromptVersions(
-  versions: Record<string, unknown> | null,
-): string {
-  if (!versions || Object.keys(versions).length === 0) return '*not recorded*'
-  return jsonFence(versions)
+  return parts.join('\n\n')
 }
 
 function renderRunContextSection(
@@ -1019,26 +1116,35 @@ function renderRunContextSection(
   runId: number,
   ctx: ExportRunContext,
 ): string {
+  const modelLine = ctx.model ? `\`${ctx.model}\`` : '*not recorded*'
   const variantLine = ctx.variant_id
-    ? `**Variant:** \`#${ctx.variant_id}\``
-    : '**Variant:** *none (baseline run)*'
+    ? `**Variant:** \`#${ctx.variant_id}\` — overrides applied to the production config for this run.`
+    : '**Variant:** *none (run used production configuration directly)*'
   const deltaBlock =
     ctx.variant_delta && Object.keys(ctx.variant_delta).length > 0
-      ? `\n\n**Variant delta applied:**\n${jsonFence(ctx.variant_delta)}`
+      ? `\n\n*Variant delta:*\n${jsonFence(ctx.variant_delta)}`
       : ''
+  const promptsSection =
+    ctx.prompts.length > 0
+      ? ctx.prompts.map(renderPrompt).join('\n\n')
+      : '*No prompts recorded.*'
   const instrBlock = ctx.instructions_schema
     ? jsonFence(ctx.instructions_schema)
     : '*not recorded*'
   return [
-    `## ${label} context (run #${runId})`,
+    `## ${label} (run #${runId})`,
     '',
-    `**Model:** ${renderModelSnapshot(ctx.model_snapshot)}`,
-    '',
-    `**Prompt versions:**\n${renderPromptVersions(ctx.prompt_versions)}`,
+    `**Model:** ${modelLine}`,
     '',
     variantLine + deltaBlock,
     '',
-    `**Instructions schema:**\n${instrBlock}`,
+    '### Prompts used',
+    '',
+    promptsSection,
+    '',
+    '### Instructions schema',
+    '',
+    instrBlock,
   ].join('\n')
 }
 
@@ -1064,8 +1170,16 @@ function renderCaseDriftSection(drift: ExportCaseDrift[]): string {
 
 function buildPayloadMarkdown(args: BuildPayloadArgs): string {
   const payload = buildPayloadJSON(args)
-  const { step, prod_reference, comparison, runs, case_drift, dataset_cases } =
-    payload
+  const {
+    step,
+    dataset,
+    evaluators,
+    registered_enums,
+    comparison,
+    runs,
+    case_drift,
+    dataset_cases,
+  } = payload
 
   // Build a drift lookup for per-case annotation.
   const driftByName = new Map(case_drift.map((d) => [d.case_name, d]))
@@ -1110,21 +1224,6 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     )
     .join('\n')
 
-  const varDefs = prod_reference.variable_definitions
-  const varDefsBlock =
-    varDefs && Object.keys(varDefs).length > 0
-      ? jsonFence(varDefs)
-      : '(none defined)'
-  const modelLine = prod_reference.model
-    ? `\`${prod_reference.model}\``
-    : '*not set*'
-  const sysBlock = prod_reference.system_prompt
-    ? fenced('', prod_reference.system_prompt)
-    : '*none*'
-  const userBlock = prod_reference.user_prompt
-    ? fenced('', prod_reference.user_prompt)
-    : '*none*'
-
   const baseStats = runs.base.stats
   const compareStats = runs.compare.stats
   const aggregateTable = aggregateComparisonTable(
@@ -1139,17 +1238,37 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     ? `## Per-case details\n\n${banner}\n\n${perCase}`
     : `## Per-case details\n\n${perCase}`
 
+  const datasetDescription =
+    dataset.description && dataset.description.trim().length > 0
+      ? dataset.description.trim()
+      : '*No description provided.*'
+
+  const evaluatorsLine =
+    evaluators.length > 0
+      ? evaluators.map((n) => `\`${n}\``).join(', ')
+      : '*No evaluators recorded.*'
+
   return [
     META_PROMPT,
     '---',
     '',
-    `## Step: ${step.name} (${step.target_type})`,
+    '## What is being tested',
     '',
-    `## Comparison summary\nBase run #${comparison.base_run_id} vs Compare run #${comparison.compare_run_id}`,
+    `**Step under test:** \`${step.name}\` (target type: ${step.target_type})`,
     '',
-    renderRunContextSection('Base', runs.base.id, runs.base.context),
+    `**Dataset:** \`${dataset.name}\` (id ${dataset.id})`,
     '',
-    renderRunContextSection('Compare', runs.compare.id, runs.compare.context),
+    datasetDescription,
+    '',
+    `**Evaluators applied:** ${evaluatorsLine}`,
+    '',
+    '## Comparison summary',
+    '',
+    `Base run \`#${comparison.base_run_id}\` vs Compare run \`#${comparison.compare_run_id}\`.`,
+    '',
+    renderRunContextSection('Base configuration', runs.base.id, runs.base.context),
+    '',
+    renderRunContextSection('Compare configuration', runs.compare.id, runs.compare.context),
     '',
     renderCaseDriftSection(case_drift),
     '',
@@ -1159,24 +1278,9 @@ function buildPayloadMarkdown(args: BuildPayloadArgs): string {
     '',
     perCaseSection,
     '',
-    '## Current production reference',
+    '## Registered enums (referenced by the instructions schema)',
     '',
-    '*Shown for prompt text the runs only capture as version ids. May differ from what either run actually used.*',
-    '',
-    '### Current model',
-    modelLine,
-    '',
-    '### Current system prompt',
-    sysBlock,
-    '',
-    '### Current user prompt',
-    userBlock,
-    '',
-    '### Variable definitions',
-    varDefsBlock,
-    '',
-    '### Registered enums',
-    enumCatalogMarkdown(prod_reference.enum_catalog),
+    enumCatalogMarkdown(registered_enums),
   ].join('\n')
 }
 
@@ -1382,6 +1486,219 @@ function CompareOutputPanel({
         <PassFailBadge result={compareResult} />
       </div>
       {body}
+    </div>
+  )
+}
+
+/**
+ * Configuration comparison panel — renders each run's actual model, prompts,
+ * instructions schema, and variant delta side-by-side. Prompts are shown in
+ * full (Base as plain text, Compare as a diff against Base when both are
+ * present) so the reader can see what each run used without project jargon.
+ */
+function ConfigurationComparison({
+  baseRunId,
+  compareRunId,
+  baseModel,
+  compareModel,
+  baseInstructionsSchema,
+  compareInstructionsSchema,
+  baseVariantDelta,
+  compareVariantDelta,
+  promptPairs,
+}: {
+  baseRunId: number
+  compareRunId: number
+  baseModel: string | null
+  compareModel: string | null
+  baseInstructionsSchema: Record<string, unknown> | null
+  compareInstructionsSchema: Record<string, unknown> | null
+  baseVariantDelta: Record<string, unknown> | null
+  compareVariantDelta: Record<string, unknown> | null
+  promptPairs: PromptPair[]
+}) {
+  const schemaSame =
+    JSON.stringify(baseInstructionsSchema ?? null) ===
+    JSON.stringify(compareInstructionsSchema ?? null)
+  return (
+    <div className="space-y-5">
+      {/* Model */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+            Model (Base #{baseRunId})
+          </p>
+          <p className="text-sm font-mono">
+            {baseModel ?? <span className="text-muted-foreground italic">not recorded</span>}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+            Model (Compare #{compareRunId})
+            {baseModel != null && compareModel != null && baseModel === compareModel && (
+              <span className="ml-2 text-muted-foreground normal-case"> (same as base)</span>
+            )}
+          </p>
+          <p className="text-sm font-mono">
+            {compareModel ?? <span className="text-muted-foreground italic">not recorded</span>}
+          </p>
+        </div>
+      </div>
+
+      {/* Prompts: pair each (step, key, type) and show Base + Compare */}
+      {promptPairs.map((pair) => (
+        <PromptPairPanel key={pair.key} pair={pair} />
+      ))}
+
+      {/* Variant deltas (only shown when present) */}
+      {(baseVariantDelta || compareVariantDelta) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+              Variant delta (Base)
+            </p>
+            {baseVariantDelta ? (
+              <JsonScroll>
+                <JsonViewer data={baseVariantDelta} maxDepth={3} />
+              </JsonScroll>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">
+                No variant applied.
+              </p>
+            )}
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+              Variant delta (Compare)
+            </p>
+            {compareVariantDelta ? (
+              <JsonScroll>
+                <JsonViewer data={compareVariantDelta} maxDepth={3} />
+              </JsonScroll>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">
+                No variant applied.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Instructions schema */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
+          Instructions schema
+          {schemaSame && (
+            <span className="ml-2 text-muted-foreground normal-case"> (identical in both runs)</span>
+          )}
+        </p>
+        {schemaSame ? (
+          baseInstructionsSchema ? (
+            <JsonScroll>
+              <JsonViewer data={baseInstructionsSchema} maxDepth={3} />
+            </JsonScroll>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              No schema recorded.
+            </p>
+          )
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div>
+              <p className="text-[9px] uppercase text-muted-foreground mb-0.5">
+                Base #{baseRunId}
+              </p>
+              {baseInstructionsSchema ? (
+                <JsonScroll>
+                  <JsonViewer data={baseInstructionsSchema} maxDepth={3} />
+                </JsonScroll>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  not recorded
+                </p>
+              )}
+            </div>
+            <div>
+              <p className="text-[9px] uppercase text-muted-foreground mb-0.5">
+                Compare #{compareRunId}
+              </p>
+              {compareInstructionsSchema && baseInstructionsSchema ? (
+                <JsonScroll>
+                  <JsonViewer
+                    before={baseInstructionsSchema}
+                    after={compareInstructionsSchema}
+                    maxDepth={3}
+                  />
+                </JsonScroll>
+              ) : compareInstructionsSchema ? (
+                <JsonScroll>
+                  <JsonViewer data={compareInstructionsSchema} maxDepth={3} />
+                </JsonScroll>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  not recorded
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Render a single base/compare prompt pair. Base is plain text; Compare is
+ * plain text when identical to Base (with a "same" marker) or a highlighted
+ * diff when different.
+ */
+function PromptPairPanel({ pair }: { pair: PromptPair }) {
+  const stepPrefix = pair.step_name ? `${pair.step_name} · ` : ''
+  const label = `${stepPrefix}${pair.prompt_key} (${pair.prompt_type})`
+  const baseContent = pair.base?.content ?? ''
+  const compareContent = pair.compare?.content ?? ''
+  const contentSame =
+    pair.base != null &&
+    pair.compare != null &&
+    baseContent === compareContent
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+        {label}
+      </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div>
+          <p className="text-[9px] uppercase text-muted-foreground mb-0.5">
+            Base{pair.base ? ` (v${pair.base.version})` : ''}
+          </p>
+          {pair.base ? (
+            <pre className="whitespace-pre-wrap text-xs bg-background border rounded p-2 max-h-[300px] overflow-auto">
+              {baseContent || <span className="italic text-muted-foreground">(empty)</span>}
+            </pre>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              not used by base
+            </p>
+          )}
+        </div>
+        <div>
+          <p className="text-[9px] uppercase text-muted-foreground mb-0.5">
+            Compare{pair.compare ? ` (v${pair.compare.version})` : ''}
+            {contentSame && (
+              <span className="ml-2 text-muted-foreground"> (same as base)</span>
+            )}
+          </p>
+          {pair.compare ? (
+            <pre className="whitespace-pre-wrap text-xs bg-background border rounded p-2 max-h-[300px] overflow-auto">
+              {compareContent || <span className="italic text-muted-foreground">(empty)</span>}
+            </pre>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">
+              not used by compare
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1691,11 +2008,13 @@ function CompareRunsPage() {
   const variantIdForLookup = compareRun?.variant_id ?? 0
   const variantQ = useVariant(datasetId, variantIdForLookup)
 
-  // Prod-reference fetches for the export (prompt text the runs only capture
-  // as version ids). Non-blocking: export proceeds with nulls if these
-  // error/are still loading.
-  const prodPromptsQ = useDatasetProdPrompts(datasetId)
-  const prodModelQ = useDatasetProdModel(datasetId)
+  // Resolve historical prompt content for each run. Runs capture only version
+  // ids in `prompt_versions`; these hooks fetch the full prompt rows so the
+  // configuration diff and export can show what each run actually used.
+  const basePromptsQ = useRunPrompts(baseRun?.prompt_versions)
+  const comparePromptsQ = useRunPrompts(compareRun?.prompt_versions)
+
+  // Registered enums reference (static lookup for the export).
   const autoGenQ = useAutoGenerateObjects()
 
   // Build dataset case map (by case name -> CaseItem). Empty when dataset
@@ -1834,15 +2153,24 @@ function CompareRunsPage() {
     if (!datasetQ.data || !baseRun || !compareRun) return null
     return {
       dataset: {
+        id: datasetQ.data.id,
+        name: datasetQ.data.name,
+        description: datasetQ.data.description,
         target_name: datasetQ.data.target_name,
         target_type: datasetQ.data.target_type,
         cases: datasetQ.data.cases,
       },
-      prodModel: prodModelQ.data?.model ?? null,
-      prodPrompts: prodPromptsQ.data,
       enumObjects: autoGenQ.data?.objects,
       baseRun,
       compareRun,
+      basePrompts: toExportRunPrompts(
+        basePromptsQ.flat,
+        basePromptsQ.items,
+      ),
+      comparePrompts: toExportRunPrompts(
+        comparePromptsQ.flat,
+        comparePromptsQ.items,
+      ),
     }
   }
 
@@ -1957,21 +2285,29 @@ function CompareRunsPage() {
       }
     }, [matchedOnly, filteredCaseNames, baseByName, compareByName, baseRun, compareRun])
 
-  // Delta summary: snapshot-based diff from both runs' prompt_versions +
-  // model_snapshot. Works for any two runs regardless of variant.
-  // Must be before early returns to satisfy rules-of-hooks.
-  const baseConfig = useMemo<Record<string, unknown>>(() => {
-    const cfg: Record<string, unknown> = {}
-    if (baseRun?.prompt_versions != null) cfg.prompt_versions = baseRun.prompt_versions
-    if (baseRun?.model_snapshot != null) cfg.model_snapshot = baseRun.model_snapshot
-    return cfg
-  }, [baseRun])
-  const compareConfig = useMemo<Record<string, unknown>>(() => {
-    const cfg: Record<string, unknown> = {}
-    if (compareRun?.prompt_versions != null) cfg.prompt_versions = compareRun.prompt_versions
-    if (compareRun?.model_snapshot != null) cfg.model_snapshot = compareRun.model_snapshot
-    return cfg
-  }, [compareRun])
+  // Derive the resolved model string from each run's snapshot, and pair
+  // the base/compare prompts by (step_name, prompt_key, prompt_type) for
+  // the configuration diff card below.
+  const baseModel = useMemo(
+    () => resolveModelFromSnapshot(baseRun?.model_snapshot ?? null),
+    [baseRun?.model_snapshot],
+  )
+  const compareModel = useMemo(
+    () => resolveModelFromSnapshot(compareRun?.model_snapshot ?? null),
+    [compareRun?.model_snapshot],
+  )
+  const basePromptsResolved = useMemo(
+    () => toExportRunPrompts(basePromptsQ.flat, basePromptsQ.items),
+    [basePromptsQ.flat, basePromptsQ.items],
+  )
+  const comparePromptsResolved = useMemo(
+    () => toExportRunPrompts(comparePromptsQ.flat, comparePromptsQ.items),
+    [comparePromptsQ.flat, comparePromptsQ.items],
+  )
+  const pairedPrompts = useMemo(
+    () => pairRunPrompts(basePromptsResolved, comparePromptsResolved),
+    [basePromptsResolved, comparePromptsResolved],
+  )
 
   // Early param validation
   if (baseRunId === 0 || compareRunId === 0) {
@@ -2030,12 +2366,15 @@ function CompareRunsPage() {
   const allExpanded =
     allCaseNames.length > 0 && expanded.size === allCaseNames.length
 
-  // Renders if either side has any snapshot field. Partial nulls (e.g. base
-  // has data, compare has none) still render — the filtered-config approach
-  // means the missing side shows as `{}`, so the diff clearly highlights the
-  // added/removed fields.
-  const hasSnapshotData =
-    Object.keys(baseConfig).length > 0 || Object.keys(compareConfig).length > 0
+  // The configuration card renders when either run recorded a model or
+  // has any resolved prompts — even a partial context is useful.
+  const hasConfigData =
+    baseModel != null ||
+    compareModel != null ||
+    pairedPrompts.length > 0 ||
+    baseRun?.instructions_schema_snapshot != null ||
+    compareRun?.instructions_schema_snapshot != null
+  const configLoading = basePromptsQ.isLoading || comparePromptsQ.isLoading
 
   return (
     <ScrollArea className="h-full">
@@ -2171,23 +2510,33 @@ function CompareRunsPage() {
           </Card>
         </div>
 
-        {/* Delta summary — snapshot diff between the two runs */}
+        {/* Configuration comparison — shows each run's actual model + prompts */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Configuration diff</CardTitle>
+            <CardTitle className="text-base">Configuration</CardTitle>
           </CardHeader>
           <CardContent>
-            {hasSnapshotData ? (
-              <div className="rounded border bg-background p-2 max-h-[400px] overflow-auto">
-                <JsonViewer
-                  before={baseConfig}
-                  after={compareConfig}
-                  maxDepth={3}
-                />
-              </div>
+            {configLoading ? (
+              <p className="text-xs text-muted-foreground italic">
+                Loading configuration…
+              </p>
+            ) : hasConfigData ? (
+              <ConfigurationComparison
+                baseRunId={baseRun.id}
+                compareRunId={compareRun.id}
+                baseModel={baseModel}
+                compareModel={compareModel}
+                baseInstructionsSchema={baseRun.instructions_schema_snapshot}
+                compareInstructionsSchema={
+                  compareRun.instructions_schema_snapshot
+                }
+                baseVariantDelta={baseRun.delta_snapshot}
+                compareVariantDelta={compareRun.delta_snapshot}
+                promptPairs={pairedPrompts}
+              />
             ) : (
               <p className="text-xs text-muted-foreground">
-                No snapshot data recorded for either run.
+                No configuration recorded for either run.
               </p>
             )}
           </CardContent>
