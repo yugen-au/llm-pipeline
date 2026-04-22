@@ -136,3 +136,6 @@
 [2026-04-22 10:49:08] [INFO] Auto-updated agent statuses: Add case_id to CaseResultItem: complete -> in-progress, Zod schema compareRunId + alias: complete -> pending, Universal compare button + picker: complete -> pending, Case version matching logic: complete -> pending, Delta summary snapshot diff: complete -> pending, Architecture review: complete -> pending
 [2026-04-22 10:49:08] [INFO] Deleted 1 old contract file(s)
 [2026-04-22 10:49:08] [DEBUG] STATE.md atomic write complete
+[2026-04-22 10:49:31] [INFO] Task call: backend-development:backend-architect (phase: fixing-review)
+[2026-04-22 10:49:31] [INFO] Incremented Revisions: 0 -> 1
+[2026-04-22 10:49:31] [DEBUG] STATE.md atomic write complete
