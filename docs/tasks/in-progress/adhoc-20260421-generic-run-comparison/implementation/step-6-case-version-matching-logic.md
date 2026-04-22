@@ -37,3 +37,72 @@ Added client-side case version matching logic that computes matched/drifted/unma
 [x] Scope toggle conditionally rendered only when needed
 [x] Stats cards use filtered values when matchedOnly active
 [x] Step 7 delta summary area not modified
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+- [x] Issue #1 (Medium) — setState called during render in seed-expanded logic
+- [x] Issue #7 (Low) — Unused `_caseName` param in `computeCaseBucket`
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/evals.$datasetId.compare.tsx`
+
+**Fix #1:** Moved render-phase setState into `useEffect` (added `useEffect` to react import).
+```
+# Before
+const seedKey = `${baseRun?.id ?? 0}-${compareRun?.id ?? 0}`
+if (baseRun && compareRun && seedKey !== seededFor) {
+  setExpanded(new Set(initialExpanded))
+  setSeededFor(seedKey)
+}
+
+# After
+const seedKey = `${baseRun?.id ?? 0}-${compareRun?.id ?? 0}`
+useEffect(() => {
+  if (baseRun && compareRun && seedKey !== seededFor) {
+    setExpanded(new Set(initialExpanded))
+    setSeededFor(seedKey)
+  }
+}, [seedKey, seededFor, initialExpanded, baseRun, compareRun])
+```
+
+**Fix #7:** Removed unused `_caseName` param from `computeCaseBucket` signature and updated call site.
+```
+# Before (signature)
+function computeCaseBucket(
+  _caseName: string,
+  baseResult: CaseResultItem | undefined,
+  ...
+)
+
+# Before (call site)
+const bucket = computeCaseBucket(
+  name,
+  baseMap.get(name),
+  cmpMap.get(name),
+  baseRun,
+  compareRun,
+)
+
+# After (signature)
+function computeCaseBucket(
+  baseResult: CaseResultItem | undefined,
+  ...
+)
+
+# After (call site)
+const bucket = computeCaseBucket(
+  baseMap.get(name),
+  cmpMap.get(name),
+  baseRun,
+  compareRun,
+)
+```
+
+### Verification
+- [x] `tsc --noEmit` passes with no errors
+- [x] Seeding still happens exactly once per (baseRun, compareRun) pair via seedKey gate
+- [x] Only call site of `computeCaseBucket` updated; signature and call match
+- [x] Step 7 delta summary area untouched
