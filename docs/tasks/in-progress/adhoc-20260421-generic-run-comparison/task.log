@@ -111,3 +111,12 @@
 [2026-04-21 18:24:53] [INFO] Auto-updated agent statuses: Verify build: pending -> in-progress
 [2026-04-21 18:24:53] [INFO] Deleted 1 old contract file(s)
 [2026-04-21 18:24:53] [DEBUG] STATE.md atomic write complete
+[2026-04-21 18:25:28] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-21 18:25:50] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-21 18:26:06] [ERROR] BLOCKED: Bash not allowed in task dir
+[2026-04-22 10:30:23] [INFO] Cleaned up stale semaphores: subagent, state, git
+[2026-04-22 10:30:45] [INFO] Task call: full-stack-orchestration:test-automator (phase: testing)
+[2026-04-22 10:37:47] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-22 10:37:54] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-22 10:38:00] [ERROR] BLOCKED: Invalid commit message format
+[2026-04-22 10:38:13] [DEBUG] STATE.md atomic write complete
