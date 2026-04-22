@@ -192,6 +192,9 @@ function computeCaseBucket(
   compareRun: RunDetail,
 ): VersionBucket {
   if (!baseResult || !compareResult) return 'unmatched'
+  // case_id may be null if the runner couldn't resolve the case name to a DB id;
+  // without an id we cannot key into case_versions -> treat as unmatched.
+  if (baseResult.case_id === null || compareResult.case_id === null) return 'unmatched'
   const baseCv = baseRun.case_versions
   const compareCv = compareRun.case_versions
   if (baseCv === null && compareCv === null) return 'matched'

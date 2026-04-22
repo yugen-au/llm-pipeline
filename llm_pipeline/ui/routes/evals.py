@@ -100,7 +100,11 @@ class CaseUpdateRequest(BaseModel):
 
 class CaseResultItem(BaseModel):
     id: int
-    case_id: int = 0
+    # case_id is None when the runner could not resolve the case name to a DB id
+    # (see runner.py lines 222, 237: name_to_id.get(..., 0) sentinel). The ORM
+    # column is non-null int; the route handler maps the 0 sentinel to None so
+    # clients receive an explicit null instead of a magic 0.
+    case_id: Optional[int] = None
     case_name: str
     passed: bool
     evaluator_scores: dict
@@ -1043,7 +1047,8 @@ def get_eval_run(
         case_results=[
             CaseResultItem(
                 id=cr.id,
-                case_id=cr.case_id,
+                # Map runner's 0 sentinel (unresolved case name) to None for clients
+                case_id=cr.case_id if cr.case_id else None,
                 case_name=cr.case_name,
                 passed=cr.passed,
                 evaluator_scores=cr.evaluator_scores or {},
