@@ -56,3 +56,49 @@ search: { baseRunId: baseline.id, compareRunId: runId },
 [x] All search-param destructuring uses `compareRunId`
 [x] Navigation in runs detail uses `compareRunId`
 [x] `tsc --noEmit` passes with no errors
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] ISSUE #5 (Low) - Zod transform drops variantRunId from resolved shape; TanStack Router may rewrite URLs
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/evals.$datasetId.compare.tsx`
+Added code comment above `compareSearchSchema` documenting backward-compat alias behavior and URL rewrite by TanStack Router on subsequent navigations.
+
+```
+# Before
+const compareSearchSchema = z
+  .object({
+    baseRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+    compareRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+    variantRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+  })
+  .transform(({ baseRunId, compareRunId, variantRunId }) => ({
+    baseRunId,
+    compareRunId: compareRunId || variantRunId || 0,
+  }))
+
+# After
+// Note: variantRunId is accepted as a backward-compat alias for compareRunId.
+// The .transform() drops variantRunId from the resolved shape, so TanStack
+// Router will rewrite the URL (stripping variantRunId) on the next navigation.
+// This is intentional - bookmarks continue to work on initial load.
+const compareSearchSchema = z
+  .object({
+    baseRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+    compareRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+    variantRunId: fallback(z.coerce.number().int().positive(), 0).default(0),
+  })
+  .transform(({ baseRunId, compareRunId, variantRunId }) => ({
+    baseRunId,
+    compareRunId: compareRunId || variantRunId || 0,
+  }))
+```
+
+### Verification
+[x] Comment placed directly above `compareSearchSchema` definition
+[x] Explains intentional URL-rewrite behavior for future maintainers
+[x] No behavioral change (comment-only)
