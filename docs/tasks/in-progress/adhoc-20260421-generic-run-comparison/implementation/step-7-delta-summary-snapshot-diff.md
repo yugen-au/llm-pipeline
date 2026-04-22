@@ -39,3 +39,75 @@ Replaced the variant-gated delta summary card with a snapshot-based configuratio
 [x] Fallback shows "No snapshot data recorded" when both configs are all-null
 [x] No modifications to case row rendering or aggregate stats (Step 6 scope preserved)
 [x] `useVariant`, `useDatasetProdPrompts`, `useDatasetProdModel` retained for non-delta-card usages
+
+## Review Fix Iteration 0
+**Issues Source:** REVIEW.md
+**Status:** fixed
+
+### Issues Addressed
+[x] ISSUE #2 (Medium) — JsonViewer diff-mode prop typed as non-null but fed null values; call site force-casts via `as unknown as Record<string, unknown>`, silencing legitimate null handling at the JsonViewer boundary.
+
+### Changes Made
+#### File: `llm_pipeline/ui/frontend/src/routes/evals.$datasetId.compare.tsx`
+
+Applied Option A: narrow types at construction time by filtering out null fields from baseConfig and compareConfig, then dropped the cast at the JsonViewer call site. Updated hasSnapshotData guard to use `Object.keys(...).length` on the filtered configs so partial nulls (one side has data, the other doesn't) render sensibly — the missing side shows as `{}` and the diff highlights the added/removed fields.
+
+```
+# Before
+const baseConfig = useMemo(
+  () => ({
+    prompt_versions: baseRun?.prompt_versions ?? null,
+    model_snapshot: baseRun?.model_snapshot ?? null,
+  }),
+  [baseRun],
+)
+const compareConfig = useMemo(
+  () => ({
+    prompt_versions: compareRun?.prompt_versions ?? null,
+    model_snapshot: compareRun?.model_snapshot ?? null,
+  }),
+  [compareRun],
+)
+// ...
+const hasSnapshotData =
+  baseConfig.prompt_versions != null ||
+  baseConfig.model_snapshot != null ||
+  compareConfig.prompt_versions != null ||
+  compareConfig.model_snapshot != null
+// ...
+<JsonViewer
+  before={baseConfig as unknown as Record<string, unknown>}
+  after={compareConfig as unknown as Record<string, unknown>}
+  maxDepth={3}
+/>
+
+# After
+const baseConfig = useMemo<Record<string, unknown>>(() => {
+  const cfg: Record<string, unknown> = {}
+  if (baseRun?.prompt_versions != null) cfg.prompt_versions = baseRun.prompt_versions
+  if (baseRun?.model_snapshot != null) cfg.model_snapshot = baseRun.model_snapshot
+  return cfg
+}, [baseRun])
+const compareConfig = useMemo<Record<string, unknown>>(() => {
+  const cfg: Record<string, unknown> = {}
+  if (compareRun?.prompt_versions != null) cfg.prompt_versions = compareRun.prompt_versions
+  if (compareRun?.model_snapshot != null) cfg.model_snapshot = compareRun.model_snapshot
+  return cfg
+}, [compareRun])
+// ...
+const hasSnapshotData =
+  Object.keys(baseConfig).length > 0 || Object.keys(compareConfig).length > 0
+// ...
+<JsonViewer
+  before={baseConfig}
+  after={compareConfig}
+  maxDepth={3}
+/>
+```
+
+### Verification
+[x] TypeScript compiles without errors (`npx tsc --noEmit` passes)
+[x] No `as unknown as` cast remains at the JsonViewer call site
+[x] `hasSnapshotData` still correctly returns false when both runs have all-null snapshot fields (filtered configs empty on both sides)
+[x] Partial nulls render sensibly — one-sided data yields `{}` vs populated object diff
+[x] No changes to Step 6 scope (case matching, useMemo seeding, computeCaseBucket untouched)
