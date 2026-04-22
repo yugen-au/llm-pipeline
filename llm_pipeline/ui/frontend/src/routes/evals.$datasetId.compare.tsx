@@ -26,6 +26,7 @@ import {
 import type {
   CaseItem,
   CaseResultItem,
+  HistoricalCaseItem,
   ProdPromptsResponse,
   RunDetail,
   VariableDefinitions,
@@ -1219,18 +1220,15 @@ function CaseDetailCard({
 }) {
   return (
     <Card className="bg-muted/20 border-0 rounded-none">
-      <CardContent className="p-4 space-y-4">
-        {bucket === 'drifted' || bucket === 'unmatched' ? (
-          <CaseVersionDiffPanel
-            datasetId={datasetId}
-            baseCaseId={baseResult?.case_id ?? null}
-            compareCaseId={compareResult?.case_id ?? null}
-            bucket={bucket}
-          />
-        ) : null}
+      <CardContent className="p-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {bucket === 'drifted' || bucket === 'unmatched' ? (
-            <div /> /* Spacer: diff panel rendered above, skip single caseDef */
+            <DriftedInputExpectedPanel
+              datasetId={datasetId}
+              baseCaseId={baseResult?.case_id ?? null}
+              compareCaseId={compareResult?.case_id ?? null}
+              bucket={bucket}
+            />
           ) : (
             <InputExpectedPanel caseDef={caseDef} />
           )}
@@ -1247,13 +1245,13 @@ function CaseDetailCard({
 
 /**
  * For drifted/unmatched cases, fetch the exact case row(s) used by each run
- * and render a side-by-side diff (drifted) or single-sided view (unmatched).
+ * and render Base (plain) + Compare (diff vs base) stacked per field.
  *
  * Case rows are append-only, so the historical endpoint resolves the exact
  * content used by the past run even if the case has since been edited or
  * soft-deleted.
  */
-function CaseVersionDiffPanel({
+function DriftedInputExpectedPanel({
   datasetId,
   baseCaseId,
   compareCaseId,
@@ -1276,139 +1274,128 @@ function CaseVersionDiffPanel({
 
   if (loading) {
     return (
-      <Card className="bg-background/60 border-dashed">
-        <CardContent className="p-3">
-          <p className="text-xs text-muted-foreground italic">
-            Loading case versions…
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground italic">
+          Loading case versions…
+        </p>
+      </div>
     )
   }
 
-  const title =
-    bucket === 'drifted' ? 'Case drift detail' : 'Case availability detail'
-
   return (
-    <Card className="bg-background/60 border-dashed">
-      <CardContent className="p-3 space-y-3">
-        <div className="flex items-center gap-2">
-          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
-            {title}
-          </p>
-          {bucket === 'drifted' && baseCase && compareCase && (
-            <span className="text-[10px] text-muted-foreground">
-              v{baseCase.version} → v{compareCase.version}
-            </span>
-          )}
-        </div>
-        <CaseFieldDiff
-          field="inputs"
-          baseValue={baseCase?.inputs ?? null}
-          compareValue={compareCase?.inputs ?? null}
-          bucket={bucket}
-          baseAvailable={!!baseCase}
-        />
-        <CaseFieldDiff
-          field="expected_output"
-          baseValue={baseCase?.expected_output ?? null}
-          compareValue={compareCase?.expected_output ?? null}
-          bucket={bucket}
-          baseAvailable={!!baseCase}
-        />
-        <CaseFieldDiff
-          field="metadata_"
-          baseValue={baseCase?.metadata_ ?? null}
-          compareValue={compareCase?.metadata_ ?? null}
-          bucket={bucket}
-          baseAvailable={!!baseCase}
-        />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <CaseFieldDiff
+        field="inputs"
+        label="Input"
+        baseCase={baseCase}
+        compareCase={compareCase}
+        bucket={bucket}
+      />
+      <CaseFieldDiff
+        field="expected_output"
+        label="Expected output"
+        baseCase={baseCase}
+        compareCase={compareCase}
+        bucket={bucket}
+      />
+      <CaseFieldDiff
+        field="metadata_"
+        label="Metadata"
+        baseCase={baseCase}
+        compareCase={compareCase}
+        bucket={bucket}
+      />
+    </div>
   )
 }
 
 function CaseFieldDiff({
   field,
-  baseValue,
-  compareValue,
+  label,
+  baseCase,
+  compareCase,
   bucket,
-  baseAvailable,
 }: {
   field: 'inputs' | 'expected_output' | 'metadata_'
-  baseValue: Record<string, unknown> | null
-  compareValue: Record<string, unknown> | null
+  label: string
+  baseCase: HistoricalCaseItem | undefined
+  compareCase: HistoricalCaseItem | undefined
   bucket: 'drifted' | 'unmatched'
-  baseAvailable: boolean
 }) {
-  const label =
-    field === 'inputs'
-      ? 'Input'
-      : field === 'expected_output'
-        ? 'Expected output'
-        : 'Metadata'
+  const baseValue = baseCase?.[field] ?? null
+  const compareValue = compareCase?.[field] ?? null
 
-  // Drifted: show before/after diff when both sides exist. If only one side has
-  // a value for this field, fall back to plain single-sided view.
-  if (bucket === 'drifted') {
-    if (baseValue && compareValue) {
-      return (
-        <div>
-          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
-            {label}
-          </p>
-          <JsonScroll>
-            <JsonViewer before={baseValue} after={compareValue} maxDepth={3} />
-          </JsonScroll>
-        </div>
-      )
-    }
-    // One side has nothing for this field — show whichever is present
-    const present = baseValue ?? compareValue
+  const emptyMessage =
+    field === 'expected_output'
+      ? 'No expected output defined'
+      : field === 'metadata_'
+        ? 'No metadata'
+        : 'Not available'
+
+  // Unmatched: only one side has the case. Show the present side with a label.
+  if (bucket === 'unmatched') {
+    const present = baseCase ? baseValue : compareValue
+    const sideLabel = baseCase ? 'Base only' : 'Compare only'
+    const versionLabel = baseCase
+      ? `v${baseCase.version}`
+      : compareCase
+        ? `v${compareCase.version}`
+        : ''
     return (
       <div>
-        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide mb-1">
-          {label}
-        </p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+            {label}
+          </p>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+            {sideLabel} {versionLabel}
+          </Badge>
+        </div>
         {present ? (
           <JsonScroll>
             <JsonViewer data={present} maxDepth={3} />
           </JsonScroll>
         ) : (
-          <p className="text-xs text-muted-foreground italic">
-            Not set in either version
-          </p>
+          <p className="text-xs text-muted-foreground italic">{emptyMessage}</p>
         )}
       </div>
     )
   }
 
-  // Unmatched: show whichever side has the case, labeled clearly.
-  const present = baseAvailable ? baseValue : compareValue
-  const presentLabel = baseAvailable ? 'Base only' : 'Compare only'
+  // Drifted: Base as plain view, Compare as diff (vs base).
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-1">
-        <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
-          {label}
+    <div className="space-y-2">
+      <p className="text-[10px] font-semibold uppercase text-muted-foreground tracking-wide">
+        {label}
+      </p>
+      <div>
+        <p className="text-[9px] uppercase text-muted-foreground mb-0.5">
+          Base{baseCase ? ` (v${baseCase.version})` : ''}
         </p>
-        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-          {presentLabel}
-        </Badge>
+        {baseValue ? (
+          <JsonScroll>
+            <JsonViewer data={baseValue} maxDepth={3} />
+          </JsonScroll>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">{emptyMessage}</p>
+        )}
       </div>
-      {present ? (
-        <JsonScroll>
-          <JsonViewer data={present} maxDepth={3} />
-        </JsonScroll>
-      ) : (
-        <p className="text-xs text-muted-foreground italic">
-          {field === 'expected_output'
-            ? 'No expected output defined'
-            : field === 'metadata_'
-              ? 'No metadata'
-              : 'Not available'}
+      <div>
+        <p className="text-[9px] uppercase text-muted-foreground mb-0.5">
+          Compare{compareCase ? ` (v${compareCase.version})` : ''}
         </p>
-      )}
+        {baseValue && compareValue ? (
+          <JsonScroll>
+            <JsonViewer before={baseValue} after={compareValue} maxDepth={3} />
+          </JsonScroll>
+        ) : compareValue ? (
+          <JsonScroll>
+            <JsonViewer data={compareValue} maxDepth={3} />
+          </JsonScroll>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">{emptyMessage}</p>
+        )}
+      </div>
     </div>
   )
 }
