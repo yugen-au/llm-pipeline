@@ -129,3 +129,10 @@
 [2026-04-22 10:38:27] [DEBUG] STATE.md atomic write complete
 [2026-04-22 10:38:52] [INFO] Task call: comprehensive-review:architect-review (phase: review)
 [2026-04-22 10:44:07] [DEBUG] STATE.md atomic write complete
+[2026-04-22 10:48:57] [INFO] STATE.md updated: phase=review, status=in-progress
+[2026-04-22 10:49:06] [INFO] Committed review-A: ['REVIEW.md'] -> 012a5ff1
+[2026-04-22 10:49:08] [INFO] STATE.md updated: phase=fixing-review, status=in-progress
+[2026-04-22 10:49:08] [INFO] Updated Commits for 'Architecture review': 3bbee64d
+[2026-04-22 10:49:08] [INFO] Auto-updated agent statuses: Add case_id to CaseResultItem: complete -> in-progress, Zod schema compareRunId + alias: complete -> pending, Universal compare button + picker: complete -> pending, Case version matching logic: complete -> pending, Delta summary snapshot diff: complete -> pending, Architecture review: complete -> pending
+[2026-04-22 10:49:08] [INFO] Deleted 1 old contract file(s)
+[2026-04-22 10:49:08] [DEBUG] STATE.md atomic write complete

@@ -1,7 +1,7 @@
 ## Task: adhoc-20260421-generic-run-comparison
 ## Description: Generic eval run comparison — replace baseline-only compare with any-two-runs picker, case-level version matching (matched/drifted/unmatched buckets), scoped aggregates. Modify existing comparison page to support any run-to-run comparison.
 
-## Phase: review
+## Phase: fixing-review
 ## Status: in-progress
 ## Current Group: A
 ## Base Branch: dev
@@ -12,7 +12,7 @@
 ## Steps to Fix: [1,3,5,6,7]
 ## Work Mode: standard
 ## PRD Target Tasks: 0
-## Last Updated: 2026-04-22 10:44
+## Last Updated: 2026-04-22 10:49
 
 ## Agents
 | Name | Agent | Phase | Step | Skills | Group | Status | Revisions | Agent ID | Commits | Context7 Docs |
@@ -21,13 +21,13 @@
 | Backend comparison logic research | backend-development:backend-architect | research | 2 | - | A | complete | 0 | a36edd5e701e73d61 | 2c9b329b | - |
 | Assumption Check | code-documentation:code-reviewer | validate | 1 | - | A | complete | 1 | a20d56ad5a3832e24 | a4bde376 | - |
 | Plan | planning | planning | 1 | - | A | complete | 0 | a60feb2cf2494a2ea | c2e269ac | - |
-| Add case_id to CaseResultItem | backend-development:backend-architect | implementation | 1 | - | A | complete | 0 | abaa93095c8b1019a | b8c76a6a,de2bff9d | - |
+| Add case_id to CaseResultItem | backend-development:backend-architect | implementation | 1 | - | A | in-progress | 0 | abaa93095c8b1019a | b8c76a6a,de2bff9d | - |
 | Sync frontend TS types | frontend-mobile-development:frontend-developer | implementation | 2 | - | A | complete | 0 | a721761759d582a9b | 6249de3d,de2bff9d | - |
-| Zod schema compareRunId + alias | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | complete | 0 | a2bc6b43303ea9b16 | 8b48ccac,5b037a42 | /colinhacks/zod |
+| Zod schema compareRunId + alias | frontend-mobile-development:frontend-developer | implementation | 3 | - | B | pending | 0 | a2bc6b43303ea9b16 | 8b48ccac,5b037a42 | /colinhacks/zod |
 | Rename labels Base/Compare | frontend-mobile-development:frontend-developer | implementation | 4 | - | B | complete | 0 | a60cf7843d0fd984e | aac9ca0a,5b037a42 | - |
-| Universal compare button + picker | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | complete | 0 | ac0ed5da409f87dfd | e0509022 | - |
-| Case version matching logic | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | complete | 0 | ad6bce4c62a996dc6 | 0da4c5a0,febfdd6a | - |
-| Delta summary snapshot diff | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | complete | 0 | ae04cab6675148f8a | febfdd6a | - |
+| Universal compare button + picker | frontend-mobile-development:frontend-developer | implementation | 5 | - | C | pending | 0 | ac0ed5da409f87dfd | e0509022 | - |
+| Case version matching logic | frontend-mobile-development:frontend-developer | implementation | 6 | - | D | pending | 0 | ad6bce4c62a996dc6 | 0da4c5a0,febfdd6a | - |
+| Delta summary snapshot diff | frontend-mobile-development:frontend-developer | implementation | 7 | - | D | pending | 0 | ae04cab6675148f8a | febfdd6a | - |
 | Export neutral meta-prompt | frontend-mobile-development:frontend-developer | implementation | 8 | - | E | complete | 0 | accaa787bd57e47f7 | e22de50e | - |
 | Verify build | full-stack-orchestration:test-automator | testing | 1 | - | A | complete | 0 | a8a93c72276b486b7 | fae357b1 | - |
-| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | complete | 0 | a9cdd929eb7782c79 | pending | - |
+| Architecture review | comprehensive-review:architect-review | review | 1 | - | A | pending | 0 | a9cdd929eb7782c79 | 3bbee64d | - |
