@@ -10,8 +10,12 @@ inputs are sourced. Strategies return a list of Bind instances from
 """
 from __future__ import annotations
 
+import typing
 from dataclasses import dataclass, field
+from types import UnionType
 from typing import Any, Callable
+
+from pydantic import BaseModel
 
 __all__ = [
     "AdapterContext",
@@ -22,6 +26,7 @@ __all__ = [
     "FromPipeline",
     "Source",
     "SourcesSpec",
+    "validate_bindings",
 ]
 
 
@@ -175,3 +180,178 @@ class Bind:
                 raise ValueError(
                     "Nested Binds under a step must have extraction= set, not step="
                 )
+
+
+# ---------------------------------------------------------------------------
+# Static analysis
+# ---------------------------------------------------------------------------
+
+
+def validate_bindings(
+    bindings: list[Bind],
+    *,
+    input_cls: type[BaseModel],
+) -> None:
+    """Statically verify a strategy's bindings against pipeline INPUT_DATA and step INSTRUCTIONS.
+
+    Raises ``ValueError`` on any violation:
+
+    - Top-level ``Bind`` with ``extraction=`` (instead of ``step=``).
+    - ``FromInput(path)`` referencing a path that does not exist on ``input_cls``.
+    - ``FromOutput(step_cls, ...)`` referencing a step that does not appear
+      earlier in the bindings list. An extraction nested under a step may
+      reference that step's output (it runs after the step completes).
+    - ``FromOutput(step_cls, field=X)`` where ``X`` is not a field on
+      ``step_cls.INSTRUCTIONS`` (checked only when ``INSTRUCTIONS`` is set).
+    - ``Computed`` with an invalid nested source (recursive validation).
+
+    ``FromPipeline`` sources are not checked statically — pipeline attrs are
+    too dynamic to verify at strategy-class time.
+
+    Designed to be called at pipeline class creation / strategy instantiation
+    so errors surface at import rather than at pipeline run.
+    """
+    steps_seen: set[type] = set()
+
+    for i, bind in enumerate(bindings):
+        if bind.step is None:
+            raise ValueError(
+                f"validate_bindings: binding[{i}] has no step "
+                f"(extractions cannot be top-level bindings)"
+            )
+        step_label = f"binding[{i}] step={bind.step.__name__}"
+
+        # Step's own inputs adapter — may only read from strictly earlier steps.
+        _validate_spec(
+            bind.inputs,
+            input_cls=input_cls,
+            steps_seen=steps_seen,
+            location=step_label,
+        )
+
+        # Nested extraction binds — may additionally reference the owning step.
+        extended_seen = steps_seen | {bind.step}
+        for j, ext_bind in enumerate(bind.extractions):
+            if ext_bind.extraction is None:
+                # Guarded by Bind.__post_init__, but kept defensive.
+                raise ValueError(
+                    f"{step_label} extractions[{j}]: missing extraction="
+                )
+            ext_label = (
+                f"{step_label} extractions[{j}] "
+                f"extraction={ext_bind.extraction.__name__}"
+            )
+            _validate_spec(
+                ext_bind.inputs,
+                input_cls=input_cls,
+                steps_seen=extended_seen,
+                location=ext_label,
+            )
+
+        steps_seen.add(bind.step)
+
+
+def _validate_spec(
+    spec: SourcesSpec | None,
+    *,
+    input_cls: type[BaseModel],
+    steps_seen: set[type],
+    location: str,
+) -> None:
+    if spec is None:
+        # Guarded by Bind.__post_init__, but kept defensive.
+        raise ValueError(f"{location}: missing inputs SourcesSpec")
+    for field_name, source in spec.field_sources.items():
+        _validate_source(
+            source,
+            input_cls=input_cls,
+            steps_seen=steps_seen,
+            location=f"{location} field={field_name}",
+        )
+
+
+def _validate_source(
+    source: Source,
+    *,
+    input_cls: type[BaseModel],
+    steps_seen: set[type],
+    location: str,
+) -> None:
+    if isinstance(source, FromInput):
+        _validate_dotted_path(input_cls, source.path, location=location)
+    elif isinstance(source, FromOutput):
+        if source.step_cls not in steps_seen:
+            raise ValueError(
+                f"{location}: FromOutput references step "
+                f"{source.step_cls.__name__}, which does not appear earlier "
+                f"in the bindings (or is not in this strategy)"
+            )
+        if source.field is not None:
+            _validate_instructions_field(
+                source.step_cls, source.field, location=location
+            )
+    elif isinstance(source, FromPipeline):
+        # Pipeline attrs are too dynamic (session, logger, user-defined) to
+        # verify statically. Skipped intentionally.
+        return
+    elif isinstance(source, Computed):
+        for inner in source.sources:
+            _validate_source(
+                inner,
+                input_cls=input_cls,
+                steps_seen=steps_seen,
+                location=location,
+            )
+    else:
+        raise TypeError(
+            f"{location}: unknown Source subclass {type(source).__name__}"
+        )
+
+
+def _validate_dotted_path(
+    model_cls: type[BaseModel], path: str, *, location: str
+) -> None:
+    """Walk a dotted path through nested BaseModels. Raise on missing field."""
+    parts = path.split(".")
+    current: Any = model_cls
+    for part in parts:
+        fields = getattr(current, "model_fields", None)
+        if fields is None:
+            # Stepped into a non-BaseModel field type; cannot statically walk further.
+            return
+        if part not in fields:
+            raise ValueError(
+                f"{location}: FromInput references path '{path}', "
+                f"but '{part}' is not a field on {current.__name__}"
+            )
+        annotation = fields[part].annotation
+        current = _unwrap_optional(annotation)
+
+
+def _unwrap_optional(annotation: Any) -> Any:
+    """Unwrap ``Optional[X]`` / ``X | None`` to ``X``. Leaves other types as-is."""
+    origin = typing.get_origin(annotation)
+    if origin is typing.Union or origin is UnionType:
+        args = [a for a in typing.get_args(annotation) if a is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return annotation
+
+
+def _validate_instructions_field(
+    step_cls: type, field_name: str, *, location: str
+) -> None:
+    """Check ``field_name`` exists on ``step_cls.INSTRUCTIONS`` if present."""
+    instructions_cls = getattr(step_cls, "INSTRUCTIONS", None)
+    if instructions_cls is None:
+        # Step not migrated / not decorated with @step_definition — skip.
+        return
+    fields = getattr(instructions_cls, "model_fields", None)
+    if fields is None:
+        return
+    if field_name not in fields:
+        raise ValueError(
+            f"{location}: FromOutput(step={step_cls.__name__}, field='{field_name}') "
+            f"— '{field_name}' is not a field on "
+            f"{instructions_cls.__name__}"
+        )
