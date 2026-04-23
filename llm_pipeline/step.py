@@ -20,6 +20,7 @@ from llm_pipeline.events.types import (
     ExtractionError,
     ExtractionStarting,
 )
+from llm_pipeline.inputs import StepInputs
 from llm_pipeline.naming import to_snake_case
 from llm_pipeline.types import StepCallParams
 
@@ -43,11 +44,11 @@ def step_definition(
     default_user_key: Optional[str] = None,
     default_extractions: Optional[List] = None,
     default_transformation=None,
-    context: Optional[Type] = None,
     agent: Optional[str] = None,
     model: Optional[str] = None,
     review: Optional[Type] = None,
     evaluators: Optional[List[Type]] = None,
+    inputs: Optional[Type[StepInputs]] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -60,10 +61,12 @@ def step_definition(
         default_user_key: Default user prompt template key
         default_extractions: Default extraction classes
         default_transformation: Default transformation class
-        context: Context class this step produces
         agent: Optional agent name for tool lookup from global agent registry
         model: Optional default model for this step (overrides pipeline default)
         review: Optional StepReview subclass for human-in-the-loop review
+        inputs: StepInputs subclass declaring this step's typed inputs
+            contract. Strategies wire these inputs via Bind + .sources().
+            Must be named ``{StepName}Inputs`` and subclass ``StepInputs``.
     """
     def decorator(step_class):
         if not step_class.__name__.endswith('Step'):
@@ -88,14 +91,6 @@ def step_definition(
                     f"'{expected_transformation_name}', got '{default_transformation.__name__}'"
                 )
 
-        if context:
-            expected_context_name = f"{step_name_prefix}Context"
-            if context.__name__ != expected_context_name:
-                raise ValueError(
-                    f"Context class for {step_class.__name__} must be named "
-                    f"'{expected_context_name}', got '{context.__name__}'"
-                )
-
         if review:
             expected_review_name = f"{step_name_prefix}Review"
             if review.__name__ != expected_review_name:
@@ -104,15 +99,28 @@ def step_definition(
                     f"'{expected_review_name}', got '{review.__name__}'"
                 )
 
+        if inputs is not None:
+            if not isinstance(inputs, type) or not issubclass(inputs, StepInputs):
+                raise TypeError(
+                    f"inputs= for {step_class.__name__} must be a StepInputs "
+                    f"subclass, got {inputs!r}"
+                )
+            expected_inputs_name = f"{step_name_prefix}Inputs"
+            if inputs.__name__ != expected_inputs_name:
+                raise ValueError(
+                    f"Inputs class for {step_class.__name__} must be named "
+                    f"'{expected_inputs_name}', got '{inputs.__name__}'"
+                )
+
         step_class.INSTRUCTIONS = instructions
         step_class.DEFAULT_SYSTEM_KEY = default_system_key
         step_class.DEFAULT_USER_KEY = default_user_key
         step_class.DEFAULT_EXTRACTIONS = default_extractions or []
         step_class.DEFAULT_TRANSFORMATION = default_transformation
-        step_class.CONTEXT = context
         step_class.AGENT = agent
         step_class.MODEL = model
         step_class.REVIEW = review
+        step_class.INPUTS = inputs
         step_class._step_evaluators = evaluators or []
 
         @classmethod
@@ -162,7 +170,6 @@ def step_definition(
                 instructions=cls.INSTRUCTIONS,
                 extractions=extractions,
                 transformation=transformation,
-                context=cls.CONTEXT,
                 **kwargs
             )
 
