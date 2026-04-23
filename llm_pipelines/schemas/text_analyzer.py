@@ -1,15 +1,16 @@
-"""TextAnalyzer data models: input, instructions, contexts, and DB models."""
+"""TextAnalyzer data models: input, instructions, step inputs, DB models."""
 from typing import ClassVar, Optional
 
 from pydantic import BaseModel
 from sqlmodel import SQLModel, Field
 
-from llm_pipeline.context import PipelineContext, PipelineInputData
+from llm_pipeline.context import PipelineInputData
+from llm_pipeline.inputs import StepInputs
 from llm_pipeline.step import LLMResultMixin
 
 
 # ---------------------------------------------------------------------------
-# Input data
+# Pipeline input data
 # ---------------------------------------------------------------------------
 
 class TextAnalyzerInputData(PipelineInputData):
@@ -38,7 +39,7 @@ class Topic(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# Instructions
+# Instructions (LLM output contracts)
 # ---------------------------------------------------------------------------
 
 class SentimentAnalysisInstructions(LLMResultMixin):
@@ -76,20 +77,22 @@ class SummaryInstructions(LLMResultMixin):
 
 
 # ---------------------------------------------------------------------------
-# Context classes
+# Step inputs (declared contracts for each step)
 # ---------------------------------------------------------------------------
 
-class SentimentAnalysisContext(PipelineContext):
-    """Context produced by the sentiment analysis step."""
+class SentimentAnalysisInputs(StepInputs):
+    """Everything SentimentAnalysisStep needs to run."""
+    text: str
+
+
+class TopicExtractionInputs(StepInputs):
+    """Everything TopicExtractionStep needs to run."""
+    text: str
     sentiment: str
 
 
-class TopicExtractionContext(PipelineContext):
-    """Context produced by the topic extraction step."""
+class SummaryInputs(StepInputs):
+    """Everything SummaryStep needs to run."""
+    text: str
+    sentiment: str
     primary_topic: str
-    topics: list[str]
-
-
-class SummaryContext(PipelineContext):
-    """Context produced by the summary step."""
-    summary: str
