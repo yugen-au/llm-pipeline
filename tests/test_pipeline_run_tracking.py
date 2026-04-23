@@ -1,26 +1,28 @@
 """Integration tests: PipelineRun write behaviour during execute()."""
 import uuid
-from typing import Any, ClassVar, Dict, List, Optional, Type
+from typing import ClassVar, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlmodel import SQLModel, Field, Session, create_engine, select
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from llm_pipeline import (
-    PipelineConfig,
-    LLMStep,
     LLMResultMixin,
-    step_definition,
-    PipelineStrategy,
-    PipelineStrategies,
-    PipelineContext,
-    PipelineExtraction,
+    LLMStep,
+    PipelineConfig,
     PipelineDatabaseRegistry,
+    PipelineExtraction,
+    PipelineStrategies,
+    PipelineStrategy,
+    step_definition,
 )
+from llm_pipeline.context import PipelineInputData
 from llm_pipeline.db import init_pipeline_db
+from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.inputs import StepInputs
 from llm_pipeline.state import PipelineRun
 from llm_pipeline.types import StepCallParams
-from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.wiring import Bind, FromInput, FromOutput
 
 
 # ---------------------------------------------------------------------------
@@ -34,7 +36,23 @@ class Gadget(SQLModel, table=True):
 
 
 # ---------------------------------------------------------------------------
-# LLM result / context / extraction
+# Pipeline input + step inputs
+# ---------------------------------------------------------------------------
+
+class GadgetPipelineInput(PipelineInputData):
+    data: str
+
+
+class GadgetInputs(StepInputs):
+    data: str
+
+
+class BrokenInputs(StepInputs):
+    data: str
+
+
+# ---------------------------------------------------------------------------
+# LLM result / extraction
 # ---------------------------------------------------------------------------
 
 class GadgetInstructions(LLMResultMixin):
@@ -44,14 +62,13 @@ class GadgetInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"count": 1, "label": "test", "confidence_score": 1.0}
 
 
-class GadgetContext(PipelineContext):
-    label: str
-
-
 class GadgetExtraction(PipelineExtraction, model=Gadget):
-    def default(self, results):
-        instruction = results[0]
-        return [Gadget(name=f"{instruction.label}_{i}") for i in range(instruction.count)]
+    class FromGadgetInputs(StepInputs):
+        count: int
+        label: str
+
+    def from_gadget(self, inputs: FromGadgetInputs) -> list[Gadget]:
+        return [Gadget(name=f"{inputs.label}_{i}") for i in range(inputs.count)]
 
 
 # ---------------------------------------------------------------------------
@@ -59,18 +76,14 @@ class GadgetExtraction(PipelineExtraction, model=Gadget):
 # ---------------------------------------------------------------------------
 
 @step_definition(
+    inputs=GadgetInputs,
     instructions=GadgetInstructions,
     default_system_key="gadget.system",
     default_user_key="gadget.user",
-    default_extractions=[GadgetExtraction],
-    context=GadgetContext,
 )
 class GadgetStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
-        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
-
-    def process_instructions(self, instructions):
-        return GadgetContext(label=instructions[0].label)
+        return [StepCallParams(variables={"data": self.inputs.data})]
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +96,7 @@ class BrokenInstructions(LLMResultMixin):
 
 
 @step_definition(
+    inputs=BrokenInputs,
     instructions=BrokenInstructions,
     default_system_key="gadget.system",
     default_user_key="gadget.user",
@@ -100,16 +114,35 @@ class GadgetStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [GadgetStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=GadgetStep,
+                inputs=GadgetInputs.sources(data=FromInput("data")),
+                extractions=[
+                    Bind(
+                        extraction=GadgetExtraction,
+                        inputs=GadgetExtraction.FromGadgetInputs.sources(
+                            count=FromOutput(GadgetStep, field="count"),
+                            label=FromOutput(GadgetStep, field="label"),
+                        ),
+                    ),
+                ],
+            ),
+        ]
 
 
 class BrokenStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [BrokenStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=BrokenStep,
+                inputs=BrokenInputs.sources(data=FromInput("data")),
+            ),
+        ]
 
 
 class TrackingRegistry(PipelineDatabaseRegistry, models=[Gadget]):
@@ -125,7 +158,7 @@ class TrackingPipeline(
     registry=TrackingRegistry,
     strategies=TrackingStrategies,
 ):
-    pass
+    INPUT_DATA = GadgetPipelineInput
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +230,7 @@ class TestPipelineRunTracking:
         run_id = pipeline.run_id
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(count=2, label="widget")):
-            pipeline.execute(data="raw input", initial_context={})
+            pipeline.execute(input_data={"data": "raw input"})
 
         with Session(tracking_engine) as session:
             stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
@@ -219,7 +252,7 @@ class TestPipelineRunTracking:
         run_id = pipeline.run_id
 
         with pytest.raises(RuntimeError, match="intentional failure"):
-            pipeline.execute(data="raw input", initial_context={})
+            pipeline.execute(input_data={"data": "raw input"})
 
         with Session(tracking_engine) as session:
             stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
@@ -240,7 +273,7 @@ class TestPipelineRunTracking:
         assert pipeline.run_id == custom_run_id
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(count=1, label="x")):
-            pipeline.execute(data="input", initial_context={})
+            pipeline.execute(input_data={"data": "input"})
 
         with Session(tracking_engine) as session:
             stmt = select(PipelineRun).where(PipelineRun.run_id == custom_run_id)
@@ -253,7 +286,7 @@ class TestPipelineRunTracking:
         pipeline = TrackingPipeline(session=seeded_tracking_session, model="test-model")
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(count=1, label="g")):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(tracking_engine) as session:
             run = session.exec(
