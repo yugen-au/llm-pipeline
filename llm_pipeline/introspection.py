@@ -16,6 +16,29 @@ if TYPE_CHECKING:
     from llm_pipeline.pipeline import PipelineConfig
 
 from llm_pipeline.extraction import PipelineExtraction
+from llm_pipeline.wiring import Bind
+
+
+def _compile_bind_for_introspection(bind: Bind):
+    """Compile a Bind to a StepDefinition without requiring a live pipeline.
+
+    Mirrors ``PipelineConfig._compile_bind_to_step_def`` but is pure-class
+    (no ``self``) so introspection can run before any pipeline instance
+    exists. Resolves consensus from Bind override or step's CONSENSUS_STRATEGY
+    decorator default (None if neither set).
+    """
+    resolved_consensus = (
+        bind.consensus_strategy
+        if bind.consensus_strategy is not None
+        else getattr(bind.step, "CONSENSUS_STRATEGY", None)
+    )
+    create_kwargs: Dict[str, Any] = {
+        "inputs_spec": bind.inputs,
+        "extraction_binds": list(bind.extractions),
+    }
+    if resolved_consensus is not None:
+        create_kwargs["consensus_strategy"] = resolved_consensus
+    return bind.step.create_definition(**create_kwargs)
 
 
 class PipelineIntrospector:
@@ -150,12 +173,16 @@ class PipelineIntrospector:
                     else None
                 ),
                 "instructions_schema": self._get_schema(step_def.instructions),
-                "context_class": (
-                    step_def.context.__name__
-                    if step_def.context
+                "inputs_class": (
+                    step_def.inputs_spec.inputs_cls.__name__
+                    if step_def.inputs_spec
                     else None
                 ),
-                "context_schema": self._get_schema(step_def.context),
+                "inputs_schema": self._get_schema(
+                    step_def.inputs_spec.inputs_cls
+                    if step_def.inputs_spec
+                    else None
+                ),
                 "extractions": [],
                 "transformation": None,
                 "tools": [],
@@ -173,8 +200,9 @@ class PipelineIntrospector:
                         getattr(fn, '__name__', str(fn)) for fn in tool_fns
                     ]
 
-            # Extractions
-            for ext_cls in (step_def.extractions or []):
+            # Extractions (from nested Binds under this step)
+            for ext_bind in (step_def.extraction_binds or []):
+                ext_cls = ext_bind.extraction
                 ext_entry: Dict[str, Any] = {
                     "class_name": ext_cls.__name__,
                     "model_class": (
@@ -236,13 +264,17 @@ class PipelineIntrospector:
         if strategies_cls is not None:
             strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
 
-        # Instantiate each strategy once; reuse step_defs for both
-        # strategy metadata and execution_order derivation.
+        # Instantiate each strategy once; compile each Bind into a
+        # StepDefinition for metadata extraction (same helper the pipeline
+        # executor uses, but callable without a live pipeline instance).
         resolved: List[tuple] = []  # (strategy_cls, step_defs | None, error | None)
         for s_cls in strategy_classes:
             try:
                 instance = s_cls()
-                step_defs = instance.get_steps()
+                step_defs = [
+                    _compile_bind_for_introspection(bind)
+                    for bind in instance.get_bindings()
+                ]
                 resolved.append((s_cls, step_defs, None))
             except Exception as exc:
                 resolved.append((s_cls, None, exc))

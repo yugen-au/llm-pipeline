@@ -2,26 +2,28 @@
 Tests for PipelineIntrospector - class-level pipeline metadata extraction.
 No DB, no LLM, no FastAPI required.
 """
-import pytest
 from typing import ClassVar, List, Optional
 
+import pytest
 from pydantic import BaseModel
-from sqlmodel import SQLModel, Field
+from sqlmodel import Field, SQLModel
 
 from llm_pipeline import (
-    PipelineConfig,
-    LLMStep,
     LLMResultMixin,
-    step_definition,
-    PipelineStrategy,
-    PipelineStrategies,
-    PipelineContext,
-    PipelineExtraction,
+    LLMStep,
+    PipelineConfig,
     PipelineDatabaseRegistry,
+    PipelineExtraction,
+    PipelineStrategies,
+    PipelineStrategy,
+    step_definition,
 )
+from llm_pipeline.agent_registry import clear_agent_registry, register_agent
+from llm_pipeline.context import PipelineInputData
+from llm_pipeline.inputs import StepInputs
 from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.transformation import PipelineTransformation
-from llm_pipeline.agent_registry import register_agent, clear_agent_registry
+from llm_pipeline.wiring import Bind, FromInput, FromOutput
 
 
 # ---------- Domain classes (minimal WidgetPipeline pattern) ----------
@@ -31,6 +33,14 @@ class WidgetModel(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     category: str
+
+
+class WidgetPipelineInput(PipelineInputData):
+    data: str
+
+
+class WidgetDetectionInputs(StepInputs):
+    data: str
 
 
 class WidgetDetectionInstructions(LLMResultMixin):
@@ -44,29 +54,47 @@ class WidgetDetectionInstructions(LLMResultMixin):
     }
 
 
-class WidgetDetectionContext(PipelineContext):
-    category: str
-
-
 class WidgetExtraction(PipelineExtraction, model=WidgetModel):
-    def default(self, results):
-        return [WidgetModel(name=f"w_{i}", category=results[0].category)
-                for i in range(results[0].widget_count)]
+    class FromWidgetDetectionInputs(StepInputs):
+        widget_count: int
+        category: str
+
+    def from_widget_detection(
+        self, inputs: FromWidgetDetectionInputs
+    ) -> list[WidgetModel]:
+        return [
+            WidgetModel(name=f"w_{i}", category=inputs.category)
+            for i in range(inputs.widget_count)
+        ]
 
 
 @step_definition(
+    inputs=WidgetDetectionInputs,
     instructions=WidgetDetectionInstructions,
     default_system_key="widget.system",
     default_user_key="widget.user",
-    default_extractions=[WidgetExtraction],
-    context=WidgetDetectionContext,
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self):
-        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
+        return [{"variables": {"data": self.inputs.data}}]
 
-    def process_instructions(self, instructions):
-        return WidgetDetectionContext(category=instructions[0].category)
+
+def _widget_extraction_bind() -> Bind:
+    return Bind(
+        extraction=WidgetExtraction,
+        inputs=WidgetExtraction.FromWidgetDetectionInputs.sources(
+            widget_count=FromOutput(WidgetDetectionStep, field="widget_count"),
+            category=FromOutput(WidgetDetectionStep, field="category"),
+        ),
+    )
+
+
+def _widget_step_bind() -> Bind:
+    return Bind(
+        step=WidgetDetectionStep,
+        inputs=WidgetDetectionInputs.sources(data=FromInput("data")),
+        extractions=[_widget_extraction_bind()],
+    )
 
 
 # ---------- Transformation domain classes (Pydantic input/output) ----------
@@ -77,6 +105,10 @@ class TransformInput(BaseModel):
 
 class TransformOutput(BaseModel):
     processed: str
+
+
+class ScanDetectionInputs(StepInputs):
+    data: str
 
 
 class ScanDetectionInstructions(LLMResultMixin):
@@ -92,6 +124,7 @@ class ScanDetectionTransformation(PipelineTransformation,
 
 
 @step_definition(
+    inputs=ScanDetectionInputs,
     instructions=ScanDetectionInstructions,
     default_system_key="scan.system",
     default_user_key="scan.user",
@@ -101,16 +134,18 @@ class ScanDetectionStep(LLMStep):
     def prepare_calls(self):
         return [{"variables": {}}]
 
-    def process_instructions(self, instructions):
-        return None
-
 
 class ScanStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [ScanDetectionStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=ScanDetectionStep,
+                inputs=ScanDetectionInputs.sources(data=FromInput("data")),
+            ),
+        ]
 
 
 class ScanRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
@@ -122,7 +157,7 @@ class ScanStrategies(PipelineStrategies, strategies=[ScanStrategy]):
 
 
 class ScanPipeline(PipelineConfig, registry=ScanRegistry, strategies=ScanStrategies):
-    pass
+    INPUT_DATA = WidgetPipelineInput
 
 
 # ---------- Transformation domain classes (non-Pydantic input/output) ----------
@@ -133,6 +168,10 @@ class PlainInput:
 
 class PlainOutput:
     pass
+
+
+class GadgetDetectionInputs(StepInputs):
+    data: str
 
 
 class GadgetDetectionInstructions(LLMResultMixin):
@@ -148,6 +187,7 @@ class GadgetDetectionTransformation(PipelineTransformation,
 
 
 @step_definition(
+    inputs=GadgetDetectionInputs,
     instructions=GadgetDetectionInstructions,
     default_system_key="gadget.system",
     default_user_key="gadget.user",
@@ -157,16 +197,18 @@ class GadgetDetectionStep(LLMStep):
     def prepare_calls(self):
         return [{"variables": {}}]
 
-    def process_instructions(self, instructions):
-        return None
-
 
 class GadgetStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [GadgetDetectionStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=GadgetDetectionStep,
+                inputs=GadgetDetectionInputs.sources(data=FromInput("data")),
+            ),
+        ]
 
 
 class GadgetRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
@@ -178,7 +220,7 @@ class GadgetStrategies(PipelineStrategies, strategies=[GadgetStrategy]):
 
 
 class GadgetPipeline(PipelineConfig, registry=GadgetRegistry, strategies=GadgetStrategies):
-    pass
+    INPUT_DATA = WidgetPipelineInput
 
 
 # ---------- Primary strategy (no transformation) ----------
@@ -187,8 +229,8 @@ class PrimaryStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [WidgetDetectionStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [_widget_step_bind()]
 
 
 class WidgetRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
@@ -200,7 +242,7 @@ class WidgetStrategies(PipelineStrategies, strategies=[PrimaryStrategy]):
 
 
 class WidgetPipeline(PipelineConfig, registry=WidgetRegistry, strategies=WidgetStrategies):
-    pass
+    INPUT_DATA = WidgetPipelineInput
 
 
 # ---------- Helper: clear cache between tests ----------
@@ -259,7 +301,8 @@ class TestStepEntries:
     def test_step_has_required_keys(self):
         step = self._step()
         for key in ("step_name", "system_key", "user_key",
-                    "instructions_class", "instructions_schema", "extractions"):
+                    "instructions_class", "instructions_schema",
+                    "inputs_class", "inputs_schema", "extractions"):
             assert key in step, f"step missing key: {key}"
 
     def test_step_name_correct(self):
@@ -278,6 +321,14 @@ class TestStepEntries:
         schema = self._step()["instructions_schema"]
         assert isinstance(schema, dict)
         # Valid JSON Schema for a Pydantic model has 'type' and 'properties'
+        assert "type" in schema or "properties" in schema
+
+    def test_inputs_class_name(self):
+        assert self._step()["inputs_class"] == "WidgetDetectionInputs"
+
+    def test_inputs_schema_is_valid_json_schema(self):
+        schema = self._step()["inputs_schema"]
+        assert isinstance(schema, dict)
         assert "type" in schema or "properties" in schema
 
 
@@ -300,9 +351,11 @@ class TestExtractionEntries:
     def test_extraction_methods_is_list(self):
         assert isinstance(self._extraction()["methods"], list)
 
-    def test_extraction_methods_contains_default(self):
-        # 'default' is a custom method on WidgetExtraction not present on PipelineExtraction
-        assert "default" in self._extraction()["methods"]
+    def test_extraction_methods_contains_pathway_method(self):
+        # Under the new contract, extractions dispatch per pathway inputs
+        # class; the method name is whatever the author chose, e.g.
+        # from_widget_detection for FromWidgetDetectionInputs.
+        assert "from_widget_detection" in self._extraction()["methods"]
 
 
 class TestExecutionOrder:
@@ -321,15 +374,15 @@ class TestExecutionOrder:
             def can_handle(self, ctx):
                 return True
 
-            def get_steps(self):
-                return [WidgetDetectionStep.create_definition()]
+            def get_bindings(self) -> List[Bind]:
+                return [_widget_step_bind()]
 
         class BetaStrategy(PipelineStrategy):
             def can_handle(self, ctx):
                 return False
 
-            def get_steps(self):
-                return [WidgetDetectionStep.create_definition()]
+            def get_bindings(self) -> List[Bind]:
+                return [_widget_step_bind()]
 
         class DedupeStrategies(PipelineStrategies, strategies=[AlphaStrategy, BetaStrategy]):
             pass
@@ -338,7 +391,7 @@ class TestExecutionOrder:
             pass
 
         class DedupePipeline(PipelineConfig, registry=DedupeRegistry, strategies=DedupeStrategies):
-            pass
+            INPUT_DATA = WidgetPipelineInput
 
         meta = PipelineIntrospector(DedupePipeline).get_metadata()
         order = meta["execution_order"]
@@ -418,7 +471,7 @@ class TestBrokenStrategy:
             def can_handle(self, ctx):
                 return True
 
-            def get_steps(self):
+            def get_bindings(self) -> List[Bind]:
                 return []
 
         class ErroringStrategies(PipelineStrategies, strategies=[ErroringStrategy]):
@@ -428,7 +481,7 @@ class TestBrokenStrategy:
             pass
 
         class ErroringPipeline(PipelineConfig, registry=ErroringRegistry, strategies=ErroringStrategies):
-            pass
+            INPUT_DATA = WidgetPipelineInput
 
         # Must not raise
         meta = PipelineIntrospector(ErroringPipeline).get_metadata()
@@ -449,7 +502,7 @@ class TestBrokenStrategy:
             def can_handle(self, ctx):
                 return True
 
-            def get_steps(self):
+            def get_bindings(self) -> List[Bind]:
                 return []
 
         class ComboStrategies(PipelineStrategies, strategies=[FailingStrategy, PrimaryStrategy]):
@@ -459,7 +512,7 @@ class TestBrokenStrategy:
             pass
 
         class ComboPipeline(PipelineConfig, registry=ComboRegistry, strategies=ComboStrategies):
-            pass
+            INPUT_DATA = WidgetPipelineInput
 
         meta = PipelineIntrospector(ComboPipeline).get_metadata()
         strategies = meta["strategies"]
@@ -541,6 +594,10 @@ def _dummy_tool_beta(y: str) -> bool:
     return bool(y)
 
 
+class TooledInputs(StepInputs):
+    data: str
+
+
 class TooledInstructions(LLMResultMixin):
     widget_count: int
     category: str
@@ -552,32 +609,38 @@ class TooledInstructions(LLMResultMixin):
     }
 
 
-class TooledContext(PipelineContext):
-    category: str
-
-
 @step_definition(
+    inputs=TooledInputs,
     instructions=TooledInstructions,
     default_system_key="widget.system",
     default_user_key="widget.user",
-    default_extractions=[WidgetExtraction],
-    context=TooledContext,
     agent="tooled",
 )
 class TooledStep(LLMStep):
     def prepare_calls(self):
-        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
-
-    def process_instructions(self, instructions):
-        return TooledContext(category=instructions[0].category)
+        return [{"variables": {"data": self.inputs.data}}]
 
 
 class TooledStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [TooledStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=TooledStep,
+                inputs=TooledInputs.sources(data=FromInput("data")),
+                extractions=[
+                    Bind(
+                        extraction=WidgetExtraction,
+                        inputs=WidgetExtraction.FromWidgetDetectionInputs.sources(
+                            widget_count=FromOutput(TooledStep, field="widget_count"),
+                            category=FromOutput(TooledStep, field="category"),
+                        ),
+                    ),
+                ],
+            ),
+        ]
 
 
 class TooledStrategies(PipelineStrategies, strategies=[TooledStrategy]):
@@ -591,7 +654,7 @@ class TooledRegistry(PipelineDatabaseRegistry, models=[WidgetModel]):
 class TooledPipeline(PipelineConfig,
                       registry=TooledRegistry,
                       strategies=TooledStrategies):
-    pass
+    INPUT_DATA = WidgetPipelineInput
 
 
 class TestToolsMetadata:
