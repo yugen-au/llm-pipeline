@@ -1,92 +1,104 @@
 """
 Base classes for pipeline data extractions.
 
-Extractions handle the conversion of LLM results into database models.
-Each extraction is responsible for one model type and has access to the
-pipeline's context and state.
+Extractions convert typed pathway inputs (assembled by the strategy's
+adapter from pipeline input + prior step outputs) into database models.
+Each extraction is responsible for one model type.
 
-Extractions are defined in the same file as their step (next to the result schema)
-and configured at the step level using default_extractions:
+Pathway dispatch contract:
+- An extraction subclass declares one or more nested inputs classes named
+  ``From{Purpose}Inputs`` (subclass of ``StepInputs``).
+- For each pathway class, the extraction defines a method with the
+  signature ``(self, inputs: FromPurposeInputs) -> list[MODEL]``.
+- At class creation, pathways and methods are validated for 1:1 mapping
+  and a dispatch table is built on ``cls._pathway_dispatch``.
+- ``extract(self, inputs)`` dispatches by ``type(inputs)`` at runtime.
 
-    @step_definition(
-        result_class=SemanticMappingInstructions,
-        default_extractions=[LaneExtraction],
-    )
-    class SemanticMappingStep(LLMStep):
-        pass
+Example::
 
-Extraction methods can be:
-- Single method (any name) → auto-detected
-- Explicit 'default' method → always used  
-- Multiple methods (lane_based, destination_based) → specified in strategy
+    class TopicExtraction(PipelineExtraction, model=Topic):
+        class FromTopicExtractionInputs(StepInputs):
+            result: TopicExtractionInstructions
+            run_id: int
+
+        def from_topic_extraction(
+            self, inputs: FromTopicExtractionInputs
+        ) -> list[Topic]:
+            return [Topic(name=t.name, run_id=inputs.run_id)
+                    for t in inputs.result.topics]
 """
-from abc import ABC, abstractmethod
-from typing import List, Type, ClassVar, TYPE_CHECKING
-from sqlmodel import SQLModel
+import inspect
+import re
+import typing
+from abc import ABC
 from decimal import Decimal
-from pydantic import ValidationError
+from typing import Any, ClassVar, List, TYPE_CHECKING, Type
+
+from sqlmodel import SQLModel
+
+from llm_pipeline.inputs import StepInputs
 
 if TYPE_CHECKING:
     from llm_pipeline.pipeline import PipelineConfig
 
 
+_FROM_INPUTS_PATTERN = re.compile(r"^From[A-Z][A-Za-z0-9]*Inputs$")
+_BASE_EXTRACTION_METHODS = frozenset({"extract", "begin_update"})
+
+
 class PipelineExtraction(ABC):
     """
-    Base class for data extraction logic.
-    
-    Each extraction is responsible for creating instances of one database model
-    from LLM results and pipeline context.
-    
-    Extractions have access to:
-    - self.pipeline.context: All step results, DataFrame, etc.
-    - self.pipeline.get_extractions(Model): Previously extracted models
-    - self.pipeline.session: Database session
-    
-    Model must be configured at class definition time using class call syntax:
-    
-    Example:
-        class LaneExtraction(PipelineExtraction, model=Lane):
-            def extract(self, results: List[SemanticMappingInstructions]) -> List[Lane]:
-                result = results[0]
-                df = self.pipeline.context['df']
-                rate_card_id = self.pipeline.context['rate_card_id']
-                # ... extraction logic
-                return lanes
+    Base class for pathway-dispatched data extractions.
+
+    Each extraction produces instances of one database model (``MODEL``)
+    from typed pathway inputs. A concrete extraction declares one or more
+    nested ``From{Purpose}Inputs`` classes (subclasses of ``StepInputs``)
+    and a matching method per pathway. At class creation, pathways and
+    methods are validated for 1:1 mapping and a dispatch table is built
+    on ``cls._pathway_dispatch``.
+
+    At runtime, ``extract(self, inputs)`` dispatches by ``type(inputs)``.
+    Ambient access (``self.pipeline.session`` etc.) is unchanged.
     """
-    
+
     MODEL: ClassVar[Type[SQLModel]] = None
-    
+    _pathway_dispatch: ClassVar[dict[type, Any]] = {}
+
     def __init_subclass__(cls, model=None, **kwargs):
-        """
-        Called when a subclass is defined. Sets MODEL from class parameter.
-        
+        """Validate model binding, naming convention, and pathway dispatch.
+
         Args:
-            model: SQLModel class this extraction produces (required)
-            **kwargs: Additional keyword arguments passed to super().__init_subclass__
-        
+            model: SQLModel class this extraction produces (required for
+                concrete direct subclasses of PipelineExtraction).
+
         Raises:
-            ValueError: If model not provided for concrete extraction
-            ValueError: If class name doesn't follow naming convention
+            ValueError: If model is missing, naming convention is violated,
+                or pathway declarations are inconsistent with method
+                signatures.
         """
         super().__init_subclass__(**kwargs)
-        
-        # Only enforce model for concrete extractions (not intermediate base classes)
+
+        is_concrete_direct_subclass = (
+            not cls.__name__.startswith("_")
+            and cls.__bases__[0] is PipelineExtraction
+        )
+
         if model is not None:
             cls.MODEL = model
-        elif not cls.__name__.startswith('_') and cls.__bases__[0] is PipelineExtraction:
-            # This is a concrete extraction without model specified
+        elif is_concrete_direct_subclass:
             raise ValueError(
                 f"{cls.__name__} must specify model parameter when defining the class:\n"
                 f"class {cls.__name__}(PipelineExtraction, model=YourModel)"
             )
-        
-        # Enforce naming convention: must end with 'Extraction'
-        if not cls.__name__.startswith('_') and cls.__bases__[0] is PipelineExtraction:
-            if not cls.__name__.endswith('Extraction'):
+
+        if is_concrete_direct_subclass:
+            if not cls.__name__.endswith("Extraction"):
                 raise ValueError(
-                    f"{cls.__name__} must follow naming convention: {{ModelName}}Extraction\n"
+                    f"{cls.__name__} must follow naming convention: "
+                    f"{{ModelName}}Extraction\n"
                     f"Example: LaneExtraction, RateExtraction"
                 )
+            cls._pathway_dispatch = _build_pathway_dispatch(cls)
     
     def __init__(self, pipeline: 'PipelineConfig'):
         """
@@ -215,74 +227,172 @@ class PipelineExtraction(ABC):
         
         return instances
     
-    def extract(self, results: List[any]) -> List[SQLModel]:
-        """
-        Auto-detect and call the appropriate extraction method.
-        
-        This method implements smart method detection:
-        1. If subclass defines a 'default' method → use it
-        2. If current strategy has matching method name → use that
-        3. If subclass has exactly ONE custom method (not extract) → use that
-        4. Otherwise → raise error (ambiguous, must specify method in strategy)
-        
-        This allows extraction classes to define:
-        - Single method with any name → auto-detected
-        - Explicit 'default' method → always used
-        - Multiple strategy-specific methods (lane_based, destination_based, etc.) → auto-routed by strategy name
-        
+    def extract(self, inputs: StepInputs) -> List[SQLModel]:
+        """Dispatch to the pathway method matching ``type(inputs)``.
+
+        The pathway dispatch table is built at class-creation time from
+        the extraction's nested ``From{Purpose}Inputs`` classes and the
+        methods that accept them. See ``PipelineExtraction`` class doc
+        for the contract.
+
         Args:
-            results: List of LLM result objects from pipeline execution
-        
+            inputs: Pathway inputs instance produced by the strategy's
+                adapter. Must be an instance of a nested inputs class
+                declared on this extraction.
+
         Returns:
-            List of model instances ready for database insertion
-        
+            Validated list of ``MODEL`` instances ready for DB insertion.
+
         Raises:
-            NotImplementedError: If multiple methods exist and none match current strategy or default
+            TypeError: If ``type(inputs)`` is not a declared pathway on
+                this extraction.
         """
-        # Get all public methods except 'extract' itself and inherited methods
-        all_methods = set(dir(self))
-        base_methods = set(dir(PipelineExtraction))
-        custom_methods = [
-            m for m in (all_methods - base_methods)
-            if callable(getattr(self, m))
-            and not m.startswith('_')
-            and m != 'extract'
-        ]
-        
-        # Priority 1: explicit 'default' method
-        if 'default' in custom_methods:
-            instances = self.default(results)
-            return self._validate_instances(instances)
-        
-        # Priority 2: strategy-specific method matching current strategy name
-        if hasattr(self.pipeline, '_current_strategy') and self.pipeline._current_strategy:
-            strategy_name = self.pipeline._current_strategy.name
-            if strategy_name in custom_methods:
-                method = getattr(self, strategy_name)
-                instances = method(results)
-                return self._validate_instances(instances)
-        
-        # Priority 3: exactly one custom method
-        if len(custom_methods) == 1:
-            method = getattr(self, custom_methods[0])
-            instances = method(results)
-            return self._validate_instances(instances)
-        
-        # Priority 4: no custom methods - must be abstract base or error
-        if len(custom_methods) == 0:
-            raise NotImplementedError(
-                f"{self.__class__.__name__} has no extraction methods defined. "
-                f"Add a 'default' method or a custom extraction method."
+        method = self._pathway_dispatch.get(type(inputs))
+        if method is None:
+            declared = [c.__name__ for c in self._pathway_dispatch.keys()]
+            raise TypeError(
+                f"{self.__class__.__name__} has no pathway method accepting "
+                f"{type(inputs).__name__}; declared pathways: {declared}"
             )
-        
-        # Ambiguous - multiple methods but no 'default' or strategy match
-        strategy_name = self.pipeline._current_strategy.name if hasattr(self.pipeline, '_current_strategy') and self.pipeline._current_strategy else None
-        raise NotImplementedError(
-            f"{self.__class__.__name__} has multiple extraction methods {custom_methods} "
-            f"but no matching method for current strategy '{strategy_name}' and no 'default' method. Either:\n"
-            f"  1. Add a method named '{strategy_name}' to match the current strategy, or\n"
-            f"  2. Add a 'default' method to handle all strategies"
+        instances = method(self, inputs)
+        return self._validate_instances(instances)
+
+
+# ---------------------------------------------------------------------------
+# Pathway dispatch construction
+# ---------------------------------------------------------------------------
+
+
+def _build_pathway_dispatch(cls: type) -> dict[type, Any]:
+    """Validate pathway/method consistency and return the dispatch table.
+
+    Scans ``cls.__dict__`` for nested ``StepInputs`` subclasses and public
+    methods. Enforces:
+
+    - Every nested inputs class is named ``From{Purpose}Inputs``.
+    - Every public method (excluding ``extract`` and ``begin_update``)
+      has signature ``(self, inputs: FromPurposeInputs) -> list[MODEL]``
+      where the inputs annotation matches one of the nested inputs classes.
+    - 1:1 mapping between pathway classes and methods. No orphaned
+      pathways; no two methods accepting the same inputs type.
+
+    Returns the dispatch map keyed on inputs class with unbound method
+    values (call as ``method(self, inputs)``).
+    """
+    pathway_classes = _collect_pathway_classes(cls)
+    candidate_methods = _collect_candidate_methods(cls)
+
+    dispatch: dict[type, Any] = {}
+    for method_name, method in candidate_methods.items():
+        input_cls, return_hint = _resolve_method_hints(cls, method_name, method)
+
+        if input_cls not in pathway_classes.values():
+            pathway_names = sorted(pathway_classes.keys())
+            raise ValueError(
+                f"{cls.__name__}.{method_name}: inputs parameter must be "
+                f"annotated with one of the nested pathway classes "
+                f"{pathway_names}, got {input_cls!r}"
+            )
+        if input_cls in dispatch:
+            raise ValueError(
+                f"{cls.__name__}: two methods accept {input_cls.__name__} "
+                f"as inputs; each pathway must dispatch to exactly one method"
+            )
+
+        expected_return = list[cls.MODEL]
+        if return_hint != expected_return:
+            raise ValueError(
+                f"{cls.__name__}.{method_name}: must return "
+                f"list[{cls.MODEL.__name__}], got {return_hint!r}"
+            )
+
+        dispatch[input_cls] = method
+
+    orphaned = set(pathway_classes.values()) - set(dispatch.keys())
+    if orphaned:
+        names = sorted(o.__name__ for o in orphaned)
+        raise ValueError(
+            f"{cls.__name__}: pathway inputs classes without matching "
+            f"methods: {names}"
         )
+
+    return dispatch
+
+
+def _collect_pathway_classes(cls: type) -> dict[str, type]:
+    """Return nested StepInputs subclasses defined on ``cls``, keyed by name."""
+    pathway_classes: dict[str, type] = {}
+    for name, value in vars(cls).items():
+        if not isinstance(value, type):
+            continue
+        if not issubclass(value, StepInputs) or value is StepInputs:
+            continue
+        if not _FROM_INPUTS_PATTERN.match(value.__name__):
+            raise ValueError(
+                f"{cls.__name__}: nested inputs class {value.__name__!r} "
+                f"must match pattern 'From{{Purpose}}Inputs'"
+            )
+        pathway_classes[value.__name__] = value
+    return pathway_classes
+
+
+def _collect_candidate_methods(cls: type) -> dict[str, Any]:
+    """Return public methods defined on ``cls`` that are pathway candidates.
+
+    Excludes nested classes — they're callable but are pathway inputs
+    classes, handled separately by ``_collect_pathway_classes``.
+    """
+    return {
+        name: value
+        for name, value in vars(cls).items()
+        if callable(value)
+        and not isinstance(value, type)
+        and not name.startswith("_")
+        and name not in _BASE_EXTRACTION_METHODS
+    }
+
+
+def _resolve_method_hints(
+    cls: type, method_name: str, method: Any
+) -> tuple[Any, Any]:
+    """Resolve the inputs-type annotation and return-type annotation for ``method``.
+
+    Returns ``(input_cls, return_hint)``. Raises ``ValueError`` if the
+    signature is malformed.
+    """
+    # Pass the class's own namespace as localns so annotations like
+    # ``FromPurposeInputs`` (referencing sibling nested classes) resolve,
+    # regardless of whether the module uses ``from __future__ import annotations``.
+    try:
+        hints = typing.get_type_hints(method, localns=dict(vars(cls)))
+    except Exception as exc:  # noqa: BLE001 — surface any hint-resolution failure
+        raise ValueError(
+            f"{cls.__name__}.{method_name}: failed to resolve type hints: {exc}"
+        ) from exc
+
+    sig = inspect.signature(method)
+    params = list(sig.parameters.values())
+    if len(params) < 2:
+        raise ValueError(
+            f"{cls.__name__}.{method_name}: must accept an inputs parameter "
+            f"in addition to self"
+        )
+
+    input_param = params[1]
+    input_cls = hints.get(input_param.name)
+    if input_cls is None:
+        raise ValueError(
+            f"{cls.__name__}.{method_name}: parameter "
+            f"{input_param.name!r} must have a type annotation"
+        )
+
+    return_hint = hints.get("return")
+    if return_hint is None:
+        raise ValueError(
+            f"{cls.__name__}.{method_name}: must have a return type annotation"
+        )
+
+    return input_cls, return_hint
 
 
 __all__ = ["PipelineExtraction"]
