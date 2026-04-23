@@ -1,32 +1,34 @@
 """
-Tests for llm-pipeline.
+Tests for llm-pipeline core: pipeline execution, prompts, DB init, events.
 """
 import pytest
-from typing import List, Optional, ClassVar
+from typing import ClassVar, List, Optional
 from unittest.mock import MagicMock, patch
-from sqlmodel import SQLModel, Field, Session, create_engine
+from sqlmodel import Field, Session, SQLModel, create_engine
 
 from llm_pipeline import (
-    PipelineConfig,
-    LLMStep,
-    LLMResultMixin,
-    step_definition,
-    PipelineStrategy,
-    PipelineStrategies,
-    StepDefinition,
-    PipelineContext,
-    PipelineExtraction,
-    PipelineDatabaseRegistry,
-    PipelineStepState,
-    PipelineRunInstance,
     ArrayValidationConfig,
+    LLMResultMixin,
+    LLMStep,
+    PipelineConfig,
+    PipelineDatabaseRegistry,
+    PipelineExtraction,
+    PipelineRunInstance,
+    PipelineStepState,
+    PipelineStrategies,
+    PipelineStrategy,
+    StepDefinition,
     ValidationContext,
     init_pipeline_db,
+    step_definition,
 )
-from llm_pipeline.prompts.service import PromptService
+from llm_pipeline.context import PipelineInputData
 from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.events import PipelineEvent, PipelineEventEmitter, PipelineStarted
+from llm_pipeline.inputs import StepInputs
+from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.types import StepCallParams
-from llm_pipeline.events import PipelineEventEmitter, PipelineEvent, PipelineStarted
+from llm_pipeline.wiring import Bind, FromInput, FromOutput
 
 
 # ---------- Test Domain Models ----------
@@ -38,7 +40,17 @@ class Widget(SQLModel, table=True):
     category: str
 
 
-# ---------- Test Step Instructions ----------
+# ---------- Pipeline input + step inputs ----------
+
+class WidgetPipelineInput(PipelineInputData):
+    data: str
+
+
+class WidgetDetectionInputs(StepInputs):
+    data: str
+
+
+# ---------- LLM output ----------
 
 class WidgetDetectionInstructions(LLMResultMixin):
     widget_count: int
@@ -51,37 +63,33 @@ class WidgetDetectionInstructions(LLMResultMixin):
     }
 
 
-class WidgetDetectionContext(PipelineContext):
-    category: str
-
-
 # ---------- Test Extraction ----------
 
 class WidgetExtraction(PipelineExtraction, model=Widget):
-    def default(self, results):
-        instruction = results[0]
-        widgets = []
-        for i in range(instruction.widget_count):
-            widgets.append(Widget(name=f"widget_{i}", category=instruction.category))
-        return widgets
+    class FromWidgetDetectionInputs(StepInputs):
+        widget_count: int
+        category: str
+
+    def from_widget_detection(
+        self, inputs: FromWidgetDetectionInputs
+    ) -> list[Widget]:
+        return [
+            Widget(name=f"widget_{i}", category=inputs.category)
+            for i in range(inputs.widget_count)
+        ]
 
 
 # ---------- Test Step ----------
 
 @step_definition(
+    inputs=WidgetDetectionInputs,
     instructions=WidgetDetectionInstructions,
     default_system_key="widget_detection.system_instruction",
     default_user_key="widget_detection.user_prompt",
-    default_extractions=[WidgetExtraction],
-    context=WidgetDetectionContext,
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
-        return [{"variables": {"data": self.pipeline.get_sanitized_data()}}]
-
-    def process_instructions(self, instructions):
-        instruction = instructions[0]
-        return WidgetDetectionContext(category=instruction.category)
+        return [StepCallParams(variables={"data": self.inputs.data})]
 
 
 # ---------- Test Strategy ----------
@@ -90,8 +98,28 @@ class DefaultStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [WidgetDetectionStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=WidgetDetectionStep,
+                inputs=WidgetDetectionInputs.sources(
+                    data=FromInput("data"),
+                ),
+                extractions=[
+                    Bind(
+                        extraction=WidgetExtraction,
+                        inputs=WidgetExtraction.FromWidgetDetectionInputs.sources(
+                            widget_count=FromOutput(
+                                WidgetDetectionStep, field="widget_count"
+                            ),
+                            category=FromOutput(
+                                WidgetDetectionStep, field="category"
+                            ),
+                        ),
+                    ),
+                ],
+            ),
+        ]
 
 
 # ---------- Test Pipeline ----------
@@ -109,7 +137,7 @@ class TestPipeline(
     registry=TestRegistry,
     strategies=TestStrategies,
 ):
-    pass
+    INPUT_DATA = WidgetPipelineInput
 
 
 # ---------- Helpers ----------
@@ -179,12 +207,12 @@ class TestImports:
     """Verify all public API imports work."""
 
     def test_core_imports(self):
-        from llm_pipeline import PipelineConfig, LLMStep, LLMResultMixin, step_definition
+        from llm_pipeline import LLMResultMixin, LLMStep, PipelineConfig, step_definition
         assert PipelineConfig is not None
         assert LLMStep is not None
 
     def test_db_imports(self):
-        from llm_pipeline.db import init_pipeline_db, Prompt
+        from llm_pipeline.db import Prompt, init_pipeline_db
         assert Prompt is not None
 
     def test_prompts_imports(self):
@@ -270,13 +298,10 @@ class TestPipelineExecution:
         pipeline = TestPipeline(session=seeded_session, model="test-model")
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=3, category="gadgets")):
-            result = pipeline.execute(data="some raw data", initial_context={})
+            result = pipeline.execute(input_data={"data": "some raw data"})
 
         # Verify chaining
         assert result is pipeline
-
-        # Verify context was set
-        assert pipeline.context["category"] == "gadgets"
 
         # Verify extractions
         widgets = pipeline.get_extractions(Widget)
@@ -291,7 +316,7 @@ class TestPipelineExecution:
         pipeline = TestPipeline(session=seeded_session, model="test-model")
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=2, category="tools")):
-            pipeline.execute(data="data", initial_context={})
+            pipeline.execute(input_data={"data": "data"})
 
         results = pipeline.save()
 
@@ -307,7 +332,7 @@ class TestPipelineExecution:
         pipeline = TestPipeline(session=seeded_session, model="test-model")
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=1, category="test")):
-            pipeline.execute(data="data", initial_context={})
+            pipeline.execute(input_data={"data": "data"})
 
         from sqlmodel import select
         states = seeded_session.exec(select(PipelineStepState)).all()
