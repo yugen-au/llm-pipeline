@@ -48,6 +48,7 @@ def step_definition(
     review: Optional[Type] = None,
     evaluators: Optional[List[Type]] = None,
     inputs: Optional[Type[StepInputs]] = None,
+    consensus_strategy: Optional[Any] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -67,6 +68,11 @@ def step_definition(
         inputs: StepInputs subclass declaring this step's typed inputs
             contract. Strategies wire these inputs via Bind + .sources().
             Must be named ``{StepName}Inputs`` and subclass ``StepInputs``.
+        consensus_strategy: Optional ``ConsensusStrategy`` instance declaring
+            this step's default consensus behaviour (majority vote / adaptive
+            / etc.). When set, strategies using this step get consensus by
+            default; individual Binds may override with their own
+            ``consensus_strategy`` field.
     """
     def decorator(step_class):
         if not step_class.__name__.endswith('Step'):
@@ -120,6 +126,7 @@ def step_definition(
         step_class.MODEL = model
         step_class.REVIEW = review
         step_class.INPUTS = inputs
+        step_class.CONSENSUS_STRATEGY = consensus_strategy
         step_class._step_evaluators = evaluators or []
 
         @classmethod

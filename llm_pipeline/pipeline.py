@@ -388,11 +388,23 @@ class PipelineConfig(ABC):
         Uses the step's decorator-generated ``create_definition`` to fill in
         prompt keys, agent, model, review, evaluators. Splices in the Bind's
         inputs SourcesSpec and nested extraction Binds.
+
+        ``consensus_strategy`` resolution order: ``Bind.consensus_strategy``
+        overrides ``step.CONSENSUS_STRATEGY`` (decorator default). Either
+        can be None; None everywhere means no consensus.
         """
-        return bind.step.create_definition(
-            inputs_spec=bind.inputs,
-            extraction_binds=list(bind.extractions),
+        resolved_consensus = (
+            bind.consensus_strategy
+            if bind.consensus_strategy is not None
+            else getattr(bind.step, "CONSENSUS_STRATEGY", None)
         )
+        create_kwargs = {
+            "inputs_spec": bind.inputs,
+            "extraction_binds": list(bind.extractions),
+        }
+        if resolved_consensus is not None:
+            create_kwargs["consensus_strategy"] = resolved_consensus
+        return bind.step.create_definition(**create_kwargs)
 
     def _get_foreign_key_dependencies(self, model: Type[SQLModel]) -> List[Type[SQLModel]]:
         dependencies = []

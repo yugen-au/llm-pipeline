@@ -16,21 +16,23 @@ from unittest.mock import MagicMock, patch, call
 from sqlmodel import SQLModel, Field, Session, create_engine, select
 
 from llm_pipeline import (
-    PipelineConfig,
-    LLMStep,
     LLMResultMixin,
-    step_definition,
-    PipelineStrategy,
-    PipelineStrategies,
-    PipelineContext,
+    LLMStep,
+    MajorityVoteStrategy,
+    PipelineConfig,
     PipelineDatabaseRegistry,
     PipelineStepState,
-    MajorityVoteStrategy,
+    PipelineStrategies,
+    PipelineStrategy,
+    step_definition,
 )
+from llm_pipeline.context import PipelineInputData
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.types import StepCallParams
 from llm_pipeline.events.handlers import InMemoryEventHandler
+from llm_pipeline.inputs import StepInputs
+from llm_pipeline.types import StepCallParams
+from llm_pipeline.wiring import Bind, FromInput
 
 
 # ---------------------------------------------------------------------------
@@ -43,35 +45,41 @@ class TokenWidget(SQLModel, table=True):
     name: str
 
 
+class TokenPipelineInput(PipelineInputData):
+    data: str
+
+
+class TokenInputs(StepInputs):
+    data: str
+
+
 class TokenInstructions(LLMResultMixin):
     count: int
     example: ClassVar[dict] = {"count": 1, "notes": "test"}
 
 
-class TokenContext(PipelineContext):
-    total: int
-
-
 @step_definition(
+    inputs=TokenInputs,
     instructions=TokenInstructions,
     default_system_key="token.system",
     default_user_key="token.user",
-    context=TokenContext,
 )
 class TokenStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
-        return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return TokenContext(total=instructions[0].count)
+        return [StepCallParams(variables={"data": self.inputs.data})]
 
 
 class TokenStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [TokenStep.create_definition()]
+    def get_bindings(self) -> List[Bind]:
+        return [
+            Bind(
+                step=TokenStep,
+                inputs=TokenInputs.sources(data=FromInput("data")),
+            ),
+        ]
 
 
 class TokenRegistry(PipelineDatabaseRegistry, models=[TokenWidget]):
@@ -87,7 +95,7 @@ class TokenPipeline(
     registry=TokenRegistry,
     strategies=TokenStrategies,
 ):
-    pass
+    INPUT_DATA = TokenPipelineInput
 
 
 def _consensus_token_strategies(threshold, max_calls):
@@ -97,8 +105,15 @@ def _consensus_token_strategies(threshold, max_calls):
     class ConsensusTokenTestStrategy(PipelineStrategy):
         def can_handle(self, context):
             return True
-        def get_steps(self):
-            return [TokenStep.create_definition(consensus_strategy=mv)]
+        def get_bindings(self) -> List[Bind]:
+            return [
+                Bind(
+                    step=TokenStep,
+                    inputs=TokenInputs.sources(data=FromInput("data")),
+                    consensus_strategy=mv,
+                ),
+            ]
+
     return [ConsensusTokenTestStrategy()]
 
 
@@ -198,7 +213,7 @@ class TestLLMCallCompletedTokens:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=20, output_tokens=8)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
@@ -210,7 +225,7 @@ class TestLLMCallCompletedTokens:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=20, output_tokens=8)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
@@ -221,7 +236,7 @@ class TestLLMCallCompletedTokens:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=20, output_tokens=8)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
@@ -233,7 +248,7 @@ class TestLLMCallCompletedTokens:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result_no_usage()):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
@@ -255,7 +270,7 @@ class TestStepCompletedTokens:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=15, output_tokens=7)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         step_completed = [e for e in events if e["event_type"] == "step_completed"]
@@ -275,7 +290,7 @@ class TestStepCompletedTokens:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result_no_usage()):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         step_completed = [e for e in events if e["event_type"] == "step_completed"]
@@ -295,7 +310,7 @@ class TestPipelineStepStateTokens:
     def test_state_has_input_tokens(self, token_engine, token_session):
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=30, output_tokens=12)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(token_engine) as s:
             states = s.exec(select(PipelineStepState)).all()
@@ -305,7 +320,7 @@ class TestPipelineStepStateTokens:
     def test_state_has_output_tokens(self, token_engine, token_session):
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=30, output_tokens=12)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(token_engine) as s:
             states = s.exec(select(PipelineStepState)).all()
@@ -314,7 +329,7 @@ class TestPipelineStepStateTokens:
     def test_state_has_total_tokens(self, token_engine, token_session):
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result(input_tokens=30, output_tokens=12)):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(token_engine) as s:
             states = s.exec(select(PipelineStepState)).all()
@@ -323,7 +338,7 @@ class TestPipelineStepStateTokens:
     def test_state_has_total_requests(self, token_engine, token_session):
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result()):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(token_engine) as s:
             states = s.exec(select(PipelineStepState)).all()
@@ -337,7 +352,7 @@ class TestPipelineStepStateTokens:
         """
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result_no_usage()):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(token_engine) as s:
             states = s.exec(select(PipelineStepState)).all()
@@ -379,7 +394,7 @@ class TestConsensusTokenAggregation:
             strategies=_consensus_token_strategies(threshold, max_calls),
         )
         with patch("pydantic_ai.Agent.run_sync", side_effect=_side_effect):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
         return pipeline
 
     def test_consensus_sums_input_tokens(self, token_engine, token_session, handler):
@@ -479,14 +494,14 @@ class TestNullAndZeroUsage:
         """Pipeline completes when usage() returns None."""
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result_no_usage()):
-            result = pipeline.execute(data="d", initial_context={})
+            result = pipeline.execute(input_data={"data": "d"})
         assert result is pipeline
 
     def test_zero_usage_stored(self, token_engine, token_session):
         """Zero tokens from usage() stored as 0 in DB."""
         pipeline = TokenPipeline(session=token_session, model="test-model")
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result_zero_usage()):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         with Session(token_engine) as s:
             states = s.exec(select(PipelineStepState)).all()
@@ -501,7 +516,7 @@ class TestNullAndZeroUsage:
             session=token_session, model="test-model", event_emitter=handler,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result_zero_usage()):
-            pipeline.execute(data="d", initial_context={})
+            pipeline.execute(input_data={"data": "d"})
 
         events = handler.get_events()
         completed = [e for e in events if e["event_type"] == "llm_call_completed"]
@@ -517,7 +532,7 @@ class TestNullAndZeroUsage:
             strategies=_consensus_token_strategies(threshold=2, max_calls=5),
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=result_none):
-            result = pipeline.execute(data="d", initial_context={})
+            result = pipeline.execute(input_data={"data": "d"})
         assert result is pipeline
 
 
@@ -536,7 +551,7 @@ class TestNoInstrumentationSettings:
             instrumentation_settings=None,
         )
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result()):
-            result = pipeline.execute(data="d", initial_context={})
+            result = pipeline.execute(input_data={"data": "d"})
         assert result is pipeline
 
     def test_build_step_agent_called_without_instrument_kwarg(self, token_engine, token_session):
@@ -548,7 +563,7 @@ class TestNoInstrumentationSettings:
         )
         with patch("llm_pipeline.agent_builders.build_step_agent", side_effect=real_build) as mock_build:
             with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result()):
-                pipeline.execute(data="d", initial_context={})
+                pipeline.execute(input_data={"data": "d"})
 
         assert mock_build.called
         _, kwargs = mock_build.call_args
@@ -573,7 +588,7 @@ class TestInstrumentationSettingsThreading:
         )
         with patch("llm_pipeline.agent_builders.build_step_agent", side_effect=real_build) as mock_build:
             with patch("pydantic_ai.Agent.run_sync", return_value=_make_run_result()):
-                pipeline.execute(data="d", initial_context={})
+                pipeline.execute(input_data={"data": "d"})
 
         assert mock_build.called
         _, kwargs = mock_build.call_args

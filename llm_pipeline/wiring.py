@@ -155,11 +155,15 @@ class Bind:
     Exactly one of ``step`` / ``extraction`` must be provided. The
     ``extractions`` list is only valid when ``step`` is set (nested
     extraction binds under a step bind).
+
+    ``consensus_strategy`` is a per-step concern and is only valid when
+    ``step`` is set; it's passed through to the compiled StepDefinition.
     """
     step: type | None = None
     extraction: type | None = None
     inputs: SourcesSpec | None = None
     extractions: list["Bind"] = field(default_factory=list)
+    consensus_strategy: Any | None = None
 
     def __post_init__(self) -> None:
         has_step = self.step is not None
@@ -174,6 +178,10 @@ class Bind:
         if self.extractions and not has_step:
             raise ValueError(
                 "Nested extractions are only valid when step= is set"
+            )
+        if self.consensus_strategy is not None and not has_step:
+            raise ValueError(
+                "consensus_strategy is only valid when step= is set"
             )
         for child in self.extractions:
             if child.step is not None or child.extraction is None:
