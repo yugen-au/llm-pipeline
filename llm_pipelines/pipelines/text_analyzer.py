@@ -1,5 +1,5 @@
 """TextAnalyzer pipeline: sentiment -> topic extraction -> summary."""
-from typing import Any, ClassVar, List
+from typing import Any, List
 
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.registry import PipelineDatabaseRegistry
@@ -85,4 +85,4 @@ class TextAnalyzerPipeline(
     strategies=TextAnalyzerStrategies,
 ):
     """Demo pipeline: sentiment -> topic extraction -> summary."""
-    INPUT_DATA: ClassVar[type] = TextAnalyzerInputData
+    INPUT_DATA = TextAnalyzerInputData
