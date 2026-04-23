@@ -2,40 +2,47 @@
 Base classes for pipeline strategies.
 
 A strategy defines:
-1. What steps to run (get_steps)
+1. What bindings to run (get_bindings)
 2. When it applies (can_handle)
 
-The pipeline orchestrates execution step-by-step, selecting the appropriate
-strategy for each step based on context.
+Each Bind in the returned list pairs a step class with a SourcesSpec
+describing how the step's inputs are assembled, plus an optional list
+of nested extraction Binds.
+
+The pipeline orchestrates execution step-by-step, compiling each Bind
+into a StepDefinition (internal data carrier) and resolving its inputs
+adapter against the pipeline's accumulated output context.
 """
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Type, Optional, ClassVar, TYPE_CHECKING
 from dataclasses import dataclass, field
 
 from llm_pipeline.naming import to_snake_case
+from llm_pipeline.wiring import Bind, SourcesSpec
 
 if TYPE_CHECKING:
     from llm_pipeline.consensus import ConsensusStrategy
-    from llm_pipeline.extraction import PipelineExtraction
     from llm_pipeline.transformation import PipelineTransformation
 
 
 @dataclass
 class StepDefinition:
     """
-    Definition of a pipeline step with its configuration.
-    
-    This connects a step class with its prompts, configuration, extractions, transformation,
-    and context, making it clear what each step will do and what data it produces.
+    Internal data carrier between ``Bind`` (declarative, from strategy)
+    and the live step instance (constructed in ``create_step``).
+
+    A Bind is compiled into a StepDefinition at pipeline execution time;
+    this dataclass captures everything the executor needs to run the step,
+    including the Bind's inputs adapter and nested extraction Binds.
     """
     step_class: Type
     system_instruction_key: str
     user_prompt_key: str
     instructions: Type
     action_after: Optional[str] = None
-    extractions: List[Type['PipelineExtraction']] = field(default_factory=list)
+    extraction_binds: List[Bind] = field(default_factory=list)
     transformation: Optional[Type['PipelineTransformation']] = None
-    context: Optional[Type] = None  # Type is PipelineContext but avoid circular import
+    inputs_spec: Optional[SourcesSpec] = None
     agent_name: str | None = None
     model: str | None = None
     not_found_indicators: list[str] | None = None
@@ -90,12 +97,12 @@ class StepDefinition:
             instructions=self.instructions,
             pipeline=pipeline  # Pass pipeline to step
         )
-        # Store extractions, transformation, context, and agent_name on the step instance
-        step._extractions = self.extractions
+        # Attach runtime configuration from this StepDefinition to the step.
+        step._extraction_binds = self.extraction_binds
         step._transformation = self.transformation
-        step._context = self.context
         step._agent_name = self.agent_name
         step._step_model = self.model
+        step._inputs_spec = self.inputs_spec
         return step
 
 
@@ -201,12 +208,18 @@ class PipelineStrategy(ABC):
         pass
     
     @abstractmethod
-    def get_steps(self) -> List[StepDefinition]:
+    def get_bindings(self) -> List[Bind]:
         """
-        Define all steps for this strategy.
-        
+        Declare the step bindings this strategy runs.
+
+        Each Bind pairs a step class with the ``SourcesSpec`` describing
+        how to assemble its inputs, plus optional nested extraction Binds.
+        The pipeline compiles each Bind into a StepDefinition at execution
+        time and resolves its inputs adapter against the accumulated output
+        context.
+
         Returns:
-            List of StepDefinition objects in order
+            Ordered list of ``Bind`` instances.
         """
         pass
 

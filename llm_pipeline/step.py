@@ -35,14 +35,13 @@ def _safe_dump(instance: SQLModel) -> dict:
 if TYPE_CHECKING:
     from pydantic_ai import Agent
     from llm_pipeline.pipeline import PipelineConfig
-    from llm_pipeline.context import PipelineContext
+    from llm_pipeline.wiring import AdapterContext
 
 
 def step_definition(
     instructions: Type[BaseModel],
     default_system_key: Optional[str] = None,
     default_user_key: Optional[str] = None,
-    default_extractions: Optional[List] = None,
     default_transformation=None,
     agent: Optional[str] = None,
     model: Optional[str] = None,
@@ -54,12 +53,13 @@ def step_definition(
     Decorator that auto-generates a factory function for creating step definitions.
 
     Stores configuration on the class and provides a create_definition() method.
+    Extractions are no longer declared on the step (they are attached per-strategy
+    via nested ``Bind`` instances).
 
     Args:
         instructions: The Pydantic instruction class for this step
         default_system_key: Default system instruction prompt key
         default_user_key: Default user prompt template key
-        default_extractions: Default extraction classes
         default_transformation: Default transformation class
         agent: Optional agent name for tool lookup from global agent registry
         model: Optional default model for this step (overrides pipeline default)
@@ -115,7 +115,6 @@ def step_definition(
         step_class.INSTRUCTIONS = instructions
         step_class.DEFAULT_SYSTEM_KEY = default_system_key
         step_class.DEFAULT_USER_KEY = default_user_key
-        step_class.DEFAULT_EXTRACTIONS = default_extractions or []
         step_class.DEFAULT_TRANSFORMATION = default_transformation
         step_class.AGENT = agent
         step_class.MODEL = model
@@ -128,14 +127,11 @@ def step_definition(
             cls,
             system_instruction_key: Optional[str] = None,
             user_prompt_key: Optional[str] = None,
-            extractions: Optional[List] = None,
             transformation=None,
             **kwargs
         ):
             from llm_pipeline.strategy import StepDefinition
 
-            if extractions is None:
-                extractions = cls.DEFAULT_EXTRACTIONS
             if 'transformation' not in kwargs and transformation is None:
                 transformation = cls.DEFAULT_TRANSFORMATION
 
@@ -168,7 +164,6 @@ def step_definition(
                     else cls.DEFAULT_USER_KEY
                 ),
                 instructions=cls.INSTRUCTIONS,
-                extractions=extractions,
                 transformation=transformation,
                 **kwargs
             )
@@ -251,6 +246,10 @@ class LLMStep(ABC):
         self.user_prompt_key = user_prompt_key
         self.instructions = instructions
         self.pipeline: 'PipelineConfig' = pipeline
+        # Populated by the pipeline before prepare_calls() runs:
+        # result of resolving the step's SourcesSpec against the current
+        # AdapterContext. None until the pipeline assigns it.
+        self.inputs: Optional[StepInputs] = None
 
     @property
     def step_name(self) -> str:
@@ -297,12 +296,8 @@ class LLMStep(ABC):
 
     @abstractmethod
     def prepare_calls(self) -> List[StepCallParams]:
-        """Prepare LLM call(s) for this step based on pipeline context."""
+        """Prepare LLM call(s) for this step based on self.inputs."""
         pass
-
-    def process_instructions(self, instructions: List[Any]) -> Dict[str, Any]:
-        """Process raw LLM instructions to extract derived context values."""
-        return {}
 
     def should_skip(self) -> bool:
         """Determine if this step should be skipped based on context."""
@@ -312,14 +307,21 @@ class LLMStep(ABC):
         """Log step instructions to console. Override for custom logging."""
         pass
 
-    def extract_data(self, instructions: List[Any]) -> None:
-        """
-        Extract database models from LLM instructions using step-level extractions.
+    def extract_data(self, adapter_ctx: "AdapterContext") -> None:
+        """Run the step's extraction binds, dispatching each via the Bind's adapter.
 
-        Automatically delegates to extraction classes registered on this step definition.
+        For each nested extraction Bind attached via create_step:
+        1. Resolve the Bind's inputs SourcesSpec against ``adapter_ctx``
+           to produce a typed pathway inputs instance.
+        2. Construct the extraction (validates MODEL in pipeline REGISTRY).
+        3. Dispatch via ``extraction.extract(pathway_inputs)`` which routes
+           to the method accepting that pathway's inputs class.
+        4. Persist returned instances through the existing store_extractions
+           + session flush + event emission machinery.
         """
-        extraction_classes = getattr(self, '_extractions', [])
-        for extraction_class in extraction_classes:
+        extraction_binds = getattr(self, '_extraction_binds', [])
+        for ext_bind in extraction_binds:
+            extraction_class = ext_bind.extraction
             extraction = extraction_class(self.pipeline)
             self.pipeline._current_extraction = extraction_class
 
@@ -334,8 +336,9 @@ class LLMStep(ABC):
                 ))
 
             try:
+                pathway_inputs = ext_bind.inputs.resolve(adapter_ctx)
                 extract_start = datetime.now(timezone.utc)
-                instances = extraction.extract(instructions)
+                instances = extraction.extract(pathway_inputs)
                 self.store_extractions(extraction.MODEL, instances)
                 for instance in instances:
                     self.pipeline._real_session.add(instance)

@@ -32,6 +32,7 @@ from sqlmodel import SQLModel, Session
 from llm_pipeline.context import PipelineInputData
 from llm_pipeline.consensus import instructions_match, ConsensusResult
 from llm_pipeline.naming import to_snake_case
+from llm_pipeline.wiring import AdapterContext, Bind
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +367,8 @@ class PipelineConfig(ABC):
     def _build_execution_order(self) -> None:
         all_steps = []
         for strategy in self._strategies:
-            for step_def in strategy.get_steps():
+            for bind in strategy.get_bindings():
+                step_def = self._compile_bind_to_step_def(bind)
                 step_class = step_def.step_class
                 if step_class not in [s.step_class for s in all_steps]:
                     all_steps.append(step_def)
@@ -374,11 +376,23 @@ class PipelineConfig(ABC):
         for position, step_def in enumerate(all_steps):
             step_class = step_def.step_class
             self._step_order[step_class] = position
-            for extraction_class in step_def.extractions:
-                model = extraction_class.MODEL
+            for ext_bind in step_def.extraction_binds:
+                model = ext_bind.extraction.MODEL
                 self._model_extraction_step[model] = step_class
             if step_def.transformation:
                 self._step_data_transformations[step_class] = step_class
+
+    def _compile_bind_to_step_def(self, bind: Bind):
+        """Compile a declarative Bind into an internal StepDefinition.
+
+        Uses the step's decorator-generated ``create_definition`` to fill in
+        prompt keys, agent, model, review, evaluators. Splices in the Bind's
+        inputs SourcesSpec and nested extraction Binds.
+        """
+        return bind.step.create_definition(
+            inputs_spec=bind.inputs,
+            extraction_binds=list(bind.extractions),
+        )
 
     def _get_foreign_key_dependencies(self, model: Type[SQLModel]) -> List[Type[SQLModel]]:
         dependencies = []
@@ -466,38 +480,6 @@ class PipelineConfig(ABC):
             f"{resource_type} from {step_class.__name__} (step {target_position}).\n"
             f"Steps can only access {resource_type} from previously executed steps."
         )
-
-    def _validate_and_merge_context(self, step, new_context: Any) -> None:
-        from llm_pipeline.context import PipelineContext
-
-        if hasattr(step, "_context") and step._context:
-            context_class = step._context
-            if not isinstance(new_context, context_class):
-                raise TypeError(
-                    f"{step.__class__.__name__}.process_instructions() must return "
-                    f"{context_class.__name__}, got {type(new_context).__name__}"
-                )
-            if isinstance(new_context, PipelineContext):
-                new_context = new_context.model_dump()
-
-        if new_context is None:
-            new_context = {}
-        elif isinstance(new_context, dict):
-            pass
-        else:
-            raise TypeError(
-                f"{step.__class__.__name__}.process_instructions() must return dict or "
-                f"PipelineContext, got {type(new_context).__name__}"
-            )
-        self._context.update(new_context)
-        if self._event_emitter:
-            self._emit(ContextUpdated(
-                run_id=self.run_id,
-                pipeline_name=self.pipeline_name,
-                step_name=step.step_name,
-                new_keys=list(new_context.keys()),
-                context_snapshot=dict(self._context),
-            ))
 
     def sanitize(self, data: Any) -> str:
         """Override for custom sanitization. Default: str(data)."""
@@ -636,6 +618,15 @@ class PipelineConfig(ABC):
         self.data = {"raw": data, "sanitized": self.sanitize(data)}
         self.extractions = {}
 
+        # AdapterContext accumulates step outputs as the loop runs. It is
+        # passed to each step's inputs adapter (before prepare_calls) and
+        # to each extraction's inputs adapter (during extract_data).
+        adapter_ctx = AdapterContext(
+            input=self._validated_input,
+            outputs={},
+            pipeline=self,
+        )
+
         start_time = datetime.now(timezone.utc)
         current_step_name: str | None = None
 
@@ -674,7 +665,7 @@ class PipelineConfig(ABC):
                 ))
 
         try:
-            max_steps = max(len(s.get_steps()) for s in self._strategies)
+            max_steps = max(len(s.get_bindings()) for s in self._strategies)
 
             _resume_from = getattr(self, '_resume_from_step', 0)
 
@@ -697,10 +688,12 @@ class PipelineConfig(ABC):
 
                 for strategy in self._strategies:
                     if strategy.can_handle(self.context):
-                        steps = strategy.get_steps()
-                        if step_index < len(steps):
+                        bindings = strategy.get_bindings()
+                        if step_index < len(bindings):
                             selected_strategy = strategy
-                            step_def = steps[step_index]
+                            step_def = self._compile_bind_to_step_def(
+                                bindings[step_index]
+                            )
                             break
 
                 if not step_def:
@@ -711,6 +704,12 @@ class PipelineConfig(ABC):
                 step_class = type(step)
                 self._current_step = step_class
                 current_step_name = step.step_name
+
+                # Resolve the step's inputs adapter now that the step instance
+                # exists and is bound to this pipeline. Populated before the
+                # first prepare_calls() read.
+                if step_def.inputs_spec is not None:
+                    step.inputs = step_def.inputs_spec.resolve(adapter_ctx)
 
                 if self._event_emitter:
                     self._emit(StepSelected(
@@ -804,8 +803,7 @@ class PipelineConfig(ABC):
                             step_name=step.step_name,
                             instruction_count=len(instructions),
                         ))
-                    new_context = step.process_instructions(instructions)
-                    self._validate_and_merge_context(step, new_context)
+                    adapter_ctx.outputs[step_class] = instructions
 
                     if hasattr(step, "_transformation") and step._transformation:
                         transformation = step._transformation(self)
@@ -844,17 +842,17 @@ class PipelineConfig(ABC):
                     reconstructed_count = self._reconstruct_extractions_from_cache(
                         cached_state, step_def
                     )
-                    if self._event_emitter and step_def.extractions:
+                    if self._event_emitter and step_def.extraction_binds:
                         self._emit(CacheReconstruction(
                             run_id=self.run_id,
                             pipeline_name=self.pipeline_name,
                             step_name=step.step_name,
-                            model_count=len(step_def.extractions),
+                            model_count=len(step_def.extraction_binds),
                             instance_count=reconstructed_count,
                         ))
-                    if reconstructed_count == 0 and step_def.extractions:
+                    if reconstructed_count == 0 and step_def.extraction_binds:
                         logger.info("  [PARTIAL CACHE] Re-running extraction")
-                        step.extract_data(instructions)
+                        step.extract_data(adapter_ctx)
                 else:
                     if use_cache:
                         if self._event_emitter:
@@ -1057,8 +1055,7 @@ class PipelineConfig(ABC):
                             step_name=step.step_name,
                             instruction_count=len(instructions),
                         ))
-                    new_context = step.process_instructions(instructions)
-                    self._validate_and_merge_context(step, new_context)
+                    adapter_ctx.outputs[step_class] = instructions
 
                     if hasattr(step, "_transformation") and step._transformation:
                         transformation = step._transformation(self)
@@ -1086,7 +1083,7 @@ class PipelineConfig(ABC):
                                 timestamp=datetime.now(timezone.utc),
                             ))
 
-                    step.extract_data(instructions)
+                    step.extract_data(adapter_ctx)
                     execution_time_ms = int(
                         (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
                     )
@@ -1317,13 +1314,14 @@ class PipelineConfig(ABC):
         from sqlmodel import select
 
         cached_run_id = cached_state.run_id
-        extraction_classes = getattr(step_def, "extractions", [])
-        if not extraction_classes:
+        extraction_binds = getattr(step_def, "extraction_binds", [])
+        if not extraction_binds:
             return 0
 
         logger.info(f"  -> Reconstructing extractions from cached run {cached_run_id[:8]}...")
         total = 0
-        for extraction_class in extraction_classes:
+        for ext_bind in extraction_binds:
+            extraction_class = ext_bind.extraction
             model_class = extraction_class.MODEL
             run_instances = self.session.exec(
                 select(PipelineRunInstance).where(
