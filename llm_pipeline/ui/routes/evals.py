@@ -349,13 +349,33 @@ def _find_step_def_by_target(
         for strategy_cls in strategy_classes:
             try:
                 strategy_inst = strategy_cls()
-                for sd in strategy_inst.get_steps():
-                    if sd.step_name == target_step:
-                        return (
-                            sd,
-                            getattr(strategy_inst, "name", None),
-                            pipeline_name,
-                        )
+                # Support both get_bindings (new) and get_steps (legacy)
+                if hasattr(strategy_inst, "get_bindings"):
+                    from llm_pipeline.wiring import Bind
+                    from llm_pipeline.naming import to_snake_case
+                    for bind in strategy_inst.get_bindings():
+                        if bind.step is not None:
+                            step_name = to_snake_case(
+                                bind.step.__name__, strip_suffix="Step"
+                            )
+                            if step_name == target_step:
+                                sd = bind.step.create_definition(
+                                    inputs_spec=bind.inputs,
+                                    extraction_binds=list(bind.extractions),
+                                )
+                                return (
+                                    sd,
+                                    getattr(strategy_inst, "name", None),
+                                    pipeline_name,
+                                )
+                else:
+                    for sd in strategy_inst.get_steps():
+                        if sd.step_name == target_step:
+                            return (
+                                sd,
+                                getattr(strategy_inst, "name", None),
+                                pipeline_name,
+                            )
             except Exception:
                 logger.debug(
                     "Failed to introspect strategy %s for step '%s'",

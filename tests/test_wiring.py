@@ -291,9 +291,14 @@ class TestBind:
         with pytest.raises(ValueError, match="exactly one"):
             Bind(inputs=_spec())
 
-    def test_requires_inputs(self):
+    def test_step_bind_allows_no_inputs(self):
+        # Steps without a declared INPUTS class can omit inputs=
+        b = Bind(step=_FakeStep)
+        assert b.inputs is None
+
+    def test_extraction_bind_requires_inputs(self):
         with pytest.raises(ValueError, match="inputs="):
-            Bind(step=_FakeStep)
+            Bind(extraction=_FakeExtraction)
 
     def test_nested_extractions_under_step_ok(self):
         child = Bind(extraction=_FakeExtraction, inputs=_spec())

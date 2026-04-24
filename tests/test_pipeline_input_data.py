@@ -203,7 +203,7 @@ class EmptyStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
+    def get_bindings(self):
         return []
 
 

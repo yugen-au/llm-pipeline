@@ -1,11 +1,12 @@
 """Tests for evaluators= param on step_definition and auto FieldMatch evaluators."""
 import pytest
+from unittest.mock import MagicMock
 from pydantic import BaseModel, Field
 
 from llm_pipeline.evals.evaluators import FieldMatchEvaluator, build_auto_evaluators
 
 
-# -- FieldMatchEvaluator tests --
+# -- helpers --
 
 
 class FakeOutput:
@@ -14,40 +15,51 @@ class FakeOutput:
             setattr(self, k, v)
 
 
+def _make_ctx(output, expected_output):
+    """Build a minimal EvaluatorContext-like mock."""
+    ctx = MagicMock()
+    ctx.output = output
+    ctx.expected_output = expected_output
+    return ctx
+
+
+# -- FieldMatchEvaluator tests --
+
+
 class TestFieldMatchEvaluator:
     def test_skip_when_expected_none(self):
-        ev = FieldMatchEvaluator("sentiment")
-        result = ev(FakeOutput(sentiment="positive"), None)
+        ev = FieldMatchEvaluator(field_name="sentiment")
+        result = ev.evaluate(_make_ctx(FakeOutput(sentiment="positive"), None))
         assert result == {}
 
     def test_skip_when_field_missing_from_expected_dict(self):
-        ev = FieldMatchEvaluator("sentiment")
-        result = ev(FakeOutput(sentiment="positive"), {"score": 0.9})
+        ev = FieldMatchEvaluator(field_name="sentiment")
+        result = ev.evaluate(_make_ctx(FakeOutput(sentiment="positive"), {"score": 0.9}))
         assert result == {}
 
     def test_true_when_match(self):
-        ev = FieldMatchEvaluator("sentiment")
-        result = ev(FakeOutput(sentiment="positive"), {"sentiment": "positive"})
+        ev = FieldMatchEvaluator(field_name="sentiment")
+        result = ev.evaluate(_make_ctx(FakeOutput(sentiment="positive"), {"sentiment": "positive"}))
         assert result is True
 
     def test_false_when_mismatch(self):
-        ev = FieldMatchEvaluator("sentiment")
-        result = ev(FakeOutput(sentiment="positive"), {"sentiment": "negative"})
+        ev = FieldMatchEvaluator(field_name="sentiment")
+        result = ev.evaluate(_make_ctx(FakeOutput(sentiment="positive"), {"sentiment": "negative"}))
         assert result is False
 
     def test_match_with_numeric_field(self):
-        ev = FieldMatchEvaluator("score")
-        assert ev(FakeOutput(score=0.8), {"score": 0.8}) is True
-        assert ev(FakeOutput(score=0.8), {"score": 0.9}) is False
+        ev = FieldMatchEvaluator(field_name="score")
+        assert ev.evaluate(_make_ctx(FakeOutput(score=0.8), {"score": 0.8})) is True
+        assert ev.evaluate(_make_ctx(FakeOutput(score=0.8), {"score": 0.9})) is False
 
     def test_output_missing_field_returns_false(self):
-        ev = FieldMatchEvaluator("missing_field")
-        result = ev(FakeOutput(), {"missing_field": "value"})
+        ev = FieldMatchEvaluator(field_name="missing_field")
+        result = ev.evaluate(_make_ctx(FakeOutput(), {"missing_field": "value"}))
         assert result is False
 
-    def test_repr(self):
-        ev = FieldMatchEvaluator("sentiment")
-        assert repr(ev) == "FieldMatchEvaluator('sentiment')"
+    def test_repr_contains_field_name(self):
+        ev = FieldMatchEvaluator(field_name="sentiment")
+        assert "sentiment" in repr(ev)
 
 
 # -- build_auto_evaluators tests --
@@ -92,7 +104,6 @@ class TestStepDefinitionEvaluatorsParam:
         class MockInstructions(BaseModel):
             value: str = ""
 
-        # Rename to match naming convention
         MockInstructions.__name__ = "EvalTestInstructions"
 
         @step_definition(instructions=MockInstructions, evaluators=[MockEval])

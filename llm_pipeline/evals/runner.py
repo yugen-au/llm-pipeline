@@ -449,11 +449,28 @@ class EvalRunner:
                     continue
                 for strategy_cls in strategies_cls.STRATEGIES:
                     strategy = strategy_cls()
-                    for sd in strategy.get_steps():
-                        if sd.step_name == step_name:
-                            input_data_cls = getattr(pipeline_cls, "INPUT_DATA", None)
-                            default_model = getattr(pipeline_cls, "_default_model", None)
-                            return sd, input_data_cls, default_model, pipeline_name
+                    # Support both get_bindings (new) and get_steps (legacy)
+                    if hasattr(strategy, "get_bindings"):
+                        from llm_pipeline.naming import to_snake_case
+                        for bind in strategy.get_bindings():
+                            if bind.step is not None:
+                                sn = to_snake_case(
+                                    bind.step.__name__, strip_suffix="Step"
+                                )
+                                if sn == step_name:
+                                    sd = bind.step.create_definition(
+                                        inputs_spec=bind.inputs,
+                                        extraction_binds=list(bind.extractions),
+                                    )
+                                    input_data_cls = getattr(pipeline_cls, "INPUT_DATA", None)
+                                    default_model = getattr(pipeline_cls, "_default_model", None)
+                                    return sd, input_data_cls, default_model, pipeline_name
+                    else:
+                        for sd in strategy.get_steps():
+                            if sd.step_name == step_name:
+                                input_data_cls = getattr(pipeline_cls, "INPUT_DATA", None)
+                                default_model = getattr(pipeline_cls, "_default_model", None)
+                                return sd, input_data_cls, default_model, pipeline_name
             except Exception:
                 logger.debug(
                     "Failed to introspect '%s' for step '%s'",

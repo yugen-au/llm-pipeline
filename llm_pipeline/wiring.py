@@ -180,8 +180,11 @@ class Bind:
                 f"tool={self.tool!r}"
             )
         is_step = self.step is not None
-        if self.inputs is None:
-            raise ValueError("Bind requires inputs= (a SourcesSpec)")
+        if self.inputs is None and not is_step:
+            raise ValueError(
+                "Bind requires inputs= (a SourcesSpec) for extraction "
+                "and tool binds"
+            )
         if self.extractions and not is_step:
             raise ValueError(
                 "Nested extractions are only valid when step= is set"

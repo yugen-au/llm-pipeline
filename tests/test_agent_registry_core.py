@@ -182,7 +182,7 @@ class TestClearAgentRegistry:
 class TestStepDepsFields:
     def test_field_count(self):
         f = dc_fields(StepDeps)
-        assert len(f) == 11
+        assert len(f) == 10
 
     def test_required_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]

@@ -12,6 +12,7 @@ from sqlmodel import Session
 from starlette.testclient import TestClient
 
 from llm_pipeline.db import init_pipeline_db
+from llm_pipeline.wiring import Bind
 from llm_pipeline.evals.models import (
     EvaluationDataset,
     EvaluationRun,
@@ -799,8 +800,8 @@ class TestProdPrompts:
             def can_handle(self, context):
                 return True
 
-            def get_steps(self):
-                return [DeclaredStep.create_definition()]
+            def get_bindings(self):
+                return [Bind(step=DeclaredStep)]
 
         class DeclaredTestRegistry(PipelineDatabaseRegistry, models=[]):
             pass
@@ -896,8 +897,8 @@ class TestProdPrompts:
             def can_handle(self, context):
                 return True
 
-            def get_steps(self):
-                return [AutoDiscStep.create_definition()]
+            def get_bindings(self):
+                return [Bind(step=AutoDiscStep)]
 
         class AutoTestRegistry(PipelineDatabaseRegistry, models=[]):
             pass
@@ -985,8 +986,8 @@ class TestProdPrompts:
             def can_handle(self, context):
                 return True
 
-            def get_steps(self):
-                return [PartialStep.create_definition()]
+            def get_bindings(self):
+                return [Bind(step=PartialStep)]
 
         class PartialTestRegistry(PipelineDatabaseRegistry, models=[]):
             pass
@@ -1148,8 +1149,8 @@ class TestProdModel:
             def can_handle(self, context):
                 return True
 
-            def get_steps(self):
-                return [StepCls.create_definition()]
+            def get_bindings(self):
+                return [Bind(step=StepCls)]
 
         class _Registry(PipelineDatabaseRegistry, models=[]):
             pass

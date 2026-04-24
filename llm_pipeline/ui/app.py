@@ -321,8 +321,8 @@ def create_app(
     else:
         app.state.engine = init_pipeline_db()
 
-    # Model resolution: param > env > None
-    resolved_model = default_model or os.environ.get("LLM_PIPELINE_MODEL")
+    # Model resolution: param > env > None (strip to catch LLM_PIPELINE_MODEL=)
+    resolved_model = default_model or os.environ.get("LLM_PIPELINE_MODEL", "").strip() or None
     if resolved_model is None:
         logger.warning(
             "No default model configured. Set LLM_PIPELINE_MODEL or pass "

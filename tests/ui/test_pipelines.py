@@ -152,12 +152,12 @@ class TestListPipelines:
         assert resp.status_code == 200
         assert resp.json() == {"pipelines": []}
 
-    def test_list_has_input_schema_false_without_input_data(self, populated_introspection_client):
-        """WidgetPipeline/ScanPipeline have step instructions but no INPUT_DATA ClassVar, so has_input_schema=False."""
+    def test_list_has_input_schema_true_when_input_data_declared(self, populated_introspection_client):
+        """Both WidgetPipeline and ScanPipeline declare INPUT_DATA, so has_input_schema=True."""
         resp = populated_introspection_client.get("/api/pipelines")
         body = resp.json()
         for item in body["pipelines"]:
-            assert item["has_input_schema"] is False
+            assert item["has_input_schema"] is True
 
     def test_list_has_input_schema_true_with_pipeline_input_schema(self):
         """has_input_schema=True when introspection metadata includes pipeline_input_schema."""
