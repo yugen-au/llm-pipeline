@@ -323,13 +323,6 @@ class PipelineConfig(ABC):
 
         self.session = ReadOnlySession(self._real_session)
 
-    def get_extra(self) -> dict[str, Any]:
-        """Return extra deps to inject into StepDeps.extra.
-
-        Subclasses override to supply domain-specific deps (e.g. workbook_context).
-        """
-        return {}
-
     def _build_runtime_ctx(
         self,
         step_name: str | None = None,
@@ -1006,7 +999,6 @@ class PipelineConfig(ABC):
                             variable_resolver=self._variable_resolver,
                             array_validation=params.get("array_validation"),
                             validation_context=params.get("validation_context"),
-                            extra=self.get_extra(),
                         )
 
                         user_prompt = step.build_user_prompt(

@@ -52,8 +52,6 @@ class StepDeps:
     array_validation: Any | None = None  # ArrayValidationConfig
     validation_context: Any | None = None  # ValidationContext for Pydantic field_validators
 
-    # Extensible bag for domain-specific deps (e.g. workbook_context)
-    extra: dict[str, Any] = field(default_factory=dict)
 
 
 def build_step_agent(
