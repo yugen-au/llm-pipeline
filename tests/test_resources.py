@@ -1,15 +1,14 @@
-"""Tests for the PipelineResource / Resource(...) declaration machinery.
-
-Covers class-creation validation only — runtime resolution is exercised
-by pipeline/sandbox tests once adapter resolution is extended.
-"""
+"""Tests for PipelineResource / Resource(...) declaration + runtime resolution."""
 from __future__ import annotations
 
 import pytest
 from pydantic import BaseModel
 
+from unittest.mock import MagicMock
+
 from llm_pipeline.inputs import StepInputs
-from llm_pipeline.resources import PipelineResource, Resource
+from llm_pipeline.resources import PipelineResource, Resource, resolve_resources
+from llm_pipeline.runtime import PipelineContext
 
 
 # ---------------------------------------------------------------------------
@@ -18,13 +17,19 @@ from llm_pipeline.resources import PipelineResource, Resource
 
 
 class WorkbookContextStub(PipelineResource):
+    """Minimal resource stub that records its build args."""
+
     class Inputs(BaseModel):
         vendor_id: str
         input_2: bool
 
+    def __init__(self, vendor_id: str, input_2: bool) -> None:
+        self.vendor_id = vendor_id
+        self.input_2 = input_2
+
     @classmethod
-    def build(cls, inputs, ctx):  # pragma: no cover — not exercised here
-        return cls()
+    def build(cls, inputs, ctx):
+        return cls(vendor_id=inputs.vendor_id, input_2=inputs.input_2)
 
 
 # ---------------------------------------------------------------------------
@@ -197,3 +202,83 @@ class TestResourceValidationFailures:
                     vendor_id="workbook_context",  # self-reference
                     input_2="input_2",
                 )
+
+
+# ---------------------------------------------------------------------------
+# Runtime resolution
+# ---------------------------------------------------------------------------
+
+
+# Module-scope StepInputs so pydantic resolves resource annotations.
+class _ResolvableInputs(StepInputs):
+    vendor_id: str
+    flag: bool
+    workbook: WorkbookContextStub = Resource(
+        vendor_id="vendor_id",
+        input_2="flag",
+    )
+
+
+class TestResolveResources:
+    @staticmethod
+    def _make_ctx() -> PipelineContext:
+        return PipelineContext(
+            session=MagicMock(),
+            logger=MagicMock(),
+            run_id="test-run",
+        )
+
+    def test_resolve_populates_resource_field(self) -> None:
+        inputs = _ResolvableInputs(vendor_id="ACME", flag=True)
+        assert inputs.workbook is None  # default before resolution
+        resolve_resources(inputs, self._make_ctx())
+        assert inputs.workbook is not None
+        assert isinstance(inputs.workbook, WorkbookContextStub)
+        assert inputs.workbook.vendor_id == "ACME"
+        assert inputs.workbook.input_2 is True
+
+    def test_resolve_with_renamed_mapping(self) -> None:
+        class _Renamed(StepInputs):
+            my_vendor: str
+            my_flag: bool
+            wb: WorkbookContextStub = Resource(
+                vendor_id="my_vendor",
+                input_2="my_flag",
+            )
+
+        inputs = _Renamed(my_vendor="X", my_flag=False)
+        resolve_resources(inputs, self._make_ctx())
+        assert inputs.wb.vendor_id == "X"
+        assert inputs.wb.input_2 is False
+
+    def test_resolve_passes_ctx_to_build(self) -> None:
+        class CtxCapture(PipelineResource):
+            class Inputs(BaseModel):
+                x: str
+
+            captured_ctx = None
+
+            def __init__(self) -> None:
+                pass
+
+            @classmethod
+            def build(cls, inputs, ctx):
+                cls.captured_ctx = ctx
+                return cls()
+
+        class _Inputs(StepInputs):
+            x: str
+            cap: CtxCapture = Resource(x="x")
+
+        ctx = self._make_ctx()
+        inputs = _Inputs(x="hello")
+        resolve_resources(inputs, ctx)
+        assert CtxCapture.captured_ctx is ctx
+
+    def test_resolve_noop_when_no_resource_fields(self) -> None:
+        class _Plain(StepInputs):
+            x: str
+
+        inputs = _Plain(x="hi")
+        resolve_resources(inputs, self._make_ctx())  # should not raise
+        assert inputs.x == "hi"

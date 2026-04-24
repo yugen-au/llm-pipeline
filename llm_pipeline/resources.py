@@ -57,6 +57,7 @@ from llm_pipeline.runtime import PipelineContext
 __all__ = [
     "PipelineResource",
     "Resource",
+    "resolve_resources",
 ]
 
 
@@ -168,3 +169,50 @@ def Resource(**mapping: str) -> Any:  # noqa: N802 — public API mirrors pydant
         )
     """
     return _ResourceFieldInfo(mapping=mapping)
+
+
+# ---------------------------------------------------------------------------
+# Runtime resolution
+# ---------------------------------------------------------------------------
+
+
+def resolve_resources(
+    inputs: Any,
+    ctx: PipelineContext,
+) -> None:
+    """Populate resource-typed fields on an already-constructed inputs instance.
+
+    Call this **after** non-resource fields have been set (via
+    ``SourcesSpec.resolve()`` or direct construction from case data).
+    For each resource field declared via ``Resource(...)``, the function:
+
+    1. Reads the mapped non-resource field values from ``inputs``.
+    2. Constructs the resource's ``Inputs`` model from those values.
+    3. Calls ``resource_cls.build(resource_inputs, ctx)``.
+    4. Sets the result on ``inputs`` via attribute assignment.
+
+    Raises ``RuntimeError`` if a mapped field has not been populated
+    (value is ``None`` and the resource mapping expects a real value).
+    """
+    resource_specs = getattr(type(inputs), "_resource_specs", {})
+    if not resource_specs:
+        return
+
+    for field_name, spec in resource_specs.items():
+        resource_cls = spec.resource_cls
+        mapping = spec.mapping
+
+        # Gather mapped values from the already-resolved non-resource fields
+        resource_kwargs: dict[str, Any] = {}
+        for resource_arg, step_field in mapping.items():
+            value = getattr(inputs, step_field, None)
+            resource_kwargs[resource_arg] = value
+
+        # Build the resource's typed Inputs model (pydantic validates types)
+        resource_inputs = resource_cls.Inputs(**resource_kwargs)
+
+        # Build the resource instance
+        resource_instance = resource_cls.build(resource_inputs, ctx)
+
+        # Set on the inputs object (pydantic model — not frozen by default)
+        object.__setattr__(inputs, field_name, resource_instance)
