@@ -14,7 +14,7 @@ Example::
 
         @classmethod
         def build(cls, inputs: "WorkbookContext.Inputs",
-                  ctx: ResourceContext) -> "WorkbookContext":
+                  ctx: PipelineContext) -> "WorkbookContext":
             return cls.for_vendor(inputs.vendor_id, ctx.session)
 
 
@@ -47,37 +47,17 @@ or the strategy):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
-if TYPE_CHECKING:  # pragma: no cover
-    from sqlalchemy.orm import Session
+from llm_pipeline.runtime import PipelineContext
 
 __all__ = [
     "PipelineResource",
     "Resource",
-    "ResourceContext",
 ]
-
-
-# ---------------------------------------------------------------------------
-# ResourceContext
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ResourceContext:
-    """Ambient context passed to ``PipelineResource.build()``.
-
-    Framework-owned fixtures — same set available to step ``prepare_calls``.
-    Resources read from ``inputs`` for domain values and from ``ctx`` for
-    infrastructure.
-    """
-
-    session: "Session"
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +102,7 @@ class PipelineResource:
     def build(
         cls,
         inputs: BaseModel,
-        ctx: ResourceContext,
+        ctx: PipelineContext,
     ) -> "PipelineResource":
         """Construct a resource instance from typed inputs + ambient context.
 
