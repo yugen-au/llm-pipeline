@@ -23,7 +23,7 @@ class TestStepInputsBase:
         assert StepInputs._sources_cls is None
 
     def test_base_class_sources_raises(self):
-        with pytest.raises(TypeError, match="no fields"):
+        with pytest.raises(TypeError, match="no non-resource fields"):
             StepInputs.sources()
 
 

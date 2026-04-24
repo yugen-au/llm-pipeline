@@ -344,6 +344,12 @@ class LLMStep(ABC):
 
             try:
                 pathway_inputs = ext_bind.inputs.resolve(adapter_ctx)
+                # Build any resource-typed fields on the pathway inputs.
+                from llm_pipeline.resources import resolve_resources
+                resolve_resources(
+                    pathway_inputs,
+                    self.pipeline._build_runtime_ctx(step_name=self.step_name),
+                )
                 extract_start = datetime.now(timezone.utc)
                 instances = extraction.extract(pathway_inputs)
                 self.store_extractions(extraction.MODEL, instances)

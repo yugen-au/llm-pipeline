@@ -330,6 +330,23 @@ class PipelineConfig(ABC):
         """
         return {}
 
+    def _build_runtime_ctx(
+        self,
+        step_name: str | None = None,
+        tool_name: str | None = None,
+    ) -> "PipelineContext":
+        """Build a PipelineContext from current pipeline state."""
+        from llm_pipeline.runtime import PipelineContext as _Ctx
+
+        return _Ctx(
+            session=self._real_session,
+            logger=logger,
+            run_id=self.run_id,
+            event_emitter=self._event_emitter,
+            step_name=step_name,
+            tool_name=tool_name,
+        )
+
     def _emit(self, event: "PipelineEvent") -> None:
         """Forward event to emitter if configured.
 
@@ -722,6 +739,13 @@ class PipelineConfig(ABC):
                 # first prepare_calls() read.
                 if step_def.inputs_spec is not None:
                     step.inputs = step_def.inputs_spec.resolve(adapter_ctx)
+                    # Second pass: build any resource-typed fields from the
+                    # now-populated non-resource fields.
+                    from llm_pipeline.resources import resolve_resources
+                    resolve_resources(
+                        step.inputs,
+                        self._build_runtime_ctx(step_name=step.step_name),
+                    )
 
                 if self._event_emitter:
                     self._emit(StepSelected(
