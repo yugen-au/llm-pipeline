@@ -49,6 +49,7 @@ def step_definition(
     evaluators: Optional[List[Type]] = None,
     inputs: Optional[Type[StepInputs]] = None,
     consensus_strategy: Optional[Any] = None,
+    tools: Optional[List[Type]] = None,
 ):
     """
     Decorator that auto-generates a factory function for creating step definitions.
@@ -63,6 +64,7 @@ def step_definition(
         default_user_key: Default user prompt template key
         default_transformation: Default transformation class
         agent: Optional agent name for tool lookup from global agent registry
+            (legacy — prefer ``tools`` for new steps)
         model: Optional default model for this step (overrides pipeline default)
         review: Optional StepReview subclass for human-in-the-loop review
         inputs: StepInputs subclass declaring this step's typed inputs
@@ -73,6 +75,10 @@ def step_definition(
             / etc.). When set, strategies using this step get consensus by
             default; individual Binds may override with their own
             ``consensus_strategy`` field.
+        tools: Optional list of ``PipelineTool`` subclasses this step uses
+            by default. Strategy-level ``Bind.tools`` overrides this list.
+            Each tool declares its own ``Inputs`` and ``Args``; the framework
+            resolves tool inputs at step-execution time.
     """
     def decorator(step_class):
         if not step_class.__name__.endswith('Step'):
@@ -118,6 +124,16 @@ def step_definition(
                     f"'{expected_inputs_name}', got '{inputs.__name__}'"
                 )
 
+        # Validate tools are PipelineTool subclasses
+        if tools:
+            from llm_pipeline.tool import PipelineTool
+            for t in tools:
+                if not (isinstance(t, type) and issubclass(t, PipelineTool)):
+                    raise TypeError(
+                        f"tools= for {step_class.__name__}: each entry must be "
+                        f"a PipelineTool subclass, got {t!r}"
+                    )
+
         step_class.INSTRUCTIONS = instructions
         step_class.DEFAULT_SYSTEM_KEY = default_system_key
         step_class.DEFAULT_USER_KEY = default_user_key
@@ -127,6 +143,7 @@ def step_definition(
         step_class.REVIEW = review
         step_class.INPUTS = inputs
         step_class.CONSENSUS_STRATEGY = consensus_strategy
+        step_class.DEFAULT_TOOLS = tools or []
         step_class._step_evaluators = evaluators or []
 
         @classmethod

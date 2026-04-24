@@ -43,6 +43,7 @@ class StepDefinition:
     extraction_binds: List[Bind] = field(default_factory=list)
     transformation: Optional[Type['PipelineTransformation']] = None
     inputs_spec: Optional[SourcesSpec] = None
+    tool_binds: List[Bind] = field(default_factory=list)
     agent_name: str | None = None
     model: str | None = None
     not_found_indicators: list[str] | None = None
@@ -99,6 +100,7 @@ class StepDefinition:
         )
         # Attach runtime configuration from this StepDefinition to the step.
         step._extraction_binds = self.extraction_binds
+        step._tool_binds = self.tool_binds
         step._transformation = self.transformation
         step._agent_name = self.agent_name
         step._step_model = self.model

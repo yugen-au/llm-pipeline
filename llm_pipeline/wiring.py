@@ -150,43 +150,59 @@ class SourcesSpec:
 
 @dataclass
 class Bind:
-    """Wires a step (or extraction) with its input adapter.
+    """Wires a step, extraction, or tool with its input adapter.
 
-    Exactly one of ``step`` / ``extraction`` must be provided. The
-    ``extractions`` list is only valid when ``step`` is set (nested
-    extraction binds under a step bind).
+    Exactly one of ``step`` / ``extraction`` / ``tool`` must be set.
+    ``extractions`` and ``tools`` lists are only valid when ``step``
+    is set (nested binds under a step bind).
 
     ``consensus_strategy`` is a per-step concern and is only valid when
     ``step`` is set; it's passed through to the compiled StepDefinition.
     """
     step: type | None = None
     extraction: type | None = None
+    tool: type | None = None
     inputs: SourcesSpec | None = None
     extractions: list["Bind"] = field(default_factory=list)
+    tools: list["Bind"] = field(default_factory=list)
     consensus_strategy: Any | None = None
 
     def __post_init__(self) -> None:
-        has_step = self.step is not None
-        has_extraction = self.extraction is not None
-        if has_step == has_extraction:
+        set_count = sum([
+            self.step is not None,
+            self.extraction is not None,
+            self.tool is not None,
+        ])
+        if set_count != 1:
             raise ValueError(
-                "Bind must have exactly one of step= or extraction= set, "
-                f"got step={self.step!r}, extraction={self.extraction!r}"
+                "Bind must have exactly one of step=, extraction=, or tool= "
+                f"set; got step={self.step!r}, extraction={self.extraction!r}, "
+                f"tool={self.tool!r}"
             )
+        is_step = self.step is not None
         if self.inputs is None:
             raise ValueError("Bind requires inputs= (a SourcesSpec)")
-        if self.extractions and not has_step:
+        if self.extractions and not is_step:
             raise ValueError(
                 "Nested extractions are only valid when step= is set"
             )
-        if self.consensus_strategy is not None and not has_step:
+        if self.tools and not is_step:
+            raise ValueError(
+                "Nested tools are only valid when step= is set"
+            )
+        if self.consensus_strategy is not None and not is_step:
             raise ValueError(
                 "consensus_strategy is only valid when step= is set"
             )
         for child in self.extractions:
-            if child.step is not None or child.extraction is None:
+            if child.extraction is None:
                 raise ValueError(
-                    "Nested Binds under a step must have extraction= set, not step="
+                    "Nested extraction Binds must have extraction= set"
+                )
+        for child in self.tools:
+            if child.tool is None:
+                raise ValueError(
+                    "Nested tool Binds must have tool= set"
                 )
 
 

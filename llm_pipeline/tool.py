@@ -44,7 +44,7 @@ from pydantic import BaseModel
 from llm_pipeline.inputs import StepInputs
 from llm_pipeline.runtime import PipelineContext
 
-__all__ = ["PipelineTool"]
+__all__ = ["PipelineTool", "resolve_tool_binds"]
 
 
 _TOOL_INPUTS_PATTERN = re.compile(r"^Inputs$")
@@ -142,3 +142,94 @@ class PipelineTool:
         raise NotImplementedError(
             f"{cls.__name__}.run must be implemented by subclasses"
         )
+
+
+# ---------------------------------------------------------------------------
+# Runtime resolution: Bind list → pydantic-ai tool functions
+# ---------------------------------------------------------------------------
+
+
+def resolve_tool_binds(
+    tool_binds: list,
+    adapter_ctx: Any,
+    pipeline_ctx: "PipelineContext",
+) -> list:
+    """Resolve a list of tool Binds into pydantic-ai compatible callables.
+
+    For each tool Bind:
+    1. Resolve the tool's ``Inputs`` via its SourcesSpec adapter.
+    2. Build resource-typed fields on the resolved inputs.
+    3. Wrap the tool into a function whose signature exposes
+       ``Tool.Args`` fields — pydantic-ai derives the LLM-facing
+       schema from this signature.
+
+    Returns a list of callables ready for ``FunctionToolset(tools=...)``.
+    """
+    import inspect
+
+    from llm_pipeline.naming import to_snake_case
+    from llm_pipeline.resources import resolve_resources
+
+    resolved: list = []
+    for bind in tool_binds:
+        tool_cls = bind.tool
+        # Resolve tool inputs (non-resource fields via adapter, then resources)
+        if bind.inputs is not None:
+            tool_inputs = bind.inputs.resolve(adapter_ctx)
+            resolve_resources(tool_inputs, pipeline_ctx)
+        else:
+            # Tool with no inputs (e.g. stateless utility)
+            tool_inputs = tool_cls.Inputs() if tool_cls.Inputs.model_fields else None
+
+        resolved.append(
+            _make_tool_wrapper(tool_cls, tool_inputs, pipeline_ctx)
+        )
+    return resolved
+
+
+def _make_tool_wrapper(
+    tool_cls: type["PipelineTool"],
+    resolved_inputs: Any,
+    pipeline_ctx: "PipelineContext",
+):
+    """Build a pydantic-ai compatible function from a PipelineTool.
+
+    The returned function's ``__signature__`` exposes the tool's ``Args``
+    fields so pydantic-ai can derive the JSON schema for the LLM. The
+    closure captures resolved inputs and context — the LLM only sees
+    the Args-derived parameters.
+    """
+    import inspect
+
+    args_cls = tool_cls.Args
+
+    def wrapper(**kwargs):
+        args = args_cls(**kwargs)
+        return tool_cls.run(resolved_inputs, args, pipeline_ctx)
+
+    # Build a signature from Args fields so pydantic-ai sees real params
+    params: list[inspect.Parameter] = []
+    for name, field_info in args_cls.model_fields.items():
+        default = (
+            field_info.default
+            if field_info.default is not None
+            else inspect.Parameter.empty
+        )
+        params.append(inspect.Parameter(
+            name,
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            annotation=field_info.annotation,
+            default=default,
+        ))
+
+    wrapper.__signature__ = inspect.Signature(params)
+    wrapper.__name__ = to_snake_case(tool_cls.__name__)
+    wrapper.__qualname__ = wrapper.__name__
+    wrapper.__doc__ = tool_cls.__doc__ or f"Tool: {tool_cls.__name__}"
+    # Annotations dict needed by some introspection paths
+    wrapper.__annotations__ = {
+        name: field_info.annotation
+        for name, field_info in args_cls.model_fields.items()
+    }
+
+    return wrapper

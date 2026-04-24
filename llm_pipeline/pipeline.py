@@ -415,9 +415,42 @@ class PipelineConfig(ABC):
             if bind.consensus_strategy is not None
             else getattr(bind.step, "CONSENSUS_STRATEGY", None)
         )
+        # Tool binds: strategy-level overrides step defaults.
+        # If the Bind has explicit tools, use those; otherwise fall back
+        # to the step's DEFAULT_TOOLS (converted to tool Binds with no
+        # adapter — tool inputs resolved from step inputs at runtime).
+        if bind.tools:
+            tool_binds = list(bind.tools)
+        else:
+            default_tools = getattr(bind.step, "DEFAULT_TOOLS", [])
+            tool_binds = []
+            for t in default_tools:
+                # Default tool binds: empty .sources() so adapter resolves
+                # with no external wiring (all fields from resources or defaults)
+                tool_inputs_cls = t.Inputs
+                if tool_inputs_cls.model_fields:
+                    non_resource = {
+                        k for k in tool_inputs_cls.model_fields
+                        if k not in tool_inputs_cls._resource_specs
+                    }
+                    if non_resource:
+                        # Tool has non-resource fields; strategy must bind them.
+                        # Skip for now — strategy-level binds handle this case.
+                        continue
+                    # All fields are resources — empty sources is valid
+                    tool_binds.append(
+                        Bind(tool=t, inputs=tool_inputs_cls.sources())
+                    )
+                else:
+                    # No fields at all — provide a trivial SourcesSpec
+                    tool_binds.append(
+                        Bind(tool=t, inputs=tool_inputs_cls.sources())
+                    )
+
         create_kwargs = {
             "inputs_spec": bind.inputs,
             "extraction_binds": list(bind.extractions),
+            "tool_binds": tool_binds,
         }
         if resolved_consensus is not None:
             create_kwargs["consensus_strategy"] = resolved_consensus
@@ -921,8 +954,22 @@ class PipelineConfig(ABC):
                     # Build agent once per step (reused across consensus iterations)
                     from llm_pipeline.agent_registry import get_agent_tools
                     instructions_type = step.instructions
+
+                    # Collect tools: new PipelineTool binds + legacy agent registry
                     agent_name = getattr(step, '_agent_name', None)
-                    step_tools = get_agent_tools(agent_name) if agent_name else []
+                    step_tools = list(get_agent_tools(agent_name) if agent_name else [])
+
+                    # Resolve PipelineTool binds (new system)
+                    _tool_binds = getattr(step, '_tool_binds', [])
+                    if _tool_binds:
+                        from llm_pipeline.tool import resolve_tool_binds
+                        pipeline_tool_fns = resolve_tool_binds(
+                            _tool_binds,
+                            adapter_ctx,
+                            self._build_runtime_ctx(step_name=step.step_name),
+                        )
+                        step_tools.extend(pipeline_tool_fns)
+
                     step_model = self._resolve_step_model(step)
                     step_usage_limits = self._resolve_step_usage_limits(step)
 
