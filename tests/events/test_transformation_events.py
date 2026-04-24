@@ -316,8 +316,6 @@ class TestTransformationZeroOverhead:
                 use_cache=False,
             )
         assert result is not None
-        assert "operation" in result.context
-        assert result.context["operation"] == "transform"
 
     def test_no_events_without_emitter_cached(self, seeded_session):
         """Pipeline with transformation on cached path runs without error when event_emitter=None."""

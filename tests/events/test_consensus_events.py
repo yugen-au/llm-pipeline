@@ -16,6 +16,7 @@ from llm_pipeline.events.types import (
     ConsensusReached,
     ConsensusFailed,
 )
+from llm_pipeline.wiring import Bind
 from conftest import (
     SuccessPipeline, SimpleStep,
     make_simple_run_result,
@@ -40,10 +41,10 @@ def _consensus_strategies(threshold, max_calls):
     class ConsensusTestStrategy(PipelineStrategy):
         def can_handle(self, context):
             return True
-        def get_steps(self):
+        def get_bindings(self):
             return [
-                SimpleStep.create_definition(consensus_strategy=mv),
-                SimpleStep.create_definition(consensus_strategy=mv),
+                Bind(step=SimpleStep, consensus_strategy=mv),
+                Bind(step=SimpleStep, consensus_strategy=mv),
             ]
     return [ConsensusTestStrategy()]
 
@@ -424,7 +425,6 @@ class TestConsensusZeroOverhead:
                 initial_context={},
             )
         assert result is not None
-        assert "total" in result.context
 
 
 # -- Tests: Multi-Group Consensus ---------------------------------------------

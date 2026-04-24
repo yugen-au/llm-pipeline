@@ -1,7 +1,7 @@
 """Shared fixtures and test helpers for event emission tests.
 
-Provides common instruction models, context classes, steps,
-strategies, pipelines, and pytest fixtures used across event test modules.
+Provides common instruction models, steps, strategies, pipelines,
+and pytest fixtures used across event test modules.
 """
 import pytest
 from unittest.mock import MagicMock, patch
@@ -16,12 +16,13 @@ from llm_pipeline import (
     PipelineStrategy,
     PipelineStrategies,
     PipelineDatabaseRegistry,
-    PipelineContext,
 )
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.db.prompt import Prompt
+from llm_pipeline.inputs import StepInputs
 from llm_pipeline.types import StepCallParams
+from llm_pipeline.wiring import Bind, FromOutput
 from llm_pipeline.events.handlers import InMemoryEventHandler
 
 
@@ -33,11 +34,6 @@ class SimpleInstructions(LLMResultMixin):
     count: int
 
     example: ClassVar[dict] = {"count": 1, "notes": "test"}
-
-
-class SimpleContext(PipelineContext):
-    """Minimal context for test pipeline."""
-    total: int
 
 
 class FailingInstructions(LLMResultMixin):
@@ -52,11 +48,6 @@ class SkippableInstructions(LLMResultMixin):
     count: int
 
     example: ClassVar[dict] = {"count": 1, "notes": "test"}
-
-
-class SkippableContext(PipelineContext):
-    """Minimal context for skippable step."""
-    total: int
 
 
 # -- Extraction Domain (for CacheReconstruction tests) -------------------------
@@ -78,18 +69,15 @@ class ItemDetectionInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"item_count": 2, "category": "test", "notes": "ok"}
 
 
-class ItemDetectionContext(PipelineContext):
-    """Context produced by extraction step."""
-    category: str
-
-
 class ItemExtraction(PipelineExtraction, model=Item):
-    """Extraction that creates Item instances from instructions."""
-    def default(self, results):
-        instruction = results[0]
+    """Extraction that creates Item instances from step output."""
+    class FromItemDetectionInputs(StepInputs):
+        item_count: int
+
+    def from_item_detection(self, inputs: FromItemDetectionInputs) -> list[Item]:
         return [
             Item(name=f"item_{i}", value=i)
-            for i in range(instruction.item_count)
+            for i in range(inputs.item_count)
         ]
 
 
@@ -114,11 +102,6 @@ class TransformationInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"count": 5, "operation": "transform", "notes": "test"}
 
 
-class TransformationContext(PipelineContext):
-    """Context produced by transformation step."""
-    operation: str
-
-
 # -- Test Steps ----------------------------------------------------------------
 
 
@@ -126,15 +109,11 @@ class TransformationContext(PipelineContext):
     instructions=SimpleInstructions,
     default_system_key="simple.system",
     default_user_key="simple.user",
-    context=SimpleContext,
 )
 class SimpleStep(LLMStep):
     """Step that succeeds."""
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return SimpleContext(total=instructions[0].count)
 
 
 @step_definition(
@@ -152,7 +131,6 @@ class FailingStep(LLMStep):
     instructions=SkippableInstructions,
     default_system_key="skippable.system",
     default_user_key="skippable.user",
-    context=SkippableContext,
 )
 class SkippableStep(LLMStep):
     """Step that is skipped (should_skip returns True)."""
@@ -162,24 +140,16 @@ class SkippableStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
 
-    def process_instructions(self, instructions):
-        return SkippableContext(total=instructions[0].count)
-
 
 @step_definition(
     instructions=ItemDetectionInstructions,
     default_system_key="item_detection.system",
     default_user_key="item_detection.user",
-    default_extractions=[ItemExtraction],
-    context=ItemDetectionContext,
 )
 class ItemDetectionStep(LLMStep):
     """Step with extractions for CacheReconstruction tests."""
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return ItemDetectionContext(category=instructions[0].category)
 
 
 @step_definition(
@@ -187,15 +157,11 @@ class ItemDetectionStep(LLMStep):
     default_system_key="transformation.system",
     default_user_key="transformation.user",
     default_transformation=TransformationTransformation,
-    context=TransformationContext,
 )
 class TransformationStep(LLMStep):
     """Step with transformation for transformation event tests."""
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return TransformationContext(operation=instructions[0].operation)
 
 
 # -- Test Strategies -----------------------------------------------------------
@@ -206,10 +172,10 @@ class SuccessStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
+    def get_bindings(self):
         return [
-            SimpleStep.create_definition(),
-            SimpleStep.create_definition(),
+            Bind(step=SimpleStep),
+            Bind(step=SimpleStep),
         ]
 
 
@@ -218,8 +184,8 @@ class FailureStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [FailingStep.create_definition()]
+    def get_bindings(self):
+        return [Bind(step=FailingStep)]
 
 
 class SkipStrategy(PipelineStrategy):
@@ -227,8 +193,8 @@ class SkipStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [SkippableStep.create_definition()]
+    def get_bindings(self):
+        return [Bind(step=SkippableStep)]
 
 
 # -- Test Pipelines ------------------------------------------------------------
@@ -288,8 +254,20 @@ class ExtractionStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [ItemDetectionStep.create_definition()]
+    def get_bindings(self):
+        return [
+            Bind(
+                step=ItemDetectionStep,
+                extractions=[
+                    Bind(
+                        extraction=ItemExtraction,
+                        inputs=ItemExtraction.FromItemDetectionInputs.sources(
+                            item_count=FromOutput(ItemDetectionStep, field="item_count"),
+                        ),
+                    ),
+                ],
+            ),
+        ]
 
 
 class ExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
@@ -313,8 +291,8 @@ class TransformationStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [TransformationStep.create_definition()]
+    def get_bindings(self):
+        return [Bind(step=TransformationStep)]
 
 
 class TransformationRegistry(PipelineDatabaseRegistry, models=[]):

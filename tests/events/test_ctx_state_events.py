@@ -27,9 +27,9 @@ from llm_pipeline import (
     PipelineStrategy,
     PipelineStrategies,
     PipelineDatabaseRegistry,
-    PipelineContext,
 )
 from llm_pipeline.types import StepCallParams
+from llm_pipeline.wiring import Bind
 from conftest import SuccessPipeline, make_simple_run_result
 
 
@@ -51,13 +51,10 @@ class EmptyContextInstructions(LLMResultMixin):
     default_user_key="simple.user",
 )
 class EmptyContextStep(LLMStep):
-    """Step that returns None from process_instructions (no context update)."""
+    """Step that produces no context update."""
 
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return None
 
 
 class EmptyContextStrategy(PipelineStrategy):
@@ -66,8 +63,8 @@ class EmptyContextStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [EmptyContextStep.create_definition()]
+    def get_bindings(self):
+        return [Bind(step=EmptyContextStep)]
 
 
 class EmptyContextRegistry(PipelineDatabaseRegistry, models=[]):
@@ -357,107 +354,20 @@ class TestInstructionsLoggedCachedPath:
 # -- Tests: ContextUpdated (Fresh Path) ----------------------------------------
 
 
-class TestContextUpdatedFreshPath:
-    """Verify ContextUpdated emitted on fresh (cache miss) path."""
+class TestContextUpdatedNotEmitted:
+    """ContextUpdated no longer emitted (context subclasses removed in Bind+StepInputs)."""
 
-    def test_ctx_updated_emitted_fresh(self, seeded_session, in_memory_handler):
-        """ContextUpdated emitted for each step on fresh run."""
+    def test_ctx_updated_not_emitted_fresh(self, seeded_session, in_memory_handler):
+        """ContextUpdated not emitted on fresh run (no process_instructions)."""
         _, events = _run_fresh(seeded_session, in_memory_handler)
         updated = [e for e in events if e["event_type"] == "context_updated"]
-        assert len(updated) == 2, f"Expected 2 ContextUpdated on fresh run, got {len(updated)}"
+        assert len(updated) == 0, f"Expected 0 ContextUpdated, got {len(updated)}"
 
-    def test_ctx_updated_new_keys_populated(self, seeded_session, in_memory_handler):
-        """new_keys contains keys from SimpleContext (total)."""
-        _, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        for e in updated:
-            assert "total" in e["new_keys"], (
-                f"Expected 'total' in new_keys, got {e['new_keys']!r}"
-            )
-
-    def test_ctx_updated_context_snapshot_contains_merged_keys(self, seeded_session, in_memory_handler):
-        """context_snapshot reflects post-merge state."""
-        _, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        last_update = updated[-1]
-        assert "total" in last_update["context_snapshot"], (
-            f"Expected 'total' in context_snapshot, got {last_update['context_snapshot']!r}"
-        )
-
-    def test_ctx_updated_new_keys_is_list(self, seeded_session, in_memory_handler):
-        """new_keys is a list."""
-        _, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        for e in updated:
-            assert isinstance(e["new_keys"], list)
-
-    def test_ctx_updated_context_snapshot_is_dict(self, seeded_session, in_memory_handler):
-        """context_snapshot is a dict."""
-        _, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        for e in updated:
-            assert isinstance(e["context_snapshot"], dict)
-
-    def test_ctx_updated_has_run_id(self, seeded_session, in_memory_handler):
-        """ContextUpdated carries run_id from pipeline."""
-        pipeline, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        for e in updated:
-            assert e["run_id"] == pipeline.run_id
-
-    def test_ctx_updated_has_pipeline_name(self, seeded_session, in_memory_handler):
-        """ContextUpdated carries pipeline_name."""
-        pipeline, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        for e in updated:
-            assert e["pipeline_name"] == pipeline.pipeline_name
-
-    def test_ctx_updated_has_timestamp(self, seeded_session, in_memory_handler):
-        """timestamp is present and valid ISO string."""
-        _, events = _run_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"]
-        from datetime import datetime
-        for e in updated:
-            assert "timestamp" in e
-            assert isinstance(e["timestamp"], str)
-            parsed = datetime.fromisoformat(e["timestamp"])
-            assert parsed is not None
-
-
-# -- Tests: ContextUpdated (Empty Context) -------------------------------------
-
-
-class TestContextUpdatedEmptyContext:
-    """Verify ContextUpdated always emits even when step returns no new context."""
-
-    def test_ctx_updated_emitted_on_empty_context(self, seeded_session, in_memory_handler):
-        """ContextUpdated emitted even when step returns None (no context)."""
+    def test_ctx_updated_not_emitted_empty_context(self, seeded_session, in_memory_handler):
+        """ContextUpdated not emitted for empty-context step."""
         _, events = _run_empty_ctx_fresh(seeded_session, in_memory_handler)
         updated = [e for e in events if e["event_type"] == "context_updated"]
-        assert len(updated) == 1, (
-            f"Expected 1 ContextUpdated even on empty context, got {len(updated)}"
-        )
-
-    def test_ctx_updated_new_keys_empty_on_none_return(self, seeded_session, in_memory_handler):
-        """new_keys == [] when process_instructions returns None."""
-        _, events = _run_empty_ctx_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"][0]
-        assert updated["new_keys"] == [], (
-            f"Expected new_keys==[], got {updated['new_keys']!r}"
-        )
-
-    def test_ctx_updated_context_snapshot_is_dict_on_empty(self, seeded_session, in_memory_handler):
-        """context_snapshot is a dict (possibly empty) on empty-context step."""
-        _, events = _run_empty_ctx_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"][0]
-        assert isinstance(updated["context_snapshot"], dict)
-
-    def test_ctx_updated_step_name_populated_on_empty(self, seeded_session, in_memory_handler):
-        """step_name is populated even when context is empty."""
-        _, events = _run_empty_ctx_fresh(seeded_session, in_memory_handler)
-        updated = [e for e in events if e["event_type"] == "context_updated"][0]
-        assert updated["step_name"] is not None
-        assert updated["step_name"] == "empty_context"
+        assert len(updated) == 0, f"Expected 0 ContextUpdated, got {len(updated)}"
 
 
 # -- Tests: StateSaved (Fresh Path) --------------------------------------------
@@ -581,7 +491,6 @@ class TestCtxStateZeroOverhead:
                 use_cache=False,
             )
         assert result is not None
-        assert "total" in result.context
 
     def test_no_events_without_emitter_cached(self, seeded_session):
         """Pipeline with no event_emitter runs without error on cached path."""

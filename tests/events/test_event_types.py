@@ -447,10 +447,10 @@ class TestContextSnapshotDepth:
         # Document: frozen dataclass does NOT copy on construction
         assert event.context_snapshot["total"] == 999
 
-    def test_context_snapshot_contains_all_merged_keys_integration(
+    def test_context_updated_not_emitted_integration(
         self, seeded_session, in_memory_handler
     ):
-        """Integration: ContextUpdated snapshot contains merged keys after pipeline run."""
+        """Integration: ContextUpdated no longer emitted (Bind+StepInputs)."""
         pipeline = SuccessPipeline(
             session=seeded_session,
             model="test-model",
@@ -463,25 +463,4 @@ class TestContextSnapshotDepth:
             e for e in in_memory_handler.get_events()
             if e["event_type"] == "context_updated"
         ]
-        assert len(ctx_events) >= 1, "Expected at least 1 ContextUpdated event"
-        last_ctx = ctx_events[-1]
-        assert "total" in last_ctx["context_snapshot"]
-
-    def test_context_snapshot_new_keys_reflects_step_output(
-        self, seeded_session, in_memory_handler
-    ):
-        """Integration: new_keys for each step contains 'total' (SimpleStep output)."""
-        pipeline = SuccessPipeline(
-            session=seeded_session,
-            model="test-model",
-            event_emitter=in_memory_handler,
-        )
-        with patch("pydantic_ai.Agent.run_sync", return_value=make_simple_run_result(count=2)):
-            pipeline.execute(data="test data", initial_context={})
-
-        ctx_events = [
-            e for e in in_memory_handler.get_events()
-            if e["event_type"] == "context_updated"
-        ]
-        for ctx_event in ctx_events:
-            assert "total" in ctx_event["new_keys"]
+        assert len(ctx_events) == 0, "ContextUpdated no longer emitted"

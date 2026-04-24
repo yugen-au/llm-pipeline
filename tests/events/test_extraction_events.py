@@ -17,11 +17,12 @@ from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.step import step_definition, LLMStep, LLMResultMixin
 from llm_pipeline import PipelineConfig, PipelineStrategy, PipelineStrategies, PipelineDatabaseRegistry
 from llm_pipeline.types import StepCallParams
+from llm_pipeline.inputs import StepInputs
+from llm_pipeline.wiring import Bind, FromOutput
 from conftest import (
     ExtractionPipeline,
     Item,
     ItemDetectionInstructions,
-    ItemDetectionContext,
     make_item_detection_run_result,
 )
 from typing import List, ClassVar
@@ -127,22 +128,19 @@ class FailingItemDetectionInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"item_count": 2, "category": "test", "notes": "ok"}
 
 
-class FailingItemDetectionContext(ItemDetectionContext):
-    """Context for failing extraction step (inherits from ItemDetectionContext)."""
-    pass
-
-
 class FailingItemExtraction(PipelineExtraction, model=Item):
-    """Extraction that raises ValidationError during extract()."""
-    def extract(self, results: List[FailingItemDetectionInstructions]) -> List[Item]:
+    """Extraction that raises ValidationError during typed pathway."""
+    class FromFailingDetectionInputs(StepInputs):
+        item_count: int
+
+    def from_failing_detection(self, inputs: FromFailingDetectionInputs) -> list[Item]:
         """Raise ValidationError to trigger ExtractionError event."""
-        from pydantic import BaseModel, Field
+        from pydantic import BaseModel, Field as PydanticField
 
         class StrictItem(BaseModel):
-            name: str = Field(min_length=5)  # Enforce minimum length
-            value: int = Field(gt=0)  # Must be positive
+            name: str = PydanticField(min_length=5)
+            value: int = PydanticField(gt=0)
 
-        # This will raise ValidationError: name too short
         StrictItem(name="x", value=-1)
         return []  # Never reached
 
@@ -151,16 +149,11 @@ class FailingItemExtraction(PipelineExtraction, model=Item):
     instructions=FailingItemDetectionInstructions,
     default_system_key="item_detection.system",
     default_user_key="item_detection.user",
-    default_extractions=[FailingItemExtraction],
-    context=FailingItemDetectionContext,
 )
 class FailingItemDetectionStep(LLMStep):
     """Step with failing extraction for error event tests."""
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return FailingItemDetectionContext(category=instructions[0].category)
 
 
 class FailingExtractionStrategy(PipelineStrategy):
@@ -168,8 +161,20 @@ class FailingExtractionStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [FailingItemDetectionStep.create_definition()]
+    def get_bindings(self):
+        return [
+            Bind(
+                step=FailingItemDetectionStep,
+                extractions=[
+                    Bind(
+                        extraction=FailingItemExtraction,
+                        inputs=FailingItemExtraction.FromFailingDetectionInputs.sources(
+                            item_count=FromOutput(FailingItemDetectionStep, field="item_count"),
+                        ),
+                    ),
+                ],
+            ),
+        ]
 
 
 class FailingExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
@@ -307,7 +312,6 @@ class TestExtractionZeroOverhead:
         with patch("pydantic_ai.Agent.run_sync", return_value=make_item_detection_run_result(item_count=2, category="test")):
             result = pipeline.execute(data="test data", initial_context={})
         assert result is not None
-        assert "category" in result.context
 
 
 # -- Tests: Event Fields -------------------------------------------------------
@@ -380,7 +384,10 @@ class TestExtractionCreatedData:
 
 class UpdatingItemExtraction(PipelineExtraction, model=Item):
     """Extraction that updates existing records using begin_update()."""
-    def default(self, results):
+    class FromUpdatingDetectionInputs(StepInputs):
+        item_count: int
+
+    def from_updating_detection(self, inputs: FromUpdatingDetectionInputs) -> list[Item]:
         existing = self.pipeline.session.query(Item).all()
         for item in existing:
             self.begin_update(item)
@@ -396,31 +403,34 @@ class UpdatingItemDetectionInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"item_count": 0, "category": "test", "notes": "ok"}
 
 
-class UpdatingItemDetectionContext(ItemDetectionContext):
-    pass
-
-
 @step_definition(
     instructions=UpdatingItemDetectionInstructions,
     default_system_key="item_detection.system",
     default_user_key="item_detection.user",
-    default_extractions=[UpdatingItemExtraction],
-    context=UpdatingItemDetectionContext,
 )
 class UpdatingItemDetectionStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
         return [{"variables": {"data": "test"}}]
-
-    def process_instructions(self, instructions):
-        return UpdatingItemDetectionContext(category=instructions[0].category)
 
 
 class UpdatingExtractionStrategy(PipelineStrategy):
     def can_handle(self, context):
         return True
 
-    def get_steps(self):
-        return [UpdatingItemDetectionStep.create_definition()]
+    def get_bindings(self):
+        return [
+            Bind(
+                step=UpdatingItemDetectionStep,
+                extractions=[
+                    Bind(
+                        extraction=UpdatingItemExtraction,
+                        inputs=UpdatingItemExtraction.FromUpdatingDetectionInputs.sources(
+                            item_count=FromOutput(UpdatingItemDetectionStep, field="item_count"),
+                        ),
+                    ),
+                ],
+            ),
+        ]
 
 
 class UpdatingExtractionRegistry(PipelineDatabaseRegistry, models=[Item]):
