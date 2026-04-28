@@ -411,32 +411,29 @@ export interface WsError {
 }
 
 /**
- * OTEL span lifecycle messages forwarded by
- * ``WebSocketBroadcastProcessor``. Spans are tapped from the same
- * pipeline Langfuse uses, so the same observations the trace endpoint
- * returns get pushed live as they happen.
+ * OTEL span lifecycle messages from ``WebSocketBroadcastProcessor``.
  *
- * The message is a lightweight signal — the frontend reacts by
- * invalidating the trace query, which refetches the full structure
- * via HTTP. No event payload here.
+ * Carries the full TraceObservation payload (not a doorbell), so the
+ * frontend can render the trace tree live without round-tripping
+ * Langfuse. Langfuse remains the system of record (cost, history,
+ * datasets), and the trace HTTP endpoint reconciles canonical data
+ * back into the cache once Langfuse catches up.
+ *
+ * For ``span_started``, ``observation.end_time`` / ``duration_ms`` are
+ * null and the obs renders as "running". For ``span_ended``, the obs
+ * is complete except for ``total_cost`` (Langfuse computes that
+ * server-side and it fills in on the next reconcile poll).
  */
 export interface WsSpanStarted {
   type: 'span_started'
-  /** Span name e.g. "pipeline.foo" / "step.detect" / "extraction.WidgetExtraction" / "gen_ai chat openai:gpt-4". */
-  name: string
-  /** OTEL span ID hex (16 chars). Frontend can dedup messages by this. */
-  span_id: string
   run_id: string
+  observation: TraceObservation
 }
 
 export interface WsSpanEnded {
   type: 'span_ended'
-  name: string
-  span_id: string
   run_id: string
-  duration_ms: number | null
-  /** OTEL status code name: "OK" / "ERROR" / "UNSET". */
-  status: string
+  observation: TraceObservation
 }
 
 /** Global run-creation notification broadcast to all connected clients. */

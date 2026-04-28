@@ -35,6 +35,8 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import threading
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator
 
 if TYPE_CHECKING:
@@ -56,19 +58,6 @@ _CONFIGURED = False
 # ---------------------------------------------------------------------------
 
 
-# Span name prefixes the WS processor forwards. Filters out OTEL
-# internals + uninteresting auto-instrumented spans (e.g. http client
-# requests). Pydantic-ai's gen_ai.* spans are kept — those ARE the
-# LLM-call observations we want to surface live.
-_WS_FORWARDED_PREFIXES = (
-    "pipeline.",
-    "step.",
-    "extraction.",
-    "transformation.",
-    "gen_ai.",  # pydantic-ai auto-instrumented LLM calls
-)
-
-
 def _extract_run_id_from_span(span: Any) -> str | None:
     """Read the run_id off a span via the Langfuse session_id attribute.
 
@@ -82,64 +71,250 @@ def _extract_run_id_from_span(span: Any) -> str | None:
     return attrs.get("langfuse.session.id") or attrs.get("session.id")
 
 
+def _span_id_hex(span: Any) -> str:
+    """Format an OTEL span_id as a 16-char hex string."""
+    sid = span.context.span_id if span.context else 0
+    return format(sid, "016x")
+
+
+def _trace_id_hex(span: Any) -> str:
+    """Format an OTEL trace_id as a 32-char hex string."""
+    tid = span.context.trace_id if span.context else 0
+    return format(tid, "032x")
+
+
+def _parent_span_id_hex(span: Any) -> str | None:
+    """Parent span ID as 16-char hex, or None for root spans."""
+    parent = getattr(span, "parent", None)
+    if parent is None:
+        return None
+    sid = getattr(parent, "span_id", 0) or 0
+    if sid == 0:
+        return None
+    return format(sid, "016x")
+
+
+def _ns_to_iso(ns: int | None) -> str | None:
+    """OTEL stamps span times in nanoseconds since epoch (UTC)."""
+    if not ns:
+        return None
+    return datetime.fromtimestamp(ns / 1_000_000_000, tz=timezone.utc).isoformat()
+
+
+def _classify_observation_type(name: str, attrs: dict) -> str:
+    """Mimic Langfuse's server-side type classification locally.
+
+    Langfuse buckets observations into SPAN/GENERATION/TOOL/EVENT/etc. based
+    on ``gen_ai.*`` attributes + name conventions. The frontend's existing
+    rendering paths key off this field, so the WS-pushed payload must match
+    what Langfuse would have produced server-side.
+    """
+    name_l = (name or "").lower()
+    has_gen_ai = any(k.startswith("gen_ai.") for k in attrs)
+    if has_gen_ai and (
+        "gen_ai.usage.input_tokens" in attrs
+        or "gen_ai.usage.output_tokens" in attrs
+        or "gen_ai.usage.prompt_tokens" in attrs
+        or "gen_ai.usage.completion_tokens" in attrs
+        or "gen_ai.request.model" in attrs
+        or "gen_ai.response.model" in attrs
+        or name_l.startswith("chat ")
+    ):
+        return "GENERATION"
+    if "running tool" in name_l or name_l.startswith("tool "):
+        return "TOOL"
+    return "SPAN"
+
+
+def _span_to_observation(span: Any) -> dict[str, Any]:
+    """Build a TraceObservation-shaped dict from an OTEL span.
+
+    Mirrors what the ``/runs/{run_id}/trace`` route returns after
+    Langfuse fetch (minus ``total_cost``, which Langfuse computes
+    server-side from its pricing table — fills in on the next reconcile
+    poll). Field names are snake_case to match the frontend's
+    ``TraceObservation`` interface.
+    """
+    raw_attrs = getattr(span, "attributes", None) or {}
+    # Snapshot attrs to a plain dict — OTEL's BoundedAttributes proxy
+    # isn't a dict and doesn't survive `dict(...)` semantics on every
+    # platform.
+    attrs: dict[str, Any] = {}
+    try:
+        for k, v in raw_attrs.items():
+            attrs[k] = v
+    except Exception:
+        attrs = {}
+
+    obs_type = _classify_observation_type(span.name or "", attrs)
+
+    input_tokens = (
+        attrs.get("gen_ai.usage.input_tokens")
+        or attrs.get("gen_ai.usage.prompt_tokens")
+    )
+    output_tokens = (
+        attrs.get("gen_ai.usage.output_tokens")
+        or attrs.get("gen_ai.usage.completion_tokens")
+    )
+    total_tokens: int | None = None
+    if input_tokens is not None or output_tokens is not None:
+        total_tokens = (input_tokens or 0) + (output_tokens or 0)
+
+    obs_input = (
+        attrs.get("langfuse.observation.input")
+        or attrs.get("input.value")
+        or attrs.get("gen_ai.prompt")
+    )
+    obs_output = (
+        attrs.get("langfuse.observation.output")
+        or attrs.get("output.value")
+        or attrs.get("gen_ai.completion")
+    )
+
+    model = (
+        attrs.get("gen_ai.request.model")
+        or attrs.get("gen_ai.response.model")
+        or attrs.get("model")
+    )
+
+    status_code_name = "UNSET"
+    status_message = None
+    status = getattr(span, "status", None)
+    if status is not None:
+        status_code_name = getattr(getattr(status, "status_code", None), "name", "UNSET")
+        status_message = getattr(status, "description", None)
+    level = "ERROR" if status_code_name == "ERROR" else "DEFAULT"
+
+    start_ns = getattr(span, "start_time", None)
+    end_ns = getattr(span, "end_time", None)
+    duration_ms: float | None = None
+    if start_ns and end_ns:
+        duration_ms = (end_ns - start_ns) / 1_000_000.0
+
+    return {
+        "id": _span_id_hex(span),
+        "parent_observation_id": _parent_span_id_hex(span),
+        "trace_id": _trace_id_hex(span),
+        "name": span.name or "",
+        "type": obs_type,
+        "level": level,
+        "status_message": status_message,
+        "start_time": _ns_to_iso(start_ns),
+        "end_time": _ns_to_iso(end_ns),
+        "duration_ms": duration_ms,
+        "model": model,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "total_cost": None,
+        "input": obs_input,
+        "output": obs_output,
+        "metadata": None,
+    }
+
+
 class WebSocketBroadcastProcessor:
-    """OTEL ``SpanProcessor`` that forwards span lifecycle events to the
-    UI's WebSocket manager for live updates.
+    """OTEL ``SpanProcessor`` that pushes full span data to the UI WS bus.
 
-    Runs alongside Langfuse's processor on the same OTEL tracer
-    provider. The same spans Langfuse stores get tapped here for live
-    UX — no parallel emit machinery, no duplicate data.
+    Acts as the live data feed (not a doorbell): each ``on_start`` /
+    ``on_end`` callback ships a complete TraceObservation-shaped payload
+    so the frontend can render the trace tree without round-tripping
+    Langfuse. Langfuse's API ingest still happens in parallel (via its
+    own SpanProcessor) and remains the system of record for cost,
+    history, search, evals — but the live UX never waits for the
+    Langfuse batch flush.
 
-    Filters spans to those whose name starts with one of
-    ``_WS_FORWARDED_PREFIXES`` so OTEL internals and unrelated auto-
-    instrumented spans don't pollute the WS stream. Pydantic-ai's
-    ``gen_ai.*`` spans (LLM calls) are kept — those are the operations
-    end users care about seeing live.
+    Run-id resolution:
+        ``langfuse.propagate_attributes(session_id=run_id, ...)``
+        attaches ``langfuse.session.id`` to spans created within its
+        context. In practice not every nested span carries the
+        attribute directly (depends on baggage propagation timing), so
+        we cache ``trace_id -> run_id`` the first time a span in a
+        trace exposes the attribute and fall back to the cache for
+        nested spans. The cache is cleaned up when the root span ends.
 
     Thread safety: ``broadcast_to_run`` uses ``queue.Queue.put_nowait``
-    which is safe to call from any thread. The OTEL SDK invokes
-    on_start / on_end on whichever thread closed the span.
+    which is safe to call from any thread. The trace_id cache is
+    guarded by a ``threading.Lock`` since OTEL may invoke ``on_start``
+    / ``on_end`` from worker threads (pydantic-ai async dispatch, span
+    closer threads, etc.).
 
-    Designed to no-op when the UI WebSocket manager isn't importable
-    (smoke scripts, headless deployments).
+    No-op when the UI WS module isn't importable (smoke scripts,
+    headless deployments).
     """
 
+    def __init__(self) -> None:
+        self._trace_to_run: dict[int, str] = {}
+        self._lock = threading.Lock()
+
+    # OTEL ``SpanProcessor`` protocol --------------------------------------
+
     def on_start(self, span: Any, parent_context: Any = None) -> None:
-        if not span.name.startswith(_WS_FORWARDED_PREFIXES):
-            return
-        run_id = _extract_run_id_from_span(span)
+        run_id = self._resolve_run_id(span)
         if not run_id:
             return
+        observation = _span_to_observation(span)
         self._broadcast(run_id, {
             "type": "span_started",
-            "name": span.name,
-            "span_id": _span_id_hex(span),
+            "run_id": run_id,
+            "observation": observation,
         })
 
     def on_end(self, span: Any) -> None:
-        if not span.name.startswith(_WS_FORWARDED_PREFIXES):
-            return
-        run_id = _extract_run_id_from_span(span)
+        run_id = self._resolve_run_id(span)
         if not run_id:
+            self._maybe_evict_trace(span)
             return
-        # OTEL span end_time / start_time are nanoseconds since epoch.
-        duration_ms = None
-        if span.end_time and span.start_time:
-            duration_ms = (span.end_time - span.start_time) / 1_000_000
+        observation = _span_to_observation(span)
         self._broadcast(run_id, {
             "type": "span_ended",
-            "name": span.name,
-            "span_id": _span_id_hex(span),
-            "duration_ms": duration_ms,
-            "status": getattr(getattr(span.status, "status_code", None), "name", "OK"),
+            "run_id": run_id,
+            "observation": observation,
         })
+        self._maybe_evict_trace(span)
 
-    # OTEL ``SpanProcessor`` protocol — required no-ops. We don't buffer.
     def shutdown(self) -> None:
         return None
 
     def force_flush(self, timeout_millis: int = 30_000) -> bool:
         return True
+
+    # Internals ------------------------------------------------------------
+
+    def _resolve_run_id(self, span: Any) -> str | None:
+        """Return run_id for this span, populating + reading the cache.
+
+        Direct attribute wins; trace_id cache is the fallback for nested
+        spans where ``propagate_attributes`` hasn't materialised the
+        ``langfuse.session.id`` attribute on the span itself.
+        """
+        direct = _extract_run_id_from_span(span)
+        ctx = getattr(span, "context", None)
+        trace_id = getattr(ctx, "trace_id", None) if ctx else None
+        if direct:
+            if trace_id is not None:
+                with self._lock:
+                    self._trace_to_run[trace_id] = direct
+            return direct
+        if trace_id is None:
+            return None
+        with self._lock:
+            return self._trace_to_run.get(trace_id)
+
+    def _maybe_evict_trace(self, span: Any) -> None:
+        """Drop the trace_id cache entry when the root span ends.
+
+        Prevents the map from growing unbounded across many runs.
+        Detects the root by absence of a parent SpanContext.
+        """
+        if getattr(span, "parent", None) is not None:
+            return
+        ctx = getattr(span, "context", None)
+        trace_id = getattr(ctx, "trace_id", None) if ctx else None
+        if trace_id is None:
+            return
+        with self._lock:
+            self._trace_to_run.pop(trace_id, None)
 
     @staticmethod
     def _broadcast(run_id: str, message: dict) -> None:
@@ -162,12 +337,6 @@ class WebSocketBroadcastProcessor:
                 "WebSocketBroadcastProcessor: broadcast failed",
                 exc_info=True,
             )
-
-
-def _span_id_hex(span: Any) -> str:
-    """Format an OTEL span_id as a 16-char hex string."""
-    sid = span.context.span_id if span.context else 0
-    return format(sid, "016x")
 
 
 def configure(

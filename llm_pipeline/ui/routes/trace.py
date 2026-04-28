@@ -183,7 +183,23 @@ def _fetch_run_traces(run_id: str) -> List[TraceSummary]:
             #    name/input/output/level/usage/cost). The list+get_many
             #    pair returns minimal-only data — `trace.get` is the only
             #    SDK call that gives the full detail shape we render.
-            full = client.api.trace.get(trace_id=stub.id)
+            #
+            # Race: Langfuse's `trace.list` indexes session_id ahead of
+            # the single-trace ingestion pipeline, so a fresh trace can
+            # show up in `list` before `get` resolves it (404). Skip
+            # per-trace on any SDK error rather than blanking the whole
+            # response — the WS-pushed observations already cover the
+            # live UI; the next reconcile poll picks up the trace once
+            # ingestion catches up.
+            try:
+                full = client.api.trace.get(trace_id=stub.id)
+            except Exception:
+                logger.debug(
+                    "Langfuse trace.get not ready for trace_id=%s "
+                    "(run_id=%s); skipping this poll",
+                    stub.id, run_id, exc_info=True,
+                )
+                continue
             raw_observations = list(getattr(full, "observations", []) or [])
             observations = [_flatten_observation(o, full.id) for o in raw_observations]
             observations.sort(

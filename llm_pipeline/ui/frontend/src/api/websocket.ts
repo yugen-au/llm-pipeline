@@ -19,6 +19,8 @@ import type {
   WsMessage,
   WsClientMessage,
   RunDetail,
+  RunTraceResponse,
+  TraceObservation,
 } from './types'
 
 // ---------------------------------------------------------------------------
@@ -109,15 +111,65 @@ function parseWsMessage(data: string): WsMessage | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Invalidate the trace query for a run so the frontend refetches the
- * latest observation tree from /api/runs/{run_id}/trace. Called on
- * span_started / span_ended pushes from the OTEL broadcast processor.
+ * Insert or update a span observation in the trace cache directly.
  *
- * Step boundaries also invalidate the steps query so the timeline
- * header reflects the latest persisted step state.
+ * The OTEL broadcast processor pushes the full TraceObservation
+ * payload over WS at on_start (start_time set, end_time null) and
+ * on_end (full data). We mutate the trace query cache by id so the
+ * UI rerenders immediately — no Langfuse round-trip on the live path.
+ *
+ * Merge rule: incoming observation wins when ``end_time`` is set
+ * (final state) or the incoming type/level differs. Otherwise we keep
+ * any richer existing version (e.g. one Langfuse already filled in
+ * with cost via the reconcile poll).
  */
-function invalidateTraceForRun(qc: QueryClient, runId: string, spanName: string): void {
-  qc.invalidateQueries({ queryKey: queryKeys.runs.trace(runId) })
+function applySpanEvent(
+  qc: QueryClient,
+  runId: string,
+  obs: TraceObservation,
+  spanName: string,
+): void {
+  qc.setQueryData<RunTraceResponse>(queryKeys.runs.trace(runId), (prev) => {
+    const existing = prev?.observations ?? []
+    const idx = existing.findIndex((o) => o.id === obs.id)
+    let nextObservations: TraceObservation[]
+    if (idx === -1) {
+      nextObservations = [...existing, obs]
+    } else {
+      const current = existing[idx]
+      // Prefer Langfuse-canonical fields when present (e.g. total_cost)
+      const merged: TraceObservation = {
+        ...current,
+        ...obs,
+        total_cost: obs.total_cost ?? current.total_cost,
+        // Keep richer input/output if WS happens to push null on a
+        // re-emit (defensive — shouldn't happen but cheap to guard)
+        input: obs.input ?? current.input,
+        output: obs.output ?? current.output,
+      }
+      nextObservations = [...existing]
+      nextObservations[idx] = merged
+    }
+    nextObservations.sort((a, b) => {
+      const at = a.start_time ?? ''
+      const bt = b.start_time ?? ''
+      return at.localeCompare(bt)
+    })
+    if (!prev) {
+      return {
+        run_id: runId,
+        pipeline_name: '',
+        status: 'running',
+        langfuse_configured: true,
+        traces: [],
+        observations: nextObservations,
+      }
+    }
+    return { ...prev, observations: nextObservations }
+  })
+
+  // Step span boundaries also affect the operational steps query
+  // (StepTimeline derives running/completed from these rows).
   if (spanName.startsWith('step.')) {
     qc.invalidateQueries({ queryKey: queryKeys.runs.steps(runId) })
   }
@@ -229,7 +281,7 @@ export function useGlobalWebSocket(): void {
 
         case 'span_started':
         case 'span_ended':
-          invalidateTraceForRun(queryClient, msg.run_id, msg.name)
+          applySpanEvent(queryClient, msg.run_id, msg.observation, msg.observation.name)
           useWsStore.getState().updateSubscriptionStatus(msg.run_id, 'running')
           break
 
