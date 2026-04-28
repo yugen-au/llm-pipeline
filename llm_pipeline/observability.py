@@ -42,7 +42,84 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["PipelineObserver"]
+__all__ = ["PipelineObserver", "configure"]
+
+
+# Module-level flag — idempotency for ``configure()``. The Langfuse SDK
+# is a singleton internally, but ``Agent.instrument_all()`` should only
+# be invoked once per process to avoid double-instrumentation.
+_CONFIGURED = False
+
+
+def configure(
+    *,
+    instrument_pydantic_ai: bool = True,
+    environment: str | None = None,
+    release: str | None = None,
+    sample_rate: float | None = None,
+) -> bool:
+    """Bootstrap Langfuse + pydantic-ai instrumentation for the process.
+
+    Call once at application startup (``llm-pipeline ui`` CLI, smoke
+    tests, contract entry points). Subsequent calls are idempotent
+    no-ops.
+
+    No-op when ``LANGFUSE_PUBLIC_KEY`` / ``LANGFUSE_SECRET_KEY`` are
+    absent. This preserves the framework-wide contract that observability
+    is opt-in via environment variables — local dev and tests run
+    without it, no instrumentation overhead, no warning spam.
+
+    Order matters: Langfuse must be instantiated *before* ``Agent.
+    instrument_all()`` so the Langfuse SDK sets up the OTEL tracer
+    provider that pydantic-ai then attaches to.
+
+    Args:
+        instrument_pydantic_ai: When True (default), call
+            ``Agent.instrument_all()`` so every pydantic-ai LLM call
+            and tool invocation produces an OTEL generation span that
+            auto-nests under the active step span. Disable only for
+            tests that want to verify the bootstrap path without
+            globally instrumenting pydantic-ai.
+        environment: Tags traces with the deployment environment
+            (``production`` / ``staging`` / ``smoke-test``).
+        release: Tracks the application release/version on traces.
+        sample_rate: Trace sampling rate (0.0–1.0). Use for high-volume
+            production where shipping every trace is wasteful. Do NOT
+            use during eval / variant comparison runs — sampling
+            defeats statistical significance.
+
+    Returns:
+        True if Langfuse was configured (creds present and SDK
+        initialized). False if the call was a no-op (creds absent).
+    """
+    global _CONFIGURED
+    if _CONFIGURED:
+        return True
+    if not _credentials_present():
+        logger.debug(
+            "llm_pipeline.observability.configure(): credentials absent, "
+            "skipping Langfuse + pydantic-ai instrumentation."
+        )
+        return False
+
+    from langfuse import Langfuse
+
+    init_kwargs: dict[str, Any] = {}
+    if environment is not None:
+        init_kwargs["environment"] = environment
+    if release is not None:
+        init_kwargs["release"] = release
+    if sample_rate is not None:
+        init_kwargs["sample_rate"] = sample_rate
+    Langfuse(**init_kwargs)
+
+    if instrument_pydantic_ai:
+        from pydantic_ai import Agent
+        Agent.instrument_all()
+
+    _CONFIGURED = True
+    logger.info("Langfuse + pydantic-ai instrumentation configured.")
+    return True
 
 
 def _credentials_present() -> bool:
@@ -92,25 +169,29 @@ class PipelineObserver:
         """Open the root trace span for this pipeline run.
 
         Sets ``session_id = self.run_id`` and ``user_id`` / ``tags`` on
-        the underlying Langfuse trace so the UI can surface the run in
-        listings. Flushes pending traces on exit so they ship before
-        the process can terminate.
+        the underlying Langfuse trace via ``propagate_attributes`` so
+        the UI can surface the run in listings. Flushes pending traces
+        on exit so they ship before the process can terminate.
         """
         if not self._enabled:
             yield None
             return
         assert self._client is not None
+        from langfuse import propagate_attributes
+
+        # Build kwargs dropping None so the SDK uses its own defaults
+        # rather than recording an explicit-None attribute.
+        propagate_kwargs: dict[str, Any] = {"session_id": self.run_id}
+        if user_id is not None:
+            propagate_kwargs["user_id"] = user_id
+        propagate_kwargs["tags"] = tags or [self.pipeline_name]
         with self._client.start_as_current_observation(
             name=f"pipeline.{self.pipeline_name}",
             as_type="span",
             input=input_data,
         ) as root:
-            root.update_trace(
-                user_id=user_id,
-                session_id=self.run_id,
-                tags=tags or [self.pipeline_name],
-            )
-            yield root
+            with propagate_attributes(**propagate_kwargs):
+                yield root
         self._client.flush()
 
     @contextlib.contextmanager

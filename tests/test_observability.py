@@ -34,6 +34,18 @@ def with_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGFUSE_BASE_URL", "https://example.invalid")
 
 
+@pytest.fixture(autouse=True)
+def reset_configure_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reset the module-level _CONFIGURED flag between tests.
+
+    configure() is intentionally idempotent via a module-level flag so
+    that production code can call it freely. Tests need a clean slate
+    each run or only the first configure-related test would exercise
+    the configuration path.
+    """
+    monkeypatch.setattr(obs_mod, "_CONFIGURED", False)
+
+
 # ---------------------------------------------------------------------------
 # No-op disabled mode
 # ---------------------------------------------------------------------------
@@ -107,25 +119,27 @@ class TestEnabledMode:
         assert obs._enabled is True
         mock_client_cls.assert_called_once_with()
 
-    def test_pipeline_run_opens_root_span_and_tags_trace(self, with_credentials):
+    def test_pipeline_run_opens_root_span_and_propagates_attrs(self, with_credentials):
         mock_client_cls = MagicMock()
         mock_client = mock_client_cls.return_value
-        # The CM returned by start_as_current_observation must support __enter__/__exit__
         mock_root_span = MagicMock()
         mock_client.start_as_current_observation.return_value.__enter__.return_value = mock_root_span
 
         obs = self._make_observer(with_credentials, mock_client_cls)
-        with obs.pipeline_run(input_data={"q": 1}, user_id="u1", tags=["foo"]) as root:
-            assert root is mock_root_span
+        with patch("langfuse.propagate_attributes") as mock_propagate:
+            with obs.pipeline_run(input_data={"q": 1}, user_id="u1", tags=["foo"]) as root:
+                assert root is mock_root_span
 
         mock_client.start_as_current_observation.assert_called_once()
-        kwargs = mock_client.start_as_current_observation.call_args.kwargs
-        assert kwargs["name"] == "pipeline.p"
-        assert kwargs["as_type"] == "span"
-        assert kwargs["input"] == {"q": 1}
+        start_kwargs = mock_client.start_as_current_observation.call_args.kwargs
+        assert start_kwargs["name"] == "pipeline.p"
+        assert start_kwargs["as_type"] == "span"
+        assert start_kwargs["input"] == {"q": 1}
 
-        mock_root_span.update_trace.assert_called_once_with(
-            user_id="u1", session_id="r1", tags=["foo"],
+        # Trace-level attributes go through the top-level propagate_attributes()
+        # context manager (v4 API exposes it as a free function, not a client method)
+        mock_propagate.assert_called_once_with(
+            session_id="r1", user_id="u1", tags=["foo"],
         )
         mock_client.flush.assert_called_once()
 
@@ -136,11 +150,13 @@ class TestEnabledMode:
         mock_client.start_as_current_observation.return_value.__enter__.return_value = mock_root_span
 
         obs = self._make_observer(with_credentials, mock_client_cls)
-        with obs.pipeline_run():
-            pass
+        with patch("langfuse.propagate_attributes") as mock_propagate:
+            with obs.pipeline_run():
+                pass
 
-        mock_root_span.update_trace.assert_called_once_with(
-            user_id=None, session_id="r1", tags=["p"],
+        # user_id absent → key is omitted from propagate_attributes (not passed as None)
+        mock_propagate.assert_called_once_with(
+            session_id="r1", tags=["p"],
         )
 
     def test_step_opens_span_with_metadata(self, with_credentials):
@@ -240,3 +256,79 @@ class TestSpanEventsAttachToActiveSpan:
         patch_active_span.add_event.assert_called_once_with(
             "consensus.reached", attributes={"attempts_used": 2},
         )
+
+
+# ---------------------------------------------------------------------------
+# configure() bootstrap
+# ---------------------------------------------------------------------------
+
+
+class TestConfigure:
+    """``configure()`` initializes Langfuse + pydantic-ai instrumentation once."""
+
+    def test_returns_false_and_noop_when_creds_absent(self, no_credentials):
+        with (
+            patch("langfuse.Langfuse") as mock_langfuse,
+            patch("pydantic_ai.Agent") as mock_agent,
+        ):
+            assert obs_mod.configure() is False
+        mock_langfuse.assert_not_called()
+        mock_agent.instrument_all.assert_not_called()
+        assert obs_mod._CONFIGURED is False
+
+    def test_returns_true_and_initializes_when_creds_present(self, with_credentials):
+        with (
+            patch("langfuse.Langfuse") as mock_langfuse,
+            patch("pydantic_ai.Agent") as mock_agent,
+        ):
+            assert obs_mod.configure() is True
+        mock_langfuse.assert_called_once_with()
+        mock_agent.instrument_all.assert_called_once()
+        assert obs_mod._CONFIGURED is True
+
+    def test_idempotent_second_call_skips_initialization(self, with_credentials):
+        with (
+            patch("langfuse.Langfuse") as mock_langfuse,
+            patch("pydantic_ai.Agent") as mock_agent,
+        ):
+            assert obs_mod.configure() is True
+            assert obs_mod.configure() is True
+        # Initialization happens exactly once across both calls
+        mock_langfuse.assert_called_once()
+        mock_agent.instrument_all.assert_called_once()
+
+    def test_instrument_pydantic_ai_false_skips_agent_instrumentation(
+        self, with_credentials,
+    ):
+        with (
+            patch("langfuse.Langfuse") as mock_langfuse,
+            patch("pydantic_ai.Agent") as mock_agent,
+        ):
+            assert obs_mod.configure(instrument_pydantic_ai=False) is True
+        mock_langfuse.assert_called_once()
+        mock_agent.instrument_all.assert_not_called()
+
+    def test_forwards_environment_release_and_sample_rate(self, with_credentials):
+        with (
+            patch("langfuse.Langfuse") as mock_langfuse,
+            patch("pydantic_ai.Agent"),
+        ):
+            obs_mod.configure(
+                environment="staging",
+                release="v1.2.3",
+                sample_rate=0.5,
+            )
+        mock_langfuse.assert_called_once_with(
+            environment="staging",
+            release="v1.2.3",
+            sample_rate=0.5,
+        )
+
+    def test_omits_optional_kwargs_when_not_provided(self, with_credentials):
+        """When None, the kwargs aren't passed — Langfuse SDK uses its own defaults."""
+        with (
+            patch("langfuse.Langfuse") as mock_langfuse,
+            patch("pydantic_ai.Agent"),
+        ):
+            obs_mod.configure()
+        mock_langfuse.assert_called_once_with()
