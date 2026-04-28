@@ -85,21 +85,27 @@ class TestTraceEndpointWithMockedLangfuse:
         monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-fake")
         monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-fake")
 
-        # Mock the Langfuse SDK's trace + observations API
-        mock_trace = MagicMock()
-        mock_trace.id = "lf-trace-1"
-        mock_trace.name = "pipeline.alpha_pipeline"
-        mock_trace.user_id = None
-        mock_trace.session_id = "aaaaaaaa-0000-0000-0000-000000000001"
-        mock_trace.tags = ["alpha_pipeline"]
-        mock_trace.timestamp = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-        mock_trace.latency = 1.234
+        # Mock the Langfuse SDK's trace API.
+        # `list` returns minimal stubs (only id) — the route then calls
+        # `trace.get` to fetch the full TraceWithFullDetails (including
+        # nested observations with names/inputs/usage).
+        mock_trace_stub = MagicMock()
+        mock_trace_stub.id = "lf-trace-1"
 
         mock_traces_page = MagicMock()
-        mock_traces_page.data = [mock_trace]
+        mock_traces_page.data = [mock_trace_stub]
 
-        mock_obs_page = MagicMock()
-        mock_obs_page.data = [
+        mock_full_trace = MagicMock()
+        mock_full_trace.id = "lf-trace-1"
+        mock_full_trace.name = "pipeline.alpha_pipeline"
+        mock_full_trace.user_id = None
+        mock_full_trace.session_id = "aaaaaaaa-0000-0000-0000-000000000001"
+        mock_full_trace.tags = ["alpha_pipeline"]
+        mock_full_trace.timestamp = datetime(
+            2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc,
+        )
+        mock_full_trace.latency = 1.234
+        mock_full_trace.observations = [
             _make_mock_observation(
                 id="obs-root", name="pipeline.alpha_pipeline", type_="SPAN",
                 start_offset=0, end_offset=1234,
@@ -122,7 +128,7 @@ class TestTraceEndpointWithMockedLangfuse:
         mock_client_cls = MagicMock()
         mock_client = mock_client_cls.return_value
         mock_client.api.trace.list.return_value = mock_traces_page
-        mock_client.api.observations.get_many.return_value = mock_obs_page
+        mock_client.api.trace.get.return_value = mock_full_trace
 
         with patch("langfuse.Langfuse", mock_client_cls):
             resp = seeded_app_client.get(

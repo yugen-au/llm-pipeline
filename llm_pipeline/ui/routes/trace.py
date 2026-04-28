@@ -169,21 +169,23 @@ def _fetch_run_traces(run_id: str) -> List[TraceSummary]:
 
     try:
         client = Langfuse()
-        # 1. Find traces for this session
+        # 1. Find trace IDs for this session. The list endpoint returns
+        #    minimal stubs (name, observations, input/output are all null)
+        #    so we can't render from these directly.
         traces_page = client.api.trace.list(session_id=run_id, limit=50)
-        trace_records = list(getattr(traces_page, "data", []))
-        if not trace_records:
+        trace_stubs = list(getattr(traces_page, "data", []))
+        if not trace_stubs:
             return []
 
         result: List[TraceSummary] = []
-        for t in trace_records:
-            # 2. Pull observations for each trace
-            obs_page = client.api.observations.get_many(
-                trace_id=t.id,
-                limit=200,
-            )
-            raw_observations = list(getattr(obs_page, "data", []))
-            observations = [_flatten_observation(o, t.id) for o in raw_observations]
+        for stub in trace_stubs:
+            # 2. Pull the full trace (with embedded observations carrying
+            #    name/input/output/level/usage/cost). The list+get_many
+            #    pair returns minimal-only data — `trace.get` is the only
+            #    SDK call that gives the full detail shape we render.
+            full = client.api.trace.get(trace_id=stub.id)
+            raw_observations = list(getattr(full, "observations", []) or [])
+            observations = [_flatten_observation(o, full.id) for o in raw_observations]
             observations.sort(
                 key=lambda o: o.start_time or datetime.min,
             )
@@ -192,14 +194,14 @@ def _fetch_run_traces(run_id: str) -> List[TraceSummary]:
                 if o.total_cost is not None
             ) or None
             result.append(TraceSummary(
-                id=t.id,
-                name=getattr(t, "name", None),
-                user_id=getattr(t, "user_id", None),
-                session_id=getattr(t, "session_id", None),
-                tags=list(getattr(t, "tags", []) or []),
-                start_time=getattr(t, "timestamp", None),
+                id=full.id,
+                name=getattr(full, "name", None),
+                user_id=getattr(full, "user_id", None),
+                session_id=getattr(full, "session_id", None),
+                tags=list(getattr(full, "tags", []) or []),
+                start_time=getattr(full, "timestamp", None),
                 end_time=None,  # Langfuse trace doesn't have a direct end_time field
-                duration_ms=getattr(t, "latency", None) and float(t.latency) * 1000.0,
+                duration_ms=getattr(full, "latency", None) and float(full.latency) * 1000.0,
                 total_cost=total_cost,
                 observations=observations,
             ))
