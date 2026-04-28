@@ -309,6 +309,16 @@ class PipelineConfig(ABC):
 
         self.run_id = run_id or str(uuid.uuid4())
 
+        # Bootstrap Langfuse + pydantic-ai instrumentation (no-op when
+        # LANGFUSE_PUBLIC_KEY/SECRET_KEY are absent — local dev / tests
+        # incur no Langfuse overhead). Idempotent across multiple
+        # pipeline instantiations in the same process.
+        from llm_pipeline import observability as _obs_mod
+        _obs_mod.configure()
+        self._observer = _obs_mod.PipelineObserver(
+            run_id=self.run_id, pipeline_name=self.pipeline_name,
+        )
+
         # Session setup: explicit session > engine > auto-SQLite
         if session is not None:
             self._owns_session = False
@@ -718,6 +728,24 @@ class PipelineConfig(ABC):
                     run_id=self.run_id,
                     pipeline_name=self.pipeline_name,
                 ))
+
+        # Open the Langfuse root trace span around the entire execute() body.
+        # Manual __enter__/__exit__ instead of `with` so the existing
+        # try/except (~540 lines) doesn't need re-indentation. The
+        # observer's pipeline_run is no-op when Langfuse is unconfigured;
+        # __enter__ + __exit__ are then trivial. Step and extraction spans
+        # opened later auto-nest via OTEL context propagation.
+        _observer_input = (
+            self._validated_input.model_dump()
+            if self._validated_input is not None
+            and hasattr(self._validated_input, "model_dump")
+            else self._validated_input
+        )
+        _root_cm = self._observer.pipeline_run(
+            input_data=_observer_input,
+            tags=[self.pipeline_name],
+        )
+        _root_cm.__enter__()
 
         try:
             max_steps = max(len(s.get_bindings()) for s in self._strategies)
@@ -1217,6 +1245,11 @@ class PipelineConfig(ABC):
                         self._pause_for_review(
                             pipeline_run, step, step_num, review_config, review_data,
                         )
+                        # Close the observer's root span before the
+                        # early return — pause-for-review counts as
+                        # successful step span closure (the run will
+                        # resume later as a new trace).
+                        _root_cm.__exit__(None, None, None)
                         return self
 
             pipeline_execution_time_ms = (
@@ -1239,6 +1272,8 @@ class PipelineConfig(ABC):
                 ))
 
             self._current_step = None
+            # Close the observer's root span on the success path.
+            _root_cm.__exit__(None, None, None)
             return self
 
         except Exception as e:
@@ -1259,6 +1294,9 @@ class PipelineConfig(ABC):
                     traceback=traceback.format_exc(),
                 ))
             self._current_step = None
+            # Close the observer's root span with the exception so the
+            # span is marked ERROR in Langfuse before re-raising.
+            _root_cm.__exit__(type(e), e, e.__traceback__)
             raise
 
     def clear_cache(self) -> int:
