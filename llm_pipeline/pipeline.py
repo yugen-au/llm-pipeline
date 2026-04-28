@@ -708,8 +708,15 @@ class PipelineConfig(ABC):
             _resume_from = getattr(self, '_resume_from_step', 0)
 
             for step_index in range(max_steps):
-                # Skip steps before resume point (already executed)
+                # Skip steps before resume point (already executed) but
+                # rehydrate adapter_ctx.outputs so downstream
+                # FromOutput(...) sources can resolve. Without this,
+                # resume crashes the first time a later step reads a
+                # prior step's output.
                 if step_index < _resume_from:
+                    self._rehydrate_resumed_step_output(
+                        step_index, adapter_ctx,
+                    )
                     continue
 
                 step_num = step_index + 1
@@ -1124,6 +1131,57 @@ class PipelineConfig(ABC):
         return self.session.exec(
             query.order_by(PipelineStepState.created_at.desc())
         ).first()
+
+    def _rehydrate_resumed_step_output(
+        self, step_index: int, adapter_ctx: "AdapterContext",
+    ) -> None:
+        """Rebuild ``adapter_ctx.outputs[step_class]`` for an already-run step.
+
+        On resume, ``execute_from_step`` populates ``self._instructions``
+        from persisted ``PipelineStepState.result_data`` (a list of dicts).
+        Later steps' ``FromOutput(StepCls)`` sources read from
+        ``adapter_ctx.outputs``, so we must materialize the prior step's
+        output back into the adapter context here. Without this, the
+        first step that reads a prior step's output raises
+        ``KeyError: FromOutput: no outputs recorded for step X``.
+        """
+        selected_strategy = None
+        step_def = None
+        for strategy in self._strategies:
+            if not strategy.can_handle(self.context):
+                continue
+            bindings = strategy.get_bindings()
+            if step_index < len(bindings):
+                selected_strategy = strategy
+                step_def = self._compile_bind_to_step_def(bindings[step_index])
+                break
+
+        if step_def is None:
+            return
+
+        # Need a step instance to read INSTRUCTIONS class + step_name
+        step = step_def.create_step(pipeline=self)
+        step_class = type(step)
+        instructions_class = getattr(step_class, "INSTRUCTIONS", None)
+
+        raw = self._instructions.get(step.step_name)
+        if not raw:
+            return
+        if not isinstance(raw, list):
+            raw = [raw]
+
+        rehydrated: List[Any] = []
+        for item in raw:
+            if (
+                instructions_class is not None
+                and isinstance(item, dict)
+                and issubclass(instructions_class, BaseModel)
+            ):
+                rehydrated.append(instructions_class(**item))
+            else:
+                rehydrated.append(item)
+
+        adapter_ctx.outputs[step_class] = rehydrated
 
     def _load_from_cache(self, cached_state, step) -> List[Any]:
         instructions_class = getattr(step, "INSTRUCTIONS", None)
