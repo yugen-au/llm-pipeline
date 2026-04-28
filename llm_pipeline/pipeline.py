@@ -882,6 +882,7 @@ class PipelineConfig(ABC):
 
                 cached_state = None
                 if use_cache:
+                    self._observer.cache_lookup(input_hash=input_hash)
                     if self._event_emitter:
                         self._emit(CacheLookup(
                             run_id=self.run_id,
@@ -899,6 +900,7 @@ class PipelineConfig(ABC):
                 _step_cost_usd = 0.0
 
                 if cached_state:
+                    self._observer.cache_hit(input_hash=input_hash)
                     if self._event_emitter:
                         self._emit(CacheHit(
                             run_id=self.run_id,
@@ -959,6 +961,8 @@ class PipelineConfig(ABC):
                     reconstructed_count = self._reconstruct_extractions_from_cache(
                         cached_state, step_def
                     )
+                    if step_def.extraction_binds:
+                        self._observer.cache_reconstructed(input_hash=input_hash)
                     if self._event_emitter and step_def.extraction_binds:
                         self._emit(CacheReconstruction(
                             run_id=self.run_id,
@@ -972,6 +976,7 @@ class PipelineConfig(ABC):
                         step.extract_data(adapter_ctx)
                 else:
                     if use_cache:
+                        self._observer.cache_miss(input_hash=input_hash)
                         if self._event_emitter:
                             self._emit(CacheMiss(
                                 run_id=self.run_id,
@@ -1794,6 +1799,11 @@ class PipelineConfig(ABC):
                 result_groups.append([instruction])
                 matched_group = result_groups[-1]
 
+            self._observer.consensus_attempt(
+                attempt=attempt + 1,
+                max_attempts=strategy.max_attempts,
+                strategy=strategy.name,
+            )
             if self._event_emitter:
                 self._emit(ConsensusAttempt(
                     run_id=self.run_id,
@@ -1812,6 +1822,10 @@ class PipelineConfig(ABC):
             logger.info(
                 f"  [CONSENSUS] {strategy.name}: reached after {consensus_result.total_attempts} attempts"
             )
+            self._observer.consensus_reached(
+                attempts_used=consensus_result.total_attempts,
+                agreement=None,
+            )
             if self._event_emitter:
                 self._emit(ConsensusReached(
                     run_id=self.run_id,
@@ -1825,6 +1839,10 @@ class PipelineConfig(ABC):
                 f"  [NO CONSENSUS] {strategy.name}: after {consensus_result.total_attempts} attempts"
             )
             largest_group = max(result_groups, key=len)
+            self._observer.consensus_failed(
+                attempts_used=consensus_result.total_attempts,
+                reason=f"largest_group={len(largest_group)} below threshold={strategy.threshold}",
+            )
             if self._event_emitter:
                 self._emit(ConsensusFailed(
                     run_id=self.run_id,
