@@ -747,6 +747,12 @@ class PipelineConfig(ABC):
         )
         _root_cm.__enter__()
 
+        # Tracks the open observer step span (if any) so the outer
+        # except handler can close it on exception. Initialized before
+        # the try so it's always defined even if max_steps computation
+        # raises immediately.
+        _step_cm = None
+
         try:
             max_steps = max(len(s.get_bindings()) for s in self._strategies)
 
@@ -788,6 +794,22 @@ class PipelineConfig(ABC):
                 self._current_step = step_class
                 current_step_name = step.step_name
 
+                # Open the observer's step span. Manual __enter__/__exit__
+                # so the existing per-iteration body (~450 lines) doesn't
+                # need re-indentation. ``_step_cm`` is tracked locally so
+                # the outer except can close it on exception. Pydantic-ai
+                # LLM-call generations spawned inside auto-nest under
+                # this span via OTEL context propagation.
+                _step_cm = self._observer.step(
+                    step_name=step.step_name,
+                    step_number=step_num,
+                    instructions_class=(
+                        step.instructions.__name__
+                        if step.instructions is not None else None
+                    ),
+                )
+                _step_cm.__enter__()
+
                 # Resolve the step's inputs adapter now that the step instance
                 # exists and is bound to this pipeline. Populated before the
                 # first prepare_calls() read.
@@ -812,6 +834,9 @@ class PipelineConfig(ABC):
 
                 if step.should_skip():
                     logger.info(f"\nSTEP {step_num}: {step.step_name} SKIPPED")
+                    self._observer.step_skipped(
+                        reason="should_skip returned True",
+                    )
                     if self._event_emitter:
                         self._emit(StepSkipped(
                             run_id=self.run_id,
@@ -821,6 +846,8 @@ class PipelineConfig(ABC):
                             reason="should_skip returned True",
                         ))
                     self._executed_steps.add(step_class)
+                    _step_cm.__exit__(None, None, None)
+                    _step_cm = None
                     continue
 
                 logger.info(f"\nSTEP {step_num}: {step.step_name}...")
@@ -1245,12 +1272,19 @@ class PipelineConfig(ABC):
                         self._pause_for_review(
                             pipeline_run, step, step_num, review_config, review_data,
                         )
-                        # Close the observer's root span before the
-                        # early return — pause-for-review counts as
-                        # successful step span closure (the run will
-                        # resume later as a new trace).
+                        # Close step + root spans before the early
+                        # return — pause-for-review counts as a
+                        # successful span closure (the run will resume
+                        # later as a new trace).
+                        _step_cm.__exit__(None, None, None)
+                        _step_cm = None
                         _root_cm.__exit__(None, None, None)
                         return self
+
+                # Normal end-of-iteration: close the step span before
+                # falling through to the next loop iteration.
+                _step_cm.__exit__(None, None, None)
+                _step_cm = None
 
             pipeline_execution_time_ms = (
                 datetime.now(timezone.utc) - start_time
@@ -1294,8 +1328,11 @@ class PipelineConfig(ABC):
                     traceback=traceback.format_exc(),
                 ))
             self._current_step = None
-            # Close the observer's root span with the exception so the
-            # span is marked ERROR in Langfuse before re-raising.
+            # Close any open step span first (innermost-to-outermost),
+            # then close the root span. Both marked ERROR so Langfuse
+            # surfaces them as failed.
+            if _step_cm is not None:
+                _step_cm.__exit__(type(e), e, e.__traceback__)
             _root_cm.__exit__(type(e), e, e.__traceback__)
             raise
 
