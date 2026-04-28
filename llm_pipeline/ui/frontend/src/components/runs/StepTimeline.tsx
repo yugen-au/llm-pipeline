@@ -104,27 +104,6 @@ export function deriveStepStatus(
     }
   }
 
-  // Add running steps (started but not completed/failed and not in DB)
-  for (const stepName of startedSteps) {
-    if (completedOrFailed.has(stepName)) continue
-
-    const existing = map.get(stepName)
-    if (existing) {
-      // DB has it but events say still running
-      existing.status = 'running'
-    } else {
-      // Not in DB yet - add as running
-      const meta = startedMeta.get(stepName)
-      map.set(stepName, {
-        step_name: stepName,
-        step_number: meta?.step_number ?? 0,
-        status: 'running',
-        execution_time_ms: null,
-        model: null,
-      })
-    }
-  }
-
   // Sort by step_number ascending
   return Array.from(map.values()).sort((a, b) => a.step_number - b.step_number)
 }
