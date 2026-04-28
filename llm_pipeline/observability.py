@@ -42,13 +42,132 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["PipelineObserver", "configure"]
+__all__ = ["PipelineObserver", "WebSocketBroadcastProcessor", "configure"]
 
 
 # Module-level flag — idempotency for ``configure()``. The Langfuse SDK
 # is a singleton internally, but ``Agent.instrument_all()`` should only
 # be invoked once per process to avoid double-instrumentation.
 _CONFIGURED = False
+
+
+# ---------------------------------------------------------------------------
+# OTEL span processor for live UI updates over WebSocket
+# ---------------------------------------------------------------------------
+
+
+# Span name prefixes the WS processor forwards. Filters out OTEL
+# internals + uninteresting auto-instrumented spans (e.g. http client
+# requests). Pydantic-ai's gen_ai.* spans are kept — those ARE the
+# LLM-call observations we want to surface live.
+_WS_FORWARDED_PREFIXES = (
+    "pipeline.",
+    "step.",
+    "extraction.",
+    "transformation.",
+    "gen_ai.",  # pydantic-ai auto-instrumented LLM calls
+)
+
+
+def _extract_run_id_from_span(span: Any) -> str | None:
+    """Read the run_id off a span via the Langfuse session_id attribute.
+
+    ``PipelineObserver.pipeline_run`` calls ``langfuse.propagate_attributes
+    (session_id=run_id, ...)`` which sets ``langfuse.session.id`` on every
+    descendant span. Reading that attribute lets the processor route the
+    broadcast to subscribers of the right run — without the framework
+    having to thread run_id through the span machinery itself.
+    """
+    attrs = getattr(span, "attributes", None) or {}
+    return attrs.get("langfuse.session.id") or attrs.get("session.id")
+
+
+class WebSocketBroadcastProcessor:
+    """OTEL ``SpanProcessor`` that forwards span lifecycle events to the
+    UI's WebSocket manager for live updates.
+
+    Runs alongside Langfuse's processor on the same OTEL tracer
+    provider. The same spans Langfuse stores get tapped here for live
+    UX — no parallel emit machinery, no duplicate data.
+
+    Filters spans to those whose name starts with one of
+    ``_WS_FORWARDED_PREFIXES`` so OTEL internals and unrelated auto-
+    instrumented spans don't pollute the WS stream. Pydantic-ai's
+    ``gen_ai.*`` spans (LLM calls) are kept — those are the operations
+    end users care about seeing live.
+
+    Thread safety: ``broadcast_to_run`` uses ``queue.Queue.put_nowait``
+    which is safe to call from any thread. The OTEL SDK invokes
+    on_start / on_end on whichever thread closed the span.
+
+    Designed to no-op when the UI WebSocket manager isn't importable
+    (smoke scripts, headless deployments).
+    """
+
+    def on_start(self, span: Any, parent_context: Any = None) -> None:
+        if not span.name.startswith(_WS_FORWARDED_PREFIXES):
+            return
+        run_id = _extract_run_id_from_span(span)
+        if not run_id:
+            return
+        self._broadcast(run_id, {
+            "type": "span_started",
+            "name": span.name,
+            "span_id": _span_id_hex(span),
+        })
+
+    def on_end(self, span: Any) -> None:
+        if not span.name.startswith(_WS_FORWARDED_PREFIXES):
+            return
+        run_id = _extract_run_id_from_span(span)
+        if not run_id:
+            return
+        # OTEL span end_time / start_time are nanoseconds since epoch.
+        duration_ms = None
+        if span.end_time and span.start_time:
+            duration_ms = (span.end_time - span.start_time) / 1_000_000
+        self._broadcast(run_id, {
+            "type": "span_ended",
+            "name": span.name,
+            "span_id": _span_id_hex(span),
+            "duration_ms": duration_ms,
+            "status": getattr(getattr(span.status, "status_code", None), "name", "OK"),
+        })
+
+    # OTEL ``SpanProcessor`` protocol — required no-ops. We don't buffer.
+    def shutdown(self) -> None:
+        return None
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        return True
+
+    @staticmethod
+    def _broadcast(run_id: str, message: dict) -> None:
+        """Send the message via the UI's WebSocket manager.
+
+        Lazy import + try/except keeps this processor safe to run in
+        environments without the UI subsystem (smoke scripts, headless
+        contract jobs).
+        """
+        try:
+            from llm_pipeline.ui.routes.websocket import manager
+        except ImportError:
+            return
+        try:
+            manager.broadcast_to_run(run_id, message)
+        except Exception:
+            # Never propagate WS errors out of the OTEL pipeline — they
+            # would taint the parent operation. Best-effort delivery.
+            logger.debug(
+                "WebSocketBroadcastProcessor: broadcast failed",
+                exc_info=True,
+            )
+
+
+def _span_id_hex(span: Any) -> str:
+    """Format an OTEL span_id as a 16-char hex string."""
+    sid = span.context.span_id if span.context else 0
+    return format(sid, "016x")
 
 
 def configure(
@@ -116,6 +235,25 @@ def configure(
     if instrument_pydantic_ai:
         from pydantic_ai import Agent
         Agent.instrument_all()
+
+    # Tap the same OTEL tracer provider Langfuse just configured: same
+    # spans, two consumers. Langfuse stores them; our processor pushes
+    # lightweight live signals to the UI WebSocket. No parallel emit
+    # machinery — OTEL is the single source of truth.
+    try:
+        from opentelemetry import trace as _trace
+        provider = _trace.get_tracer_provider()
+        # Some no-op providers (and the pre-Langfuse default) don't
+        # implement add_span_processor. Skip silently in those cases.
+        add_processor = getattr(provider, "add_span_processor", None)
+        if callable(add_processor):
+            add_processor(WebSocketBroadcastProcessor())
+    except Exception:
+        logger.debug(
+            "Failed to attach WebSocketBroadcastProcessor; live UI "
+            "updates over WebSocket will be unavailable.",
+            exc_info=True,
+        )
 
     _CONFIGURED = True
     logger.info("Langfuse + pydantic-ai instrumentation configured.")

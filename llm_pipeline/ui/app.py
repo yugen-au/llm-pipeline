@@ -432,6 +432,7 @@ def create_app(
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router
     from llm_pipeline.ui.routes.steps import router as steps_router
+    from llm_pipeline.ui.routes.trace import router as trace_router
     from llm_pipeline.ui.routes.prompts import router as prompts_router
     from llm_pipeline.ui.routes.pipelines import router as pipelines_router
     from llm_pipeline.ui.routes.websocket import router as ws_router
@@ -444,6 +445,7 @@ def create_app(
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
+    app.include_router(trace_router, prefix="/api")
     app.include_router(prompts_router, prefix="/api")
     app.include_router(pipelines_router, prefix="/api")
     app.include_router(creator_router, prefix="/api")
