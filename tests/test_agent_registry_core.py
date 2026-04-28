@@ -181,8 +181,11 @@ class TestClearAgentRegistry:
 
 class TestStepDepsFields:
     def test_field_count(self):
+        # 6 required + 3 optional (variable_resolver, array_validation,
+        # validation_context). event_emitter dropped — observability is
+        # via Langfuse, not a per-step injected dep.
         f = dc_fields(StepDeps)
-        assert len(f) == 10
+        assert len(f) == 9
 
     def test_required_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]
@@ -192,10 +195,10 @@ class TestStepDepsFields:
 
     def test_optional_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]
-        assert "event_emitter" in names
         assert "variable_resolver" in names
         assert "array_validation" in names
         assert "validation_context" in names
+        assert "event_emitter" not in names  # removed in langfuse migration
 
     def test_optional_defaults_none(self):
         import dataclasses
@@ -204,7 +207,6 @@ class TestStepDepsFields:
             for f in dc_fields(StepDeps)
             if f.default is not dataclasses.MISSING
         }
-        assert defaults.get("event_emitter") is None
         assert defaults.get("variable_resolver") is None
         assert defaults.get("array_validation") is None
         assert defaults.get("validation_context") is None
@@ -218,12 +220,10 @@ class TestStepDepsFields:
             pipeline_name="test_pipeline",
             step_name="extract_data",
         )
-        assert deps.event_emitter is None
         assert deps.variable_resolver is None
         assert deps.run_id == "run-1"
 
     def test_instantiation_with_all_fields(self):
-        mock_emitter = object()
         mock_resolver = object()
         deps = StepDeps(
             session=object(),
@@ -232,10 +232,8 @@ class TestStepDepsFields:
             run_id="run-2",
             pipeline_name="my_pipeline",
             step_name="validate",
-            event_emitter=mock_emitter,
             variable_resolver=mock_resolver,
         )
-        assert deps.event_emitter is mock_emitter
         assert deps.variable_resolver is mock_resolver
 
 
@@ -508,8 +506,10 @@ class TestBuildStepAgentValidators:
 class TestBuildStepAgentTools:
     """Tests for the tools parameter of build_step_agent.
 
-    Verifies that tool callables are wrapped in FunctionToolset ->
-    EventEmittingToolset and attached to the Agent via toolsets=.
+    Verifies tool callables are wrapped in FunctionToolset and attached
+    to the Agent via toolsets=. Tool-call observability comes from
+    pydantic-ai's Agent.instrument_all() (wired in
+    observability.configure()) — no custom wrapper.
     """
 
     @staticmethod
@@ -537,30 +537,22 @@ class TestBuildStepAgentTools:
         agent = build_step_agent("step", SimpleOutput, tools=[self._dummy_tool])
         assert len(agent._user_toolsets) == 1
 
-    def test_tools_wrapped_in_event_emitting_toolset(self):
-        """The attached toolset should be an EventEmittingToolset."""
-        from llm_pipeline.toolsets import EventEmittingToolset
-
-        agent = build_step_agent("step", SimpleOutput, tools=[self._dummy_tool])
-        toolset = agent._user_toolsets[0]
-        assert isinstance(toolset, EventEmittingToolset)
-
-    def test_inner_toolset_is_function_toolset(self):
-        """EventEmittingToolset.wrapped should be a FunctionToolset."""
+    def test_tools_wrapped_in_function_toolset(self):
+        """The attached toolset should be a FunctionToolset directly."""
         from pydantic_ai.toolsets import FunctionToolset
 
         agent = build_step_agent("step", SimpleOutput, tools=[self._dummy_tool])
         toolset = agent._user_toolsets[0]
-        assert isinstance(toolset.wrapped, FunctionToolset)
+        assert isinstance(toolset, FunctionToolset)
 
     def test_multiple_tools_registered(self):
-        """Multiple tool callables should all be registered in the inner toolset."""
+        """Multiple tool callables should all be registered in the toolset."""
         agent = build_step_agent(
             "step", SimpleOutput, tools=[self._dummy_tool, self._another_tool]
         )
         assert len(agent._user_toolsets) == 1
-        # inner FunctionToolset.tools is a dict keyed by tool name
-        inner = agent._user_toolsets[0].wrapped
+        # FunctionToolset.tools is a dict keyed by tool name
+        inner = agent._user_toolsets[0]
         tool_names = list(inner.tools.keys())
         assert "_dummy_tool" in tool_names
         assert "_another_tool" in tool_names

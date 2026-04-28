@@ -137,11 +137,6 @@ class TestRoutersIncluded:
         from llm_pipeline.ui.routes.steps import router as r
         assert r.prefix == "/runs/{run_id}/steps"
 
-    def test_events_router_prefix(self):
-        """events router has prefix /runs/{run_id}/events."""
-        from llm_pipeline.ui.routes.events import router as r
-        assert r.prefix == "/runs/{run_id}/events"
-
     def test_prompts_router_prefix(self):
         """prompts router has prefix /prompts."""
         from llm_pipeline.ui.routes.prompts import router as r
@@ -166,11 +161,6 @@ class TestRoutersIncluded:
         """steps router has tag 'steps'."""
         from llm_pipeline.ui.routes.steps import router as r
         assert "steps" in r.tags
-
-    def test_events_router_tag(self):
-        """events router has tag 'events'."""
-        from llm_pipeline.ui.routes.events import router as r
-        assert "events" in r.tags
 
     def test_prompts_router_tag(self):
         """prompts router has tag 'prompts'."""
@@ -198,11 +188,6 @@ class TestRouteModuleImports:
 
     def test_steps_importable(self):
         from llm_pipeline.ui.routes.steps import router
-        from fastapi import APIRouter
-        assert isinstance(router, APIRouter)
-
-    def test_events_importable(self):
-        from llm_pipeline.ui.routes.events import router
         from fastapi import APIRouter
         assert isinstance(router, APIRouter)
 

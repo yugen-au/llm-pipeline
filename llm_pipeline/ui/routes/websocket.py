@@ -15,7 +15,6 @@ from typing import Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session, select
 
-from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.state import PipelineRun
 
 router = APIRouter(tags=["websocket"])
@@ -124,19 +123,6 @@ async def _get_run(engine, run_id: str) -> Optional[PipelineRun]:
     return await asyncio.to_thread(_query)
 
 
-async def _get_persisted_events(engine, run_id: str) -> list[dict]:
-    """Fetch persisted events for a run, ordered by timestamp."""
-    def _query():
-        with Session(engine) as session:
-            stmt = (
-                select(PipelineEventRecord)
-                .where(PipelineEventRecord.run_id == run_id)
-                .order_by(PipelineEventRecord.timestamp)
-            )
-            return [record.event_data for record in session.exec(stmt).all()]
-    return await asyncio.to_thread(_query)
-
-
 async def _build_stream_complete(engine, run_id: str) -> dict:
     """Build enriched stream_complete message with run state from DB."""
     run = await _get_run(engine, run_id)
@@ -160,19 +146,14 @@ async def _handle_subscribe(ws: WebSocket, run_id: str, engine) -> None:
         return
 
     if run.status in ("completed", "failed"):
-        # Replay persisted events for finished runs.
-        # Running runs get live events only (replay would race with
-        # active DB writes from the pipeline thread).
-        # TODO: add catch-up replay for running runs once we have
-        # a non-blocking event buffer (e.g. in-memory ring buffer).
-        events = await _get_persisted_events(engine, run_id)
-        for event_data in events:
-            await ws.send_json(event_data)
+        # Past traces live in Langfuse, not in the local DB. The UI's
+        # run-detail page surfaces them by linking to the Langfuse trace
+        # URL — no replay needed here.
         await ws.send_json({
             "type": "replay_complete",
             "run_id": run_id,
             "run_status": run.status,
-            "event_count": len(events),
+            "event_count": 0,
         })
 
 

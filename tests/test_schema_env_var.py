@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 
 from llm_pipeline.db import init_pipeline_db, _get_schema
 from llm_pipeline.db import _schema_registered_engines, _wal_registered_engines
-from llm_pipeline.events.models import PipelineEventRecord
+from llm_pipeline.state import PipelineRun
 
 
 class TestGetSchema:
@@ -44,7 +44,6 @@ class TestSqliteUnaffectedBySchema:
                 init_pipeline_db(engine=engine)
                 inspector = inspect(engine)
                 tables = inspector.get_table_names()
-                assert "pipeline_events" in tables
                 assert "pipeline_step_states" in tables
                 assert "pipeline_runs" in tables
             finally:
@@ -57,22 +56,21 @@ class TestSqliteUnaffectedBySchema:
             engine = create_engine("sqlite://")
             try:
                 init_pipeline_db(engine=engine)
-                record = PipelineEventRecord(
+                record = PipelineRun(
                     run_id="schema-test",
-                    event_type="pipeline_started",
                     pipeline_name="test",
-                    event_data={"key": "value"},
+                    status="running",
                 )
                 with Session(engine) as session:
                     session.add(record)
                     session.commit()
 
                 with Session(engine) as session:
-                    stmt = select(PipelineEventRecord).where(
-                        PipelineEventRecord.run_id == "schema-test"
+                    stmt = select(PipelineRun).where(
+                        PipelineRun.run_id == "schema-test"
                     )
                     retrieved = session.exec(stmt).one()
-                assert retrieved.event_data["key"] == "value"
+                assert retrieved.pipeline_name == "test"
             finally:
                 _schema_registered_engines.discard(id(engine))
                 _wal_registered_engines.discard(id(engine))

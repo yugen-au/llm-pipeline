@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pydantic_ai import Agent, InstrumentationSettings, RunContext
     from llm_pipeline.prompts.service import PromptService
     from llm_pipeline.prompts.variables import VariableResolver
-    from llm_pipeline.events.emitter import PipelineEventEmitter
     from sqlmodel import Session
 
 
@@ -45,7 +44,6 @@ class StepDeps:
     step_name: str
 
     # Optional deps
-    event_emitter: Any | None = None  # PipelineEventEmitter
     variable_resolver: Any | None = None  # VariableResolver
 
     # Per-call validation config, read by output validators via ctx.deps
@@ -97,8 +95,10 @@ def build_step_agent(
             (spans for model requests, token usage). Passed directly to
             the Agent constructor. None = no instrumentation.
         tools: Optional sequence of tool callables to register on the
-            agent. When provided, wraps them in FunctionToolset then
-            EventEmittingToolset for automatic tool call event emission.
+            agent. When provided, wraps them in FunctionToolset.
+            Tool-call observability comes from pydantic-ai's
+            Agent.instrument_all() (wired in observability.configure());
+            no custom wrapper needed.
             None or empty = no tools registered.
 
     Returns:
@@ -122,11 +122,8 @@ def build_step_agent(
 
     if tools:
         from pydantic_ai.toolsets import FunctionToolset
-        from llm_pipeline.toolsets import EventEmittingToolset
 
-        inner = FunctionToolset(tools=list(tools))
-        emitting = EventEmittingToolset(inner)
-        agent_kwargs["toolsets"] = [emitting]
+        agent_kwargs["toolsets"] = [FunctionToolset(tools=list(tools))]
 
     agent: Agent[StepDeps, Any] = Agent(**agent_kwargs)
 

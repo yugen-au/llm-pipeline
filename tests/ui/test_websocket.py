@@ -67,8 +67,11 @@ class TestBatchReplay:
                     break
                 events.append(msg)
 
-        assert len(events) == 4
-        assert replay_complete["event_count"] == 4
+        # Past traces live in Langfuse, not in the local DB.
+        # WS replay no longer streams persisted events — it just signals
+        # replay_complete with the run's terminal status.
+        assert len(events) == 0
+        assert replay_complete["event_count"] == 0
         assert replay_complete["run_status"] == "completed"
         assert replay_complete["run_id"] == RUN_COMPLETED
 

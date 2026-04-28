@@ -36,17 +36,6 @@ from llm_pipeline.wiring import AdapterContext, Bind
 
 logger = logging.getLogger(__name__)
 
-from llm_pipeline.events.types import (
-    PipelineStarted, PipelineCompleted, PipelineError,
-    StepSelecting, StepSelected, StepSkipped, StepStarted, StepCompleted,
-    CacheLookup, CacheHit, CacheMiss, CacheReconstruction,
-    LLMCallPrepared, LLMCallStarting, LLMCallCompleted,
-    ConsensusStarted, ConsensusAttempt, ConsensusReached, ConsensusFailed,
-    TransformationStarting, TransformationCompleted,
-    InstructionsStored, InstructionsLogged, ContextUpdated, StateSaved,
-    ReviewRequested,
-    PipelineResumed,
-)
 
 if TYPE_CHECKING:
     from pydantic_ai import InstrumentationSettings
@@ -55,8 +44,6 @@ if TYPE_CHECKING:
     from llm_pipeline.consensus import ConsensusStrategy
     from llm_pipeline.state import PipelineStepState
     from llm_pipeline.prompts.variables import VariableResolver
-    from llm_pipeline.events.emitter import PipelineEventEmitter
-    from llm_pipeline.events.types import PipelineEvent
 
 TModel = TypeVar("TModel", bound=SQLModel)
 
@@ -100,16 +87,6 @@ def _append_review_to_prompt(user_prompt: str, review_ctx: dict) -> str:
     return user_prompt + appendix
 
 
-def _calc_llm_cost(usage: object, model: str | None) -> tuple[float | None, float | None, float | None]:
-    """Best-effort cost calculation via genai_prices. Returns (total, input, output) or (None,None,None)."""
-    if not usage or not model:
-        return None, None, None
-    try:
-        from genai_prices import calc_price
-        price = calc_price(usage=usage, model_ref=model)
-        return float(price.total_price), float(price.input_price), float(price.output_price)
-    except Exception:
-        return None, None, None
 
 
 class StepKeyDict(dict):
@@ -243,7 +220,6 @@ class PipelineConfig(ABC):
         session: Optional[Session] = None,
         engine: Optional[Engine] = None,
         variable_resolver: Optional["VariableResolver"] = None,
-        event_emitter: Optional["PipelineEventEmitter"] = None,
         run_id: Optional[str] = None,
         instrumentation_settings: Any | None = None,
     ):
@@ -256,7 +232,6 @@ class PipelineConfig(ABC):
             session: Optional database session. Overrides engine if provided.
             engine: Optional SQLAlchemy engine. Auto-SQLite if both session and engine are None.
             variable_resolver: Optional VariableResolver for prompt variable classes.
-            event_emitter: Optional PipelineEventEmitter for lifecycle/LLM/extraction events. None disables events.
             instrumentation_settings: Optional pydantic-ai InstrumentationSettings for per-agent OTel instrumentation.
         """
         from llm_pipeline.db import init_pipeline_db, get_session as db_get_session
@@ -267,7 +242,6 @@ class PipelineConfig(ABC):
             from llm_pipeline.prompts.variables import RegistryVariableResolver
             variable_resolver = RegistryVariableResolver()
         self._variable_resolver = variable_resolver
-        self._event_emitter = event_emitter
         self._instrumentation_settings = instrumentation_settings
 
         # Validate REGISTRY and STRATEGIES
@@ -345,19 +319,10 @@ class PipelineConfig(ABC):
             session=self._real_session,
             logger=logger,
             run_id=self.run_id,
-            event_emitter=self._event_emitter,
             step_name=step_name,
             tool_name=tool_name,
         )
 
-    def _emit(self, event: "PipelineEvent") -> None:
-        """Forward event to emitter if configured.
-
-        Args:
-            event: PipelineEvent instance to emit.
-        """
-        if self._event_emitter is not None:
-            self._event_emitter.emit(event)
 
     @property
     def instructions(self) -> MappingProxyType:
@@ -713,22 +678,6 @@ class PipelineConfig(ABC):
             self._real_session.add(pipeline_run)
         self._real_session.flush()
 
-        if self._event_emitter:
-            _resume_from = getattr(self, '_resume_from_step', 0)
-            if _resume_from > 0:
-                review_ctx = self._context.get("_review_context", {})
-                self._emit(PipelineResumed(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    resume_from_step=_resume_from,
-                    review_decision=review_ctx.get("decision", ""),
-                ))
-            else:
-                self._emit(PipelineStarted(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                ))
-
         # Open the Langfuse root trace span around the entire execute() body.
         # Manual __enter__/__exit__ instead of `with` so the existing
         # try/except (~540 lines) doesn't need re-indentation. The
@@ -762,14 +711,6 @@ class PipelineConfig(ABC):
                 # Skip steps before resume point (already executed)
                 if step_index < _resume_from:
                     continue
-
-                if self._event_emitter:
-                    self._emit(StepSelecting(
-                        run_id=self.run_id,
-                        pipeline_name=self.pipeline_name,
-                        step_index=step_index,
-                        strategy_count=len(self._strategies),
-                    ))
 
                 step_num = step_index + 1
                 selected_strategy = None
@@ -823,28 +764,11 @@ class PipelineConfig(ABC):
                         self._build_runtime_ctx(step_name=step.step_name),
                     )
 
-                if self._event_emitter:
-                    self._emit(StepSelected(
-                        run_id=self.run_id,
-                        pipeline_name=self.pipeline_name,
-                        step_name=step.step_name,
-                        step_number=step_num,
-                        strategy_name=selected_strategy.name,
-                    ))
-
                 if step.should_skip():
                     logger.info(f"\nSTEP {step_num}: {step.step_name} SKIPPED")
                     self._observer.step_skipped(
                         reason="should_skip returned True",
                     )
-                    if self._event_emitter:
-                        self._emit(StepSkipped(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            step_number=step_num,
-                            reason="should_skip returned True",
-                        ))
                     self._executed_steps.add(step_class)
                     _step_cm.__exit__(None, None, None)
                     _step_cm = None
@@ -867,123 +791,42 @@ class PipelineConfig(ABC):
                     except AttributeError:
                         pass  # Not a DataFrame
 
-                if self._event_emitter:
-                    self._emit(StepStarted(
-                        run_id=self.run_id,
-                        pipeline_name=self.pipeline_name,
-                        step_name=step.step_name,
-                        step_number=step_num,
-                        system_key=step.system_instruction_key,
-                        user_key=step.user_prompt_key,
-                    ))
-
                 step_start = datetime.now(timezone.utc)
                 input_hash = self._hash_step_inputs(step, step_num)
 
                 cached_state = None
                 if use_cache:
                     self._observer.cache_lookup(input_hash=input_hash)
-                    if self._event_emitter:
-                        self._emit(CacheLookup(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            input_hash=input_hash,
-                        ))
                     cached_state = self._find_cached_state(step, input_hash)
-
-                # Step-level token accumulators (sum across all calls)
-                _step_input_tokens = 0
-                _step_output_tokens = 0
-                _step_total_requests = 0
-                _step_total_tokens: int | None = None
-                _step_cost_usd = 0.0
 
                 if cached_state:
                     self._observer.cache_hit(input_hash=input_hash)
-                    if self._event_emitter:
-                        self._emit(CacheHit(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            input_hash=input_hash,
-                            cached_at=cached_state.created_at,
-                        ))
                     logger.info(
                         f"  [CACHED] Using result from "
                         f"{cached_state.created_at.strftime('%Y-%m-%d %H:%M:%S')} UTC"
                     )
                     instructions = self._load_from_cache(cached_state, step)
                     self._instructions[step.step_name] = instructions
-                    if self._event_emitter:
-                        self._emit(InstructionsStored(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            instruction_count=len(instructions),
-                        ))
                     adapter_ctx.outputs[step_class] = instructions
 
                     if hasattr(step, "_transformation") and step._transformation:
                         transformation = step._transformation(self)
-                        if self._event_emitter:
-                            self._emit(TransformationStarting(
-                                transformation_class=step._transformation.__name__,
-                                cached=True,
-                                step_name=step.step_name,
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                timestamp=datetime.now(timezone.utc),
-                            ))
                         transform_start = datetime.now(timezone.utc)
                         current_data = self.get_data("current")
                         transformed_data = transformation.transform(current_data, instructions)
                         self.set_data(transformed_data, step_name=step.step_name)
-                        if self._event_emitter:
-                            self._emit(TransformationCompleted(
-                                data_key=step.step_name,
-                                execution_time_ms=(datetime.now(timezone.utc) - transform_start).total_seconds() * 1000,
-                                cached=True,
-                                step_name=step.step_name,
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                timestamp=datetime.now(timezone.utc),
-                            ))
-
                     step.log_instructions(instructions)
-                    if self._event_emitter:
-                        self._emit(InstructionsLogged(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            logged_keys=[step.step_name],
-                        ))
                     reconstructed_count = self._reconstruct_extractions_from_cache(
                         cached_state, step_def
                     )
                     if step_def.extraction_binds:
                         self._observer.cache_reconstructed(input_hash=input_hash)
-                    if self._event_emitter and step_def.extraction_binds:
-                        self._emit(CacheReconstruction(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            model_count=len(step_def.extraction_binds),
-                            instance_count=reconstructed_count,
-                        ))
                     if reconstructed_count == 0 and step_def.extraction_binds:
                         logger.info("  [PARTIAL CACHE] Re-running extraction")
                         step.extract_data(adapter_ctx)
                 else:
                     if use_cache:
                         self._observer.cache_miss(input_hash=input_hash)
-                        if self._event_emitter:
-                            self._emit(CacheMiss(
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                step_name=step.step_name,
-                                input_hash=input_hash,
-                            ))
                         logger.info("  [FRESH] No cache found, running fresh")
                     if step_def.consensus_strategy is not None:
                         logger.info(
@@ -993,16 +836,6 @@ class PipelineConfig(ABC):
 
                     call_params = step.prepare_calls()
                     instructions = []
-
-                    if self._event_emitter:
-                        self._emit(LLMCallPrepared(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            call_count=len(call_params),
-                            system_key=step.system_instruction_key,
-                            user_key=step.user_prompt_key,
-                        ))
 
                     # Build agent once per step (reused across consensus iterations)
                     from llm_pipeline.agent_registry import get_agent_tools
@@ -1043,9 +876,6 @@ class PipelineConfig(ABC):
 
                     for idx, params in enumerate(call_params):
                         # Per-call token vars (populated in non-consensus path)
-                        _call_input_tokens: int | None = None
-                        _call_output_tokens: int | None = None
-                        _call_total_tokens: int | None = None
 
                         # Rebuild StepDeps per-call so per-call params flow correctly
                         step_deps = StepDeps(
@@ -1055,7 +885,6 @@ class PipelineConfig(ABC):
                             run_id=self.run_id,
                             pipeline_name=self.pipeline_name,
                             step_name=step.step_name,
-                            event_emitter=self._event_emitter,
                             variable_resolver=self._variable_resolver,
                             array_validation=params.get("array_validation"),
                             validation_context=params.get("validation_context"),
@@ -1074,58 +903,14 @@ class PipelineConfig(ABC):
                             )
 
                         # Resolve system prompt for LLMCallStarting event
-                        if self._event_emitter:
-                            sys_key = step.system_instruction_key
-                            if self._variable_resolver:
-                                var_class = self._variable_resolver.resolve(sys_key, 'system')
-                                if var_class:
-                                    sys_vars = var_class()
-                                    sys_vars_dict = (
-                                        sys_vars.model_dump()
-                                        if hasattr(sys_vars, 'model_dump')
-                                        else sys_vars
-                                    )
-                                    rendered_system = prompt_service.get_system_prompt(
-                                        prompt_key=sys_key,
-                                        variables=sys_vars_dict,
-                                        variable_instance=sys_vars,
-                                    )
-                                else:
-                                    rendered_system = prompt_service.get_prompt(
-                                        prompt_key=sys_key,
-                                        prompt_type='system',
-                                    )
-                            else:
-                                rendered_system = prompt_service.get_prompt(
-                                    prompt_key=sys_key,
-                                    prompt_type='system',
-                                )
-                            self._emit(LLMCallStarting(
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                step_name=step.step_name,
-                                call_index=idx,
-                                rendered_system_prompt=rendered_system,
-                                rendered_user_prompt=user_prompt,
-                            ))
-
                         if step_def.consensus_strategy is not None:
-                            # Consensus path: per-attempt LLMCallCompleted events
-                            # are emitted inside _execute_with_consensus
-                            instruction, _c_input, _c_output, _c_requests, _c_cost = (
-                                self._execute_with_consensus(
-                                    agent, user_prompt, step_deps, instructions_type,
-                                    strategy=step_def.consensus_strategy,
-                                    current_step_name=current_step_name,
-                                    step_model=step_model,
-                                    step_usage_limits=step_usage_limits,
-                                )
+                            instruction = self._execute_with_consensus(
+                                agent, user_prompt, step_deps, instructions_type,
+                                strategy=step_def.consensus_strategy,
+                                current_step_name=current_step_name,
+                                step_model=step_model,
+                                step_usage_limits=step_usage_limits,
                             )
-                            # Merge consensus token totals into step-level accumulators
-                            _step_input_tokens += _c_input or 0
-                            _step_output_tokens += _c_output or 0
-                            _step_total_requests += _c_requests
-                            _step_cost_usd += _c_cost or 0.0
                         else:
                             run_result = None
                             try:
@@ -1140,121 +925,27 @@ class PipelineConfig(ABC):
                                     **run_kwargs,
                                 )
                                 instruction = run_result.output
-                                # Capture per-call token usage
-                                _usage = run_result.usage()
-                                if _usage:
-                                    _call_input_tokens = _usage.input_tokens
-                                    _call_output_tokens = _usage.output_tokens
-                                    _call_total_tokens = (
-                                        (_call_input_tokens or 0) + (_call_output_tokens or 0)
-                                    )
-                                    _step_input_tokens += _call_input_tokens or 0
-                                    _step_output_tokens += _call_output_tokens or 0
-                                _step_total_requests += 1
                             except UnexpectedModelBehavior as exc:
                                 instruction = instructions_type.create_failure(str(exc))
-
-                            # Non-consensus: emit single LLMCallCompleted per call
-                            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, step_model)
-                            _step_cost_usd += _cost_total or 0.0
-                            if self._event_emitter:
-                                self._emit(LLMCallCompleted(
-                                    run_id=self.run_id,
-                                    pipeline_name=self.pipeline_name,
-                                    step_name=step.step_name,
-                                    call_index=idx,
-                                    raw_response=_extract_raw_response(run_result) if run_result else None,
-                                    parsed_result=(
-                                        instruction.model_dump()
-                                        if hasattr(instruction, 'model_dump')
-                                        else None
-                                    ),
-                                    model_name=step_model,
-                                    attempt_count=1,
-                                    validation_errors=[],
-                                    input_tokens=_call_input_tokens,
-                                    output_tokens=_call_output_tokens,
-                                    total_tokens=_call_total_tokens,
-                                    cost_usd=_cost_total,
-                                    input_cost_usd=_cost_in,
-                                    output_cost_usd=_cost_out,
-                                ))
-
                         instructions.append(instruction)
 
                     self._instructions[step.step_name] = instructions
-                    if self._event_emitter:
-                        self._emit(InstructionsStored(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            instruction_count=len(instructions),
-                        ))
                     adapter_ctx.outputs[step_class] = instructions
 
                     if hasattr(step, "_transformation") and step._transformation:
                         transformation = step._transformation(self)
-                        if self._event_emitter:
-                            self._emit(TransformationStarting(
-                                transformation_class=step._transformation.__name__,
-                                cached=False,
-                                step_name=step.step_name,
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                timestamp=datetime.now(timezone.utc),
-                            ))
                         transform_start = datetime.now(timezone.utc)
                         current_data = self.get_data("current")
                         transformed_data = transformation.transform(current_data, instructions)
                         self.set_data(transformed_data, step_name=step.step_name)
-                        if self._event_emitter:
-                            self._emit(TransformationCompleted(
-                                data_key=step.step_name,
-                                execution_time_ms=(datetime.now(timezone.utc) - transform_start).total_seconds() * 1000,
-                                cached=False,
-                                step_name=step.step_name,
-                                run_id=self.run_id,
-                                pipeline_name=self.pipeline_name,
-                                timestamp=datetime.now(timezone.utc),
-                            ))
-
                     step.extract_data(adapter_ctx)
                     execution_time_ms = int(
                         (datetime.now(timezone.utc) - step_start).total_seconds() * 1000
                     )
-                    _step_total_tokens = _step_input_tokens + _step_output_tokens if _step_total_requests > 0 else None
                     self._save_step_state(
                         step, step_num, instructions, input_hash, execution_time_ms, step_model,
-                        input_tokens=_step_input_tokens if _step_total_requests > 0 else None,
-                        output_tokens=_step_output_tokens if _step_total_requests > 0 else None,
-                        total_tokens=_step_total_tokens,
-                        total_requests=_step_total_requests if _step_total_requests > 0 else None,
                     )
                     step.log_instructions(instructions)
-                    if self._event_emitter:
-                        self._emit(InstructionsLogged(
-                            run_id=self.run_id,
-                            pipeline_name=self.pipeline_name,
-                            step_name=step.step_name,
-                            logged_keys=[step.step_name],
-                        ))
-
-                if self._event_emitter:
-                    # Timing includes cache-lookup or LLM-call depending on path;
-                    # CEO-approved: step_start stays after logging block (L541).
-                    # Token fields are None on cached path (no LLM calls made).
-                    self._emit(StepCompleted(
-                        run_id=self.run_id,
-                        pipeline_name=self.pipeline_name,
-                        step_name=step.step_name,
-                        step_number=step_num,
-                        execution_time_ms=(datetime.now(timezone.utc) - step_start).total_seconds() * 1000,
-                        input_tokens=_step_input_tokens if _step_total_requests > 0 else None,
-                        output_tokens=_step_output_tokens if _step_total_requests > 0 else None,
-                        total_tokens=_step_total_tokens if _step_total_requests > 0 else None,
-                        cost_usd=_step_cost_usd if _step_total_requests > 0 and _step_cost_usd > 0 else None,
-                    ))
-
                 self._executed_steps.add(step_class)
 
                 # Clear review context after step runs (don't leak to subsequent steps)
@@ -1302,14 +993,6 @@ class PipelineConfig(ABC):
             self._real_session.add(pipeline_run)
             self._real_session.flush()
 
-            if self._event_emitter:
-                self._emit(PipelineCompleted(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    execution_time_ms=pipeline_execution_time_ms,
-                    steps_executed=len(self._executed_steps),  # unique step classes (includes skipped, deduplicates repeated)
-                ))
-
             self._current_step = None
             # Close the observer's root span on the success path.
             _root_cm.__exit__(None, None, None)
@@ -1322,16 +1005,6 @@ class PipelineConfig(ABC):
                 self._real_session.add(pipeline_run)
                 self._real_session.flush()
 
-            if self._event_emitter:
-                import traceback
-                self._emit(PipelineError(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    step_name=current_step_name,
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    traceback=traceback.format_exc(),
-                ))
             self._current_step = None
             # Close any open step span first (innermost-to-outermost),
             # then close the root span. Both marked ERROR so Langfuse
@@ -1499,8 +1172,7 @@ class PipelineConfig(ABC):
                 )
         return total
 
-    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None,
-                         input_tokens=None, output_tokens=None, total_tokens=None, total_requests=None):
+    def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None):
         from llm_pipeline.state import PipelineStepState
         from llm_pipeline.db.prompt import Prompt
         from sqlmodel import select
@@ -1544,23 +1216,9 @@ class PipelineConfig(ABC):
             prompt_version=prompt_version,
             execution_time_ms=execution_time_ms,
             model=model_name,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
-            total_requests=total_requests,
         )
         self._real_session.add(state)
         self._real_session.flush()
-        if self._event_emitter:
-            self._emit(StateSaved(
-                run_id=self.run_id,
-                pipeline_name=self.pipeline_name,
-                step_name=step.step_name,
-                step_number=step_number,
-                input_hash=input_hash,
-                execution_time_ms=float(execution_time_ms) if execution_time_ms is not None else 0.0,
-            ))
-
     def _pause_for_review(self, pipeline_run, step, step_number, review_config, review_data):
         """Pause pipeline execution for human review.
 
@@ -1593,16 +1251,6 @@ class PipelineConfig(ABC):
         pipeline_run.status = "awaiting_review"
         self._real_session.add(pipeline_run)
         self._real_session.commit()  # commit, not flush — releases DB lock for event flush
-
-        if self._event_emitter:
-            self._emit(ReviewRequested(
-                run_id=self.run_id,
-                pipeline_name=self.pipeline_name,
-                step_name=step.step_name,
-                step_number=step_number,
-                token=token,
-                review_data=review_data.model_dump(mode="json"),
-            ))
 
         # Webhook notification (fire-and-forget)
         webhook_url = (
@@ -1718,75 +1366,16 @@ class PipelineConfig(ABC):
 
         results = []
         result_groups = []
-        # Token accumulators across all consensus attempts
-        _consensus_input_tokens = 0
-        _consensus_output_tokens = 0
-        _consensus_requests = 0
-        _consensus_cost_usd = 0.0
-        _has_any_usage = False
-
-        if self._event_emitter:
-            self._emit(ConsensusStarted(
-                run_id=self.run_id,
-                pipeline_name=self.pipeline_name,
-                step_name=current_step_name,
-                threshold=strategy.threshold,
-                max_calls=strategy.max_attempts,
-                strategy_name=strategy.name,
-            ))
 
         for attempt in range(strategy.max_attempts):
-            _call_input_tokens = None
-            _call_output_tokens = None
-            _call_total_tokens = None
-            run_result = None
             try:
                 _consensus_kwargs = dict(deps=step_deps, model=step_model or self._model)
                 if step_usage_limits is not None:
                     _consensus_kwargs["usage_limits"] = step_usage_limits
                 run_result = agent.run_sync(user_prompt, **_consensus_kwargs)
                 instruction = run_result.output
-                # Capture per-call token usage defensively
-                _usage = run_result.usage()
-                if _usage:
-                    _has_any_usage = True
-                    _call_input_tokens = _usage.input_tokens if _usage.input_tokens is not None else None
-                    _call_output_tokens = _usage.output_tokens if _usage.output_tokens is not None else None
-                    _call_total_tokens = (
-                        (_call_input_tokens or 0) + (_call_output_tokens or 0)
-                    )
-                    _consensus_input_tokens += _call_input_tokens or 0
-                    _consensus_output_tokens += _call_output_tokens or 0
             except UnexpectedModelBehavior as exc:
                 instruction = instructions_type.create_failure(str(exc))
-            _consensus_requests += 1
-
-            # Emit per-attempt LLMCallCompleted with per-call token values
-            _resolved_model = step_model or self._model
-            _cost_total, _cost_in, _cost_out = _calc_llm_cost(_usage, _resolved_model)
-            _consensus_cost_usd += _cost_total or 0.0
-            if self._event_emitter:
-                self._emit(LLMCallCompleted(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    step_name=current_step_name,
-                    call_index=attempt,
-                    raw_response=_extract_raw_response(run_result) if run_result else None,
-                    parsed_result=(
-                        instruction.model_dump()
-                        if hasattr(instruction, 'model_dump')
-                        else None
-                    ),
-                    model_name=_resolved_model,
-                    attempt_count=attempt + 1,
-                    validation_errors=[],
-                    input_tokens=_call_input_tokens,
-                    output_tokens=_call_output_tokens,
-                    total_tokens=_call_total_tokens,
-                    cost_usd=_cost_total,
-                    input_cost_usd=_cost_in,
-                    output_cost_usd=_cost_out,
-                ))
 
             results.append(instruction)
             matched_group = None
@@ -1804,15 +1393,6 @@ class PipelineConfig(ABC):
                 max_attempts=strategy.max_attempts,
                 strategy=strategy.name,
             )
-            if self._event_emitter:
-                self._emit(ConsensusAttempt(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    step_name=current_step_name,
-                    attempt=attempt + 1,
-                    group_count=len(result_groups),
-                ))
-
             if not strategy.should_continue(results, result_groups, attempt + 1, strategy.max_attempts):
                 break
 
@@ -1826,14 +1406,6 @@ class PipelineConfig(ABC):
                 attempts_used=consensus_result.total_attempts,
                 agreement=None,
             )
-            if self._event_emitter:
-                self._emit(ConsensusReached(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    step_name=current_step_name,
-                    attempt=consensus_result.total_attempts,
-                    threshold=strategy.threshold,
-                ))
         else:
             logger.info(
                 f"  [NO CONSENSUS] {strategy.name}: after {consensus_result.total_attempts} attempts"
@@ -1843,22 +1415,7 @@ class PipelineConfig(ABC):
                 attempts_used=consensus_result.total_attempts,
                 reason=f"largest_group={len(largest_group)} below threshold={strategy.threshold}",
             )
-            if self._event_emitter:
-                self._emit(ConsensusFailed(
-                    run_id=self.run_id,
-                    pipeline_name=self.pipeline_name,
-                    step_name=current_step_name,
-                    max_calls=strategy.max_attempts,
-                    largest_group_size=len(largest_group),
-                ))
-
-        return (
-            consensus_result.result,
-            _consensus_input_tokens if _has_any_usage else None,
-            _consensus_output_tokens if _has_any_usage else None,
-            _consensus_requests,
-            _consensus_cost_usd,
-        )
+        return consensus_result.result
 
     def close(self) -> None:
         """Close the database session if the pipeline owns it."""

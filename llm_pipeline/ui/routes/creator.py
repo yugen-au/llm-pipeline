@@ -13,10 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from llm_pipeline.events.emitter import CompositeEmitter
-from llm_pipeline.events.handlers import BufferedEventHandler
 from llm_pipeline.state import DraftStep, PipelineRun, utc_now
-from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
 from llm_pipeline.ui.routes.websocket import manager as ws_manager
 
@@ -185,9 +182,6 @@ def generate_step(
     })
 
     def run_creator() -> None:
-        bridge = UIBridge(run_id=run_id)
-        db_buffer = BufferedEventHandler(engine)
-        emitter = CompositeEmitter([bridge, db_buffer])
         pipeline = None
         try:
             from llm_pipeline.creator.pipeline import StepCreatorPipeline
@@ -196,7 +190,6 @@ def generate_step(
                 model=default_model,
                 run_id=run_id,
                 engine=engine,
-                event_emitter=emitter,
             )
             pipeline.execute(data=None, input_data=body.model_dump())
             pipeline.save()
@@ -277,12 +270,7 @@ def generate_step(
                     "Failed to update error status for run_id=%s", run_id
                 )
         finally:
-            bridge.complete()
-            try:
-                count = db_buffer.flush()
-                logger.info("Flushed %d events to DB for run_id=%s", count, run_id)
-            except Exception:
-                logger.exception("Failed to flush events for run_id=%s", run_id)
+            ws_manager.signal_run_complete(run_id)
 
     background_tasks.add_task(run_creator)
 

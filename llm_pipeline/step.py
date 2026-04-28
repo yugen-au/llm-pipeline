@@ -15,11 +15,6 @@ from typing import Any, List, Dict, TYPE_CHECKING, Type, Optional, ClassVar
 from pydantic import BaseModel, Field, ValidationError
 from sqlmodel import SQLModel
 
-from llm_pipeline.events.types import (
-    ExtractionCompleted,
-    ExtractionError,
-    ExtractionStarting,
-)
 from llm_pipeline.inputs import StepInputs
 from llm_pipeline.naming import to_snake_case
 from llm_pipeline.types import StepCallParams
@@ -360,16 +355,6 @@ class LLMStep(ABC):
             _ext_cm.__enter__()
             _ext_exc_info: tuple = (None, None, None)
 
-            if self.pipeline._event_emitter:
-                self.pipeline._emit(ExtractionStarting(
-                    run_id=self.pipeline.run_id,
-                    pipeline_name=self.pipeline.pipeline_name,
-                    step_name=self.step_name,
-                    extraction_class=extraction_class.__name__,
-                    model_class=extraction.MODEL.__name__,
-                    timestamp=datetime.now(timezone.utc),
-                ))
-
             try:
                 pathway_inputs = ext_bind.inputs.resolve(adapter_ctx)
                 # Build any resource-typed fields on the pathway inputs.
@@ -378,53 +363,13 @@ class LLMStep(ABC):
                     pathway_inputs,
                     self.pipeline._build_runtime_ctx(step_name=self.step_name),
                 )
-                extract_start = datetime.now(timezone.utc)
                 instances = extraction.extract(pathway_inputs)
                 self.store_extractions(extraction.MODEL, instances)
                 for instance in instances:
                     self.pipeline._real_session.add(instance)
                 self.pipeline._real_session.flush()
-
-                # Build created/updated payloads (post-flush so IDs are assigned)
-                created_data = tuple(_safe_dump(inst) for inst in instances)
-                updated_data = tuple(
-                    {"id": getattr(inst, "id", None), "before": before, "after": _safe_dump(inst)}
-                    for inst, before in extraction._tracked_updates
-                )
-
-                if self.pipeline._event_emitter:
-                    self.pipeline._emit(ExtractionCompleted(
-                        run_id=self.pipeline.run_id,
-                        pipeline_name=self.pipeline.pipeline_name,
-                        step_name=self.step_name,
-                        extraction_class=extraction_class.__name__,
-                        model_class=extraction.MODEL.__name__,
-                        instance_count=len(instances),
-                        execution_time_ms=(
-                            datetime.now(timezone.utc) - extract_start
-                        ).total_seconds() * 1000,
-                        timestamp=datetime.now(timezone.utc),
-                        created=created_data,
-                        updated=updated_data,
-                    ))
             except Exception as e:
                 _ext_exc_info = (type(e), e, e.__traceback__)
-                if self.pipeline._event_emitter:
-                    validation_errors = (
-                        [err["msg"] for err in e.errors()]
-                        if isinstance(e, ValidationError)
-                        else []
-                    )
-                    self.pipeline._emit(ExtractionError(
-                        run_id=self.pipeline.run_id,
-                        pipeline_name=self.pipeline.pipeline_name,
-                        step_name=self.step_name,
-                        extraction_class=extraction_class.__name__,
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        validation_errors=validation_errors,
-                        timestamp=datetime.now(timezone.utc),
-                    ))
                 raise
             finally:
                 _ext_cm.__exit__(*_ext_exc_info)

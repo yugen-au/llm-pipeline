@@ -10,7 +10,6 @@ from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.ui.app import create_app
 from llm_pipeline.state import PipelineRun, PipelineStepState
-from llm_pipeline.events.models import PipelineEventRecord
 
 
 def _utc(offset_seconds: int = 0) -> datetime:
@@ -32,7 +31,6 @@ def _make_app():
     from fastapi.middleware.cors import CORSMiddleware
     from llm_pipeline.ui.routes.runs import router as runs_router
     from llm_pipeline.ui.routes.steps import router as steps_router
-    from llm_pipeline.ui.routes.events import router as events_router
     from llm_pipeline.ui.routes.prompts import router as prompts_router
     from llm_pipeline.ui.routes.pipelines import router as pipelines_router
     from llm_pipeline.ui.routes.websocket import router as ws_router
@@ -64,7 +62,6 @@ def _make_app():
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
-    app.include_router(events_router, prefix="/api")
     app.include_router(prompts_router, prefix="/api")
     app.include_router(pipelines_router, prefix="/api")
     app.include_router(creator_router, prefix="/api")
@@ -156,41 +153,8 @@ def seeded_app_client():
         session.add(step3)
         session.commit()
 
-    # Seed events for RUN_1 only (RUN_2 and RUN_3 have no events)
-    with Session(engine) as session:
-        evt1 = PipelineEventRecord(
-            run_id="aaaaaaaa-0000-0000-0000-000000000001",
-            event_type="pipeline_started",
-            pipeline_name="alpha_pipeline",
-            timestamp=_utc(-298),
-            event_data={"event_type": "pipeline_started", "run_id": "aaaaaaaa-0000-0000-0000-000000000001"},
-        )
-        evt2 = PipelineEventRecord(
-            run_id="aaaaaaaa-0000-0000-0000-000000000001",
-            event_type="step_started",
-            pipeline_name="alpha_pipeline",
-            timestamp=_utc(-297),
-            event_data={"event_type": "step_started", "run_id": "aaaaaaaa-0000-0000-0000-000000000001", "step_name": "step_a"},
-        )
-        evt3 = PipelineEventRecord(
-            run_id="aaaaaaaa-0000-0000-0000-000000000001",
-            event_type="step_completed",
-            pipeline_name="alpha_pipeline",
-            timestamp=_utc(-294),
-            event_data={"event_type": "step_completed", "run_id": "aaaaaaaa-0000-0000-0000-000000000001", "step_name": "step_a"},
-        )
-        evt4 = PipelineEventRecord(
-            run_id="aaaaaaaa-0000-0000-0000-000000000001",
-            event_type="pipeline_completed",
-            pipeline_name="alpha_pipeline",
-            timestamp=_utc(-291),
-            event_data={"event_type": "pipeline_completed", "run_id": "aaaaaaaa-0000-0000-0000-000000000001"},
-        )
-        session.add(evt1)
-        session.add(evt2)
-        session.add(evt3)
-        session.add(evt4)
-        session.commit()
+    # Events used to be seeded here for RUN_1 timeline tests, but the
+    # events module is gone now — past traces live in Langfuse.
 
     with TestClient(app) as client:
         yield client

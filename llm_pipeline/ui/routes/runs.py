@@ -9,10 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from llm_pipeline.events.emitter import CompositeEmitter
-from llm_pipeline.events.handlers import BufferedEventHandler
 from llm_pipeline.state import PipelineRun, PipelineStepState
-from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
 from llm_pipeline.ui.routes.websocket import manager as ws_manager
 
@@ -255,12 +252,9 @@ def trigger_run(
     })
 
     def run_pipeline() -> None:
-        bridge = UIBridge(run_id=run_id)
-        db_buffer = BufferedEventHandler(engine)
-        emitter = CompositeEmitter([bridge, db_buffer])
         pipeline = None
         try:
-            pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter, input_data=body.input_data or {})
+            pipeline = factory(run_id=run_id, engine=engine, input_data=body.input_data or {})
             pipeline.execute(data=None, input_data=body.input_data)
             # Only save extractions if pipeline completed (not paused for review)
             if not getattr(pipeline, '_awaiting_review', False):
@@ -268,11 +262,6 @@ def trigger_run(
         except Exception as exc:
             logger.exception("Background pipeline execution failed for run_id=%s", run_id)
             error_msg = f"{type(exc).__name__}: {exc}"
-            # Release pipeline session lock BEFORE opening err_session.
-            # pipeline._real_session holds an open transaction with a row
-            # lock on pipeline_runs.  If we open err_session and try to
-            # UPDATE the same row while that lock is held, PostgreSQL will
-            # block indefinitely (single-threaded deadlock).
             if pipeline is not None:
                 try:
                     pipeline.close()
@@ -294,12 +283,7 @@ def trigger_run(
                     "Failed to update PipelineRun status for run_id=%s", run_id
                 )
         finally:
-            bridge.complete()
-            try:
-                count = db_buffer.flush()
-                logger.info("Flushed %d events to DB for run_id=%s", count, run_id)
-            except Exception:
-                logger.exception("Failed to flush events to DB for run_id=%s", run_id)
+            ws_manager.signal_run_complete(run_id)
 
     background_tasks.add_task(run_pipeline)
 

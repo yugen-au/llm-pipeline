@@ -20,7 +20,6 @@ from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
-from llm_pipeline.events.models import PipelineEventRecord
 from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationCaseResult, EvaluationVariant
 
 logger = logging.getLogger(__name__)
@@ -242,8 +241,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     """Initialize pipeline database tables.
 
     Creates PipelineStepState, PipelineRunInstance, Prompt,
-    PipelineEventRecord (pipeline_events), DraftStep (draft_steps),
-    and DraftPipeline (draft_pipelines) tables.
+    DraftStep (draft_steps), and DraftPipeline (draft_pipelines) tables.
 
     When LLM_PIPELINE_DB_SCHEMA is set, tables are created in that schema
     (Postgres only; SQLite ignores schemas).
@@ -299,7 +297,6 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineRunInstance.__table__,
             PipelineRun.__table__,
             Prompt.__table__,
-            PipelineEventRecord.__table__,
             DraftStep.__table__,
             DraftPipeline.__table__,
             StepModelConfig.__table__,

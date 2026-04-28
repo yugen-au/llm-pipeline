@@ -8,10 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
-from llm_pipeline.events.emitter import CompositeEmitter
-from llm_pipeline.events.handlers import BufferedEventHandler
 from llm_pipeline.state import PipelineRun, PipelineReview
-from llm_pipeline.ui.bridge import UIBridge
 from llm_pipeline.ui.deps import DBSession
 from llm_pipeline.ui.routes.websocket import manager as ws_manager
 
@@ -197,9 +194,10 @@ def submit_review(
 
         session.commit()
 
-    from llm_pipeline.events.models import PipelineEventRecord
-    event_data = {
-        "event_type": "review_completed",
+    # Notify connected WS clients of the review-completed transition.
+    # State (PipelineReview row) is the source of truth; this is just a nudge.
+    ws_manager.broadcast_to_run(run_id, {
+        "type": "review_completed",
         "run_id": run_id,
         "pipeline_name": pipeline_name,
         "step_name": reviewed_step_name,
@@ -207,18 +205,7 @@ def submit_review(
         "decision": body.decision,
         "notes": body.notes,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-    with Session(engine) as ev_session:
-        ev_session.add(PipelineEventRecord(
-            run_id=run_id,
-            event_type="review_completed",
-            pipeline_name=pipeline_name,
-            step_name=reviewed_step_name,
-            timestamp=datetime.now(timezone.utc),
-            event_data=event_data,
-        ))
-        ev_session.commit()
-    ws_manager.broadcast_to_run(run_id, event_data)
+    })
 
     if body.decision == "restart":
         new_run_id = str(uuid.uuid4())
@@ -237,12 +224,9 @@ def submit_review(
             pre_session.commit()
 
         def run_restart():
-            bridge = UIBridge(run_id=new_run_id)
-            db_buffer = BufferedEventHandler(engine)
-            emitter = CompositeEmitter([bridge, db_buffer])
             pipeline = None
             try:
-                pipeline = factory(run_id=new_run_id, engine=engine, event_emitter=emitter)
+                pipeline = factory(run_id=new_run_id, engine=engine)
                 pipeline.execute(data=None)
                 pipeline.save()
             except Exception:
@@ -265,11 +249,7 @@ def submit_review(
                 except Exception:
                     pass
             finally:
-                bridge.complete()
-                try:
-                    db_buffer.flush()
-                except Exception:
-                    pass
+                ws_manager.signal_run_complete(new_run_id)
 
         background_tasks.add_task(run_restart)
         return ReviewSubmitResponse(run_id=new_run_id, decision=body.decision, status="restarted")
@@ -288,12 +268,9 @@ def submit_review(
         resume_index = _resolve_step_index(request, pipeline_name, resume_step_name)
 
     def run_resume():
-        bridge = UIBridge(run_id=run_id)
-        db_buffer = BufferedEventHandler(engine)
-        emitter = CompositeEmitter([bridge, db_buffer])
         pipeline = None
         try:
-            pipeline = factory(run_id=run_id, engine=engine, event_emitter=emitter)
+            pipeline = factory(run_id=run_id, engine=engine)
             pipeline.execute_from_step(
                 resume_step_index=resume_index,
                 review_notes=body.notes,
@@ -326,11 +303,7 @@ def submit_review(
             except Exception:
                 pass
         finally:
-            bridge.complete()
-            try:
-                db_buffer.flush()
-            except Exception:
-                pass
+            ws_manager.signal_run_complete(run_id)
 
     background_tasks.add_task(run_resume)
     return ReviewSubmitResponse(run_id=run_id, decision=body.decision, status="resumed")
