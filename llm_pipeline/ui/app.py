@@ -28,21 +28,22 @@ def _make_pipeline_factory(
 ) -> Callable:
     """Return a factory closure that instantiates *cls* with captured *model*.
 
-    The returned callable matches the signature expected by trigger_run:
-    ``(run_id, engine, event_emitter, **kwargs) -> PipelineConfig``.
+    Observability is now driven by OTEL/Langfuse via the global tracer
+    provider configured in ``observability.configure()``; no per-run
+    event emitter is wired in. Extra kwargs (e.g. ``input_data``) are
+    accepted but ignored — input data is passed to ``pipeline.execute``
+    by the caller, not the constructor.
     """
 
     def factory(
         run_id: str,
         engine: Engine,
-        event_emitter: object = None,
         **kwargs: object,
     ) -> PipelineConfig:
         return cls(
             model=model,
             run_id=run_id,
             engine=engine,
-            event_emitter=event_emitter,
         )
 
     return factory

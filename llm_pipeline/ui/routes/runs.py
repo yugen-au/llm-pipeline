@@ -192,12 +192,13 @@ def trigger_run(
 
     The pipeline_registry on app.state maps pipeline names to factory
     callables with signature
-    ``(run_id: str, engine: Engine, event_emitter: PipelineEventEmitter | None = None) -> pipeline``
+    ``(run_id: str, engine: Engine, **kwargs) -> pipeline``
     where the returned object exposes ``.execute()`` and ``.save()``.
 
-    A :class:`~llm_pipeline.ui.bridge.UIBridge` is constructed per run and
-    passed as ``event_emitter`` so pipeline events are forwarded to
-    WebSocket clients in real time.
+    Observability is OTEL-based: spans are emitted via the global
+    tracer provider configured in ``observability.configure()``,
+    consumed by both Langfuse (storage) and the
+    ``WebSocketBroadcastProcessor`` (live UI invalidation).
     """
     registry: dict = getattr(request.app.state, "pipeline_registry", {})
     factory = registry.get(body.pipeline_name)
