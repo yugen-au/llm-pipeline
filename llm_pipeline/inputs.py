@@ -33,7 +33,18 @@ from pydantic import BaseModel, ConfigDict, create_model
 from llm_pipeline.resources import PipelineResource, _ResourceFieldInfo
 from llm_pipeline.wiring import Source, SourcesSpec
 
-__all__ = ["StepInputs"]
+__all__ = ["PipelineInputData", "StepInputs"]
+
+
+class PipelineInputData(BaseModel):
+    """Base class for pipeline-level input data.
+
+    Pipelines that take structured input declare an ``InputData`` subclass and
+    set ``INPUT_DATA = MyInputData`` on the ``PipelineConfig`` subclass. The
+    pipeline validates incoming input against this class and exposes it as
+    ``self.validated_input`` for steps to read via ``FromInput(...)`` sources.
+    """
+    pass
 
 
 # ---------------------------------------------------------------------------

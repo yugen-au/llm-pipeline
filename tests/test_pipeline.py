@@ -22,10 +22,9 @@ from llm_pipeline import (
     init_pipeline_db,
     step_definition,
 )
-from llm_pipeline.context import PipelineInputData
 from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.events import PipelineEvent, PipelineEventEmitter, PipelineStarted
-from llm_pipeline.inputs import StepInputs
+from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.types import StepCallParams
 from llm_pipeline.wiring import Bind, FromInput, FromOutput

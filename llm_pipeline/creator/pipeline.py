@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 from sqlalchemy import Engine
 
 from llm_pipeline.agent_registry import register_agent
-from llm_pipeline.context import PipelineInputData
+from llm_pipeline.inputs import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.registry import PipelineDatabaseRegistry
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies

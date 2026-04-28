@@ -29,7 +29,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy import Engine
 from sqlmodel import SQLModel, Session
 
-from llm_pipeline.context import PipelineInputData
+from llm_pipeline.inputs import PipelineInputData
 from llm_pipeline.consensus import instructions_match, ConsensusResult
 from llm_pipeline.naming import to_snake_case
 from llm_pipeline.wiring import AdapterContext, Bind

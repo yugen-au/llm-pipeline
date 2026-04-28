@@ -111,9 +111,9 @@ class TestContextKwargRemoved:
     """Phase 2: ``context=`` is no longer accepted by @step_definition."""
 
     def test_context_kwarg_rejected_as_unknown(self):
-        from llm_pipeline.context import PipelineContext
+        from pydantic import BaseModel
 
-        class BarContext(PipelineContext):
+        class BarContext(BaseModel):
             pass
 
         with pytest.raises(TypeError, match="context"):

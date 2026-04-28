@@ -20,16 +20,6 @@ framework when the context is handed to the corresponding surface.
 They are available for logging and event emission but are not load-
 bearing for business logic — step/tool identity is already known
 statically from the class that receives the context.
-
-Name clash note:
-
-``llm_pipeline.context.PipelineContext`` is the *old* "step output
-context" concept which is being removed as part of the adapter
-refactor (the ``context=`` kwarg on ``@step_definition`` was dropped
-in an earlier commit). The old class is retained only while legacy
-tests are migrated. Once those land on the new contract the old
-symbol will be deleted and this module's ``PipelineContext`` can be
-re-exported from ``context`` for a single canonical import path.
 """
 from __future__ import annotations
 

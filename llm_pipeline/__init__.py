@@ -25,7 +25,7 @@ from llm_pipeline.consensus import (
     AdaptiveStrategy,
     SoftVoteStrategy,
 )
-from llm_pipeline.context import PipelineContext, PipelineInputData
+from llm_pipeline.inputs import PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.registry import PipelineDatabaseRegistry
@@ -71,7 +71,6 @@ __all__ = [
     "PipelineStrategies",
     "StepDefinition",
     # Data handling
-    "PipelineContext",
     "PipelineInputData",
     "PipelineExtraction",
     "PipelineTransformation",

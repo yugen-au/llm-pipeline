@@ -14,9 +14,8 @@ from typing import ClassVar, Optional
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from llm_pipeline.context import PipelineInputData
 from llm_pipeline.db.prompt import Prompt
-from llm_pipeline.inputs import StepInputs
+from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.step import LLMResultMixin
 
 

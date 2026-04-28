@@ -334,9 +334,9 @@ class StepSandbox:
             schema_lines.append(f"from .{instructions_module} import {names_csv}")
         stub_names = schema_names - instructions_classes
         if stub_names:
-            schema_lines.append("from llm_pipeline.context import PipelineContext")
+            schema_lines.append("from pydantic import BaseModel")
             for name in sorted(stub_names):
-                schema_lines.append(f"class {name}(PipelineContext): pass")
+                schema_lines.append(f"class {name}(BaseModel): pass")
         (pkg_dir / "schemas.py").write_text(
             "\n".join(schema_lines) + "\n", encoding="utf-8"
         )

@@ -4,8 +4,7 @@ from typing import ClassVar, Optional
 from pydantic import BaseModel
 from sqlmodel import SQLModel, Field
 
-from llm_pipeline.context import PipelineInputData
-from llm_pipeline.inputs import StepInputs
+from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.step import LLMResultMixin
 
 

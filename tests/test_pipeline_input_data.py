@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 from sqlmodel import SQLModel, Field, Session, create_engine
 
-from llm_pipeline.context import PipelineInputData
+from llm_pipeline.inputs import PipelineInputData
 from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
 from llm_pipeline.registry import PipelineDatabaseRegistry

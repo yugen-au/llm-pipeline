@@ -1,14 +1,20 @@
 """
 Instruction and context schemas for the meta-pipeline step generator.
 
-Defines 4 Instructions classes (LLMResultMixin subclasses) and 4 Context
-classes (PipelineContext subclasses) corresponding to the 4-step creator
+Defines 4 Instructions classes (LLMResultMixin subclasses) and 4 step-output
+data classes (plain BaseModel subclasses) corresponding to the 4-step creator
 pipeline: RequirementsAnalysis, CodeGeneration, PromptGeneration,
 CodeValidation.
+
+Note: the ``*Context`` classes here predate the Bind+StepInputs contract and
+are pending migration alongside the ``register_agent`` removal. They retain
+their names for now because creator's own ``steps.py`` still references them
+under the legacy contract.
 """
 from typing import ClassVar
 
-from llm_pipeline.context import PipelineContext
+from pydantic import BaseModel
+
 from llm_pipeline.step import LLMResultMixin
 
 from .models import ExtractionTarget, FieldDefinition
@@ -138,7 +144,7 @@ class CodeValidationInstructions(LLMResultMixin):
 # ---------------------------------------------------------------------------
 
 
-class RequirementsAnalysisContext(PipelineContext):
+class RequirementsAnalysisContext(BaseModel):
     """Context produced by the requirements analysis step."""
 
     step_name: str
@@ -150,7 +156,7 @@ class RequirementsAnalysisContext(PipelineContext):
     output_context_keys: list[str]
 
 
-class CodeGenerationContext(PipelineContext):
+class CodeGenerationContext(BaseModel):
     """Context produced by the code generation step."""
 
     step_code: str
@@ -158,7 +164,7 @@ class CodeGenerationContext(PipelineContext):
     extraction_code: str | None
 
 
-class PromptGenerationContext(PipelineContext):
+class PromptGenerationContext(BaseModel):
     """Context produced by the prompt generation step."""
 
     system_prompt: str
@@ -167,7 +173,7 @@ class PromptGenerationContext(PipelineContext):
     prompt_yaml: str
 
 
-class CodeValidationContext(PipelineContext):
+class CodeValidationContext(BaseModel):
     """Context produced by the code validation step."""
 
     is_valid: bool

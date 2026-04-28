@@ -19,8 +19,7 @@ from llm_pipeline import (
     step_definition,
 )
 from llm_pipeline.agent_registry import clear_agent_registry, register_agent
-from llm_pipeline.context import PipelineInputData
-from llm_pipeline.inputs import StepInputs
+from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.wiring import Bind, FromInput, FromOutput
