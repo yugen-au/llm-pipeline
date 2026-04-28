@@ -1,9 +1,11 @@
+import { useMemo } from 'react'
 import { useStep } from '@/api/steps'
-import { useStepEvents } from '@/api/events'
+import { useTrace } from '@/api/trace'
 import { useStepInstructions, usePipeline } from '@/api/pipelines'
 import { useRunContext } from '@/api/runs'
 import { formatDuration, formatAbsolute } from '@/lib/time'
 import { JsonViewer } from '@/components/JsonViewer'
+import { TraceTimeline } from '@/components/live/TraceTimeline'
 import {
   Sheet,
   SheetContent,
@@ -23,15 +25,11 @@ import {
   SkeletonBlock,
 } from '@/components/shared'
 import type {
-  EventItem,
   StepDetail,
   StepPromptItem,
   ContextSnapshot,
+  TraceObservation,
   RunStatus,
-  LLMCallCompletedData,
-  LLMCallStartingData,
-  ContextUpdatedData,
-  ExtractionCompletedData,
 } from '@/api/types'
 
 // ---------------------------------------------------------------------------
@@ -50,177 +48,199 @@ interface StepDetailPanelProps {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Type-narrow event_data as T (no runtime validation -- task 35 scope). */
-function eventData<T>(event: EventItem): T {
-  return event.event_data as T
+/** Find the step span observation (parent of all step descendants). */
+function findStepSpan(
+  observations: TraceObservation[],
+  stepName: string,
+): TraceObservation | undefined {
+  return observations.find(
+    (o) => o.name === `step.${stepName}` && o.type === 'SPAN',
+  )
 }
 
-/** Filter events by type and cast event_data. */
-function filterEvents<T>(events: EventItem[], type: string): { event: EventItem; data: T }[] {
-  return events
-    .filter((e) => e.event_type === type)
-    .map((e) => ({ event: e, data: eventData<T>(e) }))
+/** Collect all observations descended from a given parent span. */
+function descendantsOf(
+  observations: TraceObservation[],
+  rootId: string,
+): TraceObservation[] {
+  const byParent = new Map<string, TraceObservation[]>()
+  for (const o of observations) {
+    if (!o.parent_observation_id) continue
+    if (!byParent.has(o.parent_observation_id)) byParent.set(o.parent_observation_id, [])
+    byParent.get(o.parent_observation_id)!.push(o)
+  }
+  const result: TraceObservation[] = []
+  const stack = [rootId]
+  while (stack.length) {
+    const id = stack.pop()!
+    const children = byParent.get(id) ?? []
+    for (const c of children) {
+      result.push(c)
+      stack.push(c.id)
+    }
+  }
+  return result
+}
+
+/** Sum token + cost across generation observations under this step. */
+function generationTotals(observations: TraceObservation[]) {
+  let inputTokens = 0
+  let outputTokens = 0
+  let cost = 0
+  let count = 0
+  for (const o of observations) {
+    if (o.type !== 'GENERATION' && !o.name.startsWith('gen_ai')) continue
+    count += 1
+    inputTokens += o.input_tokens ?? 0
+    outputTokens += o.output_tokens ?? 0
+    cost += o.total_cost ?? 0
+  }
+  return { count, inputTokens, outputTokens, cost }
 }
 
 // ---------------------------------------------------------------------------
-// Tab content components (private)
+// Tabs
 // ---------------------------------------------------------------------------
 
 function InputTab({
   step,
-  snapshots,
-  snapshotsLoading,
+  isLoading,
+  isError,
+  context,
+  pipelineMetadata,
+  pipelineLoading,
+  isFinalStep,
 }: {
-  step: StepDetail
-  snapshots: ContextSnapshot[]
-  snapshotsLoading: boolean
+  step: StepDetail | undefined
+  isLoading: boolean
+  isError: boolean
+  context: ContextSnapshot | null
+  pipelineMetadata: ReturnType<typeof usePipeline>['data']
+  pipelineLoading: boolean
+  isFinalStep: boolean
 }) {
-  if (step.step_number === 1) {
-    return <EmptyState message="No prior context (first step)" />
-  }
-
-  if (snapshotsLoading) {
-    return <SkeletonBlock className="h-24" />
-  }
-
-  const prevSnapshot = snapshots.find((s) => s.step_number === step.step_number - 1)
-
-  if (!prevSnapshot) {
-    return <EmptyState message="Previous step context not available" />
-  }
-
+  void pipelineMetadata
+  void pipelineLoading
+  void isFinalStep
+  if (isLoading) return <SkeletonBlock />
+  if (isError || !step) return <EmptyState message="Failed to load step input" />
   return (
     <TabScrollArea>
-      <div className="space-y-2">
-        <h4 className="text-sm font-medium text-muted-foreground">
-          Context after step {prevSnapshot.step_number} ({prevSnapshot.step_name})
-        </h4>
-        <JsonViewer data={prevSnapshot.context_snapshot} />
-      </div>
+      <BadgeSection>
+        <Badge variant="outline">step #{step.step_number}</Badge>
+        {step.execution_time_ms != null && (
+          <Badge variant="outline">{formatDuration(step.execution_time_ms)}</Badge>
+        )}
+        {step.model && <Badge variant="outline">{step.model}</Badge>}
+      </BadgeSection>
+      {context?.context_snapshot ? (
+        <div className="mt-3">
+          <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+            Context snapshot at this step
+          </p>
+          <JsonViewer data={context.context_snapshot} />
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-muted-foreground">
+          No context snapshot recorded for this step.
+        </p>
+      )}
     </TabScrollArea>
   )
 }
 
 function PromptsTab({
-  events,
+  step,
   prompts,
-  isLoading,
-  isError,
+  promptsLoading,
 }: {
-  events: EventItem[]
-  prompts: StepPromptItem[] | undefined
-  isLoading: boolean
-  isError: boolean
+  step: StepDetail | undefined
+  prompts: StepPromptItem[]
+  promptsLoading: boolean
 }) {
-  const calls = filterEvents<LLMCallStartingData>(events, 'llm_call_starting')
-  const hasRendered = calls.length > 0
-
-  if (!hasRendered && isLoading) {
+  if (!step) return <EmptyState message="Step not loaded" />
+  if (promptsLoading) return <SkeletonBlock />
+  if (prompts.length === 0) {
     return (
-      <div className="space-y-3">
-        <SkeletonLine width="10rem" className="h-5" />
-        <SkeletonBlock />
-        <SkeletonBlock />
-      </div>
+      <p className="p-4 text-sm text-muted-foreground">
+        No prompt content registered for this step.
+      </p>
     )
   }
-
-  // Show rendered prompts from events when available
-  if (hasRendered) {
-    return (
-      <TabScrollArea>
-        <div className="space-y-4">
-          {calls.map(({ data }, i) => (
-            <div key={i} className="space-y-3">
-              {calls.length > 1 && (
-                <h4 className="text-sm font-semibold">
-                  Call {data.call_index + 1} of {calls.length}
-                </h4>
-              )}
-              <BadgeSection
-                badge={<Badge variant="secondary">system</Badge>}
-              >
-                <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                  {data.rendered_system_prompt}
-                </pre>
-              </BadgeSection>
-              <BadgeSection
-                badge={<Badge variant="secondary">user</Badge>}
-              >
-                <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-                  {data.rendered_user_prompt}
-                </pre>
-              </BadgeSection>
-            </div>
-          ))}
-        </div>
-      </TabScrollArea>
-    )
-  }
-
-  // Fallback to templates
-  if (isError) {
-    return <p className="text-sm text-destructive">Failed to load prompts</p>
-  }
-
-  if (!prompts || prompts.length === 0) {
-    return <EmptyState message="No prompts recorded" />
-  }
-
   return (
     <TabScrollArea>
-      <div className="space-y-4">
-        {prompts.map((item) => (
-          <BadgeSection
-            key={item.prompt_key}
-            badge={
-              <div className="flex items-center gap-2">
-                <Badge variant="secondary">{item.prompt_type}</Badge>
-                <span className="text-sm font-medium">{item.prompt_key}</span>
-              </div>
-            }
-          >
-            <pre className="whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs">
-              {item.content}
-            </pre>
-          </BadgeSection>
-        ))}
-      </div>
+      {prompts.map((p) => (
+        <LabeledPre
+          key={p.prompt_key}
+          label={`${p.prompt_type} — ${p.prompt_key} (v${p.version})`}
+          content={p.content}
+        />
+      ))}
     </TabScrollArea>
   )
 }
 
-function ResponseTab({ events }: { events: EventItem[] }) {
-  const calls = filterEvents<LLMCallCompletedData>(events, 'llm_call_completed')
-  const total = calls.length
-
-  if (total === 0) {
-    return <EmptyState message="No LLM responses recorded" />
+function GenerationsTab({
+  observations,
+  isLoading,
+  isError,
+  langfuseConfigured,
+}: {
+  observations: TraceObservation[]
+  isLoading: boolean
+  isError: boolean
+  langfuseConfigured: boolean
+}) {
+  const generations = observations.filter(
+    (o) => o.type === 'GENERATION' || o.name.startsWith('gen_ai'),
+  )
+  if (isError) return <EmptyState message="Failed to load trace" />
+  if (!langfuseConfigured && !isLoading) {
+    return (
+      <p className="p-4 text-sm text-muted-foreground">
+        Langfuse is not configured; LLM call detail is unavailable.
+      </p>
+    )
   }
-
+  if (generations.length === 0 && !isLoading) {
+    return <p className="p-4 text-sm text-muted-foreground">No LLM calls recorded.</p>
+  }
   return (
     <TabScrollArea>
-      <div className="space-y-4">
-        {calls.map(({ data }, i) => (
-          <div key={i} className="space-y-2">
-            {total > 1 && (
-              <h4 className="text-sm font-semibold">
-                Call {data.call_index + 1} of {total}
-              </h4>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              <LabeledPre
-                label="Raw Response"
-                content={data.raw_response ?? '(null)'}
-              />
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Parsed Result</p>
-                {data.parsed_result
-                  ? <JsonViewer data={data.parsed_result as Record<string, unknown>} />
-                  : <span className="text-xs text-muted-foreground">(null)</span>
-                }
-              </div>
+      <div className="flex flex-col gap-4">
+        {generations.map((g) => (
+          <div key={g.id} className="rounded-lg border p-3">
+            <div className="mb-2 flex items-center gap-2 text-sm">
+              <span className="font-mono">{g.name}</span>
+              {g.model && <Badge variant="outline">{g.model}</Badge>}
+              {g.duration_ms != null && (
+                <span className="text-xs text-muted-foreground">
+                  {formatDuration(Math.round(g.duration_ms))}
+                </span>
+              )}
+              {g.input_tokens != null && g.output_tokens != null && (
+                <span className="text-xs text-muted-foreground">
+                  {g.input_tokens}→{g.output_tokens} tok
+                </span>
+              )}
+              {g.total_cost != null && g.total_cost > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  ${g.total_cost.toFixed(4)}
+                </span>
+              )}
             </div>
+            {g.input != null && (
+              <div className="mb-2">
+                <div className="mb-1 text-xs font-medium text-muted-foreground">input</div>
+                <JsonViewer data={g.input as object} />
+              </div>
+            )}
+            {g.output != null && (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">output</div>
+                <JsonViewer data={g.output as object} />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -229,97 +249,57 @@ function ResponseTab({ events }: { events: EventItem[] }) {
 }
 
 function InstructionsTab({
-  instructionsSchema,
-  instructionsClass,
-}: {
-  instructionsSchema: Record<string, unknown> | null
-  instructionsClass: string | null
-}) {
-  if (!instructionsSchema) {
-    return <EmptyState message="No schema available" />
-  }
-
-  return (
-    <TabScrollArea>
-      <div className="space-y-3">
-        {instructionsClass && (
-          <Badge variant="secondary">{instructionsClass}</Badge>
-        )}
-        <JsonViewer data={instructionsSchema} />
-      </div>
-    </TabScrollArea>
-  )
-}
-
-function ContextDiffTab({
   step,
-  events,
-  snapshots,
-  snapshotsLoading,
+  isLoading,
+  isError,
 }: {
-  step: StepDetail
-  events: EventItem[]
-  snapshots: ContextSnapshot[]
-  snapshotsLoading: boolean
+  step: StepDetail | undefined
+  isLoading: boolean
+  isError: boolean
 }) {
-  // Get new_keys from context_updated events for this step
-  const ctxEvents = filterEvents<ContextUpdatedData>(events, 'context_updated')
-  const newKeys = ctxEvents.flatMap(({ data }) => data.new_keys)
-
-  if (snapshotsLoading) {
-    return <SkeletonBlock className="h-24" />
+  if (isLoading) return <SkeletonBlock />
+  if (isError || !step) return <EmptyState message="Failed to load instructions" />
+  if (!step.result_data) {
+    return <p className="p-4 text-sm text-muted-foreground">No result data persisted for this step.</p>
   }
-
-  const beforeSnapshot = snapshots.find((s) => s.step_number === step.step_number - 1)
-  const afterSnapshot = snapshots.find((s) => s.step_number === step.step_number)
-
   return (
     <TabScrollArea>
-      <div className="space-y-3">
-        {newKeys.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">New Keys</p>
-            <div className="flex flex-wrap gap-1">
-              {newKeys.map((key) => (
-                <Badge key={key} variant="outline">{key}</Badge>
-              ))}
-            </div>
-          </div>
-        )}
-        <JsonViewer
-          before={beforeSnapshot?.context_snapshot ?? {}}
-          after={afterSnapshot?.context_snapshot ?? step.context_snapshot}
-          maxDepth={3}
-        />
-      </div>
+      <JsonViewer data={step.result_data} />
     </TabScrollArea>
   )
 }
 
-function ExtractionsTab({ events }: { events: EventItem[] }) {
-  const extractions = filterEvents<ExtractionCompletedData>(events, 'extraction_completed')
-  const errors = events.filter((e) => e.event_type === 'extraction_error')
-
-  if (extractions.length === 0 && errors.length === 0) {
-    return <EmptyState message="No extractions for this step" />
+function ExtractionsTab({
+  observations,
+  isLoading,
+}: {
+  observations: TraceObservation[]
+  isLoading: boolean
+}) {
+  const extractions = observations.filter((o) => o.name.startsWith('extraction.'))
+  if (isLoading && extractions.length === 0) return <SkeletonBlock />
+  if (extractions.length === 0) {
+    return <p className="p-4 text-sm text-muted-foreground">No extractions recorded for this step.</p>
   }
-
   return (
     <TabScrollArea>
-      <div className="space-y-3">
-        {extractions.map(({ data }, i) => (
-          <ExtractionDetail key={i} data={data} />
+      <div className="flex flex-col gap-3">
+        {extractions.map((e) => (
+          <ExtractionDetail
+            key={e.id}
+            extractionClass={e.name.slice('extraction.'.length)}
+            modelClass={
+              (e.metadata as { model_class?: string } | null)?.model_class ?? '?'
+            }
+            instanceCount={
+              (e.metadata as { instance_count?: number } | null)?.instance_count ?? 0
+            }
+            executionTimeMs={e.duration_ms != null ? Math.round(e.duration_ms) : 0}
+            timestamp={e.start_time ?? ''}
+            created={[]}
+            updated={[]}
+          />
         ))}
-        {errors.length > 0 && (
-          <div className="space-y-2">
-            <h4 className="text-sm font-semibold text-destructive">Extraction Errors</h4>
-            {errors.map((e, i) => (
-              <div key={i} className="rounded-md bg-destructive/10 p-3 text-destructive">
-                <JsonViewer data={e.event_data as Record<string, unknown>} />
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </TabScrollArea>
   )
@@ -327,101 +307,54 @@ function ExtractionsTab({ events }: { events: EventItem[] }) {
 
 function MetaTab({
   step,
-  events,
+  observations,
+  isLoading,
+  isError,
 }: {
-  step: StepDetail
-  events: EventItem[]
+  step: StepDetail | undefined
+  observations: TraceObservation[]
+  isLoading: boolean
+  isError: boolean
 }) {
-  const completedCalls = filterEvents<LLMCallCompletedData>(events, 'llm_call_completed')
-  const cacheHit = events.find((e) => e.event_type === 'cache_hit')
-  const cacheMiss = events.find((e) => e.event_type === 'cache_miss')
-  const stepSelected = events.find((e) => e.event_type === 'step_selected')
-
-  // Aggregate validation errors and token usage across all calls
-  const validationErrors = completedCalls.flatMap(({ data }) => data.validation_errors ?? [])
-  const maxAttempts = completedCalls.length > 0
-    ? Math.max(...completedCalls.map(({ data }) => data.attempt_count))
-    : null
-  const inputTokens = completedCalls.reduce((sum, { data }) => sum + (data.input_tokens ?? 0), 0)
-  const outputTokens = completedCalls.reduce((sum, { data }) => sum + (data.output_tokens ?? 0), 0)
-  const hasTokens = completedCalls.some(({ data }) => data.input_tokens != null || data.output_tokens != null)
-  const totalCost = completedCalls.reduce((sum, { data }) => sum + (data.cost_usd ?? 0), 0)
-  const hasCost = completedCalls.some(({ data }) => data.cost_usd != null)
-
+  const totals = useMemo(() => generationTotals(observations), [observations])
+  if (isLoading) return <SkeletonBlock />
+  if (isError || !step) return <EmptyState message="Failed to load step metadata" />
   return (
     <TabScrollArea>
-      <div className="space-y-4">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-          <dt className="text-muted-foreground">Step Name</dt>
-          <dd>{step.step_name}</dd>
-          <dt className="text-muted-foreground">Step Number</dt>
-          <dd>{step.step_number}</dd>
-          <dt className="text-muted-foreground">Model</dt>
-          <dd>{step.model ?? '\u2014'}</dd>
-          <dt className="text-muted-foreground">Duration</dt>
-          <dd>{formatDuration(step.execution_time_ms)}</dd>
-          {hasTokens && (
-            <>
-              <dt className="text-muted-foreground">Tokens In</dt>
-              <dd>{inputTokens.toLocaleString()}</dd>
-              <dt className="text-muted-foreground">Tokens Out</dt>
-              <dd>{outputTokens.toLocaleString()}</dd>
-              <dt className="text-muted-foreground">Tokens Total</dt>
-              <dd>{(inputTokens + outputTokens).toLocaleString()}</dd>
-            </>
-          )}
-          {hasCost && (
-            <>
-              <dt className="text-muted-foreground">Cost</dt>
-              <dd>${totalCost.toFixed(4)}</dd>
-            </>
-          )}
-          <dt className="text-muted-foreground">Created</dt>
-          <dd>{formatAbsolute(step.created_at)}</dd>
-          {step.prompt_system_key && (
-            <>
-              <dt className="text-muted-foreground">System Key</dt>
-              <dd className="font-mono text-xs">{step.prompt_system_key}</dd>
-            </>
-          )}
-          {step.prompt_user_key && (
-            <>
-              <dt className="text-muted-foreground">User Key</dt>
-              <dd className="font-mono text-xs">{step.prompt_user_key}</dd>
-            </>
-          )}
-          {maxAttempts != null && (
-            <>
-              <dt className="text-muted-foreground">Attempts</dt>
-              <dd>{maxAttempts}</dd>
-            </>
-          )}
-          <dt className="text-muted-foreground">Cache</dt>
-          <dd>
-            {cacheHit ? (
-              <Badge variant="secondary">hit</Badge>
-            ) : cacheMiss ? (
-              <Badge variant="outline">miss</Badge>
-            ) : (
-              '\u2014'
+      <BadgeSection>
+        <Badge variant="outline">created {formatAbsolute(step.created_at)}</Badge>
+        {step.execution_time_ms != null && (
+          <Badge variant="outline">{formatDuration(step.execution_time_ms)}</Badge>
+        )}
+        {totals.count > 0 && (
+          <>
+            <Badge variant="outline">{totals.count} LLM call{totals.count > 1 ? 's' : ''}</Badge>
+            <Badge variant="outline">
+              {totals.inputTokens}→{totals.outputTokens} tok
+            </Badge>
+            {totals.cost > 0 && (
+              <Badge variant="outline">${totals.cost.toFixed(4)}</Badge>
             )}
-          </dd>
-          {stepSelected && (
-            <>
-              <dt className="text-muted-foreground">Strategy</dt>
-              <dd>{String((stepSelected.event_data as Record<string, unknown>).strategy_name ?? '\u2014')}</dd>
-            </>
-          )}
-        </dl>
-
-        {validationErrors.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-destructive">Validation Errors</p>
-            <ul className="list-inside list-disc text-xs text-destructive">
-              {validationErrors.map((err, i) => (
-                <li key={i}>{err}</li>
-              ))}
-            </ul>
+          </>
+        )}
+      </BadgeSection>
+      <div className="mt-3 space-y-2 text-sm">
+        {step.prompt_system_key && (
+          <div>
+            <span className="text-muted-foreground">system: </span>
+            <code>{step.prompt_system_key}</code>
+          </div>
+        )}
+        {step.prompt_user_key && (
+          <div>
+            <span className="text-muted-foreground">user: </span>
+            <code>{step.prompt_user_key}</code>
+          </div>
+        )}
+        {step.input_hash && (
+          <div>
+            <span className="text-muted-foreground">input_hash: </span>
+            <code>{step.input_hash.slice(0, 16)}...</code>
           </div>
         )}
       </div>
@@ -430,7 +363,7 @@ function MetaTab({
 }
 
 // ---------------------------------------------------------------------------
-// StepContent (mounts only when open && stepNumber != null)
+// StepContent
 // ---------------------------------------------------------------------------
 
 function StepContent({
@@ -442,129 +375,106 @@ function StepContent({
   stepNumber: number
   runStatus?: string
 }) {
-  const { data: step, isLoading, isError } = useStep(runId, stepNumber, runStatus)
-
-  const {
-    data: eventsResponse,
-    isLoading: eventsLoading,
-  } = useStepEvents(runId, step?.step_name ?? '', runStatus)
-
-  const {
-    data: instructionsResponse,
-    isLoading: instructionsLoading,
-    isError: instructionsError,
-  } = useStepInstructions(step?.pipeline_name ?? '', step?.step_name ?? '')
-
-  const {
-    data: pipelineResponse,
-  } = usePipeline(step?.pipeline_name)
-
-  const {
-    data: contextResponse,
-    isLoading: contextLoading,
-  } = useRunContext(
+  const { data: step, isLoading: stepLoading, isError: stepError } = useStep(
     runId,
-    runStatus === 'completed' || runStatus === 'failed' ? (runStatus as RunStatus) : undefined,
+    stepNumber,
+    runStatus,
+  )
+  const { data: trace, isLoading: traceLoading, isError: traceError } = useTrace(
+    runId,
+    runStatus as RunStatus | undefined,
+  )
+  const { data: context } = useRunContext(runId, runStatus as RunStatus | undefined)
+  const pipelineName = step?.pipeline_name ?? ''
+  const stepName = step?.step_name ?? ''
+  const { data: pipelineMetadata, isLoading: pipelineLoading } = usePipeline(pipelineName)
+  const { data: stepInstructions, isLoading: promptsLoading } = useStepInstructions(
+    pipelineName,
+    stepName,
   )
 
-  // Derive step metadata from pipeline introspection
-  const stepMeta = pipelineResponse?.strategies
-    ?.flatMap((s) => s.steps)
-    .find((s) => s.step_name === step?.step_name) ?? null
+  // Filter observations to those descended from this step's span.
+  const observations = trace?.observations ?? []
+  const stepObservations = useMemo(() => {
+    if (!stepName) return []
+    const stepSpan = findStepSpan(observations, stepName)
+    if (!stepSpan) return []
+    return [stepSpan, ...descendantsOf(observations, stepSpan.id)]
+  }, [observations, stepName])
 
-  if (isLoading) {
-    return (
-      <div className="space-y-3 p-4">
-        <SkeletonLine width="10rem" className="h-5" />
-        <SkeletonLine width="6rem" />
-        <SkeletonLine width="8rem" />
-      </div>
-    )
-  }
-
-  if (isError) {
-    return <p className="p-4 text-sm text-destructive">Failed to load step</p>
-  }
-
-  if (!step) return null
-
-  const events = eventsResponse?.items ?? []
-  const snapshots = contextResponse?.snapshots ?? []
+  const contextSnapshot =
+    context?.snapshots?.find((s) => s.step_number === stepNumber) ?? null
+  const isFinalStep =
+    pipelineMetadata != null &&
+    pipelineMetadata.execution_order.length > 0 &&
+    pipelineMetadata.execution_order[pipelineMetadata.execution_order.length - 1] === stepName
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* Step header */}
-      <div className="shrink-0 border-b px-4 py-3">
-        <h3 className="text-base font-semibold">{step.step_name}</h3>
-        <p className="text-xs text-muted-foreground">
-          Step {step.step_number} &middot; {step.model ?? 'no model'} &middot; {formatDuration(step.execution_time_ms)}
-        </p>
-      </div>
+    <Tabs defaultValue="input" className="flex h-full flex-col">
+      <TabsList>
+        <TabsTrigger value="input">Input</TabsTrigger>
+        <TabsTrigger value="prompts">Prompts</TabsTrigger>
+        <TabsTrigger value="generations">Generations</TabsTrigger>
+        <TabsTrigger value="instructions">Instructions</TabsTrigger>
+        <TabsTrigger value="extractions">Extractions</TabsTrigger>
+        <TabsTrigger value="trace">Trace</TabsTrigger>
+        <TabsTrigger value="meta">Meta</TabsTrigger>
+      </TabsList>
 
-      {/* Tabs */}
-      <Tabs defaultValue="meta" className="flex min-h-0 flex-1 flex-col">
-        <TabsList className="mx-4 mt-3 shrink-0 flex-wrap">
-          <TabsTrigger value="meta">Meta</TabsTrigger>
-          <TabsTrigger value="input">Input</TabsTrigger>
-          <TabsTrigger value="prompts">Prompts</TabsTrigger>
-          <TabsTrigger value="response">Response</TabsTrigger>
-          <TabsTrigger value="instructions">Instructions</TabsTrigger>
-          <TabsTrigger value="context">Context</TabsTrigger>
-          <TabsTrigger value="extractions">Extractions</TabsTrigger>
-        </TabsList>
-
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {eventsLoading ? (
-            <div className="space-y-2">
-              <SkeletonLine width="12rem" />
-              <SkeletonBlock />
-            </div>
-          ) : (
-            <>
-              <TabsContent value="meta">
-                <MetaTab step={step} events={events} />
-              </TabsContent>
-              <TabsContent value="input">
-                <InputTab step={step} snapshots={snapshots} snapshotsLoading={contextLoading} />
-              </TabsContent>
-              <TabsContent value="prompts">
-                <PromptsTab
-                  events={events}
-                  prompts={instructionsResponse?.prompts}
-                  isLoading={instructionsLoading}
-                  isError={instructionsError}
-                />
-              </TabsContent>
-              <TabsContent value="response">
-                <ResponseTab events={events} />
-              </TabsContent>
-              <TabsContent value="instructions">
-                <InstructionsTab
-                  instructionsSchema={stepMeta?.instructions_schema ?? null}
-                  instructionsClass={stepMeta?.instructions_class ?? null}
-                />
-              </TabsContent>
-              <TabsContent value="context">
-                <ContextDiffTab
-                  step={step}
-                  events={events}
-                  snapshots={snapshots}
-                  snapshotsLoading={contextLoading}
-                />
-              </TabsContent>
-              <TabsContent value="extractions">
-                <ExtractionsTab events={events} />
-              </TabsContent>
-            </>
-          )}
-        </div>
-      </Tabs>
-    </div>
+      <TabsContent value="input" className="min-h-0 flex-1">
+        <InputTab
+          step={step}
+          isLoading={stepLoading}
+          isError={stepError}
+          context={contextSnapshot}
+          pipelineMetadata={pipelineMetadata}
+          pipelineLoading={pipelineLoading}
+          isFinalStep={isFinalStep}
+        />
+      </TabsContent>
+      <TabsContent value="prompts" className="min-h-0 flex-1">
+        <PromptsTab
+          step={step}
+          prompts={stepInstructions?.prompts ?? []}
+          promptsLoading={promptsLoading}
+        />
+      </TabsContent>
+      <TabsContent value="generations" className="min-h-0 flex-1">
+        <GenerationsTab
+          observations={stepObservations}
+          isLoading={traceLoading}
+          isError={traceError}
+          langfuseConfigured={trace?.langfuse_configured ?? false}
+        />
+      </TabsContent>
+      <TabsContent value="instructions" className="min-h-0 flex-1">
+        <InstructionsTab step={step} isLoading={stepLoading} isError={stepError} />
+      </TabsContent>
+      <TabsContent value="extractions" className="min-h-0 flex-1">
+        <ExtractionsTab observations={stepObservations} isLoading={traceLoading} />
+      </TabsContent>
+      <TabsContent value="trace" className="min-h-0 flex-1">
+        <TraceTimeline
+          observations={stepObservations}
+          isLoading={traceLoading}
+          isError={traceError}
+          emptyMessage="No observations for this step"
+        />
+      </TabsContent>
+      <TabsContent value="meta" className="min-h-0 flex-1">
+        <MetaTab
+          step={step}
+          observations={stepObservations}
+          isLoading={stepLoading}
+          isError={stepError}
+        />
+      </TabsContent>
+    </Tabs>
   )
 }
 
 // ---------------------------------------------------------------------------
-// StepDetailPanel (public)
+// Top-level
 // ---------------------------------------------------------------------------
 
 export function StepDetailPanel({
@@ -574,22 +484,29 @@ export function StepDetailPanel({
   onClose,
   runStatus,
 }: StepDetailPanelProps) {
-  const visible = open && stepNumber != null
-
   return (
-    <Sheet open={visible} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-[600px] max-w-full p-0 sm:max-w-[600px]">
-        <SheetHeader className="sr-only">
-          <SheetTitle>Step Detail</SheetTitle>
-          <SheetDescription>Detailed view of pipeline step execution</SheetDescription>
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-3 p-4 sm:max-w-3xl"
+      >
+        <SheetHeader>
+          <SheetTitle>Step detail</SheetTitle>
+          <SheetDescription>
+            {stepNumber == null
+              ? <SkeletonLine />
+              : <span>Step #{stepNumber}</span>}
+          </SheetDescription>
         </SheetHeader>
-        {visible ? (
-          <StepContent
-            runId={runId}
-            stepNumber={stepNumber}
-            runStatus={runStatus}
-          />
-        ) : null}
+        {stepNumber != null && (
+          <div className="min-h-0 flex-1">
+            <StepContent
+              runId={runId}
+              stepNumber={stepNumber}
+              runStatus={runStatus}
+            />
+          </div>
+        )}
       </SheetContent>
     </Sheet>
   )

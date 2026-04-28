@@ -1,10 +1,9 @@
-import type { EventItem } from '@/api/types'
+import type { TraceObservation } from '@/api/types'
 import type { WsConnectionStatus } from '@/stores/websocket'
 import type { TestResponse, AcceptResponse } from '@/api/creator'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { EmptyState, SkeletonBlock, LabeledPre } from '@/components/shared'
-import { EventStream } from '@/components/live/EventStream'
 import { TestResultsCard } from './TestResultsCard'
 import { AcceptResultsCard } from './AcceptResultsCard'
 
@@ -32,7 +31,7 @@ export interface CreatorResultsPanelProps {
   testResults: TestResponse | null
   acceptResults: AcceptResponse | null
   wsStatus: WsConnectionStatus
-  events: EventItem[]
+  observations: TraceObservation[]
   errorMessage?: string | null
 }
 
@@ -46,7 +45,7 @@ export function CreatorResultsPanel({
   testResults,
   acceptResults,
   wsStatus,
-  events,
+  observations,
   errorMessage,
 }: CreatorResultsPanelProps) {
   return (
@@ -61,7 +60,7 @@ export function CreatorResultsPanel({
           testResults={testResults}
           acceptResults={acceptResults}
           wsStatus={wsStatus}
-          events={events}
+          observations={observations}
           errorMessage={errorMessage}
         />
       </CardContent>
@@ -79,17 +78,29 @@ function ResultsContent({
   testResults,
   acceptResults,
   wsStatus,
-  events,
+  observations,
   errorMessage,
 }: CreatorResultsPanelProps) {
+  void activeRunId
+  void wsStatus
   switch (workflowState) {
     case 'idle':
       return <EmptyState message="Generate a step to see results" />
 
     case 'generating':
+      // Trace observations stream in via the trace endpoint while the
+      // run is in flight. Show a count + the latest span name as a
+      // compact progress indicator. For deeper drill-down, the user
+      // navigates to the run-detail page (full timeline).
       return (
-        <div className="flex min-h-0 flex-1 flex-col">
-          <EventStream events={events} wsStatus={wsStatus} runId={activeRunId} />
+        <div className="flex min-h-0 flex-1 flex-col gap-2 text-sm text-muted-foreground">
+          <p>Generating...</p>
+          {observations.length > 0 && (
+            <p className="font-mono text-xs">
+              {observations[observations.length - 1].name}
+            </p>
+          )}
+          <p className="text-xs">{observations.length} observations recorded</p>
         </div>
       )
 

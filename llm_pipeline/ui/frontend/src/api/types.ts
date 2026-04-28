@@ -86,14 +86,6 @@ export interface RunListParams {
   limit?: number
 }
 
-/** Query params for GET /api/runs/{run_id}/events. */
-export interface EventListParams {
-  event_type?: string
-  step_name?: string
-  offset?: number
-  limit?: number
-}
-
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -147,92 +139,62 @@ export interface StepDetail {
 }
 
 // ---------------------------------------------------------------------------
-// Events
+// Trace (Langfuse-backed observability)
 // ---------------------------------------------------------------------------
 
-/** Single event item from GET /api/runs/{run_id}/events. */
-export interface EventItem {
-  event_type: string
-  pipeline_name: string
-  run_id: string
-  timestamp: string
-  event_data: Record<string, unknown>
-}
+/** One Langfuse observation flattened for the frontend.
+ *
+ * Hierarchy is conveyed via `parent_observation_id`. The frontend
+ * builds the tree client-side. `type` is the Langfuse observation
+ * kind (`SPAN` / `GENERATION` / `EVENT` / `TOOL` / etc.).
+ */
+export interface TraceObservation {
+  id: string
+  parent_observation_id: string | null
+  trace_id: string
+  name: string
+  type: string
+  level: string | null
+  status_message: string | null
+  start_time: string | null
+  end_time: string | null
+  duration_ms: number | null
 
-/** GET /api/runs/{run_id}/events response body. */
-export interface EventListResponse {
-  items: EventItem[]
-  total: number
-  offset: number
-  limit: number
-}
-
-// ---------------------------------------------------------------------------
-// Typed event_data interfaces
-// ---------------------------------------------------------------------------
-
-/** event_data shape for llm_call_starting events. */
-export interface LLMCallStartingData {
-  call_index: number
-  rendered_system_prompt: string
-  rendered_user_prompt: string
-}
-
-/** event_data shape for llm_call_completed events. */
-export interface LLMCallCompletedData {
-  call_index: number
-  raw_response: string | null
-  parsed_result: Record<string, unknown> | null
-  model_name: string | null
-  attempt_count: number
-  validation_errors: string[]
+  // Only set for as_type='generation' (LLM calls)
+  model: string | null
   input_tokens: number | null
   output_tokens: number | null
   total_tokens: number | null
-  cost_usd: number | null
-  input_cost_usd: number | null
-  output_cost_usd: number | null
+  total_cost: number | null
+
+  input: unknown
+  output: unknown
+  metadata: unknown
 }
 
-/** event_data shape for context_updated events. */
-export interface ContextUpdatedData {
-  new_keys: string[]
-  context_snapshot: Record<string, unknown>
+/** One Langfuse trace tied to a pipeline run via session_id == run_id. */
+export interface TraceSummary {
+  id: string
+  name: string | null
+  user_id: string | null
+  session_id: string | null
+  tags: string[]
+  start_time: string | null
+  end_time: string | null
+  duration_ms: number | null
+  total_cost: number | null
+  observations: TraceObservation[]
 }
 
-/** Before/after snapshot for a single updated record. */
-export interface UpdatedRecord {
-  id: number | null
-  before: Record<string, unknown>
-  after: Record<string, unknown>
-}
-
-/** event_data shape for extraction_completed events. */
-export interface ExtractionCompletedData {
-  extraction_class: string
-  model_class: string
-  instance_count: number
-  execution_time_ms: number
-  created?: Record<string, unknown>[]
-  updated?: UpdatedRecord[]
-}
-
-/** event_data shape for tool_call_starting events. */
-export interface ToolCallStartingData {
-  tool_name: string
-  tool_args: Record<string, unknown>
-  call_index: number
-  step_name: string | null
-}
-
-/** event_data shape for tool_call_completed events. */
-export interface ToolCallCompletedData {
-  tool_name: string
-  result_preview: string | null
-  execution_time_ms: number
-  call_index: number
-  error: string | null
-  step_name: string | null
+/** GET /api/runs/{run_id}/trace response body. */
+export interface RunTraceResponse {
+  run_id: string
+  pipeline_name: string
+  status: string
+  langfuse_configured: boolean
+  traces: TraceSummary[]
+  /** Flat list of every observation across every trace, sorted by start_time. */
+  observations: TraceObservation[]
 }
 
 // ---------------------------------------------------------------------------
@@ -449,14 +411,33 @@ export interface WsError {
 }
 
 /**
- * Wrapper for raw pipeline events received over WebSocket.
+ * OTEL span lifecycle messages forwarded by
+ * ``WebSocketBroadcastProcessor``. Spans are tapped from the same
+ * pipeline Langfuse uses, so the same observations the trace endpoint
+ * returns get pushed live as they happen.
  *
- * Adds `type: 'pipeline_event'` discriminant so WsMessage forms a proper
- * discriminated union narrowable via `switch(msg.type)`. The WebSocket
- * handler is responsible for tagging incoming EventItem payloads with
- * this type before passing them through the union.
+ * The message is a lightweight signal — the frontend reacts by
+ * invalidating the trace query, which refetches the full structure
+ * via HTTP. No event payload here.
  */
-export type WsPipelineEvent = { type: 'pipeline_event' } & EventItem
+export interface WsSpanStarted {
+  type: 'span_started'
+  /** Span name e.g. "pipeline.foo" / "step.detect" / "extraction.WidgetExtraction" / "gen_ai chat openai:gpt-4". */
+  name: string
+  /** OTEL span ID hex (16 chars). Frontend can dedup messages by this. */
+  span_id: string
+  run_id: string
+}
+
+export interface WsSpanEnded {
+  type: 'span_ended'
+  name: string
+  span_id: string
+  run_id: string
+  duration_ms: number | null
+  /** OTEL status code name: "OK" / "ERROR" / "UNSET". */
+  status: string
+}
 
 /** Global run-creation notification broadcast to all connected clients. */
 export interface WsRunCreated {
@@ -497,7 +478,8 @@ export type WsMessage =
   | WsStreamComplete
   | WsReplayComplete
   | WsError
-  | WsPipelineEvent
+  | WsSpanStarted
+  | WsSpanEnded
   | WsRunCreated
   | WsReviewRequested
   | WsReviewCompleted

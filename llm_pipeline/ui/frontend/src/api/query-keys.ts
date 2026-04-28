@@ -1,4 +1,4 @@
-import type { RunListParams, EventListParams, PromptListParams, RunStatus } from './types'
+import type { RunListParams, PromptListParams, RunStatus } from './types'
 
 /**
  * Centralized query key factory for TanStack Query.
@@ -18,8 +18,7 @@ export const queryKeys = {
     steps: (runId: string) => ['runs', runId, 'steps'] as const,
     step: (runId: string, stepNumber: number) =>
       ['runs', runId, 'steps', stepNumber] as const,
-    events: (runId: string, filters: Partial<EventListParams>) =>
-      ['runs', runId, 'events', filters] as const,
+    trace: (runId: string) => ['runs', runId, 'trace'] as const,
   },
   prompts: {
     all: ['prompts'] as const,

@@ -20,11 +20,11 @@ import type {
   DraftItem,
   DraftDetail,
 } from '@/api/creator'
-import { useEvents } from '@/api/events'
+import { useTrace } from '@/api/trace'
+import { useRun } from '@/api/runs'
 import { useSubscribeRun } from '@/api/websocket'
 import { useWsStore } from '@/stores/websocket'
 import { queryKeys } from '@/api/query-keys'
-import type { EventItem } from '@/api/types'
 import { ApiError, RenameConflictError } from '@/api/types'
 import { CreatorInputColumn } from '@/components/creator/CreatorInputColumn'
 import { CreatorEditor } from '@/components/creator/CreatorEditor'
@@ -75,24 +75,27 @@ function CreatorPage() {
   useSubscribeRun(activeRunId)
   const wsStatus = useWsStore((s) => s.status)
 
-  // -- Events for active run --
-  const { data: eventsData } = useEvents(activeRunId ?? '', {})
-  const events = eventsData?.items ?? []
+  // -- Run state + trace observations for the active run --
+  const { data: activeRun } = useRun(activeRunId ?? '')
+  const { data: traceData } = useTrace(
+    activeRunId ?? '',
+    activeRun?.status,
+  )
+  const observations = traceData?.observations ?? []
 
   // ---------------------------------------------------------------------------
-  // stream_complete detection: transition from generating -> draft
+  // Generation-complete detection: transition from generating -> draft.
+  //
+  // The legacy event-driven check ('stream_complete' event) is replaced
+  // by reading the run's terminal status. The framework writes
+  // run.status = 'completed' / 'failed' on PipelineRun when execute()
+  // returns; the UI polls + refetches via useRun + WS invalidation.
   // ---------------------------------------------------------------------------
   useEffect(() => {
     if (workflowState !== 'generating') return
-    if (events.length === 0) return
+    if (!activeRun) return
+    if (activeRun.status !== 'completed') return
 
-    // Check for stream_complete in the event list
-    const hasStreamComplete = events.some(
-      (e: EventItem) => e.event_type === 'stream_complete',
-    )
-    if (!hasStreamComplete) return
-
-    // Generation finished -- fetch draft detail to populate editor
     if (activeDraftId != null) {
       refetchDraft().then(({ data }) => {
         if (data) {
@@ -101,7 +104,7 @@ function CreatorPage() {
         }
       })
     }
-  }, [workflowState, events, activeDraftId, refetchDraft])
+  }, [workflowState, activeRun, activeDraftId, refetchDraft])
 
   // ---------------------------------------------------------------------------
   // Populate editor state from a DraftDetail
@@ -135,13 +138,6 @@ function CreatorPage() {
 
     generateStep.mutate(req, {
       onSuccess: (data) => {
-        // Seed event cache before setting activeRunId
-        queryClient.setQueryData(queryKeys.runs.events(data.run_id, {}), {
-          items: [],
-          total: 0,
-          offset: 0,
-          limit: 50,
-        })
         setActiveRunId(data.run_id)
         // Parse draft ID from draft_name or use the response
         // The draft list will refresh via invalidation in the hook
@@ -408,7 +404,7 @@ function CreatorPage() {
       testResults={testResults}
       acceptResults={acceptResults}
       wsStatus={wsStatus}
-      events={events}
+      observations={observations}
       errorMessage={errorMessage}
     />
   )

@@ -18,10 +18,6 @@ import { queryKeys } from './query-keys'
 import type {
   WsMessage,
   WsClientMessage,
-  EventListResponse,
-  EventItem,
-  StepListItem,
-  StepListResponse,
   RunDetail,
 } from './types'
 
@@ -90,10 +86,10 @@ function buildWsUrl(): string {
 /**
  * Parse raw JSON into a WsMessage discriminated union member.
  *
- * Control messages have a `type` field. Raw pipeline events only have
- * `event_type`; this function tags them with `type: 'pipeline_event'`
- * and normalizes the shape to match EventItem (top-level keys extracted,
- * rest nested into event_data).
+ * All messages over the unified /ws/runs endpoint now carry a `type`
+ * field (control messages + the OTEL span signals from
+ * WebSocketBroadcastProcessor). No fallback normalization needed —
+ * the legacy "raw pipeline_event" shape is gone.
  */
 function parseWsMessage(data: string): WsMessage | null {
   let raw: Record<string, unknown>
@@ -102,25 +98,9 @@ function parseWsMessage(data: string): WsMessage | null {
   } catch {
     return null
   }
-
-  // Control messages already have `type`; pass through
   if (typeof raw.type === 'string') {
     return raw as unknown as WsMessage
   }
-
-  // Raw pipeline events have `event_type` but no `type`; normalize
-  if (typeof raw.event_type === 'string') {
-    const { event_type, run_id, pipeline_name, timestamp, ...rest } = raw
-    return {
-      type: 'pipeline_event',
-      event_type: event_type as string,
-      run_id: (run_id as string) ?? '',
-      pipeline_name: (pipeline_name as string) ?? '',
-      timestamp: (timestamp as string) ?? '',
-      event_data: rest as Record<string, unknown>,
-    } as unknown as WsMessage
-  }
-
   return null
 }
 
@@ -129,70 +109,18 @@ function parseWsMessage(data: string): WsMessage | null {
 // ---------------------------------------------------------------------------
 
 /**
- * Append a pipeline event to the events query cache for a run.
- * Also writes to step-filtered cache if the event has a step_name.
+ * Invalidate the trace query for a run so the frontend refetches the
+ * latest observation tree from /api/runs/{run_id}/trace. Called on
+ * span_started / span_ended pushes from the OTEL broadcast processor.
+ *
+ * Step boundaries also invalidate the steps query so the timeline
+ * header reflects the latest persisted step state.
  */
-/** Deduplicated append -- skips if an event with same timestamp+type already cached. */
-function appendIfNew(items: EventItem[], event: EventItem): EventItem[] | null {
-  const isDup = items.some(
-    (e) => e.timestamp === event.timestamp && e.event_type === event.event_type,
-  )
-  return isDup ? null : [...items, event]
-}
-
-function appendEventToCache(qc: QueryClient, runId: string, event: EventItem): void {
-  // Append to unfiltered events cache
-  qc.setQueryData<EventListResponse>(queryKeys.runs.events(runId, {}), (old) => {
-    if (!old) return undefined
-    const updated = appendIfNew(old.items, event)
-    return updated ? { ...old, items: updated, total: old.total + 1 } : old
-  })
-
-  // Fan-out to step-filtered cache if event has step_name
-  const stepName = event.event_data?.step_name as string | undefined
-  if (stepName) {
-    qc.setQueryData<EventListResponse>(
-      queryKeys.runs.events(runId, { step_name: stepName }),
-      (old) => {
-        if (!old) return undefined
-        const updated = appendIfNew(old.items, event)
-        return updated ? { ...old, items: updated, total: old.total + 1 } : old
-      },
-    )
+function invalidateTraceForRun(qc: QueryClient, runId: string, spanName: string): void {
+  qc.invalidateQueries({ queryKey: queryKeys.runs.trace(runId) })
+  if (spanName.startsWith('step.')) {
+    qc.invalidateQueries({ queryKey: queryKeys.runs.steps(runId) })
   }
-}
-
-/**
- * Upsert a step into the steps query cache from a step_completed event.
- * Preserves existing `model` field since it's not in the event payload.
- */
-function upsertStepFromEvent(qc: QueryClient, runId: string, event: EventItem): void {
-  const ed = event.event_data
-  const stepName = ed.step_name as string | undefined
-  const stepNumber = ed.step_number as number | undefined
-  if (!stepName || stepNumber == null) return
-
-  const newStep: StepListItem = {
-    step_name: stepName,
-    step_number: stepNumber,
-    execution_time_ms: (ed.execution_time_ms as number) ?? null,
-    model: null, // not available in event; preserve existing if present
-    created_at: event.timestamp,
-  }
-
-  qc.setQueryData<StepListResponse>(queryKeys.runs.steps(runId), (old) => {
-    if (!old) return { items: [newStep] }
-    const idx = old.items.findIndex((s) => s.step_number === stepNumber)
-    if (idx >= 0) {
-      // Preserve model from existing entry
-      const existing = old.items[idx]
-      const updated = { ...newStep, model: existing.model }
-      const items = [...old.items]
-      items[idx] = updated
-      return { ...old, items }
-    }
-    return { ...old, items: [...old.items, newStep] }
-  })
 }
 
 /**
@@ -299,18 +227,10 @@ export function useGlobalWebSocket(): void {
           }
           break
 
-        case 'pipeline_event':
-          appendEventToCache(queryClient, msg.run_id, msg)
-          // Update subscription status to running
+        case 'span_started':
+        case 'span_ended':
+          invalidateTraceForRun(queryClient, msg.run_id, msg.name)
           useWsStore.getState().updateSubscriptionStatus(msg.run_id, 'running')
-          if (msg.event_type === 'step_completed') {
-            upsertStepFromEvent(queryClient, msg.run_id, msg)
-          }
-          if (msg.event_type.includes('step') && msg.event_type !== 'step_completed') {
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.runs.steps(msg.run_id),
-            })
-          }
           break
 
         case 'stream_complete':
@@ -413,8 +333,12 @@ export function useGlobalWebSocket(): void {
 // ---------------------------------------------------------------------------
 
 /**
- * Subscribe to a run's events. Can be called from event handlers, toast
- * callbacks, etc. Seeds event cache, updates store, sends WS message.
+ * Subscribe to a run's live updates. Updates store, sends WS message.
+ *
+ * The trace data itself is fetched via ``useTrace`` (HTTP). This
+ * subscription just tells the server to push span_started / span_ended
+ * notifications for this run, which invalidate the trace query and
+ * trigger a refetch.
  */
 export function subscribeToRun(
   runId: string,
@@ -422,16 +346,9 @@ export function subscribeToRun(
   qc?: QueryClient,
 ): void {
   if (activeSubscriptions.has(runId)) return
-
-  // Seed event cache
-  const queryClient = qc ?? cachedQueryClient
-  if (queryClient) {
-    queryClient.setQueryData(
-      queryKeys.runs.events(runId, {}),
-      (old: EventListResponse | undefined) =>
-        old ?? { items: [], total: 0, offset: 0, limit: 50 },
-    )
-  }
+  // queryClient parameter retained for forward compat but unused now
+  // that there is no event cache to seed.
+  void qc
 
   activeSubscriptions.add(runId)
   useWsStore.getState().addSubscription(runId, pipelineName)

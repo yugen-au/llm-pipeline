@@ -1,4 +1,4 @@
-import type { StepListItem, EventItem } from '@/api/types'
+import type { StepListItem, TraceObservation } from '@/api/types'
 import { StatusBadge } from '@/components/runs/StatusBadge'
 import { formatDuration } from '@/lib/time'
 import { cn } from '@/lib/utils'
@@ -26,24 +26,28 @@ export interface StepTimelineProps {
 }
 
 // ---------------------------------------------------------------------------
-// deriveStepStatus - merge DB steps with WS events
+// deriveStepStatus - merge DB steps with live trace observations
 // ---------------------------------------------------------------------------
 
 /**
- * Merge completed DB steps with live WS events to produce timeline items.
+ * Merge persisted step rows with live trace observations to produce
+ * timeline items.
  *
  * Logic:
- * - All DB steps are treated as 'completed' by default.
- * - Events with event_type 'step_skipped' override to 'skipped'.
- * - Events with 'step_started' that have no matching 'step_completed' or
- *   'step_failed' produce a 'running' item (added if not already in DB).
- * - Events with 'step_failed' that match a DB step override to 'failed'.
+ * - All DB step rows are 'completed' by default (a row only gets
+ *   written once a step finishes).
+ * - For every trace observation whose name is "step.{name}":
+ *   - has start_time but no end_time → 'running' (add to map if not in DB yet)
+ *   - has end_time with level === 'ERROR' → override to 'failed'
+ *
+ * Span events for "step.skipped" don't surface as separate
+ * observations on the trace endpoint. If we ever need that, surface
+ * it via status_message on the step span and check here.
  */
 export function deriveStepStatus(
   dbSteps: StepListItem[],
-  events: EventItem[],
+  observations: TraceObservation[],
 ): StepTimelineItem[] {
-  // Build map keyed by step_name from DB steps (all completed)
   const map = new Map<string, StepTimelineItem>()
 
   for (const step of dbSteps) {
@@ -56,45 +60,46 @@ export function deriveStepStatus(
     })
   }
 
-  // Track started steps and their completion/failure
-  const startedSteps = new Set<string>()
-  const completedOrFailed = new Set<string>()
-  const skippedSteps = new Set<string>()
-  const startedMeta = new Map<string, { step_number: number }>()
+  const stepObservations = observations.filter((o) =>
+    o.name.startsWith('step.') && o.type === 'SPAN',
+  )
 
-  for (const event of events) {
-    const stepName = (event.event_data?.step_name as string) ?? ''
-    if (!stepName) continue
+  let runningStepNumberCounter = (
+    Math.max(0, ...dbSteps.map((s) => s.step_number)) + 1
+  )
 
-    if (event.event_type === 'step_started') {
-      startedSteps.add(stepName)
-      const stepNum = (event.event_data?.step_number as number) ?? 0
-      startedMeta.set(stepName, { step_number: stepNum })
-    } else if (
-      event.event_type === 'step_completed' ||
-      event.event_type === 'step_failed'
-    ) {
-      completedOrFailed.add(stepName)
-    } else if (event.event_type === 'step_skipped') {
-      skippedSteps.add(stepName)
-    }
-  }
-
-  // Override skipped steps
-  for (const stepName of skippedSteps) {
+  for (const obs of stepObservations) {
+    const stepName = obs.name.slice('step.'.length)
     const existing = map.get(stepName)
-    if (existing) {
-      existing.status = 'skipped'
-    }
-  }
 
-  // Override failed steps from events
-  for (const event of events) {
-    if (event.event_type === 'step_failed') {
-      const stepName = (event.event_data?.step_name as string) ?? ''
-      const existing = map.get(stepName)
+    // In-flight: started but not yet ended
+    if (obs.start_time && !obs.end_time) {
+      if (!existing) {
+        map.set(stepName, {
+          step_name: stepName,
+          step_number: runningStepNumberCounter++,
+          status: 'running',
+          execution_time_ms: null,
+          model: null,
+        })
+      } else if (existing.status !== 'completed' && existing.status !== 'failed') {
+        existing.status = 'running'
+      }
+      continue
+    }
+
+    // Ended with error → failed
+    if (obs.end_time && obs.level === 'ERROR') {
       if (existing) {
         existing.status = 'failed'
+      } else {
+        map.set(stepName, {
+          step_name: stepName,
+          step_number: runningStepNumberCounter++,
+          status: 'failed',
+          execution_time_ms: obs.duration_ms != null ? Math.round(obs.duration_ms) : null,
+          model: null,
+        })
       }
     }
   }

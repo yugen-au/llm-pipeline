@@ -5,13 +5,14 @@ import { z } from 'zod'
 import { AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useRun, useRunContext } from '@/api/runs'
 import { useSteps } from '@/api/steps'
-import { useEvents } from '@/api/events'
+import { useTrace } from '@/api/trace'
 import { useSubscribeRun } from '@/api/websocket'
 import { useUIStore } from '@/stores/ui'
 import { StepTimeline, deriveStepStatus } from '@/components/runs/StepTimeline'
 import { ContextEvolution } from '@/components/runs/ContextEvolution'
 import { StepDetailPanel } from '@/components/runs/StepDetailPanel'
 import { StatusBadge } from '@/components/runs/StatusBadge'
+import { TraceTimeline } from '@/components/live/TraceTimeline'
 import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -112,20 +113,26 @@ function RunDetailPage() {
 
   // Data hooks
   const { data: run, isLoading: runLoading, isError: runError } = useRun(runId)
+  const runStatus = isRunStatus(run?.status) ? run.status : undefined
   const { data: steps, isLoading: stepsLoading, isError: stepsError } = useSteps(runId)
-  const { data: events, isLoading: eventsLoading, isError: eventsError } = useEvents(runId)
+  const {
+    data: trace,
+    isLoading: traceLoading,
+    isError: traceError,
+  } = useTrace(runId, runStatus)
   const { data: context, isLoading: contextLoading, isError: contextError } = useRunContext(
     runId,
-    isRunStatus(run?.status) ? run.status : undefined,
+    runStatus,
   )
 
   // UI state
   const { selectedStepId, stepDetailOpen, selectStep, closeStepDetail } = useUIStore()
 
-  // Derive timeline items from DB steps + WS events
+  // Derive timeline items from DB steps + live trace observations
+  const observations = trace?.observations ?? []
   const timelineItems = useMemo(
-    () => deriveStepStatus(steps?.items ?? [], events?.items ?? []),
-    [steps?.items, events?.items],
+    () => deriveStepStatus(steps?.items ?? [], observations),
+    [steps?.items, observations],
   )
 
   // Loading state
@@ -185,23 +192,43 @@ function RunDetailPage() {
           </div>
         )}
 
-        {/* Page body: StepTimeline + ContextEvolution */}
+        {/* Page body: Steps + Trace + Context Evolution */}
         <div className="flex min-h-0 flex-1 gap-4">
-          {/* Step timeline - main column */}
-          <CardContent className="flex flex-1 flex-col overflow-hidden rounded-xl border p-0">
+          {/* Step list (left, narrow) — operational status from local DB */}
+          <CardContent className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border p-0">
+            <div className="border-b px-4 py-3">
+              <h2 className="text-sm font-semibold">Steps</h2>
+            </div>
             <ScrollArea className="min-h-0 flex-1">
               <StepTimeline
                 items={timelineItems}
-                isLoading={stepsLoading || eventsLoading}
-                isError={stepsError || eventsError}
+                isLoading={stepsLoading || traceLoading}
+                isError={stepsError || traceError}
                 selectedStepId={selectedStepId}
                 onSelectStep={selectStep}
               />
             </ScrollArea>
           </CardContent>
 
-          {/* Context evolution - right column */}
-          <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border">
+          {/* Trace timeline (centre, main) — Langfuse observation tree */}
+          <CardContent className="flex flex-1 flex-col overflow-hidden rounded-xl border p-0">
+            <div className="border-b px-4 py-3">
+              <h2 className="text-sm font-semibold">Trace</h2>
+            </div>
+            <TraceTimeline
+              observations={observations}
+              isLoading={traceLoading}
+              isError={traceError}
+              emptyMessage={
+                trace && !trace.langfuse_configured
+                  ? 'Langfuse is not configured on this backend; trace data is unavailable.'
+                  : 'No observations yet'
+              }
+            />
+          </CardContent>
+
+          {/* Context evolution (right, narrow) */}
+          <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded-xl border">
             <div className="border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Context Evolution</h2>
             </div>
