@@ -349,6 +349,17 @@ class LLMStep(ABC):
             extraction = extraction_class(self.pipeline)
             self.pipeline._current_extraction = extraction_class
 
+            # Open extraction span under the active step span. Manual
+            # __enter__/__exit__ keeps the existing try/except/finally
+            # untouched. On exception, _ext_exc_info captures the error
+            # so the span is marked ERROR in Langfuse.
+            _ext_cm = self.pipeline._observer.extraction(
+                extraction_class=extraction_class.__name__,
+                model_class=extraction.MODEL.__name__,
+            )
+            _ext_cm.__enter__()
+            _ext_exc_info: tuple = (None, None, None)
+
             if self.pipeline._event_emitter:
                 self.pipeline._emit(ExtractionStarting(
                     run_id=self.pipeline.run_id,
@@ -397,6 +408,7 @@ class LLMStep(ABC):
                         updated=updated_data,
                     ))
             except Exception as e:
+                _ext_exc_info = (type(e), e, e.__traceback__)
                 if self.pipeline._event_emitter:
                     validation_errors = (
                         [err["msg"] for err in e.errors()]
@@ -415,6 +427,7 @@ class LLMStep(ABC):
                     ))
                 raise
             finally:
+                _ext_cm.__exit__(*_ext_exc_info)
                 self.pipeline._current_extraction = None
 
 
