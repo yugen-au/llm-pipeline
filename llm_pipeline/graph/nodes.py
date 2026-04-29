@@ -259,12 +259,25 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         )
         resolve_resources(inputs_instance, runtime_ctx)
 
-        # Build the prompt variables and the agent.
+        # Build the prompt variables. When the eval runner has
+        # threaded a per-step prompt override through PipelineDeps,
+        # render that template directly (F_STRING semantics — same
+        # as Phoenix's template_format) and skip the Phoenix fetch.
         variables = cls.user_prompt_variables(inputs_instance)
-        user_prompt = ctx.deps.prompt_service.get_user_prompt(
-            prompt_key=cls.resolved_prompt_name(),
-            variables=variables,
-        )
+        prompt_override = (ctx.deps.prompt_overrides or {}).get(cls.step_name())
+        if prompt_override is not None:
+            try:
+                user_prompt = prompt_override.format(**variables)
+            except (KeyError, IndexError) as exc:
+                raise ValueError(
+                    f"prompt override for step {cls.step_name()!r} references "
+                    f"unknown variable {exc!r}"
+                ) from exc
+        else:
+            user_prompt = ctx.deps.prompt_service.get_user_prompt(
+                prompt_key=cls.resolved_prompt_name(),
+                variables=variables,
+            )
 
         # Optional review-feedback injection. Cleared after each step.
         review_ctx = ctx.deps.review_context
@@ -272,9 +285,20 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
             user_prompt = _append_review_to_prompt(user_prompt, review_ctx)
             ctx.deps.review_context = None
 
+        # The eval runner can swap the INSTRUCTIONS schema by mapping
+        # the production class -> a delta-derived subclass (built via
+        # ``apply_instruction_delta``). The override is keyed by the
+        # production class itself so multiple variants can coexist
+        # across concurrent runs without leaking into class-level
+        # state.
+        output_type = (
+            (ctx.deps.instructions_overrides or {}).get(cls.INSTRUCTIONS)
+            or cls.INSTRUCTIONS
+        )
+
         agent = build_step_agent(
             step_name=cls.step_name(),
-            output_type=cls.INSTRUCTIONS,
+            output_type=output_type,
             prompt_name=cls.resolved_prompt_name(),
             instrument=ctx.deps.instrumentation_settings,
             tools=None,  # Phase 1: tools deferred to a follow-up

@@ -164,3 +164,15 @@ class PipelineDeps:
     node_classes: dict[str, type] = field(default_factory=dict)
     instrumentation_settings: Any | None = None
     review_context: dict[str, Any] | None = field(default=None)
+    # Per-run overrides applied by the eval runner (and any other
+    # caller threading variant-style mutations through). All three
+    # short-circuit production resolution when present:
+    #   - ``model`` field above already overrides ``StepModelConfig``
+    #     resolution at the runtime layer.
+    #   - ``prompt_overrides[step_name]`` -> raw user-prompt template
+    #     bypassing Phoenix prompt fetch in ``_run_llm``.
+    #   - ``instructions_overrides[INSTRUCTIONS_cls]`` -> use the
+    #     mapped class as the agent's output schema instead of the
+    #     node's declared ``INSTRUCTIONS``.
+    prompt_overrides: dict[str, str] = field(default_factory=dict)
+    instructions_overrides: dict[type, type] = field(default_factory=dict)
