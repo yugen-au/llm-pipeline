@@ -172,7 +172,6 @@ def create_app(
     default_model: Optional[str] = None,
     pipeline_modules: Optional[List[str]] = None,
     auto_generate_base_path: Optional[str] = None,
-    evals_dir: Optional[str] = None,
     demo_mode: bool = False,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
@@ -326,30 +325,10 @@ def create_app(
     if resolved_base:
         set_auto_generate_base_path(resolved_base)
 
-    # Phase E: prompts live in Phoenix; the local YAML <-> DB sync
-    # is gone. ``--prompts-dir`` and ``LLM_PIPELINE_PROMPTS_DIR``
-    # are accepted but ignored; remove the import in a follow-up.
-
-    # Eval YAML sync: scan package-level + project-level dirs
-    from pathlib import Path
-    from llm_pipeline.evals.yaml_sync import sync_evals_yaml_to_db
-
-    eval_scan_dirs: list[Path] = []
-    pkg_evals = Path(__file__).resolve().parent.parent / "llm-pipeline-evals"
-    if resolved_demo and pkg_evals.is_dir():
-        eval_scan_dirs.append(pkg_evals)
-    project_evals = Path(
-        evals_dir
-        or os.environ.get("LLM_PIPELINE_EVALS_DIR", "llm-pipeline-evals")
-    )
-    if not project_evals.is_absolute():
-        project_evals = Path.cwd() / project_evals
-    if project_evals.is_dir() and project_evals.resolve() != pkg_evals.resolve():
-        eval_scan_dirs.append(project_evals)
-
-    if eval_scan_dirs:
-        sync_evals_yaml_to_db(app.state.engine, eval_scan_dirs)
-    app.state.evals_dir = project_evals
+    # Phase E (prompts) + Phase 3 (evals): both YAML/local-DB layers
+    # retired. Phoenix is the source of truth for prompts AND eval
+    # datasets/experiments. ``--prompts-dir``, ``--evals-dir``, and
+    # the matching env vars are accepted by the CLI but ignored.
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router

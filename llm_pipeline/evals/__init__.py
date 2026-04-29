@@ -1,10 +1,13 @@
 """Evaluation system public API.
 
-End-of-Phase-2 surface: Variant + delta machinery + Phoenix
-datasets/experiments client + pydantic-evals task wrappers + runner +
-evaluators (auto + custom registry). Acceptance helpers + UI route
-swap land in Phase 3.
+Phase 3 of the pydantic-evals migration: Phoenix is the source of
+truth for datasets/examples/experiments/runs/case results, the
+framework keeps only the ``EvaluationAcceptance`` audit table,
+and ``accept_experiment`` walks variant deltas across the three
+production surfaces (``StepModelConfig`` / Phoenix prompt /
+INSTRUCTIONS source files).
 """
+from llm_pipeline.evals.acceptance import AcceptanceError, accept_experiment
 from llm_pipeline.evals.evaluators import (
     FieldMatchEvaluator,
     build_auto_evaluators,
@@ -53,6 +56,9 @@ __all__ = [
     # runner
     "run_dataset",
     "EvalTargetError",
+    # acceptance
+    "accept_experiment",
+    "AcceptanceError",
     # phoenix client
     "PhoenixDatasetClient",
     "PhoenixDatasetError",

@@ -18,8 +18,15 @@ from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
-from llm_pipeline.state import PipelineNodeSnapshot, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
-from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationCaseResult, EvaluationVariant
+from llm_pipeline.state import (
+    DraftPipeline,
+    DraftStep,
+    EvaluationAcceptance,
+    PipelineNodeSnapshot,
+    PipelineReview,
+    PipelineRun,
+    PipelineRunInstance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +208,35 @@ def _drop_legacy_step_states_table(engine: Engine) -> None:
         conn.commit()
 
 
+def _drop_legacy_evals_tables(engine: Engine) -> None:
+    """Phase-3 evals migration: drop the 5 retired local eval tables.
+
+    Phoenix is now the source of truth for datasets / cases / experiments
+    / runs / case results / variants. The framework keeps only
+    ``EvaluationAcceptance`` locally. Idempotent.
+    """
+    drops = [
+        # eval_cases first — has FKs into eval_datasets that older
+        # SQLite builds may track via their own constraints.
+        "DROP INDEX IF EXISTS uq_eval_cases_active_latest",
+        "DROP INDEX IF EXISTS ix_eval_cases_dataset_live",
+        "DROP INDEX IF EXISTS ix_eval_cases_dataset_name_version",
+        "DROP INDEX IF EXISTS ix_eval_datasets_name",
+        "DROP TABLE IF EXISTS eval_case_results",
+        "DROP TABLE IF EXISTS eval_runs",
+        "DROP TABLE IF EXISTS eval_variants",
+        "DROP TABLE IF EXISTS eval_cases",
+        "DROP TABLE IF EXISTS eval_datasets",
+    ]
+    with engine.connect() as conn:
+        for stmt in drops:
+            try:
+                conn.execute(text(stmt))
+            except OperationalError:
+                pass
+        conn.commit()
+
+
 def add_missing_indexes(engine: Engine) -> None:
     """Add performance indexes that create_all skips on existing tables.
 
@@ -317,11 +353,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             StepModelConfig.__table__,
             PipelineVisibility.__table__,
             PipelineReview.__table__,
-            EvaluationDataset.__table__,
-            EvaluationCase.__table__,
-            EvaluationRun.__table__,
-            EvaluationCaseResult.__table__,
-            EvaluationVariant.__table__,
+            EvaluationAcceptance.__table__,
         ],
     )
 
@@ -338,6 +370,11 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     # Pydantic-graph migration: drop the legacy ``pipeline_step_states``
     # table; ``pipeline_node_snapshots`` replaces it.
     _drop_legacy_step_states_table(engine)
+
+    # Phase-3 evals migration: drop the 5 legacy eval tables (datasets,
+    # cases, runs, case_results, variants). Phoenix is now the source
+    # of truth; only ``EvaluationAcceptance`` survives locally.
+    _drop_legacy_evals_tables(engine)
 
     # Add performance indexes that create_all skips on existing tables
     add_missing_indexes(engine)

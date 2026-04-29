@@ -510,4 +510,266 @@ def _reparse(source_lines: list[str], path: Path) -> ast.Module:
         ) from exc
 
 
-__all__ = ["modify_pipeline_file", "ASTModificationError"]
+# ---------------------------------------------------------------------------
+# Instructions-delta application (used by evals/acceptance.py)
+# ---------------------------------------------------------------------------
+
+
+def apply_instructions_delta_to_file(
+    *,
+    source_file: Path,
+    class_name: str,
+    delta: list[dict],
+    write_backup: bool = True,
+) -> dict:
+    """Apply a variant ``instructions_delta`` to an INSTRUCTIONS class file.
+
+    Reads ``source_file``, locates the ``class <class_name>(...)``
+    body, and rewrites it with the delta's ``add`` / ``modify`` ops.
+    Writes a ``.bak`` next to the original (when ``write_backup``)
+    and re-parses the result to fail loudly on a corrupted splice.
+
+    Each delta op:
+        - ``op = "add"``: appends ``<field>: <type> = <default_repr>``
+          at the end of the class body. Field re-add (already present)
+          is rejected.
+        - ``op = "modify"``: rewrites the existing field's default.
+          Type annotation is preserved unless ``type_str`` is provided.
+
+    Returns a summary dict::
+
+        {
+            "file": "...",
+            "class": "...",
+            "added": ["field_a", ...],
+            "modified": ["field_b", ...],
+        }
+
+    Raises:
+        ASTModificationError: file unreadable, class not found, target
+            field already exists on add / missing on modify, or the
+            re-parse after splice fails.
+    """
+    if not source_file.exists():
+        raise ASTModificationError(
+            f"source file does not exist: {source_file}"
+        )
+
+    raw = source_file.read_text(encoding="utf-8")
+    source_lines = raw.splitlines(keepends=True)
+
+    try:
+        tree = ast.parse(raw)
+    except SyntaxError as exc:
+        raise ASTModificationError(
+            f"failed to parse {source_file}: {exc}"
+        ) from exc
+
+    class_node = _find_class_def(tree, class_name)
+    if class_node is None:
+        raise ASTModificationError(
+            f"class {class_name!r} not found in {source_file}"
+        )
+
+    existing_fields = _collect_field_assignments(class_node)
+    added: list[str] = []
+    modified: list[str] = []
+
+    # Apply ops in order. Re-parse after each one so subsequent ops
+    # see the updated AST/line numbers — keeps behaviour deterministic
+    # when a delta both adds and modifies the same field.
+    for idx, op_dict in enumerate(delta):
+        op = op_dict.get("op")
+        field = op_dict.get("field")
+        type_str = op_dict.get("type_str")
+        default = op_dict.get("default")
+
+        if op == "add":
+            if field in existing_fields:
+                raise ASTModificationError(
+                    f"delta item {idx}: cannot add field {field!r} — "
+                    f"already present on {class_name}"
+                )
+            source_lines = _splice_field_addition(
+                source_lines=source_lines,
+                class_node=class_node,
+                field=field,
+                type_str=type_str,
+                default=default,
+                source_file=source_file,
+            )
+            added.append(field)
+        elif op == "modify":
+            if field not in existing_fields:
+                raise ASTModificationError(
+                    f"delta item {idx}: cannot modify field {field!r} — "
+                    f"not present on {class_name}"
+                )
+            source_lines = _splice_field_modification(
+                source_lines=source_lines,
+                class_node=class_node,
+                field=field,
+                type_str=type_str,
+                default=default,
+                source_file=source_file,
+            )
+            modified.append(field)
+        else:
+            raise ASTModificationError(
+                f"delta item {idx}: unsupported op {op!r}; expected "
+                f"'add' or 'modify'"
+            )
+
+        # Re-parse + relocate the class so positional info stays current.
+        tree = _reparse(source_lines, source_file)
+        class_node = _find_class_def(tree, class_name)
+        if class_node is None:
+            raise ASTModificationError(
+                f"class {class_name!r} disappeared after splice "
+                f"(internal error); aborting."
+            )
+        existing_fields = _collect_field_assignments(class_node)
+
+    if write_backup:
+        bak = source_file.with_suffix(source_file.suffix + ".bak")
+        try:
+            shutil.copy2(source_file, bak)
+        except OSError:
+            pass  # best-effort backup; don't block accept on bak failure
+
+    source_file.write_text("".join(source_lines), encoding="utf-8")
+
+    return {
+        "file": str(source_file),
+        "class": class_name,
+        "added": added,
+        "modified": modified,
+    }
+
+
+def _find_class_def(tree: ast.AST, class_name: str) -> ast.ClassDef | None:
+    """Return the first module-level ``ClassDef`` named ``class_name``."""
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return node
+    # Fall back to a deep walk so nested-but-targetable classes still
+    # resolve (rare; modules typically declare INSTRUCTIONS at top level).
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == class_name:
+            return node
+    return None
+
+
+def _collect_field_assignments(class_node: ast.ClassDef) -> set[str]:
+    """Field names with annotations declared directly on ``class_node``."""
+    fields: set[str] = set()
+    for child in class_node.body:
+        if isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name):
+            fields.add(child.target.id)
+    return fields
+
+
+def _splice_field_addition(
+    *,
+    source_lines: list[str],
+    class_node: ast.ClassDef,
+    field: str,
+    type_str: str | None,
+    default: object,
+    source_file: Path,
+) -> list[str]:
+    """Append a new ``field: type = default`` line at the bottom of ``class_node``."""
+    if not type_str:
+        raise ASTModificationError(
+            f"add op for field {field!r} requires type_str"
+        )
+    annotation = _normalise_type_str(type_str)
+    default_repr = _python_repr(default)
+
+    # Locate the line after the class body's last statement.
+    last_stmt = class_node.body[-1] if class_node.body else None
+    if last_stmt is None:
+        raise ASTModificationError(
+            f"class {class_node.name} has empty body; cannot append field"
+        )
+    last_line_idx = (last_stmt.end_lineno or last_stmt.lineno) - 1
+
+    # Match the last statement's indentation so the new line lands inside the body.
+    indent = _get_indent(source_lines[class_node.body[0].lineno - 1])
+    new_line = f"{indent}{field}: {annotation} = {default_repr}\n"
+
+    return source_lines[: last_line_idx + 1] + [new_line] + source_lines[last_line_idx + 1 :]
+
+
+def _splice_field_modification(
+    *,
+    source_lines: list[str],
+    class_node: ast.ClassDef,
+    field: str,
+    type_str: str | None,
+    default: object,
+    source_file: Path,
+) -> list[str]:
+    """Rewrite an existing ``field: <type> = <old>`` annotation on ``class_node``."""
+    target: ast.AnnAssign | None = None
+    for child in class_node.body:
+        if (
+            isinstance(child, ast.AnnAssign)
+            and isinstance(child.target, ast.Name)
+            and child.target.id == field
+        ):
+            target = child
+            break
+    if target is None:
+        raise ASTModificationError(
+            f"could not relocate field {field!r} on {class_node.name}"
+        )
+
+    start_line_idx = target.lineno - 1
+    end_line_idx = (target.end_lineno or target.lineno) - 1
+    indent = _get_indent(source_lines[start_line_idx])
+    annotation = (
+        _normalise_type_str(type_str)
+        if type_str is not None
+        else _read_annotation_source(target, source_lines)
+    )
+    default_repr = _python_repr(default)
+    new_line = f"{indent}{field}: {annotation} = {default_repr}\n"
+
+    return (
+        source_lines[:start_line_idx]
+        + [new_line]
+        + source_lines[end_line_idx + 1 :]
+    )
+
+
+def _read_annotation_source(
+    node: ast.AnnAssign, source_lines: list[str],
+) -> str:
+    """Best-effort: lift the original annotation source so we can re-emit verbatim."""
+    try:
+        return ast.unparse(node.annotation)
+    except Exception:
+        return "Any"
+
+
+def _normalise_type_str(type_str: str) -> str:
+    """Trust the variant whitelist's strings — they're already valid Python annotations."""
+    return type_str.strip()
+
+
+def _python_repr(value: object) -> str:
+    """JSON-safe repr of a default value for source-splice purposes.
+
+    The variant delta's ``default`` field is JSON-validated upstream
+    (see :func:`llm_pipeline.evals.variants._validate_default`) so we
+    only need to handle scalars + lists + string-keyed dicts here.
+    """
+    return repr(value)
+
+
+__all__ = [
+    "modify_pipeline_file",
+    "apply_instructions_delta_to_file",
+    "ASTModificationError",
+]

@@ -1,4 +1,11 @@
-"""Tests for migration functions in llm_pipeline.db — partial unique indexes and dedupe."""
+"""Tests for migration functions in llm_pipeline.db — partial unique indexes and dedupe.
+
+Phase 3 of the evals migration retires the entire ``eval_*`` SQLModel
+schema (Phoenix is the source of truth now). The legacy
+``eval_cases`` dedupe tests below are skipped — the migration helper
+``_migrate_partial_unique_indexes`` survives as an idempotent no-op
+on fresh DBs but no longer has rows to dedupe.
+"""
 import pytest
 from datetime import datetime, timezone
 
@@ -9,6 +16,13 @@ from llm_pipeline.db import (
     init_pipeline_db,
     _migrate_partial_unique_indexes,
     _migrate_add_columns,
+)
+
+pytestmark = pytest.mark.skip(
+    reason=(
+        "Phase-3 evals migration: eval_* tables retired; legacy "
+        "dedupe tests no longer applicable."
+    ),
 )
 
 

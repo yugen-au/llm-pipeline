@@ -45,7 +45,7 @@ def main() -> None:
         "--evals-dir",
         type=str,
         default=None,
-        help="Directory containing eval dataset YAML files",
+        help="(Retired flag — Phoenix is the source of truth for eval datasets.)",
     )
     ui_parser.add_argument(
         "--demo",
@@ -180,7 +180,6 @@ def _run_ui(args: argparse.Namespace) -> None:
                 db_path=args.db,
                 default_model=args.model,
                 pipeline_modules=args.pipelines,
-                evals_dir=args.evals_dir,
                 demo_mode=args.demo,
             )
             _write_pid_file()
@@ -225,8 +224,7 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         os.environ["LLM_PIPELINE_MODEL"] = args.model
     if args.pipelines:
         os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
-    if getattr(args, "evals_dir", None) and isinstance(args.evals_dir, str):
-        os.environ["LLM_PIPELINE_EVALS_DIR"] = args.evals_dir
+    # ``--evals-dir`` is retired; flag is accepted but ignored.
     if getattr(args, "demo", False):
         os.environ["LLM_PIPELINE_DEMO_MODE"] = "true"
 
@@ -321,70 +319,52 @@ def _create_dev_app() -> object:
 
 
 def _run_eval(args: argparse.Namespace) -> None:
-    """Run an evaluation dataset by name and print summary."""
-    from llm_pipeline.db import init_pipeline_db
-    from llm_pipeline.evals.runner import EvalRunner
-    from llm_pipeline.evals.yaml_sync import sync_evals_yaml_to_db
+    """Run an evaluation dataset by id (Phoenix-backed).
 
-    # Init DB
+    Phase-3 of the evals migration moved datasets/experiments to
+    Phoenix. The CLI here is a thin convenience wrapper around
+    ``llm_pipeline.evals.run_dataset``; the dataset lookup is now by
+    Phoenix dataset id, not local YAML/DB name.
+    """
+    import asyncio
+
+    from llm_pipeline.db import init_pipeline_db
+    from llm_pipeline.evals import Variant, run_dataset
+
     if args.db:
         from sqlalchemy import create_engine
         engine = init_pipeline_db(create_engine(f"sqlite:///{args.db}"))
     else:
         engine = init_pipeline_db()
 
-    # Build registries from pipeline modules
-    pipeline_registry = {}
-    introspection_registry = {}
+    pipeline_registry: dict = {}
     if args.pipelines:
         from llm_pipeline.ui.app import _load_pipeline_modules
-        pipeline_registry, introspection_registry = _load_pipeline_modules(
+        pipeline_registry, _ = _load_pipeline_modules(
             args.pipelines, args.model, engine,
         )
 
-    # Convention-based discovery
     from llm_pipeline.discovery import discover_from_convention
-    conv_pipeline, conv_introspection = discover_from_convention(
+    conv_pipeline, _ = discover_from_convention(
         engine, args.model, include_package=False,
     )
     pipeline_registry = {**conv_pipeline, **pipeline_registry}
-    introspection_registry = {**conv_introspection, **introspection_registry}
-
-    # Sync eval YAML from CWD
-    evals_dir = Path.cwd() / "llm-pipeline-evals"
-    if evals_dir.is_dir():
-        sync_evals_yaml_to_db(engine, [evals_dir])
-
-    # Run
-    runner = EvalRunner(
-        engine=engine,
-        pipeline_registry=pipeline_registry,
-        introspection_registry=introspection_registry,
-    )
 
     try:
-        run_id = runner.run_dataset_by_name(args.dataset_name, model=args.model)
-    except ValueError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"ERROR: eval run failed: {e}", file=sys.stderr)
+        report = asyncio.run(run_dataset(
+            args.dataset_name,
+            Variant(),
+            pipeline_registry=pipeline_registry,
+            model=args.model,
+            engine=engine,
+        ))
+    except Exception as exc:
+        print(f"ERROR: eval run failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    # Print summary
-    from sqlmodel import Session, select
-    from llm_pipeline.evals.models import EvaluationRun
-
-    with Session(engine) as session:
-        run = session.exec(
-            select(EvaluationRun).where(EvaluationRun.id == run_id)
-        ).first()
-        if run:
-            print(f"Eval run #{run.id} ({run.status})")
-            print(f"  Total: {run.total_cases}  Passed: {run.passed}  "
-                  f"Failed: {run.failed}  Errored: {run.errored}")
-            if run.error_message:
-                print(f"  Error: {run.error_message}")
+    print(f"Eval report: {report.name}")
+    print(f"  Cases:    {len(report.cases)}")
+    print(f"  Failures: {len(report.failures)}")
 
 
 def _resolve_npx() -> str:

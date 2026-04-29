@@ -319,6 +319,79 @@ class PipelineReview(SQLModel, table=True):
     )
 
 
+class EvaluationAcceptance(SQLModel, table=True):
+    """One row per accepted Phoenix experiment.
+
+    Phase-3 of the evals migration retires the local 5-table eval
+    schema (``EvaluationDataset`` / ``Case`` / ``Run`` / ``CaseResult``
+    / ``Variant``) — Phoenix is now the source of truth for those.
+    The framework still owns one local row: an audit record of which
+    experiments have been accepted into production, what the variant
+    delta was, and which production surfaces (model config / Phoenix
+    prompt / source files) were rewritten.
+
+    Acceptance is append-only; rolling back a previous acceptance
+    means accepting a new variant, not deleting a row.
+    """
+
+    __tablename__ = "evaluation_acceptances"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    experiment_id: str = Field(
+        max_length=100,
+        description="Phoenix experiment id this acceptance was driven from.",
+    )
+    dataset_id: str = Field(
+        max_length=100,
+        description="Phoenix dataset id (denormalised for fast filtering).",
+    )
+
+    pipeline_name: str = Field(
+        max_length=100,
+        description="Pipeline whose surfaces were rewritten.",
+    )
+    step_name: Optional[str] = Field(
+        default=None, max_length=100,
+        description="Step whose schema/prompt/model was rewritten. "
+        "``None`` for pipeline-target acceptances.",
+    )
+
+    delta_summary: dict = Field(
+        sa_column=Column(JSON),
+        description=(
+            "Variant delta as JSON: ``{model?, prompt_overrides?, "
+            "instructions_delta?}``. Mirrors ``Variant.model_dump()``."
+        ),
+    )
+
+    accept_paths: dict = Field(
+        sa_column=Column(JSON),
+        description=(
+            "Per-surface result of the accept walk: ``{model: {...}, "
+            "prompts: [...], instructions: {...}}``. Each entry records "
+            "what changed (StepModelConfig row, Phoenix prompt version, "
+            "source file path)."
+        ),
+    )
+
+    notes: Optional[str] = Field(default=None)
+    accepted_by: Optional[str] = Field(
+        default=None, max_length=100,
+        description="Identifier of the user who accepted (free-form).",
+    )
+    accepted_at: datetime = Field(default_factory=utc_now)
+
+    __table_args__ = (
+        Index("ix_evaluation_acceptances_experiment", "experiment_id"),
+        Index("ix_evaluation_acceptances_dataset", "dataset_id"),
+        Index(
+            "ix_evaluation_acceptances_pipeline_step",
+            "pipeline_name", "step_name",
+        ),
+    )
+
+
 __all__ = [
     "PipelineNodeSnapshot",
     "PipelineRunInstance",
@@ -326,4 +399,5 @@ __all__ = [
     "DraftStep",
     "DraftPipeline",
     "PipelineReview",
+    "EvaluationAcceptance",
 ]
