@@ -70,8 +70,6 @@ class WidgetExtraction(PipelineExtraction, model=WidgetModel):
 @step_definition(
     inputs=WidgetDetectionInputs,
     instructions=WidgetDetectionInstructions,
-    default_system_key="widget.system",
-    default_user_key="widget.user",
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self):
@@ -125,8 +123,6 @@ class ScanDetectionTransformation(PipelineTransformation,
 @step_definition(
     inputs=ScanDetectionInputs,
     instructions=ScanDetectionInstructions,
-    default_system_key="scan.system",
-    default_user_key="scan.user",
     default_transformation=ScanDetectionTransformation,
 )
 class ScanDetectionStep(LLMStep):
@@ -188,8 +184,6 @@ class GadgetDetectionTransformation(PipelineTransformation,
 @step_definition(
     inputs=GadgetDetectionInputs,
     instructions=GadgetDetectionInstructions,
-    default_system_key="gadget.system",
-    default_user_key="gadget.user",
     default_transformation=GadgetDetectionTransformation,
 )
 class GadgetDetectionStep(LLMStep):
@@ -308,10 +302,12 @@ class TestStepEntries:
         assert self._step()["step_name"] == "widget_detection"
 
     def test_system_key_correct(self):
-        assert self._step()["system_key"] == "widget.system"
+        # Phase C: introspection emits ``<prompt_name>.system_instruction``
+        # derived from the step's snake_case class name.
+        assert self._step()["system_key"] == "widget_detection.system_instruction"
 
     def test_user_key_correct(self):
-        assert self._step()["user_key"] == "widget.user"
+        assert self._step()["user_key"] == "widget_detection.user_prompt"
 
     def test_instructions_class_name(self):
         assert self._step()["instructions_class"] == "WidgetDetectionInstructions"
@@ -611,8 +607,6 @@ class TooledInstructions(LLMResultMixin):
 @step_definition(
     inputs=TooledInputs,
     instructions=TooledInstructions,
-    default_system_key="widget.system",
-    default_user_key="widget.user",
     agent="tooled",
 )
 class TooledStep(LLMStep):

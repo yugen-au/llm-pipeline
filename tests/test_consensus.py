@@ -745,8 +745,7 @@ class TestIntegration:
         # Minimal StepDefinition to test field acceptance
         sd = StepDefinition(
             step_class=object,
-            system_instruction_key="sys",
-            user_prompt_key="usr",
+            prompt_name='sys',
             instructions=object,
             consensus_strategy=mv,
         )
@@ -757,8 +756,7 @@ class TestIntegration:
         from llm_pipeline.strategy import StepDefinition
         sd = StepDefinition(
             step_class=object,
-            system_instruction_key="sys",
-            user_prompt_key="usr",
+            prompt_name='sys',
             instructions=object,
         )
         assert sd.consensus_strategy is None

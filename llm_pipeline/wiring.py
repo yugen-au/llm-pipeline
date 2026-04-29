@@ -158,6 +158,13 @@ class Bind:
 
     ``consensus_strategy`` is a per-step concern and is only valid when
     ``step`` is set; it's passed through to the compiled StepDefinition.
+
+    ``prompt_name`` overrides the default Phoenix prompt name (which is
+    ``to_snake_case(step.__name__, strip='Step')``) for a strategy-
+    specific variant — e.g. ``Bind(step=SummaryStep,
+    prompt_name="summary_formal")`` to drive the same step against a
+    different Phoenix-stored template at runtime. ``prompt_name`` is
+    only valid when ``step`` is set.
     """
     step: type | None = None
     extraction: type | None = None
@@ -166,6 +173,7 @@ class Bind:
     extractions: list["Bind"] = field(default_factory=list)
     tools: list["Bind"] = field(default_factory=list)
     consensus_strategy: Any | None = None
+    prompt_name: str | None = None
 
     def __post_init__(self) -> None:
         set_count = sum([
@@ -196,6 +204,10 @@ class Bind:
         if self.consensus_strategy is not None and not is_step:
             raise ValueError(
                 "consensus_strategy is only valid when step= is set"
+            )
+        if self.prompt_name is not None and not is_step:
+            raise ValueError(
+                "prompt_name is only valid when step= is set"
             )
         for child in self.extractions:
             if child.extraction is None:

@@ -46,8 +46,6 @@ from .schemas import SentimentInstructions, SentimentContext
 
 @step_definition(
     instructions=SentimentInstructions,
-    default_system_key="sentiment_analysis",
-    default_user_key="sentiment_analysis",
     context=SentimentContext,
 )
 class SentimentAnalysisStep(LLMStep):

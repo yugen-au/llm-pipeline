@@ -21,6 +21,7 @@ from sqlmodel import Field, SQLModel
 
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.inputs import StepInputs
+from llm_pipeline.pipeline import PipelineConfig
 from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
 from llm_pipeline.strategy import PipelineStrategy, StepDefinition
 from llm_pipeline.types import StepCallParams
@@ -48,8 +49,6 @@ class PingInputs(StepInputs):
 @step_definition(
     instructions=PingInstructions,
     inputs=PingInputs,
-    default_system_key="ping.system",
-    default_user_key="ping.user",
 )
 class PingStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
@@ -79,8 +78,7 @@ class TestStepDefinitionShape:
         spec = PingInputs.sources(name=FromInput("name"))
         sd = StepDefinition(
             step_class=PingStep,
-            system_instruction_key="k.system",
-            user_prompt_key="k.user",
+            prompt_name='k.system',
             instructions=PingInstructions,
         )
         assert sd.inputs_spec is None
@@ -88,8 +86,7 @@ class TestStepDefinitionShape:
 
         sd_with = StepDefinition(
             step_class=PingStep,
-            system_instruction_key="k.system",
-            user_prompt_key="k.user",
+            prompt_name='k.system',
             instructions=PingInstructions,
             inputs_spec=spec,
         )
@@ -104,8 +101,7 @@ class TestStepDefinitionShape:
         )
         sd = StepDefinition(
             step_class=PingStep,
-            system_instruction_key="k.system",
-            user_prompt_key="k.user",
+            prompt_name='k.system',
             instructions=PingInstructions,
             extraction_binds=[ext_bind],
         )
@@ -118,15 +114,7 @@ class TestStepDefinitionShape:
 
 
 class TestCreateStepAttaches:
-    def test_inputs_spec_attached_to_step(self, monkeypatch):
-        # Stub prompt resolver so create_step doesn't need a real DB.
-        from llm_pipeline.prompts import resolver as _resolver
-        monkeypatch.setattr(
-            _resolver,
-            "resolve_with_auto_discovery",
-            lambda *_a, **_k: ("sys.key", "user.key"),
-        )
-
+    def test_inputs_spec_attached_to_step(self):
         spec = PingInputs.sources(name=FromInput("name"))
         ext_bind = Bind(
             extraction=PongExtraction,
@@ -136,8 +124,7 @@ class TestCreateStepAttaches:
         )
         sd = StepDefinition(
             step_class=PingStep,
-            system_instruction_key="sys.key",
-            user_prompt_key="user.key",
+            prompt_name='sys.key',
             instructions=PingInstructions,
             inputs_spec=spec,
             extraction_binds=[ext_bind],
@@ -150,18 +137,10 @@ class TestCreateStepAttaches:
         assert step._inputs_spec is spec
         assert step._extraction_binds == [ext_bind]
 
-    def test_step_inputs_attribute_starts_none(self, monkeypatch):
-        from llm_pipeline.prompts import resolver as _resolver
-        monkeypatch.setattr(
-            _resolver,
-            "resolve_with_auto_discovery",
-            lambda *_a, **_k: ("sys.key", "user.key"),
-        )
-
+    def test_step_inputs_attribute_starts_none(self):
         sd = StepDefinition(
             step_class=PingStep,
-            system_instruction_key="sys.key",
-            user_prompt_key="user.key",
+            prompt_name='sys.key',
             instructions=PingInstructions,
         )
         fake_pipeline = MagicMock()
@@ -214,8 +193,7 @@ class TestLLMStepInputsAttribute:
     def test_inputs_attribute_exists_and_is_none_after_init(self):
         fake_pipeline = MagicMock()
         step = PingStep(
-            system_instruction_key="sys.key",
-            user_prompt_key="user.key",
+            prompt_name='sys.key',
             instructions=PingInstructions,
             pipeline=fake_pipeline,
         )
@@ -224,8 +202,7 @@ class TestLLMStepInputsAttribute:
     def test_inputs_can_be_set_to_stepinputs_instance(self):
         fake_pipeline = MagicMock()
         step = PingStep(
-            system_instruction_key="sys.key",
-            user_prompt_key="user.key",
+            prompt_name='sys.key',
             instructions=PingInstructions,
             pipeline=fake_pipeline,
         )
@@ -282,3 +259,36 @@ class TestProcessInstructionsRemoved:
         # Base class method is gone; subclasses can still define if they want
         # but nothing in the framework calls it.
         assert not hasattr(LLMStep, "process_instructions")
+
+
+# ---------------------------------------------------------------------------
+# Bind.prompt_name override (Phase C)
+# ---------------------------------------------------------------------------
+
+
+class TestBindPromptNameOverride:
+    """A Bind may carry its own ``prompt_name`` to swap the Phoenix prompt
+    a step resolves against, without the step itself changing."""
+
+    def test_default_prompt_name_is_step_snake_case(self):
+        bind = Bind(step=PingStep)
+        compiled = PipelineConfig._compile_bind_to_step_def(MagicMock(), bind)
+        assert compiled.resolved_prompt_name == "ping"
+        assert compiled.prompt_name is None  # not explicitly set
+
+    def test_prompt_name_override_is_carried_through(self):
+        bind = Bind(step=PingStep, prompt_name="ping_formal")
+        compiled = PipelineConfig._compile_bind_to_step_def(MagicMock(), bind)
+        assert compiled.prompt_name == "ping_formal"
+        assert compiled.resolved_prompt_name == "ping_formal"
+
+    def test_prompt_name_only_valid_with_step_bind(self):
+        # Setting prompt_name on an extraction Bind raises immediately.
+        with pytest.raises(ValueError, match="prompt_name is only valid"):
+            Bind(
+                extraction=PongExtraction,
+                inputs=PongExtraction.FromPingInputs.sources(
+                    echo_value=FromInput("name"),
+                ),
+                prompt_name="oops",
+            )

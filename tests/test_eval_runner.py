@@ -187,8 +187,7 @@ class TestResolveStepTaskHonoursDBOverride:
         @dataclass
         class _SD:
             step_class: type = type("MyStep", (), {"__name__": "MyStep"})
-            system_instruction_key: _Opt[str] = None
-            user_prompt_key: _Opt[str] = None
+            prompt_name: _Opt[str] = None
             instructions: _Opt[type] = None
             evaluators: list = field(default_factory=list)
             model: _Opt[str] = None
@@ -196,6 +195,10 @@ class TestResolveStepTaskHonoursDBOverride:
             @property
             def step_name(self) -> str:
                 return "my_step"
+
+            @property
+            def resolved_prompt_name(self) -> str:
+                return self.prompt_name or self.step_name
 
         sd = _SD()
         sd.model = model
@@ -324,18 +327,23 @@ class TestRunSnapshotPopulation:
         from dataclasses import dataclass, field
         from typing import Optional as _Opt
 
+        captured_step_name = step_name
+
         @dataclass
         class _SD:
             step_class: type = type("MockStep", (), {"__name__": "MockStep"})
-            system_instruction_key: _Opt[str] = None
-            user_prompt_key: _Opt[str] = None
+            prompt_name: _Opt[str] = None
             instructions: _Opt[type] = None
             evaluators: list = field(default_factory=list)
             model: _Opt[str] = None
 
             @property
             def step_name(self) -> str:
-                return step_name
+                return captured_step_name
+
+            @property
+            def resolved_prompt_name(self) -> str:
+                return self.prompt_name or self.step_name
 
         sd = _SD()
         sd.model = model
@@ -355,7 +363,7 @@ class TestRunSnapshotPopulation:
         # Seed prompt rows
         with Session(engine) as session:
             session.add(Prompt(
-                prompt_key="mock_step",
+                prompt_key="mock_step.system_instruction",
                 prompt_name="Mock System",
                 prompt_type="system",
                 content="Analyze sentiment",
@@ -364,7 +372,7 @@ class TestRunSnapshotPopulation:
                 is_latest=True,
             ))
             session.add(Prompt(
-                prompt_key="mock_step",
+                prompt_key="mock_step.user_prompt",
                 prompt_name="Mock User",
                 prompt_type="user",
                 content="Input: {text}",
@@ -403,8 +411,7 @@ class TestRunSnapshotPopulation:
             model="gpt-4o",
             instructions=MockInstructions,
         )
-        step_def.system_instruction_key = "mock_step"
-        step_def.user_prompt_key = "mock_step"
+        step_def.prompt_name = "mock_step"
 
         def mock_task_fn(inputs: dict) -> dict:
             return {"sentiment": "positive"}
@@ -433,10 +440,11 @@ class TestRunSnapshotPopulation:
             assert len(run.case_versions) == 2
 
             # prompt_versions: flat {prompt_key: {prompt_type: version}}
+            # Phase C: keys derive from the step's ``prompt_name`` —
+            # ``<name>.system_instruction`` / ``<name>.user_prompt``.
             assert run.prompt_versions is not None
-            assert "mock_step" in run.prompt_versions
-            assert run.prompt_versions["mock_step"]["system"] == "2.1"
-            assert run.prompt_versions["mock_step"]["user"] == "1.3"
+            assert run.prompt_versions["mock_step.system_instruction"]["system"] == "2.1"
+            assert run.prompt_versions["mock_step.user_prompt"]["user"] == "1.3"
 
             # model_snapshot: {step_name: model_id} single-entry
             assert run.model_snapshot is not None
@@ -458,10 +466,11 @@ class TestRunSnapshotPopulation:
         class StepBInstructions(BaseModel):
             result_b: int = 0
 
-        # Seed prompts for two steps
+        # Seed prompts for two steps. Phase C: keys derive from
+        # the step's ``prompt_name`` (here equal to ``step_name``).
         with Session(engine) as session:
             session.add(Prompt(
-                prompt_key="step_a",
+                prompt_key="step_a.system_instruction",
                 prompt_name="Step A System",
                 prompt_type="system",
                 content="Do step A",
@@ -470,7 +479,7 @@ class TestRunSnapshotPopulation:
                 is_latest=True,
             ))
             session.add(Prompt(
-                prompt_key="step_b",
+                prompt_key="step_b.system_instruction",
                 prompt_name="Step B System",
                 prompt_type="system",
                 content="Do step B",
@@ -542,11 +551,17 @@ class TestRunSnapshotPopulation:
             assert len(run.case_versions) == 1
 
             # prompt_versions: {step_name: {prompt_key: {prompt_type: version}}}
+            # Phase C: prompt_key is the legacy split shape derived
+            # from each step's ``prompt_name``.
             assert run.prompt_versions is not None
-            assert "step_a" in run.prompt_versions
-            assert run.prompt_versions["step_a"]["step_a"]["system"] == "1.0"
-            assert "step_b" in run.prompt_versions
-            assert run.prompt_versions["step_b"]["step_b"]["system"] == "2.0"
+            assert (
+                run.prompt_versions["step_a"]["step_a.system_instruction"]["system"]
+                == "1.0"
+            )
+            assert (
+                run.prompt_versions["step_b"]["step_b.system_instruction"]["system"]
+                == "2.0"
+            )
 
             # model_snapshot: {step_name: model_id} one entry per step
             assert run.model_snapshot is not None

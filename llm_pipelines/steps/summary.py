@@ -13,8 +13,6 @@ from llm_pipelines.schemas.text_analyzer import (
 @step_definition(
     inputs=SummaryInputs,
     instructions=SummaryInstructions,
-    default_system_key="summary",
-    default_user_key="summary",
 )
 class SummaryStep(LLMStep):
     """Produce a summary incorporating sentiment and topic context."""

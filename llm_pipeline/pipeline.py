@@ -437,6 +437,8 @@ class PipelineConfig(ABC):
         }
         if resolved_consensus is not None:
             create_kwargs["consensus_strategy"] = resolved_consensus
+        if bind.prompt_name is not None:
+            create_kwargs["prompt_name"] = bind.prompt_name
         return bind.step.create_definition(**create_kwargs)
 
     def _get_foreign_key_dependencies(self, model: Type[SQLModel]) -> List[Type[SQLModel]]:
@@ -1007,10 +1009,7 @@ class PipelineConfig(ABC):
                 logger.info(f"\nSTEP {step_num}: {step.step_name}...")
                 if selected_strategy:
                     logger.info(f"  -> Strategy: {selected_strategy.display_name}")
-                    logger.info(
-                        f"  -> Prompts: system={step.system_instruction_key}, "
-                        f"user={step.user_prompt_key}"
-                    )
+                    logger.info(f"  -> Prompt: {step.prompt_name}")
 
                 current_data = self.get_current_data()
                 sanitized_data = self.get_sanitized_data()
@@ -1101,7 +1100,7 @@ class PipelineConfig(ABC):
                         validators=step_validators,
                         instrument=self._instrumentation_settings,
                         tools=step_tools,
-                        system_instruction_key=step.system_instruction_key,
+                        prompt_name=step.prompt_name,
                     )
 
                     for idx, params in enumerate(call_params):
@@ -1380,12 +1379,17 @@ class PipelineConfig(ABC):
         from llm_pipeline.db.prompt import Prompt
         from sqlmodel import select
 
-        prompt_system_key = getattr(step, "system_instruction_key", None)
+        prompt_name = getattr(step, "prompt_name", None)
         current_prompt_version = None
-        if prompt_system_key:
+        if prompt_name:
+            # Local Prompt rows are still keyed on the legacy
+            # ``<step>.system_instruction`` shape; reconstruct the key
+            # to read a stable version stamp until Phase E retires the
+            # local Prompt table.
+            legacy_key = f"{prompt_name}.system_instruction"
             prompt = self.session.exec(
                 select(Prompt).where(
-                    Prompt.prompt_key == prompt_system_key,
+                    Prompt.prompt_key == legacy_key,
                     Prompt.is_active == True,  # noqa: E712
                     Prompt.is_latest == True,  # noqa: E712
                 )
@@ -1521,8 +1525,16 @@ class PipelineConfig(ABC):
                 serialized.append({"result": str(instruction)})
 
         context_snapshot = dict(self._context)
-        prompt_system_key = getattr(step, "system_instruction_key", None)
-        prompt_user_key = getattr(step, "user_prompt_key", None)
+        prompt_name = getattr(step, "prompt_name", None)
+        # Reconstruct the legacy split keys for the persisted state row;
+        # the local PipelineStepState columns still carry the historical
+        # shape until Phase E.
+        prompt_system_key = (
+            f"{prompt_name}.system_instruction" if prompt_name else None
+        )
+        prompt_user_key = (
+            f"{prompt_name}.user_prompt" if prompt_name else None
+        )
         prompt_version = None
         if prompt_system_key:
             prompt = self.session.exec(

@@ -67,8 +67,6 @@ class GenerationRecordExtraction(PipelineExtraction, model=GenerationRecord):
 
 @step_definition(
     instructions=RequirementsAnalysisInstructions,
-    default_system_key="requirements_analysis",
-    default_user_key="requirements_analysis",
     context=RequirementsAnalysisContext,
 )
 class RequirementsAnalysisStep(LLMStep):
@@ -103,8 +101,6 @@ class RequirementsAnalysisStep(LLMStep):
 
 @step_definition(
     instructions=CodeGenerationInstructions,
-    default_system_key="code_generation",
-    default_user_key="code_generation",
     context=CodeGenerationContext,
     agent="code_gen",
 )
@@ -195,8 +191,6 @@ class CodeGenerationStep(LLMStep):
 
 @step_definition(
     instructions=PromptGenerationInstructions,
-    default_system_key="prompt_generation",
-    default_user_key="prompt_generation",
     context=PromptGenerationContext,
     agent="prompt_gen",
 )
@@ -256,8 +250,6 @@ def _syntax_check(code: str | None) -> bool:
 
 @step_definition(
     instructions=CodeValidationInstructions,
-    default_system_key="code_validation",
-    default_user_key="code_validation",
     default_extractions=[GenerationRecordExtraction],
     context=CodeValidationContext,
 )

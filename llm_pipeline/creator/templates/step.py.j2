@@ -7,8 +7,6 @@ from llm_pipeline.step import LLMStep, step_definition
 
 @step_definition(
     instructions={{ instructions_class_name }},
-    default_system_key="{{ system_key }}",
-    default_user_key="{{ user_key }}",
     context={{ context_class_name }},
 {% if extractions %}
     default_extractions=[{{ extractions | join(", ") }}],

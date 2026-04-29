@@ -28,8 +28,6 @@ class SentimentAnalysisReview(StepReview):
 @step_definition(
     inputs=SentimentAnalysisInputs,
     instructions=SentimentAnalysisInstructions,
-    default_system_key="sentiment_analysis",
-    default_user_key="sentiment_analysis",
     review=SentimentAnalysisReview,
     evaluators=[SentimentLabelEvaluator],
 )

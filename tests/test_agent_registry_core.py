@@ -306,8 +306,7 @@ class TestLLMStepMethods:
                 return []
 
         step = ExtractDataStep(
-            system_instruction_key="sys_key",
-            user_prompt_key="user_key",
+            prompt_name="sys_key",
             instructions=FakeInstructions,
             pipeline=MockPipeline(),
         )
@@ -327,7 +326,7 @@ class TestLLMStepMethods:
                 return f"prompt:{key}:{variables.get('x')}"
 
         result = step.build_user_prompt({"x": "hello"}, MockPromptService())
-        assert result == "prompt:user_key:hello"
+        assert result == "prompt:sys_key:hello"
 
     def test_build_user_prompt_model_dump(self):
         from pydantic import BaseModel as PB
@@ -357,8 +356,7 @@ class TestStepDefinitionNewFields:
 
         return StepDefinition(
             step_class=step_class,
-            system_instruction_key="sys",
-            user_prompt_key="user",
+            prompt_name='sys',
             instructions=DummyInstructions,
             agent_name=agent_name,
         )
@@ -415,8 +413,7 @@ class TestStepDefinitionNewFields:
 
         sd = StepDefinition(
             step_class=AgentNameStep,
-            system_instruction_key="sys",
-            user_prompt_key="user",
+            prompt_name='sys',
             instructions=AgentNameInstructions,
             agent_name="override_name",
         )

@@ -38,6 +38,8 @@ def _compile_bind_for_introspection(bind: Bind):
     }
     if resolved_consensus is not None:
         create_kwargs["consensus_strategy"] = resolved_consensus
+    if bind.prompt_name is not None:
+        create_kwargs["prompt_name"] = bind.prompt_name
     return bind.step.create_definition(**create_kwargs)
 
 
@@ -155,18 +157,20 @@ class PipelineIntrospector:
         for step_def in step_defs:
             step_cls = step_def.step_class
             step_name = self._step_name(step_cls)
-            # system_key / user_key reflect tier-1 (explicit) + tier-2
-            # (``@step_definition`` defaults) — both are populated on
-            # ``step_def`` at construction time. Tier-3 DB auto-discovery
-            # is a runtime-only concern (needs a Session) and is NOT
-            # surfaced here; resolve via
-            # ``llm_pipeline.prompts.resolver.resolve_with_auto_discovery``
-            # when DB access is available.
+            # Phase C: a step resolves against a single Phoenix CHAT
+            # prompt by name (defaults to the step's snake_case name;
+            # overridable per Bind via ``prompt_name``). The legacy
+            # ``system_key`` / ``user_key`` columns remain in the
+            # introspection payload as ``<name>.system_instruction``
+            # / ``<name>.user_prompt`` shims so the frontend keeps
+            # rendering until Phase D repoints it.
+            resolved_name = step_def.resolved_prompt_name
             step_entry: Dict[str, Any] = {
                 "step_name": step_name,
                 "class_name": step_cls.__name__,
-                "system_key": step_def.system_instruction_key,
-                "user_key": step_def.user_prompt_key,
+                "prompt_name": resolved_name,
+                "system_key": f"{resolved_name}.system_instruction",
+                "user_key": f"{resolved_name}.user_prompt",
                 "instructions_class": (
                     step_def.instructions.__name__
                     if step_def.instructions

@@ -35,8 +35,6 @@ if TYPE_CHECKING:
 
 def step_definition(
     instructions: Type[BaseModel],
-    default_system_key: Optional[str] = None,
-    default_user_key: Optional[str] = None,
     default_transformation=None,
     agent: Optional[str] = None,
     model: Optional[str] = None,
@@ -49,14 +47,16 @@ def step_definition(
     """
     Decorator that auto-generates a factory function for creating step definitions.
 
-    Stores configuration on the class and provides a create_definition() method.
-    Extractions are no longer declared on the step (they are attached per-strategy
-    via nested ``Bind`` instances).
+    Stores configuration on the class and provides a ``create_definition()``
+    method. Extractions are attached per-strategy via nested ``Bind``
+    instances.
+
+    The Phoenix prompt resolved at runtime is the step's snake_case name
+    (``WidgetDetectionStep`` -> ``widget_detection``). Override per
+    strategy via ``Bind(step=..., prompt_name="widget_detection_formal")``.
 
     Args:
         instructions: The Pydantic instruction class for this step
-        default_system_key: Default system instruction prompt key
-        default_user_key: Default user prompt template key
         default_transformation: Default transformation class
         agent: Optional agent name for tool lookup from global agent registry
             (legacy — prefer ``tools`` for new steps)
@@ -130,8 +130,6 @@ def step_definition(
                     )
 
         step_class.INSTRUCTIONS = instructions
-        step_class.DEFAULT_SYSTEM_KEY = default_system_key
-        step_class.DEFAULT_USER_KEY = default_user_key
         step_class.DEFAULT_TRANSFORMATION = default_transformation
         step_class.AGENT = agent
         step_class.MODEL = model
@@ -144,8 +142,6 @@ def step_definition(
         @classmethod
         def create_definition(
             cls,
-            system_instruction_key: Optional[str] = None,
-            user_prompt_key: Optional[str] = None,
             transformation=None,
             **kwargs
         ):
@@ -172,16 +168,6 @@ def step_definition(
 
             return StepDefinition(
                 step_class=cls,
-                system_instruction_key=(
-                    system_instruction_key
-                    if system_instruction_key is not None
-                    else cls.DEFAULT_SYSTEM_KEY
-                ),
-                user_prompt_key=(
-                    user_prompt_key
-                    if user_prompt_key is not None
-                    else cls.DEFAULT_USER_KEY
-                ),
                 instructions=cls.INSTRUCTIONS,
                 transformation=transformation,
                 **kwargs
@@ -256,13 +242,11 @@ class LLMStep(ABC):
 
     def __init__(
         self,
-        system_instruction_key: str,
-        user_prompt_key: str,
+        prompt_name: str,
         instructions: Type[BaseModel],
         pipeline: 'PipelineConfig'
     ):
-        self.system_instruction_key = system_instruction_key
-        self.user_prompt_key = user_prompt_key
+        self.prompt_name = prompt_name
         self.instructions = instructions
         self.pipeline: 'PipelineConfig' = pipeline
         # Populated by the pipeline before prepare_calls() runs:
@@ -303,7 +287,7 @@ class LLMStep(ABC):
         if hasattr(variables, 'model_dump'):
             variables = variables.model_dump()
         return prompt_service.get_user_prompt(
-            self.user_prompt_key,
+            self.prompt_name,
             variables=variables,
             variable_instance=variable_instance,
             context=context,

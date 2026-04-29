@@ -128,8 +128,6 @@ class _ExtWidgetReview(PipelineExtraction, model=WidgetReview):
 @step_definition(
     inputs=_AInputs,
     instructions=_AInstructions,
-    default_system_key="a.system",
-    default_user_key="a.user",
 )
 class _AStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
@@ -139,8 +137,6 @@ class _AStep(LLMStep):
 @step_definition(
     inputs=_BInputs,
     instructions=_BInstructions,
-    default_system_key="b.system",
-    default_user_key="b.user",
 )
 class _BStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
@@ -150,8 +146,6 @@ class _BStep(LLMStep):
 @step_definition(
     inputs=_CInputs,
     instructions=_CInstructions,
-    default_system_key="c.system",
-    default_user_key="c.user",
 )
 class _CStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
@@ -251,8 +245,6 @@ class _MissingInstructions(LLMResultMixin):
 @step_definition(
     inputs=_MissingInputs,
     instructions=_MissingInstructions,
-    default_system_key="missing.system",
-    default_user_key="missing.user",
 )
 class _MissingStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:

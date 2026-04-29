@@ -77,8 +77,6 @@ class GadgetExtraction(PipelineExtraction, model=Gadget):
 @step_definition(
     inputs=GadgetInputs,
     instructions=GadgetInstructions,
-    default_system_key="gadget.system",
-    default_user_key="gadget.user",
 )
 class GadgetStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
@@ -97,8 +95,6 @@ class BrokenInstructions(LLMResultMixin):
 @step_definition(
     inputs=BrokenInputs,
     instructions=BrokenInstructions,
-    default_system_key="gadget.system",
-    default_user_key="gadget.user",
 )
 class BrokenStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:

@@ -82,8 +82,6 @@ class WidgetExtraction(PipelineExtraction, model=Widget):
 @step_definition(
     inputs=WidgetDetectionInputs,
     instructions=WidgetDetectionInstructions,
-    default_system_key="widget_detection.system_instruction",
-    default_user_key="widget_detection.user_prompt",
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:

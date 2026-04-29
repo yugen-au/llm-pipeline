@@ -170,12 +170,13 @@ def get_step_prompts(
 ) -> StepPromptsResponse:
     """Return prompt/instruction content for a pipeline step.
 
-    Resolves prompt keys via the shared resolver so decorator-default
-    (tier 2) and DB auto-discovery (tier 3) keys are surfaced, not just
-    tier-1 declared values. Iterates every strategy on the pipeline —
-    keys from all strategies that include ``step_name`` are unioned.
+    Phase C: each step resolves to a single Phoenix CHAT prompt; the
+    legacy split keys (``<name>.system_instruction`` /
+    ``<name>.user_prompt``) are derived from the step's
+    ``resolved_prompt_name`` so the local Prompt-row lookup keeps
+    rendering until Phase E retires the table.
     """
-    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
+    from llm_pipeline.introspection import _compile_bind_for_introspection
 
     registry: dict = getattr(request.app.state, "introspection_registry", {})
     if name not in registry:
@@ -201,24 +202,30 @@ def get_step_prompts(
             )
             continue
 
-        strategy_name = getattr(strategy, "name", None)
         try:
-            step_defs = strategy.get_steps()
+            bindings = strategy.get_bindings()
         except Exception:
             logger.debug(
-                "Failed to get_steps for %s", strategy_cls.__name__,
+                "Failed to get_bindings for %s", strategy_cls.__name__,
                 exc_info=True,
             )
             continue
 
-        for sd in step_defs:
+        for bind in bindings:
+            try:
+                sd = _compile_bind_for_introspection(bind)
+            except Exception:
+                logger.debug(
+                    "Failed to compile bind for %s",
+                    strategy_cls.__name__, exc_info=True,
+                )
+                continue
             if sd.step_name != step_name:
                 continue
-            sys_k, usr_k = resolve_with_auto_discovery(sd, db, strategy_name)
-            if sys_k:
-                declared_keys.add(sys_k)
-            if usr_k:
-                declared_keys.add(usr_k)
+            prompt_name = sd.resolved_prompt_name
+            if prompt_name:
+                declared_keys.add(f"{prompt_name}.system_instruction")
+                declared_keys.add(f"{prompt_name}.user_prompt")
 
     if not declared_keys:
         return StepPromptsResponse(

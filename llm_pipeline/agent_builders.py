@@ -56,7 +56,7 @@ def build_step_agent(
     step_name: str,
     output_type: type,
     model: str | None = None,
-    system_instruction_key: str | None = None,
+    prompt_name: str | None = None,
     retries: int = 3,
     model_settings: Any | None = None,
     validators: list[Any] | None = None,
@@ -67,39 +67,23 @@ def build_step_agent(
 
     Constructs an Agent with dynamic system prompt injection via
     @agent.instructions. The system prompt is resolved at runtime
-    through deps.prompt_service, mirroring the former
-    prompt resolution pattern.
-
-    Validators (from validators.py factories) are registered via
-    agent.output_validator() after the instructions block. The
-    validation_context lambda wires per-call StepDeps.validation_context
-    into Pydantic model validator context at run_sync() time, enabling
-    output type field_validators to access ValidationContext via
-    info.context.
+    through deps.prompt_service against ``prompt_name`` (a Phoenix
+    CHAT prompt holding both system and user messages). The system
+    message is the one extracted here.
 
     Args:
         step_name: Unique step identifier (e.g. 'constraint_extraction').
         output_type: Pydantic model for validated output.
-        model: Model string (e.g. 'google-gla:gemini-2.0-flash-lite').
-            None defers model selection to run-time via defer_model_check.
-        system_instruction_key: DB prompt key for system instruction.
-            Defaults to step_name if not provided.
+        model: Model string. None defers selection via defer_model_check.
+        prompt_name: Phoenix prompt name to fetch the system message
+            from. Defaults to ``step_name`` when omitted.
         retries: Max retries for output validation failures.
         model_settings: ModelSettings for temperature, max_tokens, etc.
-        validators: List of output validator callables (from validator
-            factories like not_found_validator, array_length_validator).
-            Each is registered via agent.output_validator(). None = no
-            validators.
+        validators: Output validators registered via
+            ``agent.output_validator``. None = no validators.
         instrument: Optional InstrumentationSettings for OTel tracing.
-            When provided, enables per-agent OpenTelemetry instrumentation
-            (spans for model requests, token usage). Passed directly to
-            the Agent constructor. None = no instrumentation.
         tools: Optional sequence of tool callables to register on the
-            agent. When provided, wraps them in FunctionToolset.
-            Tool-call observability comes from pydantic-ai's
-            Agent.instrument_all() (wired in observability.configure());
-            no custom wrapper needed.
-            None or empty = no tools registered.
+            agent. None or empty = no tools registered.
 
     Returns:
         Configured Agent[StepDeps, Any] with dynamic instructions and
@@ -127,18 +111,20 @@ def build_step_agent(
 
     agent: Agent[StepDeps, Any] = Agent(**agent_kwargs)
 
-    sys_key = system_instruction_key or step_name
+    resolved_prompt_name = prompt_name or step_name
 
     @agent.instructions
     def _inject_system_prompt(ctx: RunContext[StepDeps]) -> str:
-        """Resolve system prompt from DB via PromptService.
+        """Resolve the system message from the Phoenix CHAT prompt.
 
-        If a variable_resolver is available, resolves the system variable
-        class and instantiates it before fetching the formatted prompt.
-        Otherwise falls back to the raw prompt template.
+        If a ``variable_resolver`` is available, resolves the system
+        variable class and instantiates it before rendering. Otherwise
+        the raw template is returned (no .format substitution).
         """
         if ctx.deps.variable_resolver:
-            var_class = ctx.deps.variable_resolver.resolve(sys_key, 'system')
+            var_class = ctx.deps.variable_resolver.resolve(
+                resolved_prompt_name, 'system',
+            )
             if var_class:
                 system_variables = var_class()
                 variables_dict = (
@@ -147,13 +133,13 @@ def build_step_agent(
                     else system_variables
                 )
                 return ctx.deps.prompt_service.get_system_prompt(
-                    prompt_key=sys_key,
+                    prompt_key=resolved_prompt_name,
                     variables=variables_dict,
                     variable_instance=system_variables,
                 )
 
         return ctx.deps.prompt_service.get_prompt(
-            prompt_key=sys_key,
+            prompt_key=resolved_prompt_name,
             prompt_type='system',
         )
 

@@ -13,8 +13,6 @@ from llm_pipelines.schemas.text_analyzer import (
 @step_definition(
     inputs=TopicExtractionInputs,
     instructions=TopicExtractionInstructions,
-    default_system_key="topic_extraction",
-    default_user_key="topic_extraction",
 )
 class TopicExtractionStep(LLMStep):
     """Extract topics from the input text."""

@@ -643,7 +643,6 @@ def _build_run_snapshot(
     """
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.model.resolver import resolve_model_with_fallbacks
-    from llm_pipeline.prompts.resolver import resolve_from_step_def
 
     # case_versions is the same regardless of target_type
     case_versions = {str(c.id): c.version for c in cases}
@@ -675,7 +674,6 @@ def _build_step_target_snapshot(
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.evals.delta import apply_instruction_delta
     from llm_pipeline.model.resolver import resolve_model_with_fallbacks
-    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
 
     step_def, _input_data_cls, default_model, pipeline_name = (
         runner._find_step_def(dataset.target_name)
@@ -688,8 +686,12 @@ def _build_step_target_snapshot(
     if step_def is None:
         return case_versions, prompt_versions, model_snapshot, instr_schema
 
-    # Resolve prompt keys via auto-discovery (same as _resolve_step_task)
-    system_key, user_key = resolve_with_auto_discovery(step_def, session, None)
+    # Phase C: derive the legacy split keys from the step's single
+    # ``prompt_name`` so the local Prompt-row lookup keeps working
+    # until Phase E retires the table.
+    prompt_name = step_def.resolved_prompt_name
+    system_key = f"{prompt_name}.system_instruction" if prompt_name else None
+    user_key = f"{prompt_name}.user_prompt" if prompt_name else None
 
     # Collect prompt versions from DB
     for key in (system_key, user_key):
@@ -744,7 +746,6 @@ def _build_pipeline_target_snapshot(
     """Build snapshot dicts for a pipeline-target dataset."""
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.model.resolver import resolve_model_with_fallbacks
-    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
 
     pipeline_name = dataset.target_name
     pipeline_cls = runner.introspection_registry.get(pipeline_name)
@@ -769,9 +770,19 @@ def _build_pipeline_target_snapshot(
             for sd in strategy.get_steps():
                 step_name = sd.step_name
 
-                # Prompt versions for this step
-                system_key, user_key = resolve_with_auto_discovery(
-                    sd, session, None
+                # Phase C: derive legacy split keys from the single
+                # ``prompt_name`` so the local Prompt-row lookup still
+                # finds rows during the transition.
+                step_prompt_name = getattr(
+                    sd, "resolved_prompt_name", None,
+                ) or getattr(sd, "prompt_name", None)
+                system_key = (
+                    f"{step_prompt_name}.system_instruction"
+                    if step_prompt_name else None
+                )
+                user_key = (
+                    f"{step_prompt_name}.user_prompt"
+                    if step_prompt_name else None
                 )
                 step_prompts: dict = {}
                 for key in (system_key, user_key):
@@ -833,8 +844,16 @@ def _apply_variant_to_sandbox(
     from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.db.step_config import StepModelConfig
 
-    system_key = getattr(step_def, "system_instruction_key", None)
-    user_key = getattr(step_def, "user_prompt_key", None)
+    # Phase C: StepDefinition carries a single ``prompt_name``. The
+    # local sandbox DB still keys Prompt rows by the legacy split
+    # shape, so reconstruct ``<name>.system_instruction`` /
+    # ``<name>.user_prompt`` to find the rows to override. Phase E
+    # rips this entirely once the local Prompt table is dropped.
+    prompt_name = getattr(step_def, "resolved_prompt_name", None) or getattr(
+        step_def, "prompt_name", None,
+    )
+    system_key = f"{prompt_name}.system_instruction" if prompt_name else None
+    user_key = f"{prompt_name}.user_prompt" if prompt_name else None
     system_content_override = variant_delta.get("system_prompt")
     user_content_override = variant_delta.get("user_prompt")
     variant_model = variant_delta.get("model")

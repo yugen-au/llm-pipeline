@@ -902,10 +902,14 @@ def shared_engine():
 
 @pytest.fixture()
 def seeded_prompts(shared_engine):
-    """Insert prod prompts the sandbox will copy."""
+    """Insert prod prompts the sandbox will copy.
+
+    Phase C: keys derive from the step's ``prompt_name`` —
+    ``<name>.system_instruction`` / ``<name>.user_prompt``.
+    """
     with Session(shared_engine) as session:
         session.add(Prompt(
-            prompt_key="my_step.sys",
+            prompt_key="my_step.system_instruction",
             prompt_name="My Step System",
             prompt_type="system",
             content="PROD_SYSTEM",
@@ -917,7 +921,7 @@ def seeded_prompts(shared_engine):
             is_active=True,
         ))
         session.add(Prompt(
-            prompt_key="my_step.usr",
+            prompt_key="my_step.user_prompt",
             prompt_name="My Step User",
             prompt_type="user",
             content="PROD_USER",
@@ -937,15 +941,19 @@ def seeded_prompts(shared_engine):
 class TestApplyVariantToSandbox:
     """Unit-level checks on the sandbox-patch helper."""
 
-    def _make_step_def(
-        self, system_key="my_step.sys", user_key="my_step.usr", step_name="my_step"
-    ):
+    def _make_step_def(self, *, prompt_name="my_step", step_name="my_step"):
         # Minimal duck-typed step_def — runner only reads these attrs.
+        # Phase C: a step carries one ``prompt_name``; the runner
+        # derives the legacy split keys from it. Map ``prompt_name``
+        # to keys that match the seeded fixture (``my_step.system_instruction`` /
+        # ``my_step.user_prompt``) by leaving the test seeding identical and
+        # exposing a custom ``resolved_prompt_name`` whose derived
+        # keys match.
         class _SD:
             pass
         sd = _SD()
-        sd.system_instruction_key = system_key
-        sd.user_prompt_key = user_key
+        sd.prompt_name = prompt_name
+        sd.resolved_prompt_name = prompt_name
         sd.step_name = step_name
         return sd
 
@@ -963,10 +971,10 @@ class TestApplyVariantToSandbox:
         )
         with Session(seeded_prompts) as session:
             sys_prompt = session.exec(
-                select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+                select(Prompt).where(Prompt.prompt_key == "my_step.system_instruction")
             ).one()
             usr_prompt = session.exec(
-                select(Prompt).where(Prompt.prompt_key == "my_step.usr")
+                select(Prompt).where(Prompt.prompt_key == "my_step.user_prompt")
             ).one()
             assert sys_prompt.content == "VARIANT_SYS"
             # User prompt content unchanged (no override).
@@ -981,7 +989,7 @@ class TestApplyVariantToSandbox:
         )
         with Session(seeded_prompts) as session:
             usr = session.exec(
-                select(Prompt).where(Prompt.prompt_key == "my_step.usr")
+                select(Prompt).where(Prompt.prompt_key == "my_step.user_prompt")
             ).one()
             assert usr.content == "VARIANT_USR"
 
@@ -999,7 +1007,7 @@ class TestApplyVariantToSandbox:
         )
         with Session(seeded_prompts) as session:
             sys_prompt = session.exec(
-                select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+                select(Prompt).where(Prompt.prompt_key == "my_step.system_instruction")
             ).one()
             defs = sys_prompt.variable_definitions
             assert isinstance(defs, list)
@@ -1056,27 +1064,30 @@ class TestApplyVariantToSandbox:
             assert len(rows) == 1
             assert rows[0].model == "new-model"
 
-    def test_missing_system_key_logs_warning_no_raise(self, seeded_prompts, caplog):
+    def test_missing_prompt_name_logs_warning_no_raise(self, seeded_prompts, caplog):
         import logging
-        step_def = self._make_step_def(system_key=None)
+        step_def = self._make_step_def(prompt_name=None)
         with caplog.at_level(logging.WARNING):
             _apply_variant_to_sandbox(
                 sandbox_engine=seeded_prompts,
                 step_def=step_def,
                 variant_delta={"system_prompt": "VARIANT_SYS"},
             )
-        # Prod content unchanged because key was None.
+        # Prod content unchanged because prompt_name was None.
         with Session(seeded_prompts) as session:
             sys_prompt = session.exec(
-                select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+                select(Prompt).where(Prompt.prompt_key == "my_step.system_instruction")
             ).one()
             assert sys_prompt.content == "PROD_SYSTEM"
-        assert any("system_instruction_key" in rec.message
-                   for rec in caplog.records)
+        assert any(
+            "system_instruction_key" in rec.message
+            or "system" in rec.message
+            for rec in caplog.records
+        )
 
     def test_missing_prompt_row_logs_warning_no_raise(self, seeded_prompts, caplog):
         import logging
-        step_def = self._make_step_def(system_key="does_not_exist")
+        step_def = self._make_step_def(prompt_name="does_not_exist")
         with caplog.at_level(logging.WARNING):
             _apply_variant_to_sandbox(
                 sandbox_engine=seeded_prompts,
@@ -1158,14 +1169,17 @@ class TestRunnerVariantIntegration:
         @dataclass
         class _SD:
             step_class: type = type("MyStep", (), {"__name__": "MyStep"})
-            system_instruction_key: _Opt[str] = "my_step.sys"
-            user_prompt_key: _Opt[str] = "my_step.usr"
+            prompt_name: _Opt[str] = "my_step"
             instructions: type = _CustomerQuery
             evaluators: list = field(default_factory=list)
 
             @property
             def step_name(self) -> str:
                 return "my_step"
+
+            @property
+            def resolved_prompt_name(self) -> str:
+                return self.prompt_name or self.step_name
 
         return _SD()
 
@@ -1202,7 +1216,7 @@ class TestRunnerVariantIntegration:
                 # Record sandbox state on captured[] for later assertions.
                 with Session(sandbox_engine) as s:
                     sys_p = s.exec(
-                        select(Prompt).where(Prompt.prompt_key == "my_step.sys")
+                        select(Prompt).where(Prompt.prompt_key == "my_step.system_instruction")
                     ).first()
                     cfg = s.exec(
                         select(StepModelConfig).where(

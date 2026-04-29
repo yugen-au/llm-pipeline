@@ -624,7 +624,6 @@ def get_dataset_prod_prompts(
     is what drives tier-3 lookup.
     """
     from llm_pipeline.db.prompt import Prompt
-    from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
 
     ds = db.exec(
         select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
@@ -658,9 +657,10 @@ def get_dataset_prod_prompts(
             ),
         )
 
-    system_key, user_key = resolve_with_auto_discovery(
-        step_def, db, strategy_name
-    )
+    # Phase C: derive legacy split keys from the single prompt_name.
+    prompt_name = step_def.resolved_prompt_name
+    system_key = f"{prompt_name}.system_instruction" if prompt_name else None
+    user_key = f"{prompt_name}.user_prompt" if prompt_name else None
 
     def _fetch(key: Optional[str], ptype: str) -> Optional[ProdPromptContent]:
         if key is None:

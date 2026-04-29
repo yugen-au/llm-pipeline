@@ -778,8 +778,6 @@ class TestProdPrompts:
 
         @step_definition(
             instructions=DeclaredInstructions,
-            default_system_key="declared.system",
-            default_user_key="declared.user",
         )
         class DeclaredStep(LLMStep):
             def prepare_calls(self):
@@ -826,7 +824,7 @@ class TestProdPrompts:
         with Session(engine) as session:
             session.add(
                 _P_model(
-                    prompt_key="declared.system",
+                    prompt_key="declared.system_instruction",
                     prompt_name="declared sys",
                     prompt_type="system",
                     content="SYS CONTENT",
@@ -835,7 +833,7 @@ class TestProdPrompts:
             )
             session.add(
                 _P_model(
-                    prompt_key="declared.user",
+                    prompt_key="declared.user_prompt",
                     prompt_name="declared usr",
                     prompt_type="user",
                     content="USR CONTENT",
@@ -862,10 +860,10 @@ class TestProdPrompts:
         resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert data["system"]["prompt_key"] == "declared.system"
+        assert data["system"]["prompt_key"] == "declared.system_instruction"
         assert data["system"]["content"] == "SYS CONTENT"
         assert data["system"]["version"] == "1.2"
-        assert data["user"]["prompt_key"] == "declared.user"
+        assert data["user"]["prompt_key"] == "declared.user_prompt"
         assert data["user"]["content"] == "USR CONTENT"
 
     def test_happy_path_auto_discovery(self, evals_app):
@@ -920,7 +918,7 @@ class TestProdPrompts:
         with Session(engine) as session:
             session.add(
                 _P_model(
-                    prompt_key="auto_disc",
+                    prompt_key="auto_disc.system_instruction",
                     prompt_name="auto disc sys",
                     prompt_type="system",
                     content="AUTO SYS",
@@ -929,7 +927,7 @@ class TestProdPrompts:
             )
             session.add(
                 _P_model(
-                    prompt_key="auto_disc",
+                    prompt_key="auto_disc.user_prompt",
                     prompt_name="auto disc usr",
                     prompt_type="user",
                     content="AUTO USR",
@@ -949,9 +947,9 @@ class TestProdPrompts:
         resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert data["system"]["prompt_key"] == "auto_disc"
+        assert data["system"]["prompt_key"] == "auto_disc.system_instruction"
         assert data["system"]["content"] == "AUTO SYS"
-        assert data["user"]["prompt_key"] == "auto_disc"
+        assert data["user"]["prompt_key"] == "auto_disc.user_prompt"
         assert data["user"]["content"] == "AUTO USR"
 
     def test_only_system_declared_user_null_when_no_db_row(self, evals_app):
@@ -976,7 +974,6 @@ class TestProdPrompts:
 
         @step_definition(
             instructions=PartialInstructions,
-            default_system_key="partial.system",
         )
         class PartialStep(LLMStep):
             def prepare_calls(self):
@@ -1009,7 +1006,7 @@ class TestProdPrompts:
         with Session(engine) as session:
             session.add(
                 _P_model(
-                    prompt_key="partial.system",
+                    prompt_key="partial.system_instruction",
                     prompt_name="sys",
                     prompt_type="system",
                     content="PARTIAL SYS",
@@ -1028,7 +1025,7 @@ class TestProdPrompts:
         resp = client.get(f"/api/evals/{ds_id}/prod-prompts")
         assert resp.status_code == 200, resp.text
         data = resp.json()
-        assert data["system"]["prompt_key"] == "partial.system"
+        assert data["system"]["prompt_key"] == "partial.system_instruction"
         assert data["system"]["content"] == "PARTIAL SYS"
         assert data["user"] is None
 

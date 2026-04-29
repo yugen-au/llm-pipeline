@@ -34,11 +34,15 @@ class StepDefinition:
     A Bind is compiled into a StepDefinition at pipeline execution time;
     this dataclass captures everything the executor needs to run the step,
     including the Bind's inputs adapter and nested extraction Binds.
+
+    ``prompt_name`` is the Phoenix prompt this step resolves against. A
+    Phoenix CHAT prompt holds both the system + user messages within
+    one record, so a single name suffices. Defaults to the step's
+    snake_case name; override via ``Bind(step=..., prompt_name=...)``.
     """
     step_class: Type
-    system_instruction_key: str
-    user_prompt_key: str
     instructions: Type
+    prompt_name: str | None = None
     action_after: Optional[str] = None
     extraction_binds: List[Bind] = field(default_factory=list)
     transformation: Optional[Type['PipelineTransformation']] = None
@@ -56,49 +60,25 @@ class StepDefinition:
         """Derived snake_case name from step_class (e.g. ConstraintExtractionStep -> 'constraint_extraction')."""
         return to_snake_case(self.step_class.__name__, strip_suffix='Step')
 
+    @property
+    def resolved_prompt_name(self) -> str:
+        """Phoenix prompt name to use at runtime. Falls back to the step's
+        snake_case name when no per-Bind override is set."""
+        return self.prompt_name or self.step_name
+
     def create_step(self, pipeline: 'PipelineConfig'):
+        """Construct a configured step instance bound to ``pipeline``.
+
+        The Phoenix prompt name is computed from ``self.resolved_prompt_name``
+        (Bind override, or the step's snake_case class name). PromptService
+        fetches the matching CHAT prompt and pulls the system + user
+        messages from it at runtime — no tier-3 DB auto-discovery.
         """
-        Create a configured step instance with pipeline reference.
-
-        Delegates prompt-key resolution to ``llm_pipeline.prompts.resolver``:
-        1. Tier 1/2: explicit or decorator-default keys on this StepDefinition
-        2. Tier 3: DB auto-discovery (``{step}.{strategy}`` then ``{step}``)
-
-        Args:
-            pipeline: Reference to the pipeline instance
-
-        Returns:
-            Instantiated step with prompts configured and pipeline reference
-        """
-        from llm_pipeline.prompts.resolver import resolve_with_auto_discovery
-
-        strategy_name = None
-        if hasattr(pipeline, '_current_strategy') and pipeline._current_strategy:
-            strategy_name = pipeline._current_strategy.name
-
-        final_system_key, final_user_key = resolve_with_auto_discovery(
-            self, pipeline.session, strategy_name
-        )
-
-        # Validate that we have at least one key
-        if final_system_key is None and final_user_key is None:
-            step_class_name = self.step_class.__name__
-            step_name = to_snake_case(step_class_name, strip_suffix='Step')
-            raise ValueError(
-                f"No prompts found for {step_class_name}. "
-                f"Searched for:\n"
-                f"  - {step_name}.{strategy_name if strategy_name else '[no strategy]'}\n"
-                f"  - {step_name}\n"
-                f"Please provide explicit keys or ensure prompts exist in database."
-            )
-        
         step = self.step_class(
-            system_instruction_key=final_system_key,
-            user_prompt_key=final_user_key,
+            prompt_name=self.resolved_prompt_name,
             instructions=self.instructions,
-            pipeline=pipeline  # Pass pipeline to step
+            pipeline=pipeline,
         )
-        # Attach runtime configuration from this StepDefinition to the step.
         step._extraction_binds = self.extraction_binds
         step._tool_binds = self.tool_binds
         step._transformation = self.transformation
