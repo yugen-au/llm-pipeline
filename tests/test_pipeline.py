@@ -22,7 +22,6 @@ from llm_pipeline import (
     init_pipeline_db,
     step_definition,
 )
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.prompts.service import PromptService
 from llm_pipeline.types import StepCallParams
@@ -174,26 +173,9 @@ def session(engine):
 
 @pytest.fixture
 def seeded_session(session):
-    """Session with prompts seeded."""
-    session.add(Prompt(
-        prompt_key="widget_detection.system_instruction",
-        prompt_name="Widget Detection System",
-        prompt_type="system",
-        category="test",
-        step_name="widget_detection",
-        content="You are a widget detector.",
-        version="1.0",
-    ))
-    session.add(Prompt(
-        prompt_key="widget_detection.user_prompt",
-        prompt_name="Widget Detection User",
-        prompt_type="user",
-        category="test",
-        step_name="widget_detection",
-        content="Analyze this data: {data}",
-        version="1.0",
-    ))
-    session.commit()
+    """Phase E: prompts live in Phoenix; this fixture is a passthrough
+    on the bare in-memory session. Tests still use it for non-prompt DB
+    state. Pair with ``stub_phoenix_prompts`` for prompt content."""
     return session
 
 
@@ -221,12 +203,13 @@ class TestImports:
         assert LLMStep is not None
 
     def test_db_imports(self):
-        from llm_pipeline.db import Prompt, init_pipeline_db
-        assert Prompt is not None
+        from llm_pipeline.db import init_pipeline_db
+        assert init_pipeline_db is not None
 
     def test_prompts_imports(self):
-        from llm_pipeline.prompts import PromptService, VariableResolver
+        from llm_pipeline.prompts import PromptService, register_auto_generate
         assert PromptService is not None
+        assert register_auto_generate is not None
 
 
 class TestLLMResultMixin:
@@ -432,6 +415,7 @@ class TestInitPipelineDb:
         tables = inspector.get_table_names()
         assert "pipeline_step_states" in tables
         assert "pipeline_run_instances" in tables
-        assert "prompts" in tables
+        # Phase E: ``prompts`` was dropped; Phoenix owns prompt storage now.
+        assert "prompts" not in tables
 
 

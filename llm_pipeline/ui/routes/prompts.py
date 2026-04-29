@@ -37,7 +37,6 @@ from llm_pipeline.prompts.phoenix_client import (
     PromptNotFoundError,
 )
 from llm_pipeline.prompts.utils import extract_variables_from_content
-from llm_pipeline.prompts.variables import get_code_prompt_variables
 
 logger = logging.getLogger(__name__)
 
@@ -772,9 +771,10 @@ def get_prompt_variable_schema(
     prompt_type: str,
     request: Request,
 ) -> dict:
-    """Merged variable schema: Phoenix metadata + code-introspected fields."""
+    """Merged variable schema: Phoenix metadata + StepInputs introspection."""
     client = _get_client(request)
     name, role = _split_key(prompt_key, prompt_type)
+    del role  # roles share inputs (one StepInputs per step)
 
     record = _phoenix_prompt_metadata(client, name)
     metadata = _normalise_metadata(record.get("metadata"))
@@ -783,10 +783,16 @@ def get_prompt_variable_schema(
         raw_defs if isinstance(raw_defs, dict) else {}
     )
 
-    code_cls = get_code_prompt_variables(prompt_key, role)
+    # Phase E: code-side variable shape comes from the step's
+    # ``StepInputs`` class (one per step, shared across system/user
+    # messages). Walk the introspection registry to find a step whose
+    # snake_case name matches the bare prompt name.
+    inputs_cls = _find_step_inputs_for(name, request)
     code_fields: Dict[str, Dict[str, Any]] = {}
-    if code_cls:
-        for field_name, field_info in code_cls.model_fields.items():
+    code_cls_name: Optional[str] = None
+    if inputs_cls is not None:
+        code_cls_name = inputs_cls.__name__
+        for field_name, field_info in inputs_cls.model_fields.items():
             annotation = field_info.annotation
             type_name = getattr(annotation, "__name__", str(annotation))
             code_fields[field_name] = {
@@ -832,6 +838,42 @@ def get_prompt_variable_schema(
 
     return {
         "fields": fields,
-        "has_code_class": code_cls is not None,
-        "code_class_name": code_cls.__name__ if code_cls else None,
+        "has_code_class": inputs_cls is not None,
+        "code_class_name": code_cls_name,
     }
+
+
+def _find_step_inputs_for(prompt_name: str, request: Request) -> Optional[type]:
+    """Find a registered step's INPUTS class whose snake_case step name
+    matches ``prompt_name``. Returns the StepInputs subclass or None.
+    """
+    from llm_pipeline.naming import to_snake_case
+
+    registry: Dict[str, Any] = getattr(
+        request.app.state, "introspection_registry", {},
+    ) or {}
+    for pipeline_cls in registry.values():
+        strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
+        strategy_classes = (
+            getattr(strategies_cls, "STRATEGIES", []) if strategies_cls else []
+        ) or []
+        for strategy_cls in strategy_classes:
+            try:
+                strategy = strategy_cls()
+                bindings = strategy.get_bindings()
+            except Exception:
+                continue
+            for bind in bindings:
+                step_cls = getattr(bind, "step", None)
+                if step_cls is None:
+                    continue
+                step_snake = to_snake_case(
+                    step_cls.__name__, strip_suffix="Step",
+                )
+                bound_name = getattr(bind, "prompt_name", None) or step_snake
+                if bound_name != prompt_name and step_snake != prompt_name:
+                    continue
+                inputs_cls = getattr(step_cls, "INPUTS", None)
+                if inputs_cls is not None:
+                    return inputs_cls
+    return None

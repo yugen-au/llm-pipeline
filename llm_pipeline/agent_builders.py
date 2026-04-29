@@ -14,7 +14,6 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from pydantic_ai import Agent, InstrumentationSettings, RunContext
     from llm_pipeline.prompts.service import PromptService
-    from llm_pipeline.prompts.variables import VariableResolver
     from sqlmodel import Session
 
 
@@ -42,9 +41,6 @@ class StepDeps:
     run_id: str
     pipeline_name: str
     step_name: str
-
-    # Optional deps
-    variable_resolver: Any | None = None  # VariableResolver
 
     # Per-call validation config, read by output validators via ctx.deps
     array_validation: Any | None = None  # ArrayValidationConfig
@@ -115,29 +111,7 @@ def build_step_agent(
 
     @agent.instructions
     def _inject_system_prompt(ctx: RunContext[StepDeps]) -> str:
-        """Resolve the system message from the Phoenix CHAT prompt.
-
-        If a ``variable_resolver`` is available, resolves the system
-        variable class and instantiates it before rendering. Otherwise
-        the raw template is returned (no .format substitution).
-        """
-        if ctx.deps.variable_resolver:
-            var_class = ctx.deps.variable_resolver.resolve(
-                resolved_prompt_name, 'system',
-            )
-            if var_class:
-                system_variables = var_class()
-                variables_dict = (
-                    system_variables.model_dump()
-                    if hasattr(system_variables, 'model_dump')
-                    else system_variables
-                )
-                return ctx.deps.prompt_service.get_system_prompt(
-                    prompt_key=resolved_prompt_name,
-                    variables=variables_dict,
-                    variable_instance=system_variables,
-                )
-
+        """Resolve the system message from the Phoenix CHAT prompt."""
         return ctx.deps.prompt_service.get_prompt(
             prompt_key=resolved_prompt_name,
             prompt_type='system',

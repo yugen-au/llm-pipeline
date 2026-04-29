@@ -38,9 +38,12 @@ class SandboxPipeline(PipelineConfig, registry=SandboxRegistry):
 # ---------------------------------------------------------------------------
 
 def create_sandbox_engine(prod_engine: Engine) -> Engine:
-    """Create an in-memory SQLite engine seeded with prompts from prod DB."""
+    """Create an in-memory SQLite engine seeded from prod DB.
+
+    Phase E: prompts live in Phoenix; only ``StepModelConfig`` rows
+    are copied across (those still drive sandbox model overrides).
+    """
     from llm_pipeline.db import init_pipeline_db
-    from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.db.step_config import StepModelConfig
 
     sandbox_engine = create_engine(
@@ -50,29 +53,6 @@ def create_sandbox_engine(prod_engine: Engine) -> Engine:
     init_pipeline_db(sandbox_engine)
 
     with Session(prod_engine) as src, Session(sandbox_engine) as dst:
-        for prompt in src.exec(
-            select(Prompt).where(
-                Prompt.is_active == True,  # noqa: E712
-                Prompt.is_latest == True,  # noqa: E712
-            )
-        ).all():
-            dst.add(Prompt(
-                prompt_key=prompt.prompt_key,
-                prompt_name=prompt.prompt_name,
-                prompt_type=prompt.prompt_type,
-                category=prompt.category,
-                step_name=prompt.step_name,
-                content=prompt.content,
-                required_variables=prompt.required_variables,
-                variable_definitions=prompt.variable_definitions,
-                description=prompt.description,
-                version=prompt.version,
-                is_active=prompt.is_active,
-                is_latest=prompt.is_latest,
-                created_at=prompt.created_at,
-                updated_at=prompt.updated_at,
-            ))
-
         for cfg in src.exec(select(StepModelConfig)).all():
             dst.add(StepModelConfig(
                 pipeline_name=cfg.pipeline_name,
@@ -80,7 +60,6 @@ def create_sandbox_engine(prod_engine: Engine) -> Engine:
                 model=cfg.model,
                 request_limit=cfg.request_limit,
             ))
-
         dst.commit()
 
     return sandbox_engine

@@ -353,34 +353,11 @@ class TestRunSnapshotPopulation:
     def test_run_populates_snapshots_step_target(self, engine):
         """Step-target run populates all four snapshot columns with correct shapes."""
         from pydantic import BaseModel
-        from llm_pipeline.db.prompt import Prompt
 
         # Create instructions model
         class MockInstructions(BaseModel):
             sentiment: str = ""
             confidence: float = 0.0
-
-        # Seed prompt rows
-        with Session(engine) as session:
-            session.add(Prompt(
-                prompt_key="mock_step.system_instruction",
-                prompt_name="Mock System",
-                prompt_type="system",
-                content="Analyze sentiment",
-                version="2.1",
-                is_active=True,
-                is_latest=True,
-            ))
-            session.add(Prompt(
-                prompt_key="mock_step.user_prompt",
-                prompt_name="Mock User",
-                prompt_type="user",
-                content="Input: {text}",
-                version="1.3",
-                is_active=True,
-                is_latest=True,
-            ))
-            session.commit()
 
         # Seed dataset + cases
         with Session(engine) as session:
@@ -418,13 +395,18 @@ class TestRunSnapshotPopulation:
 
         runner = EvalRunner(engine=engine)
 
-        # Patch _find_step_def to return our fake step def
+        # Patch _find_step_def to return our fake step def, and stub
+        # the Phoenix version-id lookup so the snapshot stamps a
+        # deterministic value without needing a live Phoenix.
         with patch.object(
             runner, "_find_step_def",
             return_value=(step_def, None, "gpt-4o", "test_pipeline"),
         ), patch.object(
             runner, "_resolve_task",
             return_value=(mock_task_fn, None),
+        ), patch(
+            "llm_pipeline.evals.runner._phoenix_latest_version_id",
+            return_value="phx_v_stub",
         ):
             run_id = runner.run_dataset(ds_id)
 
@@ -439,12 +421,11 @@ class TestRunSnapshotPopulation:
             assert all("." in v for v in run.case_versions.values())
             assert len(run.case_versions) == 2
 
-            # prompt_versions: flat {prompt_key: {prompt_type: version}}
-            # Phase C: keys derive from the step's ``prompt_name`` —
-            # ``<name>.system_instruction`` / ``<name>.user_prompt``.
+            # prompt_versions: legacy split-key shape now stamped with
+            # the same Phoenix version_id for both system + user roles.
             assert run.prompt_versions is not None
-            assert run.prompt_versions["mock_step.system_instruction"]["system"] == "2.1"
-            assert run.prompt_versions["mock_step.user_prompt"]["user"] == "1.3"
+            assert run.prompt_versions["mock_step.system_instruction"]["system"] == "phx_v_stub"
+            assert run.prompt_versions["mock_step.user_prompt"]["user"] == "phx_v_stub"
 
             # model_snapshot: {step_name: model_id} single-entry
             assert run.model_snapshot is not None
@@ -458,36 +439,12 @@ class TestRunSnapshotPopulation:
     def test_run_populates_snapshots_pipeline_target(self, engine):
         """Pipeline-target run populates snapshots keyed by step_name."""
         from pydantic import BaseModel
-        from llm_pipeline.db.prompt import Prompt
 
         class StepAInstructions(BaseModel):
             result_a: str = ""
 
         class StepBInstructions(BaseModel):
             result_b: int = 0
-
-        # Seed prompts for two steps. Phase C: keys derive from
-        # the step's ``prompt_name`` (here equal to ``step_name``).
-        with Session(engine) as session:
-            session.add(Prompt(
-                prompt_key="step_a.system_instruction",
-                prompt_name="Step A System",
-                prompt_type="system",
-                content="Do step A",
-                version="1.0",
-                is_active=True,
-                is_latest=True,
-            ))
-            session.add(Prompt(
-                prompt_key="step_b.system_instruction",
-                prompt_name="Step B System",
-                prompt_type="system",
-                content="Do step B",
-                version="2.0",
-                is_active=True,
-                is_latest=True,
-            ))
-            session.commit()
 
         # Seed dataset + case
         with Session(engine) as session:
@@ -538,7 +495,12 @@ class TestRunSnapshotPopulation:
         def mock_task_fn(inputs: dict) -> dict:
             return {"step_a": {"result_a": "ok"}, "step_b": {"result_b": 42}}
 
-        with patch.object(runner, "_resolve_task", return_value=(mock_task_fn, None)):
+        with patch.object(
+            runner, "_resolve_task", return_value=(mock_task_fn, None),
+        ), patch(
+            "llm_pipeline.evals.runner._phoenix_latest_version_id",
+            return_value="phx_v_stub",
+        ):
             run_id = runner.run_dataset(ds_id)
 
         with Session(engine) as session:
@@ -550,17 +512,16 @@ class TestRunSnapshotPopulation:
             assert run.case_versions is not None
             assert len(run.case_versions) == 1
 
-            # prompt_versions: {step_name: {prompt_key: {prompt_type: version}}}
-            # Phase C: prompt_key is the legacy split shape derived
-            # from each step's ``prompt_name``.
+            # prompt_versions: per-step legacy split-key shape stamped
+            # with the same Phoenix version_id for both roles.
             assert run.prompt_versions is not None
             assert (
                 run.prompt_versions["step_a"]["step_a.system_instruction"]["system"]
-                == "1.0"
+                == "phx_v_stub"
             )
             assert (
                 run.prompt_versions["step_b"]["step_b.system_instruction"]["system"]
-                == "2.0"
+                == "phx_v_stub"
             )
 
             # model_snapshot: {step_name: model_id} one entry per step

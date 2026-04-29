@@ -16,7 +16,6 @@ from sqlalchemy import Engine, event, text
 from sqlalchemy.exc import OperationalError
 from sqlmodel import SQLModel, Session, create_engine
 
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
@@ -44,7 +43,6 @@ def _migrate_add_columns(engine: Engine) -> None:
         ("pipeline_step_states", "total_tokens", "INTEGER"),
         ("pipeline_step_states", "total_requests", "INTEGER"),
         ("pipeline_events", "step_name", "VARCHAR(100)"),
-        ("prompts", "variable_definitions", "TEXT"),
         ("step_model_configs", "request_limit", "INTEGER"),
         ("pipeline_runs", "error_message", "TEXT"),
         ("pipeline_runs", "trace_id", "VARCHAR(32)"),
@@ -53,7 +51,6 @@ def _migrate_add_columns(engine: Engine) -> None:
         ("eval_runs", "variant_id", "INTEGER"),
         ("eval_runs", "delta_snapshot", "TEXT"),
         # Versioning-snapshots additions
-        ("prompts", "is_latest", "INTEGER DEFAULT 1"),
         ("eval_cases", "version", "VARCHAR(20) DEFAULT '1.0'"),
         ("eval_cases", "is_active", "INTEGER DEFAULT 1"),
         ("eval_cases", "is_latest", "INTEGER DEFAULT 1"),
@@ -104,18 +101,13 @@ def _migrate_add_columns(engine: Engine) -> None:
 
 
 def _migrate_partial_unique_indexes(engine: Engine) -> None:
-    """One-off: retire legacy unique, dedupe eval_cases, install partial
-    uniques + supporting indexes. Idempotent."""
+    """One-off: retire legacy unique on eval_cases, dedupe rows, install
+    partial uniques + supporting indexes. Idempotent."""
     is_sqlite = engine.url.drivername.startswith("sqlite")
-
-    drops = [
-        "DROP INDEX IF EXISTS uq_prompts_key_type",   # legacy unique
-        "DROP INDEX IF EXISTS ix_prompts_active",     # per A7
-    ]
 
     dedupe_sql = [
         # Keep newest by created_at (tiebreak id DESC); mark older duplicates
-        # is_latest=0 so partial unique no longer collides. is_active kept as-is.
+        # is_latest=0 so partial unique no longer collides.
         """
         UPDATE eval_cases
            SET is_latest = 0
@@ -135,16 +127,9 @@ def _migrate_partial_unique_indexes(engine: Engine) -> None:
 
     if is_sqlite:
         creates = [
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_prompts_active_latest "
-            "ON prompts (prompt_key, prompt_type) "
-            "WHERE is_active = 1 AND is_latest = 1",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_eval_cases_active_latest "
             "ON eval_cases (dataset_id, name) "
             "WHERE is_active = 1 AND is_latest = 1",
-            "CREATE INDEX IF NOT EXISTS ix_prompts_key_type_live "
-            "ON prompts (prompt_key, prompt_type, is_active, is_latest)",
-            "CREATE INDEX IF NOT EXISTS ix_prompts_key_type_version "
-            "ON prompts (prompt_key, prompt_type, version)",
             "CREATE INDEX IF NOT EXISTS ix_eval_cases_dataset_live "
             "ON eval_cases (dataset_id, is_active, is_latest)",
             "CREATE INDEX IF NOT EXISTS ix_eval_cases_dataset_name_version "
@@ -152,16 +137,9 @@ def _migrate_partial_unique_indexes(engine: Engine) -> None:
         ]
     else:
         creates = [
-            "CREATE UNIQUE INDEX IF NOT EXISTS uq_prompts_active_latest "
-            "ON prompts (prompt_key, prompt_type) "
-            "WHERE is_active = true AND is_latest = true",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_eval_cases_active_latest "
             "ON eval_cases (dataset_id, name) "
             "WHERE is_active = true AND is_latest = true",
-            "CREATE INDEX IF NOT EXISTS ix_prompts_key_type_live "
-            "ON prompts (prompt_key, prompt_type, is_active, is_latest)",
-            "CREATE INDEX IF NOT EXISTS ix_prompts_key_type_version "
-            "ON prompts (prompt_key, prompt_type, version)",
             "CREATE INDEX IF NOT EXISTS ix_eval_cases_dataset_live "
             "ON eval_cases (dataset_id, is_active, is_latest)",
             "CREATE INDEX IF NOT EXISTS ix_eval_cases_dataset_name_version "
@@ -169,17 +147,37 @@ def _migrate_partial_unique_indexes(engine: Engine) -> None:
         ]
 
     with engine.connect() as conn:
-        for stmt in drops:
-            try:
-                conn.execute(text(stmt))
-            except OperationalError:
-                pass
         for stmt in dedupe_sql:
             try:
                 conn.execute(text(stmt))
             except OperationalError:
                 pass  # eval_cases may not exist on fresh DB
         for stmt in creates:
+            try:
+                conn.execute(text(stmt))
+            except OperationalError:
+                pass
+        conn.commit()
+
+
+def _drop_legacy_prompts_table(engine: Engine) -> None:
+    """Phase E one-time DROP: remove the local ``prompts`` table.
+
+    Prompts moved to Phoenix in earlier phases; the local table is now
+    inert. Drops associated partial indexes too. Idempotent — silently
+    no-ops when the table doesn't exist.
+    """
+    drops = [
+        "DROP INDEX IF EXISTS uq_prompts_active_latest",
+        "DROP INDEX IF EXISTS uq_prompts_key_type",
+        "DROP INDEX IF EXISTS ix_prompts_active",
+        "DROP INDEX IF EXISTS ix_prompts_key_type_live",
+        "DROP INDEX IF EXISTS ix_prompts_key_type_version",
+        "DROP INDEX IF EXISTS ix_prompts_category_step",
+        "DROP TABLE IF EXISTS prompts",
+    ]
+    with engine.connect() as conn:
+        for stmt in drops:
             try:
                 conn.execute(text(stmt))
             except OperationalError:
@@ -298,7 +296,6 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineStepState.__table__,
             PipelineRunInstance.__table__,
             PipelineRun.__table__,
-            Prompt.__table__,
             DraftStep.__table__,
             DraftPipeline.__table__,
             StepModelConfig.__table__,
@@ -317,6 +314,10 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
 
     # Retire legacy indexes, dedupe eval_cases, install partial unique indexes
     _migrate_partial_unique_indexes(engine)
+
+    # Phase E: drop the legacy ``prompts`` table on first boot under the
+    # Phoenix-backed framework. No-op once dropped.
+    _drop_legacy_prompts_table(engine)
 
     # Add performance indexes that create_all skips on existing tables
     add_missing_indexes(engine)
@@ -343,5 +344,4 @@ __all__ = [
     "get_engine",
     "get_session",
     "get_default_db_path",
-    "Prompt",
 ]

@@ -51,7 +51,6 @@ from llm_pipeline import (  # noqa: E402
     PipelineStrategy,
     step_definition,
 )
-from llm_pipeline.db.prompt import Prompt  # noqa: E402
 from llm_pipeline.inputs import PipelineInputData, StepInputs  # noqa: E402
 from llm_pipeline.types import StepCallParams  # noqa: E402
 from llm_pipeline.wiring import Bind, FromInput, FromOutput  # noqa: E402
@@ -105,8 +104,6 @@ class WidgetExtraction(PipelineExtraction, model=Widget):
 @step_definition(
     inputs=WidgetDetectionInputs,
     instructions=WidgetDetectionInstructions,
-    default_system_key="widget_detection.system_instruction",
-    default_user_key="widget_detection.user_prompt",
 )
 class WidgetDetectionStep(LLMStep):
     def prepare_calls(self) -> List[StepCallParams]:
@@ -162,26 +159,47 @@ class SmokePipeline(
 # ---------------------------------------------------------------------------
 
 
-def _seed_prompts(session: Session) -> None:
-    session.add(Prompt(
-        prompt_key="widget_detection.system_instruction",
-        prompt_name="Widget Detection System",
-        prompt_type="system",
-        category="smoke",
-        step_name="widget_detection",
-        content="You are a widget detector. Return widget_count and category.",
-        version="1.0",
-    ))
-    session.add(Prompt(
-        prompt_key="widget_detection.user_prompt",
-        prompt_name="Widget Detection User",
-        prompt_type="user",
-        category="smoke",
-        step_name="widget_detection",
-        content="Analyze this data: {data}",
-        version="1.0",
-    ))
-    session.commit()
+def _seed_phoenix_prompt() -> None:
+    """Ensure ``widget_detection`` exists in Phoenix with smoke content."""
+    from llm_pipeline.prompts.phoenix_client import (
+        PhoenixError,
+        PhoenixPromptClient,
+        PromptNotFoundError,
+    )
+
+    try:
+        client = PhoenixPromptClient()
+    except PhoenixError as exc:
+        print(f"Phoenix not reachable; skipping prompt seed: {exc}")
+        return
+
+    try:
+        client.get_latest("widget_detection")
+        return  # already seeded
+    except PromptNotFoundError:
+        pass
+    except PhoenixError as exc:
+        print(f"Phoenix lookup failed; skipping seed: {exc}")
+        return
+
+    client.create(
+        prompt={"name": "widget_detection"},
+        version={
+            "model_provider": "OPENAI",
+            "model_name": "gpt-4o-mini",
+            "template": {
+                "type": "chat",
+                "messages": [
+                    {"role": "system",
+                     "content": "You are a widget detector. Return widget_count and category."},
+                    {"role": "user", "content": "Analyze this data: {data}"},
+                ],
+            },
+            "template_type": "CHAT",
+            "template_format": "F_STRING",
+            "invocation_parameters": {"type": "openai", "openai": {}},
+        },
+    )
 
 
 def main() -> None:
@@ -195,8 +213,7 @@ def main() -> None:
         connect_args={"check_same_thread": False},
     )
     SQLModel.metadata.create_all(engine)
-    with Session(engine) as seed_session:
-        _seed_prompts(seed_session)
+    _seed_phoenix_prompt()
 
     # The 'test' model string is resolved by pydantic-ai to TestModel,
     # which returns synthetic structured output matching Instructions

@@ -111,45 +111,42 @@ class TestMigrationDedupesEvalCases:
         assert rows[1] == (9, 1)  # higher id -> is_latest=1
 
 
-class TestMigrationDropsLegacyIndexes:
-    """#20: verify uq_prompts_key_type and ix_prompts_active no longer exist."""
+class TestPromptsTableDropped:
+    """Phase E: the local ``prompts`` table is removed on init.
 
-    def test_legacy_indexes_removed(self):
+    Simulates an older DB with a ``prompts`` table (and a couple of
+    legacy indexes), then asserts that ``init_pipeline_db`` drops them.
+    """
+
+    def test_prompts_table_dropped_on_init(self):
         engine = _fresh_engine()
 
-        # Create tables first
-        init_pipeline_db(engine)
-
-        # Manually create legacy indexes to simulate old schema
+        # Manually create the legacy prompts table + indexes before init.
         with engine.connect() as conn:
-            # These may fail if prompts table already has conflicting indexes
-            try:
-                conn.execute(text(
-                    "CREATE UNIQUE INDEX uq_prompts_key_type ON prompts (prompt_key, prompt_type)"
-                ))
-            except Exception:
-                pass
-            try:
-                conn.execute(text(
-                    "CREATE INDEX ix_prompts_active ON prompts (is_active)"
-                ))
-            except Exception:
-                pass
+            conn.execute(text(
+                "CREATE TABLE prompts ("
+                "id INTEGER PRIMARY KEY, "
+                "prompt_key VARCHAR(100), "
+                "prompt_type VARCHAR(50), "
+                "is_active INTEGER, "
+                "is_latest INTEGER)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_prompts_active ON prompts (is_active)"
+            ))
             conn.commit()
 
-        # Verify they exist (or were created)
-        indexes_before = _get_index_names(engine, "prompts")
+        init_pipeline_db(engine)
 
-        # Run migration
-        _migrate_partial_unique_indexes(engine)
-
-        # Verify legacy indexes removed
-        indexes_after = _get_index_names(engine, "prompts")
-        assert "uq_prompts_key_type" not in indexes_after
-        assert "ix_prompts_active" not in indexes_after
-
-        # Verify new partial unique index exists
-        assert "uq_prompts_active_latest" in indexes_after
+        # Verify the table itself was dropped.
+        with engine.connect() as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(text(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ))
+            }
+        assert "prompts" not in tables
 
 
 class TestMigrationIsIdempotent:

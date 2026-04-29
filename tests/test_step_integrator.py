@@ -15,7 +15,6 @@ from sqlalchemy import create_engine
 from sqlmodel import Session, select
 
 from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.state import DraftStep
 from llm_pipeline.creator.integrator import StepIntegrator
 from llm_pipeline.creator.models import GeneratedStep, IntegrationResult
@@ -197,10 +196,10 @@ class TestStepIntegratorFileWrites:
 
 
 class TestStepIntegratorPromptRegistration:
-    """StepIntegrator registers prompts idempotently in the DB."""
+    """Phase E: prompt persistence moved to Phoenix; the integrator no
+    longer writes prompt rows. ``prompts_registered`` is always 0."""
 
-    def test_prompts_inserted_in_db(self, tmp_path):
-        """After integrate(), Prompt rows exist for step's system + user prompts."""
+    def test_no_prompt_rows_inserted(self, tmp_path):
         engine = _make_engine()
         target_dir = tmp_path / "pkg"
         generated = _make_generated_step()
@@ -209,99 +208,23 @@ class TestStepIntegratorPromptRegistration:
             integrator = StepIntegrator(session=session)
             result = integrator.integrate(generated, target_dir)
 
-        with Session(engine) as session:
-            prompts = session.exec(
-                select(Prompt).where(Prompt.prompt_key == STEP_NAME)
-            ).all()
-
-        assert len(prompts) == 2
-        types = {p.prompt_type for p in prompts}
-        assert "system" in types
-        assert "user" in types
-        assert result.prompts_registered == 2
+        assert result.prompts_registered == 0
         engine.dispose()
 
-    def test_idempotent_prompt_insertion(self, tmp_path):
-        """Second integrate() call with same step does not duplicate prompts."""
+    def test_idempotent_no_writes_on_repeat(self, tmp_path):
         engine = _make_engine()
-        target_dir = tmp_path / "pkg"
         generated = _make_generated_step()
 
         with Session(engine) as session:
             integrator = StepIntegrator(session=session)
-            integrator.integrate(generated, target_dir)
+            integrator.integrate(generated, tmp_path / "pkg")
 
-        # Second call with a different target_dir to avoid file conflicts
-        target_dir2 = tmp_path / "pkg2"
         generated2 = _make_generated_step()
-
         with Session(engine) as session:
             integrator2 = StepIntegrator(session=session)
-            result2 = integrator2.integrate(generated2, target_dir2)
+            result2 = integrator2.integrate(generated2, tmp_path / "pkg2")
 
-        with Session(engine) as session:
-            prompts = session.exec(
-                select(Prompt).where(Prompt.prompt_key == STEP_NAME)
-            ).all()
-
-        # Still exactly 2 rows (system + user), no duplicates
-        assert len(prompts) == 2
-        # Second call registers 0 new (all already exist)
         assert result2.prompts_registered == 0
-        engine.dispose()
-
-    def test_prompt_registration_fallback(self, tmp_path):
-        """When prompts_code has a security issue, fallback reconstruction inserts prompts."""
-        engine = _make_engine()
-        target_dir = tmp_path / "pkg"
-
-        # Inject a blocked import to trigger security scan failure + fallback
-        bad_prompts_code = "import os\nALL_PROMPTS = []\n"
-        generated = GeneratedStep(
-            step_name=STEP_NAME,
-            step_class_name="SentimentStep",
-            instructions_class_name="SentimentInstructions",
-            step_code=STEP_CODE,
-            instructions_code=INSTRUCTIONS_CODE,
-            prompts_code=bad_prompts_code,
-            extraction_code=None,
-            all_artifacts={
-                f"{STEP_NAME}_step.py": STEP_CODE,
-                f"{STEP_NAME}_instructions.py": INSTRUCTIONS_CODE,
-                f"{STEP_NAME}_prompts.py": bad_prompts_code,
-            },
-        )
-
-        with Session(engine) as session:
-            integrator = StepIntegrator(session=session)
-            result = integrator.integrate(generated, target_dir)
-
-        with Session(engine) as session:
-            prompts = session.exec(
-                select(Prompt).where(Prompt.prompt_key == STEP_NAME)
-            ).all()
-
-        # Fallback reconstruction always inserts system + user (2 prompts)
-        assert len(prompts) == 2
-        assert result.prompts_registered == 2
-        engine.dispose()
-
-    def test_prompts_registered_count_in_result(self, tmp_path):
-        """IntegrationResult.prompts_registered matches actual DB insertions."""
-        engine = _make_engine()
-        target_dir = tmp_path / "pkg"
-        generated = _make_generated_step()
-
-        with Session(engine) as session:
-            integrator = StepIntegrator(session=session)
-            result = integrator.integrate(generated, target_dir)
-
-        with Session(engine) as session:
-            count = len(session.exec(
-                select(Prompt).where(Prompt.prompt_key == STEP_NAME)
-            ).all())
-
-        assert result.prompts_registered == count
         engine.dispose()
 
 

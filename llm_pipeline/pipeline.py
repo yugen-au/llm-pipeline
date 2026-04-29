@@ -46,7 +46,6 @@ if TYPE_CHECKING:
     from llm_pipeline.registry import PipelineDatabaseRegistry
     from llm_pipeline.consensus import ConsensusStrategy
     from llm_pipeline.state import PipelineStepState
-    from llm_pipeline.prompts.variables import VariableResolver
 
 TModel = TypeVar("TModel", bound=SQLModel)
 
@@ -222,7 +221,6 @@ class PipelineConfig(ABC):
         strategies: Optional[List["PipelineStrategy"]] = None,
         session: Optional[Session] = None,
         engine: Optional[Engine] = None,
-        variable_resolver: Optional["VariableResolver"] = None,
         run_id: Optional[str] = None,
         instrumentation_settings: Any | None = None,
     ):
@@ -241,10 +239,6 @@ class PipelineConfig(ABC):
         from llm_pipeline.session import ReadOnlySession
 
         self._model = model
-        if variable_resolver is None:
-            from llm_pipeline.prompts.variables import RegistryVariableResolver
-            variable_resolver = RegistryVariableResolver()
-        self._variable_resolver = variable_resolver
         self._instrumentation_settings = instrumentation_settings
 
         # Validate REGISTRY and STRATEGIES
@@ -1114,7 +1108,6 @@ class PipelineConfig(ABC):
                             run_id=self.run_id,
                             pipeline_name=self.pipeline_name,
                             step_name=step.step_name,
-                            variable_resolver=self._variable_resolver,
                             array_validation=params.get("array_validation"),
                             validation_context=params.get("validation_context"),
                         )
@@ -1375,40 +1368,26 @@ class PipelineConfig(ABC):
         return hashlib.sha256(input_data.encode()).hexdigest()[:16]
 
     def _find_cached_state(self, step, input_hash: str):
+        """Lookup a cached step result by (pipeline, step, input_hash).
+
+        Phase E: prompt-version invalidation is no longer applied here
+        — Phoenix owns versioning out-of-band. Cache hits depend on the
+        input hash only; if a user edits the prompt and wants a fresh
+        run, they should disable caching for that execution.
+        """
         from llm_pipeline.state import PipelineStepState
-        from llm_pipeline.db.prompt import Prompt
         from sqlmodel import select
 
-        prompt_name = getattr(step, "prompt_name", None)
-        current_prompt_version = None
-        if prompt_name:
-            # Local Prompt rows are still keyed on the legacy
-            # ``<step>.system_instruction`` shape; reconstruct the key
-            # to read a stable version stamp until Phase E retires the
-            # local Prompt table.
-            legacy_key = f"{prompt_name}.system_instruction"
-            prompt = self.session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == legacy_key,
-                    Prompt.is_active == True,  # noqa: E712
-                    Prompt.is_latest == True,  # noqa: E712
-                )
-            ).first()
-            if prompt:
-                current_prompt_version = prompt.version
-
-        query = select(PipelineStepState).where(
-            PipelineStepState.pipeline_name == self.pipeline_name,
-            PipelineStepState.step_name == step.step_name,
-            PipelineStepState.input_hash == input_hash,
-        )
-        if current_prompt_version:
-            query = query.where(
-                PipelineStepState.prompt_version == current_prompt_version
+        query = (
+            select(PipelineStepState)
+            .where(
+                PipelineStepState.pipeline_name == self.pipeline_name,
+                PipelineStepState.step_name == step.step_name,
+                PipelineStepState.input_hash == input_hash,
             )
-        return self.session.exec(
-            query.order_by(PipelineStepState.created_at.desc())
-        ).first()
+            .order_by(PipelineStepState.created_at.desc())
+        )
+        return self.session.exec(query).first()
 
     def _rehydrate_resumed_step_output(
         self, step_index: int, adapter_ctx: "AdapterContext",
@@ -1510,8 +1489,6 @@ class PipelineConfig(ABC):
 
     def _save_step_state(self, step, step_number, instructions, input_hash, execution_time_ms=None, model_name=None):
         from llm_pipeline.state import PipelineStepState
-        from llm_pipeline.db.prompt import Prompt
-        from sqlmodel import select
 
         serialized = []
         for instruction in instructions:
@@ -1526,9 +1503,9 @@ class PipelineConfig(ABC):
 
         context_snapshot = dict(self._context)
         prompt_name = getattr(step, "prompt_name", None)
-        # Reconstruct the legacy split keys for the persisted state row;
-        # the local PipelineStepState columns still carry the historical
-        # shape until Phase E.
+        # PipelineStepState's split columns still exist (frontend
+        # historical-prompt lookup uses the keys); we record the
+        # legacy-shape names but no version — Phoenix owns versioning.
         prompt_system_key = (
             f"{prompt_name}.system_instruction" if prompt_name else None
         )
@@ -1536,16 +1513,6 @@ class PipelineConfig(ABC):
             f"{prompt_name}.user_prompt" if prompt_name else None
         )
         prompt_version = None
-        if prompt_system_key:
-            prompt = self.session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == prompt_system_key,
-                    Prompt.is_active == True,  # noqa: E712
-                    Prompt.is_latest == True,  # noqa: E712
-                )
-            ).first()
-            if prompt:
-                prompt_version = prompt.version
 
         state = PipelineStepState(
             pipeline_name=self.pipeline_name,

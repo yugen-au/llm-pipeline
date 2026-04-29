@@ -766,7 +766,8 @@ class TestProdPrompts:
 
     @pytest.fixture
     def prod_prompts_app(self):
-        """Build app with a pipeline that declares tier-1/2 keys on a step."""
+        """Build app, register a step pipeline, and inject a fake
+        Phoenix client carrying the step's prompt content."""
         from typing import ClassVar as _CV
 
         from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
@@ -776,9 +777,7 @@ class TestProdPrompts:
 
             example: _CV[dict] = {"x": 1, "notes": "ok"}
 
-        @step_definition(
-            instructions=DeclaredInstructions,
-        )
+        @step_definition(instructions=DeclaredInstructions)
         class DeclaredStep(LLMStep):
             def prepare_calls(self):
                 return []
@@ -786,7 +785,6 @@ class TestProdPrompts:
         app, engine = _make_evals_app()
         client = TestClient(app)
 
-        # Register pipeline after app creation
         from llm_pipeline import (
             PipelineConfig,
             PipelineDatabaseRegistry,
@@ -818,29 +816,16 @@ class TestProdPrompts:
 
         app.state.introspection_registry["p1"] = DeclaredTestPipeline
 
-        # seed prompts for declared keys
-        from llm_pipeline.db.prompt import Prompt as _P_model
-
-        with Session(engine) as session:
-            session.add(
-                _P_model(
-                    prompt_key="declared.system_instruction",
-                    prompt_name="declared sys",
-                    prompt_type="system",
-                    content="SYS CONTENT",
-                    version="1.2",
-                )
-            )
-            session.add(
-                _P_model(
-                    prompt_key="declared.user_prompt",
-                    prompt_name="declared usr",
-                    prompt_type="user",
-                    content="USR CONTENT",
-                    version="1.2",
-                )
-            )
-            session.commit()
+        # Phoenix client double — exposes a single ``declared`` CHAT
+        # prompt with both messages.
+        from tests.ui.test_prompts import _FakePhoenixClient
+        fake = _FakePhoenixClient()
+        fake.seed(
+            "declared",
+            system="SYS CONTENT",
+            user="USR CONTENT",
+        )
+        app.state._phoenix_prompt_client = fake
 
         return client, engine, "declared"
 
@@ -862,12 +847,11 @@ class TestProdPrompts:
         data = resp.json()
         assert data["system"]["prompt_key"] == "declared.system_instruction"
         assert data["system"]["content"] == "SYS CONTENT"
-        assert data["system"]["version"] == "1.2"
         assert data["user"]["prompt_key"] == "declared.user_prompt"
         assert data["user"]["content"] == "USR CONTENT"
 
     def test_happy_path_auto_discovery(self, evals_app):
-        """Step declares no keys, DB has step-level prompts → tier-3 hit."""
+        """Phoenix carries both system + user messages; both surface."""
         from typing import ClassVar as _CV
 
         from llm_pipeline import (
@@ -876,14 +860,13 @@ class TestProdPrompts:
             PipelineStrategies,
             PipelineStrategy,
         )
-        from llm_pipeline.db.prompt import Prompt as _P_model
         from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+        from tests.ui.test_prompts import _FakePhoenixClient
 
         client, engine = evals_app
 
         class AutoDiscInstructions(LLMResultMixin):
             x: int = 0
-
             example: _CV[dict] = {"x": 1, "notes": "ok"}
 
         @step_definition(instructions=AutoDiscInstructions)
@@ -915,25 +898,11 @@ class TestProdPrompts:
 
         client.app.state.introspection_registry["auto_pipeline"] = AutoTestPipeline
 
+        fake = _FakePhoenixClient()
+        fake.seed("auto_disc", system="AUTO SYS", user="AUTO USR")
+        client.app.state._phoenix_prompt_client = fake
+
         with Session(engine) as session:
-            session.add(
-                _P_model(
-                    prompt_key="auto_disc.system_instruction",
-                    prompt_name="auto disc sys",
-                    prompt_type="system",
-                    content="AUTO SYS",
-                    is_active=True,
-                )
-            )
-            session.add(
-                _P_model(
-                    prompt_key="auto_disc.user_prompt",
-                    prompt_name="auto disc usr",
-                    prompt_type="user",
-                    content="AUTO USR",
-                    is_active=True,
-                )
-            )
             ds = EvaluationDataset(
                 name="ds_auto",
                 target_type="step",
@@ -953,7 +922,7 @@ class TestProdPrompts:
         assert data["user"]["content"] == "AUTO USR"
 
     def test_only_system_declared_user_null_when_no_db_row(self, evals_app):
-        """Step declares only system_key, DB has no user row → user=null."""
+        """Phoenix prompt has only a system message; user surfaces null."""
         from typing import ClassVar as _CV
 
         from llm_pipeline import (
@@ -962,19 +931,16 @@ class TestProdPrompts:
             PipelineStrategies,
             PipelineStrategy,
         )
-        from llm_pipeline.db.prompt import Prompt as _P_model
         from llm_pipeline.step import LLMResultMixin, LLMStep, step_definition
+        from tests.ui.test_prompts import _FakePhoenixClient
 
         client, engine = evals_app
 
         class PartialInstructions(LLMResultMixin):
             x: int = 0
-
             example: _CV[dict] = {"x": 1, "notes": "ok"}
 
-        @step_definition(
-            instructions=PartialInstructions,
-        )
+        @step_definition(instructions=PartialInstructions)
         class PartialStep(LLMStep):
             def prepare_calls(self):
                 return []
@@ -1003,15 +969,11 @@ class TestProdPrompts:
 
         client.app.state.introspection_registry["partial_pipeline"] = PartialTestPipeline
 
+        fake = _FakePhoenixClient()
+        fake.seed("partial", system="PARTIAL SYS")  # no user message
+        client.app.state._phoenix_prompt_client = fake
+
         with Session(engine) as session:
-            session.add(
-                _P_model(
-                    prompt_key="partial.system_instruction",
-                    prompt_name="sys",
-                    prompt_type="system",
-                    content="PARTIAL SYS",
-                )
-            )
             ds = EvaluationDataset(
                 name="ds_partial",
                 target_type="step",

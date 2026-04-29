@@ -623,7 +623,11 @@ def get_dataset_prod_prompts(
     Datasets don't store strategy_name, so the first-match strategy name
     is what drives tier-3 lookup.
     """
-    from llm_pipeline.db.prompt import Prompt
+    from llm_pipeline.prompts.phoenix_client import (
+        PhoenixError,
+        PhoenixPromptClient,
+        PromptNotFoundError,
+    )
 
     ds = db.exec(
         select(EvaluationDataset).where(EvaluationDataset.id == dataset_id)
@@ -645,7 +649,7 @@ def get_dataset_prod_prompts(
     )
 
     target_step = ds.target_name
-    step_def, strategy_name, _pipeline_name = _find_step_def_by_target(
+    step_def, _strategy_name, _pipeline_name = _find_step_def_by_target(
         target_step, introspection_registry
     )
 
@@ -657,34 +661,66 @@ def get_dataset_prod_prompts(
             ),
         )
 
-    # Phase C: derive legacy split keys from the single prompt_name.
     prompt_name = step_def.resolved_prompt_name
-    system_key = f"{prompt_name}.system_instruction" if prompt_name else None
-    user_key = f"{prompt_name}.user_prompt" if prompt_name else None
+    if not prompt_name:
+        return ProdPromptsResponse(system=None, user=None)
 
-    def _fetch(key: Optional[str], ptype: str) -> Optional[ProdPromptContent]:
-        if key is None:
+    # Phoenix is the source of truth for prompt content. Pull the
+    # latest CHAT prompt and surface its system + user messages
+    # under the legacy split-key shape the frontend expects.
+    cached = getattr(request.app.state, "_phoenix_prompt_client", None)
+    try:
+        client = cached if cached is not None else PhoenixPromptClient()
+        version = client.get_latest(prompt_name)
+    except (PhoenixError, PromptNotFoundError):
+        return ProdPromptsResponse(system=None, user=None)
+
+    record_metadata: dict = {}
+    try:
+        for record in client.list_prompts(limit=200).get("data") or []:
+            if record.get("name") == prompt_name:
+                record_metadata = record.get("metadata") or {}
+                break
+    except PhoenixError:
+        pass
+    var_defs = record_metadata.get("variable_definitions")
+    version_id = version.get("id") or ""
+
+    def _content_for(role: str) -> Optional[str]:
+        template = version.get("template") or {}
+        if template.get("type") == "string":
+            return template.get("template")
+        if template.get("type") != "chat":
             return None
-        row = db.exec(
-            select(Prompt).where(
-                Prompt.prompt_key == key,
-                Prompt.prompt_type == ptype,
-                Prompt.is_active == True,  # noqa: E712
-                Prompt.is_latest == True,  # noqa: E712
-            )
-        ).first()
-        if row is None:
+        roles = (
+            ("system", "developer") if role == "system" else ("user",)
+        )
+        for msg in template.get("messages") or []:
+            if msg.get("role") in roles:
+                content = msg.get("content")
+                if isinstance(content, str):
+                    return content
+                if isinstance(content, list):
+                    return "".join(
+                        p.get("text", "") for p in content
+                        if isinstance(p, dict) and p.get("type") == "text"
+                    )
+        return None
+
+    def _entry(role: str, suffix: str) -> Optional[ProdPromptContent]:
+        body = _content_for(role)
+        if body is None:
             return None
         return ProdPromptContent(
-            prompt_key=row.prompt_key,
-            content=row.content,
-            variable_definitions=row.variable_definitions,
-            version=row.version,
+            prompt_key=f"{prompt_name}.{suffix}",
+            content=body,
+            variable_definitions=var_defs,
+            version=version_id,
         )
 
     return ProdPromptsResponse(
-        system=_fetch(system_key, "system"),
-        user=_fetch(user_key, "user"),
+        system=_entry("system", "system_instruction"),
+        user=_entry("user", "user_prompt"),
     )
 
 

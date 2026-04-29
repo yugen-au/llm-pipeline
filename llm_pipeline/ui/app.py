@@ -170,28 +170,6 @@ def _load_pipeline_modules(
     return pipeline_reg, introspection_reg
 
 
-def _sync_variable_definitions(engine: Engine) -> None:
-    """Rebuild runtime PromptVariables classes from DB-stored variable_definitions."""
-    from sqlmodel import Session, select
-    from llm_pipeline.db.prompt import Prompt
-    from llm_pipeline.prompts.variables import rebuild_from_db
-
-    try:
-        with Session(engine) as session:
-            stmt = select(Prompt).where(
-                Prompt.variable_definitions.isnot(None),
-                Prompt.is_latest == True,  # noqa: E712
-            )
-            prompts = session.exec(stmt).all()
-            for p in prompts:
-                if isinstance(p.variable_definitions, dict):
-                    rebuild_from_db(p.prompt_key, p.prompt_type, p.variable_definitions)
-            if prompts:
-                logger.info("Synced variable_definitions for %d prompt(s)", len(prompts))
-    except Exception:
-        logger.warning("Failed to sync variable_definitions at startup", exc_info=True)
-
-
 def _sync_pipeline_visibility(engine: Engine, pipeline_names: list[str]) -> None:
     """Ensure each discovered pipeline has a PipelineVisibility row in DB."""
     from datetime import datetime, timezone
@@ -239,7 +217,6 @@ def create_app(
     default_model: Optional[str] = None,
     pipeline_modules: Optional[List[str]] = None,
     auto_generate_base_path: Optional[str] = None,
-    prompts_dir: Optional[str] = None,
     evals_dir: Optional[str] = None,
     demo_mode: bool = False,
 ) -> FastAPI:
@@ -394,31 +371,12 @@ def create_app(
     if resolved_base:
         set_auto_generate_base_path(resolved_base)
 
-    # YAML prompt sync: scan package-level + project-level dirs
-    from pathlib import Path
-    from llm_pipeline.prompts.yaml_sync import sync_yaml_to_db
-
-    prompt_scan_dirs: list[Path] = []
-    # Package-level prompts (ships with package, demo_mode only)
-    pkg_prompts = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
-    if resolved_demo and pkg_prompts.is_dir():
-        prompt_scan_dirs.append(pkg_prompts)
-    # Project-level prompts (CWD or env/param override)
-    project_prompts = Path(
-        prompts_dir
-        or os.environ.get("LLM_PIPELINE_PROMPTS_DIR", "llm-pipeline-prompts")
-    )
-    if not project_prompts.is_absolute():
-        project_prompts = Path.cwd() / project_prompts
-    if project_prompts.is_dir() and project_prompts.resolve() != pkg_prompts.resolve():
-        prompt_scan_dirs.append(project_prompts)
-
-    if prompt_scan_dirs:
-        sync_yaml_to_db(app.state.engine, prompt_scan_dirs)
-    # Write-back always targets project-level dir (creates if needed)
-    app.state.prompts_dir = project_prompts
+    # Phase E: prompts live in Phoenix; the local YAML <-> DB sync
+    # is gone. ``--prompts-dir`` and ``LLM_PIPELINE_PROMPTS_DIR``
+    # are accepted but ignored; remove the import in a follow-up.
 
     # Eval YAML sync: scan package-level + project-level dirs
+    from pathlib import Path
     from llm_pipeline.evals.yaml_sync import sync_evals_yaml_to_db
 
     eval_scan_dirs: list[Path] = []
@@ -437,9 +395,6 @@ def create_app(
     if eval_scan_dirs:
         sync_evals_yaml_to_db(app.state.engine, eval_scan_dirs)
     app.state.evals_dir = project_evals
-
-    # Sync DB-stored variable_definitions into runtime registry
-    _sync_variable_definitions(app.state.engine)
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router

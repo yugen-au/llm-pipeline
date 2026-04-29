@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.introspection import PipelineIntrospector, enrich_with_prompt_readiness
@@ -168,15 +167,14 @@ def get_step_prompts(
     request: Request,
     db: DBSession,
 ) -> StepPromptsResponse:
-    """Return prompt/instruction content for a pipeline step.
-
-    Phase C: each step resolves to a single Phoenix CHAT prompt; the
-    legacy split keys (``<name>.system_instruction`` /
-    ``<name>.user_prompt``) are derived from the step's
-    ``resolved_prompt_name`` so the local Prompt-row lookup keeps
-    rendering until Phase E retires the table.
-    """
+    """Return prompt content for a pipeline step (Phase E: Phoenix-backed)."""
     from llm_pipeline.introspection import _compile_bind_for_introspection
+    from llm_pipeline.prompts.phoenix_client import (
+        PhoenixError,
+        PhoenixPromptClient,
+        PromptNotFoundError,
+    )
+    from llm_pipeline.prompts.utils import extract_variables_from_content
 
     registry: dict = getattr(request.app.state, "introspection_registry", {})
     if name not in registry:
@@ -185,7 +183,7 @@ def get_step_prompts(
         )
 
     pipeline_cls = registry[name]
-    declared_keys: set[str] = set()
+    prompt_names: set[str] = set()
 
     strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
     strategy_classes = (
@@ -222,36 +220,57 @@ def get_step_prompts(
                 continue
             if sd.step_name != step_name:
                 continue
-            prompt_name = sd.resolved_prompt_name
-            if prompt_name:
-                declared_keys.add(f"{prompt_name}.system_instruction")
-                declared_keys.add(f"{prompt_name}.user_prompt")
+            if sd.resolved_prompt_name:
+                prompt_names.add(sd.resolved_prompt_name)
 
-    if not declared_keys:
+    if not prompt_names:
         return StepPromptsResponse(
             pipeline_name=name, step_name=step_name, prompts=[]
         )
 
-    stmt = select(Prompt).where(
-        Prompt.prompt_key.in_(declared_keys),  # type: ignore[union-attr]
-        Prompt.is_active == True,  # noqa: E712
-        Prompt.is_latest == True,  # noqa: E712
-    )
-    prompts = db.exec(stmt).all()
+    try:
+        client = PhoenixPromptClient()
+    except PhoenixError:
+        return StepPromptsResponse(
+            pipeline_name=name, step_name=step_name, prompts=[],
+        )
+
+    items: list[StepPromptItem] = []
+    for prompt_name in sorted(prompt_names):
+        try:
+            version = client.get_latest(prompt_name)
+        except (PhoenixError, PromptNotFoundError):
+            continue
+        version_id = version.get("id") or ""
+        template = version.get("template") or {}
+        if template.get("type") != "chat":
+            continue
+        for msg in template.get("messages") or []:
+            role = msg.get("role")
+            content = msg.get("content")
+            if not isinstance(content, str):
+                continue
+            ui_role = (
+                "system" if role in ("system", "developer")
+                else "user" if role == "user"
+                else role
+            )
+            suffix = (
+                "system_instruction" if ui_role == "system"
+                else "user_prompt"
+            )
+            items.append(
+                StepPromptItem(
+                    prompt_key=f"{prompt_name}.{suffix}",
+                    prompt_type=ui_role,
+                    content=content,
+                    required_variables=extract_variables_from_content(content),
+                    version=version_id,
+                )
+            )
 
     return StepPromptsResponse(
-        pipeline_name=name,
-        step_name=step_name,
-        prompts=[
-            StepPromptItem(
-                prompt_key=p.prompt_key,
-                prompt_type=p.prompt_type,
-                content=p.content,
-                required_variables=p.required_variables,
-                version=p.version,
-            )
-            for p in prompts
-        ],
+        pipeline_name=name, step_name=step_name, prompts=items,
     )
 
 

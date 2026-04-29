@@ -31,6 +31,27 @@ from llm_pipeline.evals.models import (
 logger = logging.getLogger(__name__)
 
 
+def _phoenix_latest_version_id(prompt_name: str) -> Optional[str]:
+    """Best-effort fetch of the latest Phoenix version_id for ``prompt_name``.
+
+    Returns ``None`` when Phoenix is unconfigured / unreachable / the
+    prompt doesn't exist — eval snapshots silently skip the
+    prompt-version stamp in those cases.
+    """
+    from llm_pipeline.prompts.phoenix_client import (
+        PhoenixError,
+        PhoenixPromptClient,
+    )
+
+    try:
+        client = PhoenixPromptClient()
+        version = client.get_latest(prompt_name)
+    except PhoenixError:
+        return None
+    vid = version.get("id")
+    return vid if isinstance(vid, str) else None
+
+
 class EvalRunner:
     """Orchestrates evaluation runs against registered pipelines/steps.
 
@@ -641,7 +662,6 @@ def _build_run_snapshot(
     instructions classes eagerly so snapshots are deterministic and committed
     atomically with the EvaluationRun row.
     """
-    from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.model.resolver import resolve_model_with_fallbacks
 
     # case_versions is the same regardless of target_type
@@ -671,7 +691,6 @@ def _build_step_target_snapshot(
     model_kwarg: str | None,
 ) -> tuple[dict, dict, dict, dict]:
     """Build snapshot dicts for a step-target dataset."""
-    from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.evals.delta import apply_instruction_delta
     from llm_pipeline.model.resolver import resolve_model_with_fallbacks
 
@@ -686,26 +705,20 @@ def _build_step_target_snapshot(
     if step_def is None:
         return case_versions, prompt_versions, model_snapshot, instr_schema
 
-    # Phase C: derive the legacy split keys from the step's single
-    # ``prompt_name`` so the local Prompt-row lookup keeps working
-    # until Phase E retires the table.
+    # Phase E: prompts live in Phoenix. Snapshot each role under the
+    # legacy split-key shape so existing snapshot consumers keep
+    # rendering, and record the Phoenix version_id for both roles
+    # (one CHAT prompt holds both messages -> one version_id).
     prompt_name = step_def.resolved_prompt_name
-    system_key = f"{prompt_name}.system_instruction" if prompt_name else None
-    user_key = f"{prompt_name}.user_prompt" if prompt_name else None
-
-    # Collect prompt versions from DB
-    for key in (system_key, user_key):
-        if key is None:
-            continue
-        rows = session.exec(
-            select(Prompt).where(
-                Prompt.prompt_key == key,
-                Prompt.is_active == True,  # noqa: E712
-                Prompt.is_latest == True,  # noqa: E712
-            )
-        ).all()
-        for row in rows:
-            prompt_versions.setdefault(row.prompt_key, {})[row.prompt_type] = row.version
+    if prompt_name:
+        phoenix_version_id = _phoenix_latest_version_id(prompt_name)
+        if phoenix_version_id is not None:
+            prompt_versions[f"{prompt_name}.system_instruction"] = {
+                "system": phoenix_version_id,
+            }
+            prompt_versions[f"{prompt_name}.user_prompt"] = {
+                "user": phoenix_version_id,
+            }
 
     # Resolve model
     base_model, _source = resolve_model_with_fallbacks(
@@ -744,7 +757,6 @@ def _build_pipeline_target_snapshot(
     model_kwarg: str | None,
 ) -> tuple[dict, dict, dict, dict]:
     """Build snapshot dicts for a pipeline-target dataset."""
-    from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.model.resolver import resolve_model_with_fallbacks
 
     pipeline_name = dataset.target_name
@@ -770,33 +782,22 @@ def _build_pipeline_target_snapshot(
             for sd in strategy.get_steps():
                 step_name = sd.step_name
 
-                # Phase C: derive legacy split keys from the single
-                # ``prompt_name`` so the local Prompt-row lookup still
-                # finds rows during the transition.
+                # Phase E: stamp the step's Phoenix version_id under
+                # the legacy split-key shape so existing snapshot
+                # consumers keep rendering.
                 step_prompt_name = getattr(
                     sd, "resolved_prompt_name", None,
                 ) or getattr(sd, "prompt_name", None)
-                system_key = (
-                    f"{step_prompt_name}.system_instruction"
-                    if step_prompt_name else None
-                )
-                user_key = (
-                    f"{step_prompt_name}.user_prompt"
-                    if step_prompt_name else None
-                )
                 step_prompts: dict = {}
-                for key in (system_key, user_key):
-                    if key is None:
-                        continue
-                    rows = session.exec(
-                        select(Prompt).where(
-                            Prompt.prompt_key == key,
-                            Prompt.is_active == True,  # noqa: E712
-                            Prompt.is_latest == True,  # noqa: E712
-                        )
-                    ).all()
-                    for row in rows:
-                        step_prompts.setdefault(row.prompt_key, {})[row.prompt_type] = row.version
+                if step_prompt_name:
+                    vid = _phoenix_latest_version_id(step_prompt_name)
+                    if vid is not None:
+                        step_prompts[f"{step_prompt_name}.system_instruction"] = {
+                            "system": vid,
+                        }
+                        step_prompts[f"{step_prompt_name}.user_prompt"] = {
+                            "user": vid,
+                        }
                 if step_prompts:
                     prompt_versions[step_name] = step_prompts
 
@@ -830,30 +831,18 @@ def _apply_variant_to_sandbox(
     step_def: Any,
     variant_delta: dict,
 ) -> None:
-    """Patch sandbox DB with variant prompt overrides, merged variable
-    definitions, and a StepModelConfig row for the model override.
+    """Patch the sandbox engine with the model override carried in
+    ``variant_delta``.
 
-    Called after ``create_sandbox_engine`` has seeded the sandbox with a copy
-    of production prompts + step configs. Mutates only the sandbox DB — prod
-    is never touched.
-
-    All inputs that cross into the sandbox layer are JSON-serialisable strings
-    / lists / dicts (no host paths, no Python class objects). See PLAN.md
-    Docker-sandbox-readiness invariants.
+    Phase E: prompt + variable_definitions overrides are no longer
+    applied — Phoenix is the source of truth for prompt content and
+    the local ``Prompt`` table is gone. The variant runner still
+    honours ``model`` (StepModelConfig is local) and the in-memory
+    instruction-class delta is applied upstream by the runner.
+    Prompt-content variants log a warning and skip.
     """
-    from llm_pipeline.db.prompt import Prompt
     from llm_pipeline.db.step_config import StepModelConfig
 
-    # Phase C: StepDefinition carries a single ``prompt_name``. The
-    # local sandbox DB still keys Prompt rows by the legacy split
-    # shape, so reconstruct ``<name>.system_instruction`` /
-    # ``<name>.user_prompt`` to find the rows to override. Phase E
-    # rips this entirely once the local Prompt table is dropped.
-    prompt_name = getattr(step_def, "resolved_prompt_name", None) or getattr(
-        step_def, "prompt_name", None,
-    )
-    system_key = f"{prompt_name}.system_instruction" if prompt_name else None
-    user_key = f"{prompt_name}.user_prompt" if prompt_name else None
     system_content_override = variant_delta.get("system_prompt")
     user_content_override = variant_delta.get("user_prompt")
     variant_model = variant_delta.get("model")
@@ -865,66 +854,26 @@ def _apply_variant_to_sandbox(
     except Exception:
         step_name = None
 
+    if isinstance(system_content_override, str):
+        logger.warning(
+            "variant system_prompt override skipped: prompts now live in "
+            "Phoenix; sandbox prompt content is no longer mutable from the "
+            "eval runner",
+        )
+    if isinstance(user_content_override, str):
+        logger.warning(
+            "variant user_prompt override skipped: prompts now live in "
+            "Phoenix; sandbox prompt content is no longer mutable from the "
+            "eval runner",
+        )
+    if variant_var_defs:
+        logger.warning(
+            "variant variable_definitions override skipped: variable "
+            "metadata now lives in Phoenix prompt records, not the local "
+            "DB",
+        )
+
     with Session(sandbox_engine) as session:
-        # --- Prompt overrides (system) ---------------------------------
-        if system_key:
-            prompt = session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == system_key,
-                    Prompt.prompt_type == "system",
-                    Prompt.is_active == True,  # noqa: E712
-                    Prompt.is_latest == True,  # noqa: E712
-                )
-            ).first()
-            if prompt is not None:
-                _merge_variant_defs_into_prompt(
-                    session,
-                    prompt,
-                    system_content_override,
-                    variant_var_defs,
-                )
-            elif isinstance(system_content_override, str):
-                logger.warning(
-                    "variant system_prompt override: no Prompt row for key "
-                    "%r in sandbox; override skipped",
-                    system_key,
-                )
-        elif isinstance(system_content_override, str):
-            logger.warning(
-                "variant system_prompt override: step has no "
-                "system_instruction_key (auto-discovery path); override "
-                "skipped — v2 limitation"
-            )
-
-        # --- Prompt overrides (user) -----------------------------------
-        if user_key:
-            prompt = session.exec(
-                select(Prompt).where(
-                    Prompt.prompt_key == user_key,
-                    Prompt.prompt_type == "user",
-                    Prompt.is_active == True,  # noqa: E712
-                    Prompt.is_latest == True,  # noqa: E712
-                )
-            ).first()
-            if prompt is not None:
-                _merge_variant_defs_into_prompt(
-                    session,
-                    prompt,
-                    user_content_override,
-                    variant_var_defs,
-                )
-            elif isinstance(user_content_override, str):
-                logger.warning(
-                    "variant user_prompt override: no Prompt row for key "
-                    "%r in sandbox; override skipped",
-                    user_key,
-                )
-        elif isinstance(user_content_override, str):
-            logger.warning(
-                "variant user_prompt override: step has no user_prompt_key "
-                "(auto-discovery path); override skipped — v2 limitation"
-            )
-
         # --- StepModelConfig upsert ------------------------------------
         if isinstance(variant_model, str) and variant_model.strip() and step_name:
             existing = session.exec(
@@ -946,66 +895,6 @@ def _apply_variant_to_sandbox(
                 )
 
         session.commit()
-
-
-def _merge_variant_defs_into_prompt(
-    session: Session,
-    prompt: Any,
-    content_override: Any,
-    variant_var_defs: Any,
-) -> None:
-    """Merge variant variable_definitions into a sandbox Prompt row.
-
-    Module-private helper shared by the system/user prompt branches of
-    ``_apply_variant_to_sandbox``. Applies content override (if a string),
-    merges ``variant_var_defs`` over existing ``prompt.variable_definitions``
-    (variant wins on name conflict via ``merge_variable_definitions``),
-    preserves the original column shape, and stages the row on the session.
-    """
-    from llm_pipeline.evals.delta import merge_variable_definitions
-
-    if isinstance(content_override, str):
-        prompt.content = content_override
-    merged = merge_variable_definitions(
-        _coerce_var_defs(prompt.variable_definitions),
-        _coerce_var_defs(variant_var_defs),
-    )
-    prompt.variable_definitions = _encode_var_defs(
-        prompt.variable_definitions, merged
-    )
-    session.add(prompt)
-
-
-def _coerce_var_defs(raw: Any) -> list:
-    """Normalise a Prompt.variable_definitions column value to a list-of-dicts.
-
-    The column is typed as ``dict`` in the ORM but prompts in the wild store
-    either a list or a {name: spec} dict. Returns [] for None/unexpected
-    shapes so merge_variable_definitions can operate uniformly.
-    """
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [item for item in raw if isinstance(item, dict)]
-    if isinstance(raw, dict):
-        out: list[dict] = []
-        for name, spec in raw.items():
-            if isinstance(spec, dict):
-                # Inject name if the nested spec lacks it.
-                entry = dict(spec)
-                entry.setdefault("name", name)
-                out.append(entry)
-        return out
-    return []
-
-
-def _encode_var_defs(original: Any, merged: list) -> Any:
-    """Preserve the original column shape (list-of-dicts vs {name: spec} dict)
-    when writing merged definitions back.
-    """
-    if isinstance(original, dict):
-        return {item["name"]: item for item in merged if "name" in item}
-    return merged
 
 
 __all__ = ["EvalRunner"]

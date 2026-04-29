@@ -34,12 +34,6 @@ from llm_pipeline.agent_registry import AgentSpec, register_agent, get_agent_too
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
 from llm_pipeline.validators import not_found_validator, array_length_validator, DEFAULT_NOT_FOUND_INDICATORS
 from llm_pipeline.prompts.variables import (
-    PromptVariables,
-    register_prompt_variables,
-    get_prompt_variables,
-    get_all_prompt_variables,
-    clear_prompt_variables_registry,
-    RegistryVariableResolver,
     register_auto_generate,
     set_auto_generate_base_path,
 )
@@ -95,12 +89,6 @@ __all__ = [
     "array_length_validator",
     "DEFAULT_NOT_FOUND_INDICATORS",
     # Prompts
-    "PromptVariables",
-    "register_prompt_variables",
-    "get_prompt_variables",
-    "get_all_prompt_variables",
-    "clear_prompt_variables_registry",
-    "RegistryVariableResolver",
     "register_auto_generate",
     "set_auto_generate_base_path",
     # Consensus

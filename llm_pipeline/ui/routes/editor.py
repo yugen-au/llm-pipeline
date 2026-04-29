@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.introspection import PipelineIntrospector
 from llm_pipeline.state import DraftPipeline, DraftStep, utc_now
 
@@ -124,33 +123,6 @@ def _collect_registered_steps(
     return step_pipelines
 
 
-def _collect_registered_prompt_keys(
-    introspection_registry: dict,
-) -> dict[str, set[str]]:
-    """Build step_name -> {prompt_keys} from introspection registry.
-
-    For each registered step, collects system_key and user_key values
-    from introspection metadata across all pipelines. Skips pipelines
-    that fail introspection.
-    """
-    step_keys: dict[str, set[str]] = {}
-    for pipeline_name, pipeline_cls in introspection_registry.items():
-        try:
-            metadata = PipelineIntrospector(pipeline_cls).get_metadata()
-        except Exception:
-            continue
-        for strategy in metadata.get("strategies", []):
-            for step in strategy.get("steps", []):
-                sn = step.get("step_name")
-                if not sn:
-                    continue
-                for key_field in ("system_key", "user_key"):
-                    val = step.get(key_field)
-                    if val:
-                        step_keys.setdefault(sn, set()).add(val)
-    return step_keys
-
-
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -253,40 +225,9 @@ def compile_pipeline(body: CompileRequest, request: Request) -> CompileResponse:
                 )
             )
 
-    # --- Pass 5: prompt key existence for registered steps ---
-    step_prompt_keys = _collect_registered_prompt_keys(introspection_registry)
-    # Collect all expected keys across registered steps referenced in the request
-    all_expected_keys: set[str] = set()
-    for strategy in body.strategies:
-        for step in strategy.steps:
-            if step.source == "registered" and step.step_ref in step_prompt_keys:
-                all_expected_keys.update(step_prompt_keys[step.step_ref])
-
-    if all_expected_keys:
-        with Session(engine) as session:
-            stmt = select(Prompt.prompt_key).where(
-                Prompt.prompt_key.in_(list(all_expected_keys)),
-                Prompt.is_active == True,  # noqa: E712
-                Prompt.is_latest == True,  # noqa: E712
-            )
-            found_keys = set(session.exec(stmt).all())
-
-        for strategy in body.strategies:
-            for step in strategy.steps:
-                if step.source != "registered":
-                    continue
-                expected_keys = step_prompt_keys.get(step.step_ref, set())
-                for key in expected_keys:
-                    if key not in found_keys:
-                        errors.append(
-                            CompileError(
-                                strategy_name=strategy.strategy_name,
-                                step_ref=step.step_ref,
-                                message=f"Prompt key '{key}' not found in prompts table",
-                                field="prompt_key",
-                                severity="warning",
-                            )
-                        )
+    # Phase E: prompt-key existence is no longer checked here. Prompts
+    # live in Phoenix and are managed out-of-band; the editor surface
+    # treats them as opaque references.
 
     has_errors = any(e.severity == "error" for e in errors)
 

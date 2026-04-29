@@ -5,12 +5,10 @@ import pytest
 from llm_pipeline.prompts.variables import (
     _parse_auto_generate,
     _resolve_object,
-    _build_auto_generate_factory,
+    build_auto_generate_factory as _build_auto_generate_factory,
     register_auto_generate,
     set_auto_generate_base_path,
     clear_auto_generate_registry,
-    clear_prompt_variables_registry,
-    rebuild_from_db,
 )
 
 
@@ -28,7 +26,7 @@ class Color(enum.Enum):
 @pytest.fixture(autouse=True)
 def _clean_registries():
     yield
-    clear_prompt_variables_registry()
+    clear_auto_generate_registry()
 
 
 # ---------------------------------------------------------------------------
@@ -166,75 +164,7 @@ class TestBuildAutoGenerateFactory:
         assert factory() == "red, green, blue"
 
 
-# ---------------------------------------------------------------------------
-# rebuild_from_db integration
-# ---------------------------------------------------------------------------
-
-
-class TestRebuildFromDbAutoGenerate:
-    def test_auto_generate_creates_default_factory(self):
-        register_auto_generate("Color", Color)
-        cls = rebuild_from_db("test_prompt", "system", {
-            "colors": {
-                "type": "str",
-                "description": "Available colors",
-                "auto_generate": "enum_values(Color)",
-            },
-        })
-        instance = cls()
-        assert instance.colors == "red, green, blue"
-
-    def test_auto_generate_with_regular_field(self):
-        register_auto_generate("Color", Color)
-        cls = rebuild_from_db("test_prompt", "user", {
-            "name": {
-                "type": "str",
-                "description": "User name",
-            },
-            "colors": {
-                "type": "str",
-                "description": "Available colors",
-                "auto_generate": "enum_values(Color)",
-            },
-        })
-        # colors has default, name is required
-        instance = cls(name="test")
-        assert instance.name == "test"
-        assert instance.colors == "red, green, blue"
-
-    def test_bad_expression_falls_through(self):
-        """Invalid auto_generate logs warning, creates simple required field."""
-        cls = rebuild_from_db("test_prompt", "system", {
-            "broken": {
-                "type": "str",
-                "description": "This will fail",
-                "auto_generate": "bad_func(X)",
-            },
-        })
-        # Field exists but has no default -- it's required
-        assert "broken" in cls.model_fields
-        field = cls.model_fields["broken"]
-        assert field.default_factory is None
-
-    def test_auto_generate_constant(self):
-        cls = rebuild_from_db("test_prompt", "system", {
-            "separator": {
-                "type": "str",
-                "description": "Separator char",
-                "auto_generate": "constant(|)",
-            },
-        })
-        instance = cls()
-        assert instance.separator == "|"
-
-    def test_auto_generate_with_import_path(self):
-        cls = rebuild_from_db("test_prompt", "system", {
-            "color_names": {
-                "type": "str",
-                "description": "Color member names",
-                "auto_generate": "enum_names(Color)",
-                "import_path": "tests.test_auto_generate.Color",
-            },
-        })
-        instance = cls()
-        assert instance.color_names == "RED, GREEN, BLUE"
+# Phase E: ``rebuild_from_db`` was the bridge between DB-stored
+# variable_definitions and runtime PromptVariables classes; both went
+# away with the local Prompt table. The auto_generate factory builder
+# is exercised directly by ``TestBuildAutoGenerateFactory`` above.

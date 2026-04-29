@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 from llm_pipeline.creator import ast_modifier
 from llm_pipeline.creator.models import GeneratedStep, IntegrationResult
 from llm_pipeline.creator.sandbox import CodeSecurityValidator
-from llm_pipeline.db.prompt import Prompt
 
 if TYPE_CHECKING:
     from sqlmodel import Session
@@ -194,28 +193,17 @@ class StepIntegrator:
         return self._insert_prompts(all_prompts)
 
     def _insert_prompts(self, prompt_list: list[dict]) -> int:
-        """Idempotent insert via save_new_version: skip if latest already exists."""
-        from llm_pipeline.db.versioning import get_latest, save_new_version
-
-        inserted = 0
-        for prompt_data in prompt_list:
-            key = prompt_data.get("prompt_key", "")
-            ptype = prompt_data.get("prompt_type", "")
-            key_filters = {"prompt_key": key, "prompt_type": ptype}
-
-            existing = get_latest(self.session, Prompt, **key_filters)
-            if existing is None:
-                new_fields = {
-                    k: v for k, v in prompt_data.items()
-                    if k not in ("prompt_key", "prompt_type", "version",
-                                 "is_active", "is_latest", "created_at", "updated_at")
-                }
-                save_new_version(
-                    self.session, Prompt, key_filters, new_fields,
-                    version=prompt_data.get("version", "1.0"),
-                )
-                inserted += 1
-        return inserted
+        """Phase E: prompt persistence moved to Phoenix; the creator
+        no longer writes prompts directly. Returns 0 to keep the
+        return shape stable for callers that just count inserted
+        rows."""
+        if prompt_list:
+            logger.info(
+                "Creator skipped writing %d prompt rows: prompts now live "
+                "in Phoenix and must be migrated via migrate_prompts_to_phoenix.py",
+                len(prompt_list),
+            )
+        return 0
 
     @staticmethod
     def _reconstruct_prompts(generated: GeneratedStep) -> list[dict]:

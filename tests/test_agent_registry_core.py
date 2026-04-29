@@ -181,11 +181,11 @@ class TestClearAgentRegistry:
 
 class TestStepDepsFields:
     def test_field_count(self):
-        # 6 required + 3 optional (variable_resolver, array_validation,
-        # validation_context). event_emitter dropped — observability is
-        # via Langfuse, not a per-step injected dep.
+        # 6 required + 2 optional (array_validation, validation_context).
+        # variable_resolver dropped in Phase E; event_emitter dropped
+        # earlier with the Langfuse migration.
         f = dc_fields(StepDeps)
-        assert len(f) == 9
+        assert len(f) == 8
 
     def test_required_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]
@@ -195,10 +195,10 @@ class TestStepDepsFields:
 
     def test_optional_field_names(self):
         names = [f.name for f in dc_fields(StepDeps)]
-        assert "variable_resolver" in names
         assert "array_validation" in names
         assert "validation_context" in names
-        assert "event_emitter" not in names  # removed in langfuse migration
+        assert "variable_resolver" not in names  # removed Phase E
+        assert "event_emitter" not in names      # removed earlier
 
     def test_optional_defaults_none(self):
         import dataclasses
@@ -207,7 +207,6 @@ class TestStepDepsFields:
             for f in dc_fields(StepDeps)
             if f.default is not dataclasses.MISSING
         }
-        assert defaults.get("variable_resolver") is None
         assert defaults.get("array_validation") is None
         assert defaults.get("validation_context") is None
 
@@ -220,11 +219,10 @@ class TestStepDepsFields:
             pipeline_name="test_pipeline",
             step_name="extract_data",
         )
-        assert deps.variable_resolver is None
         assert deps.run_id == "run-1"
+        assert deps.array_validation is None
 
     def test_instantiation_with_all_fields(self):
-        mock_resolver = object()
         deps = StepDeps(
             session=object(),
             pipeline_context={"key": "val"},
@@ -232,9 +230,11 @@ class TestStepDepsFields:
             run_id="run-2",
             pipeline_name="my_pipeline",
             step_name="validate",
-            variable_resolver=mock_resolver,
+            array_validation="cfg",
+            validation_context="vctx",
         )
-        assert deps.variable_resolver is mock_resolver
+        assert deps.array_validation == "cfg"
+        assert deps.validation_context == "vctx"
 
 
 # ============================================================
@@ -402,8 +402,6 @@ class TestStepDefinitionNewFields:
         from llm_pipeline.step import LLMStep
         from llm_pipeline.strategy import StepDefinition
         from pydantic import BaseModel as PB
-        from sqlmodel import create_engine, Session
-        import llm_pipeline.db.prompt  # ensure model is registered
 
         class AgentNameInstructions(PB):
             pass
@@ -418,29 +416,14 @@ class TestStepDefinitionNewFields:
             agent_name="override_name",
         )
 
-        # build an in-memory session with prompt tables for create_step
-        from llm_pipeline.db import init_pipeline_db
-        engine = create_engine("sqlite:///:memory:")
-        init_pipeline_db(engine)
-        session = Session(engine)
-
-        # add prompts so create_step doesn't raise
-        from llm_pipeline.db.prompt import Prompt
-        session.add(Prompt(prompt_key="sys", prompt_name="sys", prompt_type="system", content="x", is_active=True))
-        session.add(Prompt(prompt_key="user", prompt_name="user", prompt_type="user", content="y", is_active=True))
-        session.commit()
-
         class FakePipeline:
             pass
         fake_pipeline = FakePipeline()
-        fake_pipeline.session = session
+        fake_pipeline.session = None
         fake_pipeline._current_strategy = None
 
         step = sd.create_step(fake_pipeline)
         assert step._agent_name == "override_name"
-
-        session.close()
-        engine.dispose()
 
 
 # ============================================================

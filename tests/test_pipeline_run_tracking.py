@@ -17,7 +17,6 @@ from llm_pipeline import (
     step_definition,
 )
 from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.state import PipelineRun
 from llm_pipeline.types import StepCallParams
@@ -193,33 +192,16 @@ def tracking_engine():
 @pytest.fixture
 def seeded_tracking_session(tracking_engine, phoenix_prompt_stub):
     """Open a session against the in-memory tracking DB and register
-    the gadget prompt with the Phoenix stub. The local DB still gets
-    Prompt rows so any code that legitimately reads them during
-    transition keeps working; the prompt service itself goes through
-    Phoenix."""
+    the gadget prompt with the Phoenix stub.
+
+    Phase E: prompts live in Phoenix; only Phoenix-stub registration
+    remains. The session is yielded for tests that touch other DB
+    state (PipelineRun, etc.).
+    """
     phoenix_prompt_stub.register(
         "gadget", system="You detect gadgets.", user="Analyze: {data}",
     )
     with Session(tracking_engine) as session:
-        session.add(Prompt(
-            prompt_key="gadget.system",
-            prompt_name="Gadget System",
-            prompt_type="system",
-            category="test",
-            step_name="gadget",
-            content="You detect gadgets.",
-            version="1.0",
-        ))
-        session.add(Prompt(
-            prompt_key="gadget.user",
-            prompt_name="Gadget User",
-            prompt_type="user",
-            category="test",
-            step_name="gadget",
-            content="Analyze: {data}",
-            version="1.0",
-        ))
-        session.commit()
         yield session
 
 

@@ -328,38 +328,56 @@ class PipelineIntrospector:
 def enrich_with_prompt_readiness(metadata: dict, session) -> dict:
     """Add prompt readiness flags to each step in introspection metadata.
 
-    Queries DB for active prompts matching each step's system_key/user_key.
-    Mutates metadata in-place and returns it.
+    Phase E: prompts live in Phoenix. We probe Phoenix once for the
+    set of prompt names referenced by the metadata; readiness is
+    determined by Phoenix membership, not by a local DB row. When
+    Phoenix is unreachable we mark every step as ``prompts_ready=True``
+    so the frontend doesn't paint a sea of warnings on a healthy
+    system. ``session`` is accepted (and ignored) for API compat.
     """
-    from sqlmodel import select
-    from llm_pipeline.db.prompt import Prompt
+    del session  # local DB no longer carries prompt rows
 
-    all_keys = set()
+    from llm_pipeline.prompts.phoenix_client import (
+        PhoenixError,
+        PhoenixPromptClient,
+    )
+
+    referenced: set[str] = set()
     for strategy in metadata.get("strategies", []):
         for step in strategy.get("steps", []):
-            if step.get("system_key"):
-                all_keys.add(step["system_key"])
-            if step.get("user_key"):
-                all_keys.add(step["user_key"])
+            name = step.get("prompt_name")
+            if isinstance(name, str) and name:
+                referenced.add(name)
 
-    if all_keys:
-        stmt = select(Prompt.prompt_key, Prompt.prompt_type).where(
-            Prompt.prompt_key.in_(all_keys),
-            Prompt.is_active == True,  # noqa: E712
-            Prompt.is_latest == True,  # noqa: E712
-        )
-        rows = session.exec(stmt).all()
-        existing = {(row[0], row[1]) for row in rows}
-    else:
-        existing = set()
+    phoenix_names: set[str] | None
+    try:
+        client = PhoenixPromptClient()
+        cursor: str | None = None
+        phoenix_names = set()
+        while True:
+            page = client.list_prompts(limit=200, cursor=cursor)
+            for record in page.get("data") or []:
+                n = record.get("name")
+                if isinstance(n, str):
+                    phoenix_names.add(n)
+            cursor = page.get("next_cursor")
+            if not cursor:
+                break
+    except PhoenixError:
+        phoenix_names = None
 
     for strategy in metadata.get("strategies", []):
         for step in strategy.get("steps", []):
-            sys_key = step.get("system_key")
-            usr_key = step.get("user_key")
-            step["system_prompt_exists"] = (sys_key, "system") in existing if sys_key else True
-            step["user_prompt_exists"] = (usr_key, "user") in existing if usr_key else True
-            step["prompts_ready"] = step["system_prompt_exists"] and step["user_prompt_exists"]
+            name = step.get("prompt_name")
+            if not name:
+                ready = True
+            elif phoenix_names is None:
+                ready = True
+            else:
+                ready = name in phoenix_names
+            step["system_prompt_exists"] = ready
+            step["user_prompt_exists"] = ready
+            step["prompts_ready"] = ready
 
     return metadata
 

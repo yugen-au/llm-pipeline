@@ -14,7 +14,6 @@ from typing import ClassVar, Optional
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from llm_pipeline.db.prompt import Prompt
 from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.step import LLMResultMixin
 
@@ -421,7 +420,10 @@ class TestTopicExtraction:
 # ---------------------------------------------------------------------------
 
 class TestYamlPrompts:
-    """Demo prompts live in llm-pipeline-prompts/*.yaml."""
+    """Demo prompts live in llm-pipeline-prompts/*.yaml as historical
+    artifacts — they're no longer loaded at startup (Phase E moved
+    prompt storage to Phoenix), but the files stay around as a
+    bootstrap source for ``migrate_prompts_to_phoenix.py``."""
 
     def test_yaml_files_exist(self):
         from pathlib import Path
@@ -429,30 +431,6 @@ class TestYamlPrompts:
         assert (prompts_dir / "sentiment_analysis.yaml").exists()
         assert (prompts_dir / "topic_extraction.yaml").exists()
         assert (prompts_dir / "summary.yaml").exists()
-
-    def test_yaml_prompts_parse(self):
-        from pathlib import Path
-        from llm_pipeline.prompts.yaml_sync import discover_yaml_prompts
-        prompts_dir = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
-        variants = discover_yaml_prompts(prompts_dir)
-        assert len(variants) == 6  # 3 keys x 2 variants (system + user)
-        keys = {v["prompt_key"] for v in variants}
-        assert keys == {"sentiment_analysis", "topic_extraction", "summary"}
-
-    def test_yaml_sync_to_db(self):
-        from pathlib import Path
-        from sqlalchemy.pool import StaticPool
-        from llm_pipeline.db import init_pipeline_db
-        from llm_pipeline.prompts.yaml_sync import sync_yaml_to_db
-        engine = init_pipeline_db(create_engine(
-            "sqlite://", connect_args={"check_same_thread": False},
-            poolclass=StaticPool,
-        ))
-        prompts_dir = Path(__file__).resolve().parent.parent / "llm-pipeline-prompts"
-        sync_yaml_to_db(engine, prompts_dir)
-        with Session(engine) as session:
-            prompts = session.exec(select(Prompt)).all()
-        assert len(prompts) == 6
 
 
 # ---------------------------------------------------------------------------
