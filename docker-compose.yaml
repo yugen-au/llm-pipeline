@@ -1,0 +1,44 @@
+# Local-dev observability stack for llm-pipeline.
+#
+# Runs Arize Phoenix as the OTEL backend the framework ships traces to.
+# Phoenix is OSS, no feature gates, single container with SQLite. The app
+# itself (uv run llm-pipeline ui --dev) stays outside compose so existing
+# dev workflow is unchanged.
+#
+# Usage:
+#   docker compose up -d            # start Phoenix in the background
+#   docker compose logs -f phoenix  # tail logs
+#   docker compose down             # stop (data persists in named volume)
+#   docker compose down -v          # stop + wipe traces
+#
+# Then point the framework at it via env vars (see .env.example):
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:6006
+#   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+#
+# Phoenix UI: http://localhost:6006
+
+services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: llm-pipeline-phoenix
+    ports:
+      - "6006:6006"   # UI + HTTP/protobuf OTLP collector
+      - "4317:4317"   # gRPC OTLP collector
+    environment:
+      # SQLite working dir — see volume below for persistence.
+      PHOENIX_WORKING_DIR: /mnt/phoenix
+      # Optional: bump to DEBUG to see what's hitting the collector.
+      PHOENIX_LOGGING_LEVEL: INFO
+    volumes:
+      - phoenix_data:/mnt/phoenix
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:6006/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  phoenix_data:
+    name: llm-pipeline-phoenix-data
