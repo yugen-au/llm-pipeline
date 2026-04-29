@@ -513,6 +513,29 @@ def configure(
         provider = TracerProvider(resource=resource)
         otel_trace.set_tracer_provider(provider)
 
+    # Translate pydantic-ai's gen_ai.* semantic-convention attributes
+    # to OpenInference conventions (input.value, output.value,
+    # openinference.span.kind=LLM, llm.token_count.*, llm.model_name)
+    # so Phoenix / Langfuse / any OpenInference-native UI classifies
+    # the LLM and tool spans correctly. Order matters: this processor
+    # must run BEFORE the OTLP exporter so the translated attributes
+    # ship to the backend.
+    try:
+        from openinference.instrumentation.pydantic_ai import (
+            OpenInferenceSpanProcessor,
+        )
+        provider.add_span_processor(OpenInferenceSpanProcessor())
+    except ImportError:
+        logger.debug(
+            "openinference-instrumentation-pydantic-ai not installed; "
+            "pydantic-ai spans will appear as UNKNOWN in OpenInference UIs."
+        )
+
+    # In-process WebSocket fan-out for the live UI. Always on — runs
+    # before the OTLP exporter so the live feed reflects translated
+    # OpenInference attributes too.
+    provider.add_span_processor(WebSocketBroadcastProcessor())
+
     endpoint = _otel_endpoint()
     if endpoint:
         from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
@@ -529,12 +552,15 @@ def configure(
             "(live UI works, nothing ships off-host)."
         )
 
-    provider.add_span_processor(WebSocketBroadcastProcessor())
-
     if instrument_pydantic_ai:
         try:
             from pydantic_ai import Agent
-            Agent.instrument_all()
+            from pydantic_ai.models.instrumented import InstrumentationSettings
+            # version=2 is the gen_ai-semconv schema OpenInferenceSpanProcessor
+            # expects. It's the pydantic-ai default but explicit here so a
+            # future SDK default change can't silently break the
+            # translation.
+            Agent.instrument_all(InstrumentationSettings(version=2))
         except ImportError:
             logger.debug(
                 "pydantic_ai not importable; skipping Agent.instrument_all()"

@@ -50,6 +50,7 @@ Standard layout for pipeline artifacts, auto-discovered on startup:
 - Custom prompts dir: `uv run llm-pipeline ui --dev --prompts-dir path/to/prompts`
 - Demo mode: `uv run llm-pipeline ui --dev --demo` (loads built-in demo pipeline)
 - Default: demo_mode=false, only project-level llm_pipelines/ and prompts loaded
+- Stop the application: `uv run llm-pipeline stop` (never kill processes directly)
 
 ## MCP Servers
 
