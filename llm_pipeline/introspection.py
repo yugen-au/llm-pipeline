@@ -1,115 +1,72 @@
-"""
-Pipeline introspection via pure class-level attribute access.
+"""Pipeline introspection over graph-native ``Pipeline`` subclasses.
 
-No FastAPI, SQLAlchemy, or pydantic-ai dependencies. Operates entirely on
-class types -- never instantiates PipelineConfig, PipelineExtraction, or
-PipelineTransformation. Safe to call without DB connections or external LLM dependencies.
+Pure class-level access — never instantiates a pipeline. Walks
+``cls.nodes`` to surface step + extraction metadata for the UI's
+pipeline detail / editor / evals views. Results are cached per
+pipeline class.
 
-Results are cached per pipeline class (immutable after class definition).
+Response shape (preserved from the legacy
+``PipelineConfig``/``PipelineStrategy`` introspector for frontend
+compatibility): one synthetic ``"default"`` strategy holding every
+``LLMStepNode`` in declaration order, with sibling ``ExtractionNode``
+classes attached to their ``source_step`` for rendering.
 """
-import re
+from __future__ import annotations
+
 from typing import Any, ClassVar, Dict, List, Optional, Type, TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from llm_pipeline.naming import to_snake_case
+
 if TYPE_CHECKING:
-    from llm_pipeline.pipeline import PipelineConfig
-
-from llm_pipeline.extraction import PipelineExtraction
-from llm_pipeline.wiring import Bind
+    from llm_pipeline.graph import ExtractionNode, LLMStepNode, Pipeline, ReviewNode
 
 
-def _compile_bind_for_introspection(bind: Bind):
-    """Compile a Bind to a StepDefinition without requiring a live pipeline.
+__all__ = ["PipelineIntrospector", "enrich_with_prompt_readiness"]
 
-    Mirrors ``PipelineConfig._compile_bind_to_step_def`` but is pure-class
-    (no ``self``) so introspection can run before any pipeline instance
-    exists. Resolves consensus from Bind override or step's CONSENSUS_STRATEGY
-    decorator default (None if neither set).
-    """
-    resolved_consensus = (
-        bind.consensus_strategy
-        if bind.consensus_strategy is not None
-        else getattr(bind.step, "CONSENSUS_STRATEGY", None)
-    )
-    create_kwargs: Dict[str, Any] = {
-        "inputs_spec": bind.inputs,
-        "extraction_binds": list(bind.extractions),
-    }
-    if resolved_consensus is not None:
-        create_kwargs["consensus_strategy"] = resolved_consensus
-    if bind.prompt_name is not None:
-        create_kwargs["prompt_name"] = bind.prompt_name
-    return bind.step.create_definition(**create_kwargs)
+
+def _is_llm_step(node: type) -> bool:
+    from llm_pipeline.graph import LLMStepNode
+
+    return isinstance(node, type) and issubclass(node, LLMStepNode) and node is not LLMStepNode
+
+
+def _is_extraction(node: type) -> bool:
+    from llm_pipeline.graph import ExtractionNode
+
+    return isinstance(node, type) and issubclass(node, ExtractionNode) and node is not ExtractionNode
+
+
+def _is_review(node: type) -> bool:
+    from llm_pipeline.graph import ReviewNode
+
+    return isinstance(node, type) and issubclass(node, ReviewNode) and node is not ReviewNode
 
 
 class PipelineIntrospector:
     """Extract pipeline metadata via class-level introspection.
 
-    Instantiate with a PipelineConfig subclass, then call ``get_metadata()``
-    to obtain a cached dict describing pipeline name, registry models,
-    strategies (with steps), and deduplicated execution order.
+    Instantiate with a graph ``Pipeline`` subclass, then call
+    ``get_metadata()`` to obtain a cached dict describing pipeline
+    name, registry models, the synthetic strategy, and execution order.
     """
 
     _cache: ClassVar[Dict[int, Dict[str, Any]]] = {}
 
-    def __init__(self, pipeline_cls: Type["PipelineConfig"]) -> None:
+    def __init__(self, pipeline_cls: Type["Pipeline"]) -> None:
         self._pipeline_cls = pipeline_cls
 
-    # ------------------------------------------------------------------
-    # Name derivation helpers (exact regex copies from source modules)
-    # ------------------------------------------------------------------
+    @staticmethod
+    def _step_name(cls: type) -> str:
+        return to_snake_case(cls.__name__, strip_suffix="Step")
 
     @staticmethod
-    def _pipeline_name(cls: Type) -> str:
-        """Derive snake_case pipeline name from class name.
-
-        Mirrors ``PipelineConfig.pipeline_name`` property (pipeline.py L244-245):
-        single regex ``([a-z0-9])([A-Z])`` on class name minus ``Pipeline`` suffix.
-        """
-        name = cls.__name__
-        if name.endswith("Pipeline"):
-            name = name[:-8]
-        return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
+    def _extraction_name(cls: type) -> str:
+        return to_snake_case(cls.__name__, strip_suffix="Extraction")
 
     @staticmethod
-    def _strategy_name(cls: Type) -> str:
-        """Derive snake_case strategy name from class name.
-
-        Mirrors ``PipelineStrategy.__init_subclass__`` (strategy.py L188-191):
-        double regex -- first ``([A-Z]+)([A-Z][a-z])`` then ``([a-z\\d])([A-Z])``.
-        Handles consecutive capitals correctly (e.g. HTTPStrategy -> http).
-        """
-        name = cls.__name__
-        if name.endswith("Strategy"):
-            name = name[:-8]
-        s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
-        s = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", s)
-        return s.lower()
-
-    @staticmethod
-    def _step_name(cls: Type) -> str:
-        """Derive snake_case step name from class name.
-
-        Mirrors ``LLMStep.step_name`` property (step.py L260-261):
-        single regex ``([a-z0-9])([A-Z])`` on class name minus ``Step`` suffix.
-        """
-        name = cls.__name__
-        if name.endswith("Step"):
-            name = name[:-4]
-        return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
-
-    # ------------------------------------------------------------------
-    # Schema / method helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _get_schema(cls: Optional[Type]) -> Optional[Dict[str, Any]]:
-        """Extract JSON schema from a type.
-
-        Returns ``model_json_schema()`` for Pydantic BaseModel subclasses,
-        ``{"type": cls.__name__}`` for other non-None types, or None.
-        """
+    def _get_schema(cls: Optional[type]) -> Optional[Dict[str, Any]]:
         if cls is None:
             return None
         try:
@@ -119,199 +76,85 @@ class PipelineIntrospector:
             pass
         return {"type": cls.__name__}
 
-    @staticmethod
-    def _get_extraction_methods(extraction_cls: Type) -> List[str]:
-        """Discover custom extraction methods via dir() comparison.
-
-        Mirrors the runtime logic in ``PipelineExtraction.extract()``
-        (extraction.py L237-245).
-        """
-        all_methods = set(dir(extraction_cls))
-        base_methods = set(dir(PipelineExtraction))
-        return sorted(
-            m
-            for m in (all_methods - base_methods)
-            if callable(getattr(extraction_cls, m, None))
-            and not m.startswith("_")
-        )
-
-    # ------------------------------------------------------------------
-    # Strategy introspection
-    # ------------------------------------------------------------------
-
-    def _introspect_strategy(
-        self, strategy_cls: Type, step_defs: List[Any],
+    def _step_entry(
+        self,
+        node: Type["LLMStepNode"],
+        extractions_by_source: Dict[type, List[Type["ExtractionNode"]]],
     ) -> Dict[str, Any]:
-        """Build strategy metadata dict from pre-resolved step definitions.
-
-        ``step_defs`` are obtained once in ``get_metadata()`` to avoid
-        double-instantiating strategies.
-        """
-        entry: Dict[str, Any] = {
-            "name": getattr(strategy_cls, "NAME", self._strategy_name(strategy_cls)),
-            "display_name": getattr(strategy_cls, "DISPLAY_NAME", strategy_cls.__name__),
-            "class_name": strategy_cls.__name__,
-            "steps": [],
+        prompt_name = node.resolved_prompt_name()
+        return {
+            "step_name": self._step_name(node),
+            "class_name": node.__name__,
+            "prompt_name": prompt_name,
+            "system_key": f"{prompt_name}.system_instruction",
+            "user_key": f"{prompt_name}.user_prompt",
+            "instructions_class": (
+                node.INSTRUCTIONS.__name__ if node.INSTRUCTIONS else None
+            ),
+            "instructions_schema": self._get_schema(node.INSTRUCTIONS),
+            "inputs_class": (
+                node.INPUTS.__name__ if node.INPUTS else None
+            ),
+            "inputs_schema": self._get_schema(node.INPUTS),
+            "extractions": [
+                {
+                    "class_name": ext.__name__,
+                    "model_class": (
+                        ext.MODEL.__name__
+                        if getattr(ext, "MODEL", None) is not None else None
+                    ),
+                    "methods": ["extract"],
+                }
+                for ext in extractions_by_source.get(node, [])
+            ],
+            "transformation": None,
+            "tools": [t.__name__ for t in (node.DEFAULT_TOOLS or [])],
+            "action_after": None,
+            "model": None,
         }
 
-        for step_def in step_defs:
-            step_cls = step_def.step_class
-            step_name = self._step_name(step_cls)
-            # Phase C: a step resolves against a single Phoenix CHAT
-            # prompt by name (defaults to the step's snake_case name;
-            # overridable per Bind via ``prompt_name``). The legacy
-            # ``system_key`` / ``user_key`` columns remain in the
-            # introspection payload as ``<name>.system_instruction``
-            # / ``<name>.user_prompt`` shims so the frontend keeps
-            # rendering until Phase D repoints it.
-            resolved_name = step_def.resolved_prompt_name
-            step_entry: Dict[str, Any] = {
-                "step_name": step_name,
-                "class_name": step_cls.__name__,
-                "prompt_name": resolved_name,
-                "system_key": f"{resolved_name}.system_instruction",
-                "user_key": f"{resolved_name}.user_prompt",
-                "instructions_class": (
-                    step_def.instructions.__name__
-                    if step_def.instructions
-                    else None
-                ),
-                "instructions_schema": self._get_schema(step_def.instructions),
-                "inputs_class": (
-                    step_def.inputs_spec.inputs_cls.__name__
-                    if step_def.inputs_spec
-                    else None
-                ),
-                "inputs_schema": self._get_schema(
-                    step_def.inputs_spec.inputs_cls
-                    if step_def.inputs_spec
-                    else None
-                ),
-                "extractions": [],
-                "transformation": None,
-                "tools": [],
-                "action_after": step_def.action_after,
-                "model": step_def.model,
-            }
-
-            # Tools from global agent registry
-            agent_name = step_def.agent_name
-            if agent_name:
-                from llm_pipeline.agent_registry import get_agent_tools
-                tool_fns = get_agent_tools(agent_name)
-                if tool_fns:
-                    step_entry["tools"] = [
-                        getattr(fn, '__name__', str(fn)) for fn in tool_fns
-                    ]
-
-            # Extractions (from nested Binds under this step)
-            for ext_bind in (step_def.extraction_binds or []):
-                ext_cls = ext_bind.extraction
-                ext_entry: Dict[str, Any] = {
-                    "class_name": ext_cls.__name__,
-                    "model_class": (
-                        ext_cls.MODEL.__name__
-                        if getattr(ext_cls, "MODEL", None)
-                        else None
-                    ),
-                    "methods": self._get_extraction_methods(ext_cls),
-                }
-                step_entry["extractions"].append(ext_entry)
-
-            # Transformation
-            transformation_cls = step_def.transformation
-            if transformation_cls is not None:
-                input_type = getattr(transformation_cls, "INPUT_TYPE", None)
-                output_type = getattr(transformation_cls, "OUTPUT_TYPE", None)
-                step_entry["transformation"] = {
-                    "class_name": transformation_cls.__name__,
-                    "input_type": (
-                        input_type.__name__ if input_type is not None else None
-                    ),
-                    "input_schema": self._get_schema(input_type),
-                    "output_type": (
-                        output_type.__name__ if output_type is not None else None
-                    ),
-                    "output_schema": self._get_schema(output_type),
-                }
-
-            entry["steps"].append(step_entry)
-
-        return entry
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
     def get_metadata(self) -> Dict[str, Any]:
-        """Full pipeline metadata (cached by pipeline class identity).
-
-        Returns dict with keys: ``pipeline_name``, ``registry_models``,
-        ``strategies``, ``execution_order``, ``pipeline_input_schema``.
-        """
+        """Full pipeline metadata (cached by pipeline class identity)."""
         cache_key = id(self._pipeline_cls)
         if cache_key in self._cache:
             return self._cache[cache_key]
 
-        pipeline_name = self._pipeline_name(self._pipeline_cls)
+        cls = self._pipeline_cls
+        pipeline_name = cls.pipeline_name() if hasattr(cls, "pipeline_name") else cls.__name__
 
-        # Registry models
-        registry_cls = getattr(self._pipeline_cls, "REGISTRY", None)
-        registry_models: List[str] = []
-        if registry_cls is not None:
-            models_list = getattr(registry_cls, "MODELS", []) or []
-            registry_models = [m.__name__ for m in models_list]
+        nodes = list(getattr(cls, "nodes", []))
+        step_nodes: List[Type["LLMStepNode"]] = [n for n in nodes if _is_llm_step(n)]
+        extraction_nodes: List[Type["ExtractionNode"]] = [
+            n for n in nodes if _is_extraction(n)
+        ]
 
-        # Strategies
-        strategies_cls = getattr(self._pipeline_cls, "STRATEGIES", None)
-        strategy_classes: List[Type] = []
-        if strategies_cls is not None:
-            strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
+        extractions_by_source: Dict[type, List[Type["ExtractionNode"]]] = {}
+        for ext in extraction_nodes:
+            src = getattr(ext, "source_step", None)
+            if src is not None:
+                extractions_by_source.setdefault(src, []).append(ext)
 
-        # Instantiate each strategy once; compile each Bind into a
-        # StepDefinition for metadata extraction (same helper the pipeline
-        # executor uses, but callable without a live pipeline instance).
-        resolved: List[tuple] = []  # (strategy_cls, step_defs | None, error | None)
-        for s_cls in strategy_classes:
-            try:
-                instance = s_cls()
-                step_defs = [
-                    _compile_bind_for_introspection(bind)
-                    for bind in instance.get_bindings()
-                ]
-                resolved.append((s_cls, step_defs, None))
-            except Exception as exc:
-                resolved.append((s_cls, None, exc))
+        registry_models = sorted({
+            ext.MODEL.__name__
+            for ext in extraction_nodes
+            if getattr(ext, "MODEL", None) is not None
+        })
 
-        strategies: List[Dict[str, Any]] = []
-        for s_cls, step_defs, err in resolved:
-            if err is not None:
-                strategies.append({
-                    "name": getattr(s_cls, "NAME", self._strategy_name(s_cls)),
-                    "display_name": getattr(s_cls, "DISPLAY_NAME", s_cls.__name__),
-                    "class_name": s_cls.__name__,
-                    "steps": [],
-                    "error": f"{type(err).__name__}: {err}",
-                })
-            else:
-                strategies.append(self._introspect_strategy(s_cls, step_defs))
+        steps = [
+            self._step_entry(node, extractions_by_source)
+            for node in step_nodes
+        ]
 
-        # Execution order (deduplicated, first occurrence wins)
-        seen_step_classes: set = set()
-        execution_order: List[str] = []
-        for _s_cls, step_defs, err in resolved:
-            if err is not None:
-                continue
-            for step_def in step_defs:
-                sc = step_def.step_class
-                if sc not in seen_step_classes:
-                    seen_step_classes.add(sc)
-                    execution_order.append(self._step_name(sc))
+        strategies = [{
+            "name": "default",
+            "display_name": "Default",
+            "class_name": "DefaultStrategy",
+            "steps": steps,
+        }]
 
-        # Pipeline input schema (from INPUT_DATA ClassVar if declared)
-        pipeline_input_schema = self._get_schema(
-            getattr(self._pipeline_cls, "INPUT_DATA", None)
-        )
+        execution_order = [s["step_name"] for s in steps]
+
+        pipeline_input_schema = self._get_schema(getattr(cls, "INPUT_DATA", None))
 
         metadata: Dict[str, Any] = {
             "pipeline_name": pipeline_name,
@@ -335,7 +178,7 @@ def enrich_with_prompt_readiness(metadata: dict, session) -> dict:
     so the frontend doesn't paint a sea of warnings on a healthy
     system. ``session`` is accepted (and ignored) for API compat.
     """
-    del session  # local DB no longer carries prompt rows
+    del session
 
     from llm_pipeline.prompts.phoenix_client import (
         PhoenixError,
@@ -380,6 +223,3 @@ def enrich_with_prompt_readiness(metadata: dict, session) -> dict:
             step["prompts_ready"] = ready
 
     return metadata
-
-
-__all__ = ["PipelineIntrospector", "enrich_with_prompt_readiness"]

@@ -18,7 +18,7 @@ from sqlmodel import SQLModel, Session, create_engine
 
 from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
-from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
+from llm_pipeline.state import PipelineNodeSnapshot, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline, PipelineReview
 from llm_pipeline.evals.models import EvaluationDataset, EvaluationCase, EvaluationRun, EvaluationCaseResult, EvaluationVariant
 
 logger = logging.getLogger(__name__)
@@ -38,10 +38,6 @@ def _migrate_add_columns(engine: Engine) -> None:
 
     # (table_name, column_name, column_type)
     _MIGRATIONS = [
-        ("pipeline_step_states", "input_tokens", "INTEGER"),
-        ("pipeline_step_states", "output_tokens", "INTEGER"),
-        ("pipeline_step_states", "total_tokens", "INTEGER"),
-        ("pipeline_step_states", "total_requests", "INTEGER"),
         ("pipeline_events", "step_name", "VARCHAR(100)"),
         ("step_model_configs", "request_limit", "INTEGER"),
         ("pipeline_runs", "error_message", "TEXT"),
@@ -185,6 +181,26 @@ def _drop_legacy_prompts_table(engine: Engine) -> None:
         conn.commit()
 
 
+def _drop_legacy_step_states_table(engine: Engine) -> None:
+    """Pydantic-graph migration one-time DROP: remove ``pipeline_step_states``.
+
+    Replaced by ``pipeline_node_snapshots`` (the
+    ``SqlmodelStatePersistence`` backend). Idempotent.
+    """
+    drops = [
+        "DROP INDEX IF EXISTS ix_pipeline_step_states_run",
+        "DROP INDEX IF EXISTS ix_pipeline_step_states_cache",
+        "DROP TABLE IF EXISTS pipeline_step_states",
+    ]
+    with engine.connect() as conn:
+        for stmt in drops:
+            try:
+                conn.execute(text(stmt))
+            except OperationalError:
+                pass
+        conn.commit()
+
+
 def add_missing_indexes(engine: Engine) -> None:
     """Add performance indexes that create_all skips on existing tables.
 
@@ -293,7 +309,7 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     SQLModel.metadata.create_all(
         engine,
         tables=[
-            PipelineStepState.__table__,
+            PipelineNodeSnapshot.__table__,
             PipelineRunInstance.__table__,
             PipelineRun.__table__,
             DraftStep.__table__,
@@ -318,6 +334,10 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     # Phase E: drop the legacy ``prompts`` table on first boot under the
     # Phoenix-backed framework. No-op once dropped.
     _drop_legacy_prompts_table(engine)
+
+    # Pydantic-graph migration: drop the legacy ``pipeline_step_states``
+    # table; ``pipeline_node_snapshots`` replaces it.
+    _drop_legacy_step_states_table(engine)
 
     # Add performance indexes that create_all skips on existing tables
     add_missing_indexes(engine)

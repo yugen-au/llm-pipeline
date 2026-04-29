@@ -31,8 +31,14 @@ from llm_pipeline.graph.nodes import (
     PipelineDeps,
     ReviewNode,
 )
+from llm_pipeline.graph.persistence import SqlmodelStatePersistence
 from llm_pipeline.graph.pipeline import Pipeline, PipelineEnd
-from llm_pipeline.graph.runtime import run_pipeline_in_memory
+from llm_pipeline.graph.runtime import (
+    RunOutcome,
+    resume_pipeline,
+    run_pipeline,
+    run_pipeline_in_memory,
+)
 from llm_pipeline.graph.state import PipelineState
 from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.wiring import (
@@ -56,7 +62,11 @@ __all__ = [
     "PipelineState",
     "PipelineDeps",
     # Runtime
+    "run_pipeline",
+    "resume_pipeline",
     "run_pipeline_in_memory",
+    "RunOutcome",
+    "SqlmodelStatePersistence",
     # Re-exports for convenience (so user code only imports from llm_pipeline.graph)
     "PipelineInputData",
     "StepInputs",

@@ -25,7 +25,7 @@ from llm_pipeline.inputs import PipelineInputData
 from llm_pipeline.extraction import PipelineExtraction
 from llm_pipeline.transformation import PipelineTransformation
 from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.state import PipelineStepState, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline
+from llm_pipeline.state import PipelineNodeSnapshot, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline
 from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.session import ReadOnlySession
@@ -62,7 +62,7 @@ __all__ = [
     "PipelineTransformation",
     "PipelineDatabaseRegistry",
     # State
-    "PipelineStepState",
+    "PipelineNodeSnapshot",
     "PipelineRunInstance",
     "PipelineRun",
     "DraftStep",

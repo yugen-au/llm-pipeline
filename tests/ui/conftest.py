@@ -9,7 +9,7 @@ from starlette.testclient import TestClient
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.ui.app import create_app
-from llm_pipeline.state import PipelineRun, PipelineStepState
+from llm_pipeline.state import PipelineNodeSnapshot, PipelineRun
 
 
 def _utc(offset_seconds: int = 0) -> datetime:
@@ -117,42 +117,74 @@ def seeded_app_client():
         session.add(run2)
         session.add(run3)
 
-        step1 = PipelineStepState(
+        # PipelineNodeSnapshot rows — one per node execution. Field
+        # mapping from the legacy ``PipelineStepState`` shape:
+        #   step_name        -> derived from ``node_class_name`` via
+        #                       ``to_snake_case(name, strip='Step')``
+        #   step_number      -> ``sequence + 1``
+        #   result_data      -> ``state_snapshot.outputs[node_class_name]``
+        #   context_snapshot -> ``state_snapshot.metadata``
+        #   execution_time_ms -> ``duration * 1000`` (rounded)
+        snap_a1 = PipelineNodeSnapshot(
+            snapshot_id="StepA:run1",
             run_id="aaaaaaaa-0000-0000-0000-000000000001",
             pipeline_name="alpha_pipeline",
-            step_name="step_a",
-            step_number=1,
-            input_hash="hash_a1",
-            result_data={"value": 1},
-            context_snapshot={"k": "v"},
-            execution_time_ms=3000,
+            sequence=0,
+            kind="node",
+            node_class_name="StepAStep",
+            node_payload={},
+            state_snapshot={
+                "input_data": None,
+                "outputs": {"StepAStep": [{"value": 1}]},
+                "extractions": {},
+                "metadata": {"k": "v"},
+            },
+            status="success",
+            duration=3.0,
             created_at=_utc(-299),
         )
-        step2 = PipelineStepState(
+        snap_b1 = PipelineNodeSnapshot(
+            snapshot_id="StepB:run1",
             run_id="aaaaaaaa-0000-0000-0000-000000000001",
             pipeline_name="alpha_pipeline",
-            step_name="step_b",
-            step_number=2,
-            input_hash="hash_b1",
-            result_data={"value": 2},
-            context_snapshot={"k": "v"},
-            execution_time_ms=6800,
+            sequence=1,
+            kind="node",
+            node_class_name="StepBStep",
+            node_payload={},
+            state_snapshot={
+                "input_data": None,
+                "outputs": {
+                    "StepAStep": [{"value": 1}],
+                    "StepBStep": [{"value": 2}],
+                },
+                "extractions": {},
+                "metadata": {"k": "v"},
+            },
+            status="success",
+            duration=6.8,
             created_at=_utc(-295),
         )
-        step3 = PipelineStepState(
+        snap_a2 = PipelineNodeSnapshot(
+            snapshot_id="StepA:run2",
             run_id="aaaaaaaa-0000-0000-0000-000000000002",
             pipeline_name="beta_pipeline",
-            step_name="step_a",
-            step_number=1,
-            input_hash="hash_a2",
-            result_data={"value": 3},
-            context_snapshot={},
-            execution_time_ms=4500,
+            sequence=0,
+            kind="node",
+            node_class_name="StepAStep",
+            node_payload={},
+            state_snapshot={
+                "input_data": None,
+                "outputs": {"StepAStep": [{"value": 3}]},
+                "extractions": {},
+                "metadata": {},
+            },
+            status="success",
+            duration=4.5,
             created_at=_utc(-199),
         )
-        session.add(step1)
-        session.add(step2)
-        session.add(step3)
+        session.add(snap_a1)
+        session.add(snap_b1)
+        session.add(snap_a2)
         session.commit()
 
     # Events used to be seeded here for RUN_1 timeline tests, but the

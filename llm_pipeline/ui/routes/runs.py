@@ -1,4 +1,5 @@
 """Pipeline runs route module -- list, detail, trigger."""
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -9,7 +10,8 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from llm_pipeline.state import PipelineRun, PipelineStepState
+from llm_pipeline.naming import to_snake_case
+from llm_pipeline.state import PipelineNodeSnapshot, PipelineRun
 from llm_pipeline.ui.deps import DBSession
 from llm_pipeline.ui.routes.websocket import manager as ws_manager
 
@@ -155,12 +157,15 @@ def get_run(run_id: str, db: DBSession) -> RunDetail:
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    steps_stmt = (
-        select(PipelineStepState)
-        .where(PipelineStepState.run_id == run_id)
-        .order_by(PipelineStepState.step_number)
+    snaps_stmt = (
+        select(PipelineNodeSnapshot)
+        .where(
+            PipelineNodeSnapshot.run_id == run_id,
+            PipelineNodeSnapshot.kind == "node",
+        )
+        .order_by(PipelineNodeSnapshot.sequence)
     )
-    steps = db.exec(steps_stmt).all()
+    snaps = db.exec(snaps_stmt).all()
 
     return RunDetail(
         run_id=run.run_id,
@@ -172,14 +177,33 @@ def get_run(run_id: str, db: DBSession) -> RunDetail:
         total_time_ms=run.total_time_ms,
         steps=[
             StepSummary(
-                step_name=s.step_name,
-                step_number=s.step_number,
-                execution_time_ms=s.execution_time_ms,
+                step_name=_snapshot_step_name(s),
+                step_number=s.sequence + 1,
+                execution_time_ms=_duration_ms(s.duration),
                 created_at=s.created_at,
             )
-            for s in steps
+            for s in snaps
         ],
     )
+
+
+def _snapshot_step_name(snap: PipelineNodeSnapshot) -> str:
+    """Snake-case step name from the node class. Strips ``Step`` suffix when present."""
+    name = snap.node_class_name
+    suffix = (
+        "Step" if name.endswith("Step")
+        else "Extraction" if name.endswith("Extraction")
+        else "Review" if name.endswith("Review")
+        else None
+    )
+    return to_snake_case(name, strip_suffix=suffix or "")
+
+
+def _duration_ms(duration: float | None) -> int | None:
+    """Convert pydantic-graph's float-seconds duration to ms (rounded)."""
+    if duration is None:
+        return None
+    return int(round(duration * 1000.0))
 
 
 @router.post("", response_model=TriggerRunResponse, status_code=202)
@@ -188,21 +212,26 @@ def trigger_run(
     background_tasks: BackgroundTasks,
     request: Request,
 ) -> TriggerRunResponse:
-    """Trigger a pipeline run in the background.
+    """Trigger a graph-native pipeline run in the background.
 
-    The pipeline_registry on app.state maps pipeline names to factory
-    callables with signature
-    ``(run_id: str, engine: Engine, **kwargs) -> pipeline``
-    where the returned object exposes ``.execute()`` and ``.save()``.
+    The ``pipeline_registry`` on ``app.state`` maps pipeline names to
+    ``llm_pipeline.graph.Pipeline`` subclass types. Execution is driven
+    by ``llm_pipeline.graph.runtime.run_pipeline``, which writes node
+    snapshots to ``PipelineNodeSnapshot`` and updates ``PipelineRun``
+    status (``running`` -> ``completed`` / ``failed`` /
+    ``awaiting_review``).
 
-    Observability is OTEL-based: spans are emitted via the global
-    tracer provider configured in ``observability.configure()``,
-    consumed by both Langfuse (storage) and the
-    ``WebSocketBroadcastProcessor`` (live UI invalidation).
+    OTEL spans propagate via the global tracer provider configured in
+    ``observability.configure()``; the ``WebSocketBroadcastProcessor``
+    fans them out to live UI clients.
     """
+    from llm_pipeline.graph import Pipeline
+
     registry: dict = getattr(request.app.state, "pipeline_registry", {})
-    factory = registry.get(body.pipeline_name)
-    if factory is None:
+    pipeline_cls = registry.get(body.pipeline_name)
+    if pipeline_cls is None or not (
+        isinstance(pipeline_cls, type) and issubclass(pipeline_cls, Pipeline)
+    ):
         raise HTTPException(
             status_code=404,
             detail=f"Pipeline '{body.pipeline_name}' not found in registry",
@@ -235,7 +264,7 @@ def trigger_run(
     engine = request.app.state.engine
 
     # Create PipelineRun record before background task so frontend
-    # can poll /steps and /events without 404 race condition.
+    # can poll without a 404 race condition.
     with Session(engine) as pre_session:
         pre_session.add(PipelineRun(
             run_id=run_id,
@@ -252,41 +281,28 @@ def trigger_run(
         "started_at": datetime.now(timezone.utc).isoformat(),
     })
 
-    def run_pipeline() -> None:
-        pipeline = None
+    def _run_in_thread() -> None:
+        from llm_pipeline.graph.runtime import run_pipeline as _run_pipeline
+
         try:
-            pipeline = factory(run_id=run_id, engine=engine, input_data=body.input_data or {})
-            pipeline.execute(data=None, input_data=body.input_data)
-            # Only save extractions if pipeline completed (not paused for review)
-            if not getattr(pipeline, '_awaiting_review', False):
-                pipeline.save()
-        except Exception as exc:
-            logger.exception("Background pipeline execution failed for run_id=%s", run_id)
-            error_msg = f"{type(exc).__name__}: {exc}"
-            if pipeline is not None:
-                try:
-                    pipeline.close()
-                except Exception:
-                    pass
-            try:
-                with Session(engine) as err_session:
-                    run = err_session.exec(
-                        select(PipelineRun).where(PipelineRun.run_id == run_id)
-                    ).first()
-                    if run:
-                        run.status = "failed"
-                        run.completed_at = datetime.now(timezone.utc)
-                        run.error_message = error_msg[:2000]
-                        err_session.add(run)
-                        err_session.commit()
-            except Exception:
-                logger.exception(
-                    "Failed to update PipelineRun status for run_id=%s", run_id
-                )
+            asyncio.run(_run_pipeline(
+                pipeline_cls,
+                input_data=body.input_data or {},
+                model=default_model,
+                engine=engine,
+                run_id=run_id,
+            ))
+        except Exception:
+            # ``run_pipeline`` already updates the PipelineRun row on
+            # failure; this catch is just to keep the background task
+            # from raising into the FastAPI threadpool.
+            logger.exception(
+                "Background pipeline execution failed for run_id=%s", run_id,
+            )
         finally:
             ws_manager.signal_run_complete(run_id)
 
-    background_tasks.add_task(run_pipeline)
+    background_tasks.add_task(_run_in_thread)
 
     return TriggerRunResponse(run_id=run_id, status="accepted")
 
@@ -309,27 +325,30 @@ class ContextEvolutionResponse(BaseModel):
 
 @router.get("/{run_id}/context", response_model=ContextEvolutionResponse)
 def get_context_evolution(run_id: str, db: DBSession) -> ContextEvolutionResponse:
-    """Context snapshot at each step, ordered by step number."""
+    """Context (state.metadata) snapshot at each node, ordered by sequence."""
     stmt = select(PipelineRun).where(PipelineRun.run_id == run_id)
     run = db.exec(stmt).first()
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    steps_stmt = (
-        select(PipelineStepState)
-        .where(PipelineStepState.run_id == run_id)
-        .order_by(PipelineStepState.step_number)
+    snaps_stmt = (
+        select(PipelineNodeSnapshot)
+        .where(
+            PipelineNodeSnapshot.run_id == run_id,
+            PipelineNodeSnapshot.kind == "node",
+        )
+        .order_by(PipelineNodeSnapshot.sequence)
     )
-    steps = db.exec(steps_stmt).all()
+    snaps = db.exec(snaps_stmt).all()
 
     return ContextEvolutionResponse(
         run_id=run_id,
         snapshots=[
             ContextSnapshot(
-                step_name=s.step_name,
-                step_number=s.step_number,
-                context_snapshot=s.context_snapshot,
+                step_name=_snapshot_step_name(s),
+                step_number=s.sequence + 1,
+                context_snapshot=(s.state_snapshot or {}).get("metadata", {}),
             )
-            for s in steps
+            for s in snaps
         ],
     )

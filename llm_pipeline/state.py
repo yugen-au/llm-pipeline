@@ -1,17 +1,23 @@
 """
-Pipeline state tracking models for audit trail and caching.
+Pipeline state tracking models.
 
-These models provide generic state tracking for ANY pipeline:
-- PipelineStepState: Audit trail of each step's execution
-- PipelineRunInstance: Links created database instances to pipeline runs
+The framework persists three orthogonal kinds of pipeline data:
 
-This enables:
-- Traceability: "How was this data created?"
-- Caching: "Can we reuse previous results?"
-- Partial regeneration: "Re-run from step N onwards"
+- ``PipelineRun``: run-level pointer (run_id, pipeline_name, status, trace_id).
+- ``PipelineNodeSnapshot``: pydantic-graph state-persistence backend rows
+  — one per node-execution attempt. Carries the full ``PipelineState``
+  JSON at the moment that node was about to run, plus pydantic-graph
+  bookkeeping (snapshot id, status, start_ts, duration). The UI's
+  run-detail panel reads from these directly.
+- ``PipelineRunInstance``: links created SQLModel rows to the run that
+  created them (e.g. "which run extracted Topic #42?").
+- ``PipelineReview``: human-review records.
+
+``PipelineStepState`` (the legacy audit table) was retired in the
+pydantic-graph migration; ``PipelineNodeSnapshot`` is the replacement.
 """
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 from sqlmodel import SQLModel, Field, Column, JSON
 from sqlalchemy import Index, UniqueConstraint
 
@@ -21,88 +27,102 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 
-class PipelineStepState(SQLModel, table=True):
+class PipelineNodeSnapshot(SQLModel, table=True):
+    """One pydantic-graph snapshot row, owned by ``SqlmodelStatePersistence``.
+
+    Each row corresponds to either a ``NodeSnapshot`` (the graph is
+    about to run a node) or an ``EndSnapshot`` (the graph has finished).
+    The full ``PipelineState`` is JSON-encoded in ``state_snapshot`` —
+    on resume, the persistence backend reloads the most recent pending
+    snapshot, deserialises the state, and continues from that node.
+
+    Phase 2 makes this table the single source of truth for run
+    history. The UI's run-detail panel reads from here (no separate
+    audit-trail table).
     """
-    Generic audit/state tracking for any pipeline step.
-    
-    Records what happened at each step of a pipeline execution,
-    enabling audit trails, caching, and partial regeneration.
-    
-    Works for ANY pipeline type - not tied to specific domains.
-    """
-    __tablename__ = "pipeline_step_states"
-    
-    id: Optional[int] = Field(default=None, primary_key=True)
-    
-    # Pipeline identification
-    pipeline_name: str = Field(
-        max_length=100,
-        description="Pipeline name in snake_case (e.g., 'rate_card_parser', 'table_config_generator')"
+
+    __tablename__ = "pipeline_node_snapshots"
+
+    # pydantic-graph generates snapshot ids like ``NodeName:uuid_hex``
+    # and treats them as opaque opaque strings. We use them as the
+    # primary key directly.
+    snapshot_id: str = Field(
+        max_length=128,
+        primary_key=True,
+        description="pydantic-graph snapshot id (``{node_id}:{uuid_hex}``).",
     )
     run_id: str = Field(
         max_length=36,
-        description="UUID identifying this specific pipeline run"
+        index=True,
+        description="UUID of the owning ``PipelineRun.run_id``.",
     )
-
-    # Step identification
-    step_name: str = Field(
+    pipeline_name: str = Field(
         max_length=100,
-        description="Name of the step (e.g., 'table_type_detection')"
+        description="Snake-case pipeline name (mirrors ``PipelineRun``).",
     )
-    step_number: int = Field(
-        description="Order of execution (1, 2, 3...)"
+
+    # Order written. pydantic-graph doesn't carry an inherent sequence,
+    # so we autoincrement at write time to give the UI a stable ordering
+    # column (resume snapshots can appear out-of-order in time).
+    sequence: int = Field(
+        index=True,
+        description="0-based write order within the run.",
     )
-    
-    # State data
-    input_hash: str = Field(
-        max_length=64,
-        description="Hash of step inputs for cache invalidation"
+
+    kind: str = Field(
+        max_length=8,
+        description="``'node'`` for NodeSnapshot, ``'end'`` for EndSnapshot.",
     )
-    result_data: dict = Field(
+
+    # ``node_class_name`` is ``cls.__name__`` of the node about to run
+    # (or ``"End"`` for end snapshots). Used by the UI to label each
+    # row without having to deserialise ``node_payload`` first.
+    node_class_name: str = Field(
+        max_length=128,
+        description="``BaseNode`` subclass name, or ``'End'``.",
+    )
+
+    # Pydantic-dumped payload of the node instance (fields the user
+    # set on it) for NodeSnapshot, or the End.data shape for end.
+    node_payload: dict = Field(
         sa_column=Column(JSON),
-        description="The step's result (serialized)"
+        description="``model_dump`` of the BaseNode instance / End.data.",
     )
-    context_snapshot: dict = Field(
+
+    # Full PipelineState dump at the moment this snapshot was taken.
+    # Reload + rehydrate to resume the run.
+    state_snapshot: dict = Field(
         sa_column=Column(JSON),
-        description="Relevant context at this point"
+        description="``PipelineState.model_dump`` at snapshot time.",
     )
-    
-    # Metadata
-    prompt_system_key: Optional[str] = Field(
+
+    status: str = Field(
+        default="created",
+        max_length=10,
+        description=(
+            "pydantic-graph status: ``created``, ``pending``, "
+            "``running``, ``success``, ``error``."
+        ),
+    )
+
+    # pydantic-graph populates ``start_ts`` when ``record_run`` enters,
+    # and ``duration`` (seconds, float) when it exits successfully.
+    started_at: Optional[datetime] = Field(default=None)
+    duration: Optional[float] = Field(
         default=None,
-        max_length=200,
-        description="System prompt key used (if applicable)"
+        description="Wall-clock seconds inside ``record_run`` (float).",
     )
-    prompt_user_key: Optional[str] = Field(
-        default=None,
-        max_length=200,
-        description="User prompt key used (if applicable)"
+
+    error: Optional[dict] = Field(
+        default=None, sa_column=Column(JSON),
+        description="Captured exception summary on ``status='error'``.",
     )
-    prompt_version: Optional[str] = Field(
-        default=None,
-        max_length=20,
-        description="Prompt version used (for cache invalidation)"
-    )
-    model: Optional[str] = Field(
-        default=None,
-        max_length=50,
-        description="LLM model used (if applicable)"
-    )
-    
-    # Timing
+
     created_at: datetime = Field(default_factory=utc_now)
-    execution_time_ms: Optional[int] = Field(
-        default=None,
-        description="Execution time in milliseconds"
-    )
 
-    # Token usage and cost are now owned by Langfuse (the trace for run_id).
-    # Local DB no longer mirrors them — query Langfuse for those metrics.
-
-    # Indexes for efficient querying
     __table_args__ = (
-        Index("ix_pipeline_step_states_run", "run_id", "step_number"),
-        Index("ix_pipeline_step_states_cache", "pipeline_name", "step_name", "input_hash"),
+        Index("ix_pipeline_node_snapshots_run_seq", "run_id", "sequence"),
+        Index("ix_pipeline_node_snapshots_run_kind", "run_id", "kind"),
     )
 
 
@@ -300,7 +320,7 @@ class PipelineReview(SQLModel, table=True):
 
 
 __all__ = [
-    "PipelineStepState",
+    "PipelineNodeSnapshot",
     "PipelineRunInstance",
     "PipelineRun",
     "DraftStep",

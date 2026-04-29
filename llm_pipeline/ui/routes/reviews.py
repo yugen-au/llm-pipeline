@@ -1,4 +1,12 @@
-"""Review endpoints for human-in-the-loop review system."""
+"""Review endpoints for human-in-the-loop review system.
+
+Resume + restart go through ``llm_pipeline.graph.runtime``. The
+``ReviewNode`` writes a ``PipelineReview`` row with status ``pending``
+and pauses the graph (``PipelineRun.status = 'awaiting_review'``);
+this endpoint completes the review and either resumes from the
+persisted snapshot or kicks off a fresh run.
+"""
+import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
@@ -137,6 +145,7 @@ def submit_review(
     request: Request,
 ) -> ReviewSubmitResponse:
     """Submit a review decision. Token-keyed for webhook callbacks + UI."""
+    from llm_pipeline.graph import Pipeline
     from llm_pipeline.review import ReviewDecision
 
     engine = request.app.state.engine
@@ -195,7 +204,6 @@ def submit_review(
         session.commit()
 
     # Notify connected WS clients of the review-completed transition.
-    # State (PipelineReview row) is the source of truth; this is just a nudge.
     ws_manager.broadcast_to_run(run_id, {
         "type": "review_completed",
         "run_id": run_id,
@@ -207,12 +215,22 @@ def submit_review(
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
+    registry = getattr(request.app.state, "pipeline_registry", {})
+    pipeline_cls = registry.get(pipeline_name)
+    if pipeline_cls is None or not (
+        isinstance(pipeline_cls, type) and issubclass(pipeline_cls, Pipeline)
+    ):
+        raise HTTPException(status_code=404, detail="Pipeline not found in registry")
+
+    default_model = getattr(request.app.state, "default_model", None)
+    if default_model is None:
+        raise HTTPException(
+            status_code=422,
+            detail="No model configured.",
+        )
+
     if body.decision == "restart":
         new_run_id = str(uuid.uuid4())
-        registry = getattr(request.app.state, "pipeline_registry", {})
-        factory = registry.get(pipeline_name)
-        if factory is None:
-            raise HTTPException(status_code=404, detail="Pipeline not found in registry")
 
         with Session(engine) as pre_session:
             pre_session.add(PipelineRun(
@@ -223,102 +241,58 @@ def submit_review(
             ))
             pre_session.commit()
 
-        def run_restart():
-            pipeline = None
+        def _run_restart() -> None:
+            from llm_pipeline.graph.runtime import run_pipeline
+
             try:
-                pipeline = factory(run_id=new_run_id, engine=engine)
-                pipeline.execute(data=None)
-                pipeline.save()
+                asyncio.run(run_pipeline(
+                    pipeline_cls,
+                    input_data=original_input_data or {},
+                    model=default_model,
+                    engine=engine,
+                    run_id=new_run_id,
+                ))
             except Exception:
-                logger.exception("Restart pipeline failed for run_id=%s", new_run_id)
-                if pipeline is not None:
-                    try:
-                        pipeline.close()
-                    except Exception:
-                        pass
-                try:
-                    with Session(engine) as err_session:
-                        r = err_session.exec(
-                            select(PipelineRun).where(PipelineRun.run_id == new_run_id)
-                        ).first()
-                        if r:
-                            r.status = "failed"
-                            r.completed_at = datetime.now(timezone.utc)
-                            err_session.add(r)
-                            err_session.commit()
-                except Exception:
-                    pass
+                logger.exception(
+                    "Restart pipeline failed for run_id=%s", new_run_id,
+                )
             finally:
                 ws_manager.signal_run_complete(new_run_id)
 
-        background_tasks.add_task(run_restart)
-        return ReviewSubmitResponse(run_id=new_run_id, decision=body.decision, status="restarted")
+        background_tasks.add_task(_run_restart)
+        return ReviewSubmitResponse(
+            run_id=new_run_id, decision=body.decision, status="restarted",
+        )
 
-    registry = getattr(request.app.state, "pipeline_registry", {})
-    factory = registry.get(pipeline_name)
-    if factory is None:
-        raise HTTPException(status_code=404, detail="Pipeline not found in registry")
+    # approved | minor_revision | major_revision: resume from the
+    # persisted snapshot via run_pipeline_resume.
+    metadata_patch = {
+        "review_decision": body.decision,
+        "review_notes": body.notes,
+        "review_token": token,
+    }
+    if body.resume_from:
+        metadata_patch["review_resume_from"] = body.resume_from
 
-    if body.decision == "approved":
-        resume_index = reviewed_step_number
-    elif body.decision == "minor_revision":
-        resume_index = reviewed_step_number - 1
-    else:  # major_revision
-        resume_step_name = body.resume_from or reviewed_step_name
-        resume_index = _resolve_step_index(request, pipeline_name, resume_step_name)
+    def _run_resume() -> None:
+        from llm_pipeline.graph.runtime import resume_pipeline
 
-    def run_resume():
-        pipeline = None
         try:
-            pipeline = factory(run_id=run_id, engine=engine)
-            pipeline.execute_from_step(
-                resume_step_index=resume_index,
-                review_notes=body.notes,
-                review_decision=body.decision,
-                input_data=original_input_data,
-            )
-            with Session(engine) as check_session:
-                run_row = check_session.exec(
-                    select(PipelineRun).where(PipelineRun.run_id == run_id)
-                ).first()
-            if run_row and run_row.status != "awaiting_review":
-                pipeline.save()
+            asyncio.run(resume_pipeline(
+                pipeline_cls,
+                run_id=run_id,
+                model=default_model,
+                engine=engine,
+                metadata_patch=metadata_patch,
+            ))
         except Exception:
-            logger.exception("Resume pipeline failed for run_id=%s", run_id)
-            if pipeline is not None:
-                try:
-                    pipeline.close()
-                except Exception:
-                    pass
-            try:
-                with Session(engine) as err_session:
-                    r = err_session.exec(
-                        select(PipelineRun).where(PipelineRun.run_id == run_id)
-                    ).first()
-                    if r:
-                        r.status = "failed"
-                        r.completed_at = datetime.now(timezone.utc)
-                        err_session.add(r)
-                        err_session.commit()
-            except Exception:
-                pass
+            logger.exception(
+                "Resume pipeline failed for run_id=%s", run_id,
+            )
         finally:
             ws_manager.signal_run_complete(run_id)
 
-    background_tasks.add_task(run_resume)
-    return ReviewSubmitResponse(run_id=run_id, decision=body.decision, status="resumed")
-
-
-def _resolve_step_index(request: Request, pipeline_name: str, step_name: str) -> int:
-    """Find the 0-based step index for a step name within a pipeline."""
-    from llm_pipeline.introspection import PipelineIntrospector
-    registry = getattr(request.app.state, "introspection_registry", {})
-    pipeline_cls = registry.get(pipeline_name)
-    if not pipeline_cls:
-        return 0
-    metadata = PipelineIntrospector(pipeline_cls).get_metadata()
-    for strategy in metadata.get("strategies", []):
-        for i, step in enumerate(strategy.get("steps", [])):
-            if step.get("step_name") == step_name:
-                return i
-    return 0
+    background_tasks.add_task(_run_resume)
+    return ReviewSubmitResponse(
+        run_id=run_id, decision=body.decision, status="resumed",
+    )

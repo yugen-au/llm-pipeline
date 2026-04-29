@@ -30,6 +30,7 @@ walks every node's spec at class-definition time.
 """
 from __future__ import annotations
 
+import logging
 from abc import abstractmethod
 from typing import Any, Callable, ClassVar, TYPE_CHECKING
 
@@ -424,25 +425,141 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
         """Override pydantic-graph's edge resolution to honour TYPE_CHECKING."""
         return _build_node_def(cls, local_ns)
 
-    async def _record_review_request(
+    async def _begin_review(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
     ) -> None:
-        """Phase 1 placeholder: stamp metadata, no actual pause."""
+        """Open a pending ``PipelineReview`` and signal pause to the runtime.
+
+        Sets ``state.metadata["awaiting_review"] = True`` so the
+        runtime loop in ``run_pipeline`` breaks out without driving
+        the next node. The next-node snapshot is still written by
+        pydantic-graph (in ``'created'`` status) — ``resume_pipeline``
+        picks it up via ``Graph.iter_from_persistence``.
+        """
+        import os
+        import uuid as _uuid
+
+        from sqlmodel import Session, select
+
+        from llm_pipeline.state import PipelineReview, PipelineRun
+
         cls = type(self)
-        ctx.state.metadata.setdefault("review_requests", []).append({
-            "review_node": cls.__name__,
-            "target_step": cls.target_step.__name__ if cls.target_step else None,
-        })
+        if cls.condition is not None:
+            try:
+                allow = cls.condition(ctx.state)  # type: ignore[arg-type]
+            except Exception:
+                allow = True
+            if not allow:
+                return  # condition says skip — no pause
+
+        token = str(_uuid.uuid4())
+        target_name = (
+            cls.target_step.__name__ if cls.target_step is not None else cls.__name__
+        )
+        review_data: dict[str, Any] = {}
+        if cls.target_step is not None:
+            target_outputs = ctx.state.outputs.get(cls.target_step.__name__) or []
+            if target_outputs:
+                review_data = {"raw_data": target_outputs[0]}
+
+        engine = ctx.deps.session.get_bind()
+        with Session(engine) as session:
+            session.add(PipelineReview(
+                token=token,
+                run_id=ctx.deps.run_id,
+                pipeline_name=ctx.deps.pipeline_name,
+                step_name=_step_name_for_target(cls.target_step) or cls.__name__,
+                step_number=len(ctx.state.outputs),
+                status="pending",
+                review_data=review_data,
+                input_data=ctx.state.input_data,
+            ))
+            run = session.exec(
+                select(PipelineRun).where(
+                    PipelineRun.run_id == ctx.deps.run_id,
+                )
+            ).first()
+            if run is not None:
+                run.status = "awaiting_review"
+                session.add(run)
+            session.commit()
+
+        ctx.state.metadata["awaiting_review"] = True
+        ctx.state.metadata["review_token"] = token
+
+        # Optional webhook fan-out — fire-and-forget; logged + swallowed on failure.
+        webhook_url = (
+            cls.webhook_url
+            or os.environ.get("LLM_PIPELINE_REVIEW_WEBHOOK")
+        )
+        if webhook_url:
+            try:
+                _post_review_webhook(
+                    webhook_url, token=token, run_id=ctx.deps.run_id,
+                    pipeline_name=ctx.deps.pipeline_name, target=target_name,
+                    review_data=review_data,
+                )
+            except Exception:
+                logger.warning(
+                    "Review webhook failed for token=%s", token, exc_info=True,
+                )
 
     @abstractmethod
     async def run(self, ctx: GraphRunContext[PipelineState, PipelineDeps]) -> Any:
-        """Subclasses: call ``_record_review_request(ctx)``; return next node."""
+        """Subclasses: call ``_begin_review(ctx)``; return the post-review node."""
         raise NotImplementedError
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+logger = logging.getLogger(__name__)
+
+
+def _step_name_for_target(target: type | None) -> str | None:
+    """Snake-cased step_name for a ``target_step`` class (or ``None``)."""
+    if target is None:
+        return None
+    return to_snake_case(target.__name__, strip_suffix="Step")
+
+
+def _post_review_webhook(
+    url: str,
+    *,
+    token: str,
+    run_id: str,
+    pipeline_name: str,
+    target: str,
+    review_data: dict[str, Any],
+) -> None:
+    """Fire-and-forget POST to the review webhook.
+
+    Mirrors the legacy ``_send_review_webhook`` shape so existing
+    integrations don't need to change. Errors raise — caller logs +
+    swallows.
+    """
+    import os as _os
+
+    import httpx
+
+    base_url = _os.environ.get("LLM_PIPELINE_BASE_URL", "http://localhost:8642")
+    httpx.post(
+        url,
+        json={
+            "event": "review_requested",
+            "run_id": run_id,
+            "pipeline_name": pipeline_name,
+            "step_name": target,
+            "token": token,
+            "review_link": f"{base_url}/review/{token}",
+            "callback_url": f"{base_url}/reviews/{token}",
+            "callback_method": "POST",
+            "review_data": review_data,
+        },
+        timeout=10,
+    )
 
 
 def _append_review_to_prompt(user_prompt: str, review_ctx: dict[str, Any]) -> str:

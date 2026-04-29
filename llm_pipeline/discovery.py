@@ -2,7 +2,7 @@
 
 Scans for llm_pipelines/ directories (package-internal + CWD),
 imports Python files in each subfolder in dependency order,
-and registers discovered PipelineConfig subclasses.
+and registers discovered graph ``Pipeline`` subclasses.
 """
 import importlib.util
 import inspect
@@ -154,35 +154,26 @@ def _discover_pipelines_from_modules(
     modules: list[ModuleType],
     default_model: Optional[str],
     engine: Any,
-) -> Tuple[Dict[str, Callable], Dict[str, Type]]:
-    """Scan loaded modules for PipelineConfig subclasses, build registries."""
-    from llm_pipeline.pipeline import PipelineConfig
+) -> Tuple[Dict[str, Type], Dict[str, Type]]:
+    """Scan loaded modules for graph ``Pipeline`` subclasses, build registries."""
+    del default_model, engine  # graph pipelines don't use either at registration time
+    from llm_pipeline.graph import Pipeline
     from llm_pipeline.naming import to_snake_case
-    from llm_pipeline.ui.app import _make_pipeline_factory
 
-    pipeline_reg: Dict[str, Callable] = {}
+    pipeline_reg: Dict[str, Type] = {}
     introspection_reg: Dict[str, Type] = {}
 
     for mod in modules:
         for _, cls in inspect.getmembers(mod, inspect.isclass):
             if (
-                issubclass(cls, PipelineConfig)
-                and cls is not PipelineConfig
+                issubclass(cls, Pipeline)
+                and cls is not Pipeline
                 and not inspect.isabstract(cls)
                 and cls.__module__ == mod.__name__
             ):
                 key = to_snake_case(cls.__name__, strip_suffix="Pipeline")
-                pipeline_reg[key] = _make_pipeline_factory(cls, default_model)
+                pipeline_reg[key] = cls
                 introspection_reg[key] = cls
-
-                # Seed prompts if method exists
-                try:
-                    if hasattr(cls, "_seed_prompts") and callable(cls._seed_prompts):
-                        cls._seed_prompts(engine)
-                except Exception:
-                    logger.warning(
-                        "_seed_prompts failed for '%s'", key, exc_info=True,
-                    )
 
     return pipeline_reg, introspection_reg
 

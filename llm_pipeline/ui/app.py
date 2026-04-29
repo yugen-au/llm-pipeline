@@ -18,63 +18,40 @@ from llm_pipeline.naming import to_snake_case
 
 if TYPE_CHECKING:
     from sqlalchemy import Engine
-    from llm_pipeline.pipeline import PipelineConfig
+
+    from llm_pipeline.graph import Pipeline
 
 logger = logging.getLogger(__name__)
 
 
-def _make_pipeline_factory(
-    cls: Type[PipelineConfig], model: Optional[str]
-) -> Callable:
-    """Return a factory closure that instantiates *cls* with captured *model*.
-
-    Observability is now driven by OTEL/Langfuse via the global tracer
-    provider configured in ``observability.configure()``; no per-run
-    event emitter is wired in. Extra kwargs (e.g. ``input_data``) are
-    accepted but ignored — input data is passed to ``pipeline.execute``
-    by the caller, not the constructor.
-    """
-
-    def factory(
-        run_id: str,
-        engine: Engine,
-        **kwargs: object,
-    ) -> PipelineConfig:
-        return cls(
-            model=model,
-            run_id=run_id,
-            engine=engine,
-        )
-
-    return factory
-
-
 def _discover_pipelines(
-    engine: Engine, default_model: Optional[str]
-) -> Tuple[Dict[str, Callable], Dict[str, Type[PipelineConfig]]]:
-    """Scan ``llm_pipeline.pipelines`` entry-point group and build registries.
+    engine: "Engine", default_model: Optional[str]
+) -> Tuple[Dict[str, Type["Pipeline"]], Dict[str, Type["Pipeline"]]]:
+    """Scan ``llm_pipeline.pipelines`` entry-point group for graph ``Pipeline`` classes.
 
-    Returns:
-        Tuple of (pipeline_registry, introspection_registry) dicts keyed by
-        ``ep.name``.
+    Returns ``(pipeline_registry, introspection_registry)``. Both
+    map snake-cased pipeline name to the ``Pipeline`` subclass — the
+    framework no longer needs separate factory closures because
+    ``run_pipeline(pipeline_cls, ...)`` takes the class directly.
     """
-    from llm_pipeline.pipeline import PipelineConfig
+    del engine  # _seed_prompts is gone; graph pipelines do their own seed (Phoenix)
+    from llm_pipeline.graph import Pipeline
 
-    pipeline_reg: Dict[str, Callable] = {}
-    introspection_reg: Dict[str, Type[PipelineConfig]] = {}
+    pipeline_reg: Dict[str, Type[Pipeline]] = {}
+    introspection_reg: Dict[str, Type[Pipeline]] = {}
 
     eps = importlib.metadata.entry_points(group="llm_pipeline.pipelines")
     for ep in eps:
         try:
             cls = ep.load()
-            if not inspect.isclass(cls) or not issubclass(cls, PipelineConfig):
+            if not (inspect.isclass(cls) and issubclass(cls, Pipeline)):
                 logger.warning(
-                    "Entry point '%s' does not reference a PipelineConfig "
-                    "subclass, skipping",
+                    "Entry point '%s' does not reference a Pipeline "
+                    "(graph) subclass, skipping",
                     ep.name,
                 )
                 continue
-            pipeline_reg[ep.name] = _make_pipeline_factory(cls, default_model)
+            pipeline_reg[ep.name] = cls
             introspection_reg[ep.name] = cls
         except Exception:
             logger.warning(
@@ -83,17 +60,6 @@ def _discover_pipelines(
                 exc_info=True,
             )
             continue
-
-        # _seed_prompts is optional; failure must not unregister the pipeline
-        try:
-            if hasattr(cls, "_seed_prompts") and callable(cls._seed_prompts):
-                cls._seed_prompts(engine)
-        except Exception:
-            logger.warning(
-                "_seed_prompts failed for '%s', pipeline still registered",
-                ep.name,
-                exc_info=True,
-            )
 
     if pipeline_reg:
         logger.info(
@@ -108,18 +74,18 @@ def _discover_pipelines(
 def _load_pipeline_modules(
     module_paths: List[str],
     default_model: Optional[str],
-    engine: Engine,
-) -> Tuple[Dict[str, Callable], Dict[str, Type[PipelineConfig]]]:
-    """Import modules by dotted path, scan for PipelineConfig subclasses, and build registries.
+    engine: "Engine",
+) -> Tuple[Dict[str, Type["Pipeline"]], Dict[str, Type["Pipeline"]]]:
+    """Import modules by dotted path, register concrete graph ``Pipeline`` subclasses.
 
-    Raises:
-        ValueError: If a module cannot be imported or contains no
-            PipelineConfig subclasses.
+    Raises ``ValueError`` if a module can't be imported or has no
+    ``Pipeline`` subclasses.
     """
-    from llm_pipeline.pipeline import PipelineConfig
+    del default_model, engine  # not needed for graph pipelines
+    from llm_pipeline.graph import Pipeline
 
-    pipeline_reg: Dict[str, Callable] = {}
-    introspection_reg: Dict[str, Type[PipelineConfig]] = {}
+    pipeline_reg: Dict[str, Type[Pipeline]] = {}
+    introspection_reg: Dict[str, Type[Pipeline]] = {}
 
     for path in module_paths:
         try:
@@ -133,32 +99,21 @@ def _load_pipeline_modules(
         found = [
             cls
             for _, cls in members
-            if issubclass(cls, PipelineConfig)
-            and cls is not PipelineConfig
+            if issubclass(cls, Pipeline)
+            and cls is not Pipeline
             and not inspect.isabstract(cls)
             and cls.__module__ == mod.__name__
         ]
 
         if not found:
             raise ValueError(
-                f"No PipelineConfig subclasses found in module '{path}'"
+                f"No Pipeline subclasses found in module '{path}'"
             )
 
         for cls in found:
             key = to_snake_case(cls.__name__, strip_suffix="Pipeline")
-            pipeline_reg[key] = _make_pipeline_factory(cls, default_model)
+            pipeline_reg[key] = cls
             introspection_reg[key] = cls
-
-            # _seed_prompts is optional; failure must not unregister the pipeline
-            try:
-                if hasattr(cls, "_seed_prompts") and callable(cls._seed_prompts):
-                    cls._seed_prompts(engine)
-            except Exception:
-                logger.warning(
-                    "_seed_prompts failed for '%s', pipeline still registered",
-                    key,
-                    exc_info=True,
-                )
 
     if pipeline_reg:
         logger.info(
@@ -212,7 +167,7 @@ def create_app(
     database_url: Optional[str] = None,
     cors_origins: Optional[list] = None,
     pipeline_registry: Optional[dict] = None,
-    introspection_registry: Optional[Dict[str, Type[PipelineConfig]]] = None,
+    introspection_registry: Optional[Dict[str, Type["Pipeline"]]] = None,
     auto_discover: bool = True,
     default_model: Optional[str] = None,
     pipeline_modules: Optional[List[str]] = None,
@@ -314,8 +269,8 @@ def create_app(
             pipeline_modules, resolved_model, app.state.engine
         )
     else:
-        module_pipeline: Dict[str, Callable] = {}
-        module_introspection: Dict[str, Type[PipelineConfig]] = {}
+        module_pipeline: Dict[str, Type["Pipeline"]] = {}
+        module_introspection: Dict[str, Type["Pipeline"]] = {}
 
     # Demo mode: param > env > False
     resolved_demo = demo_mode or os.environ.get("LLM_PIPELINE_DEMO_MODE", "").lower() in ("1", "true")
@@ -332,8 +287,8 @@ def create_app(
             app.state.engine, resolved_model
         )
     else:
-        discovered_pipeline: Dict[str, Callable] = {}
-        discovered_introspection: Dict[str, Type[PipelineConfig]] = {}
+        discovered_pipeline: Dict[str, Type["Pipeline"]] = {}
+        discovered_introspection: Dict[str, Type["Pipeline"]] = {}
 
     # Registry setup: merge order entry-points < convention < module-loaded < explicit
     app.state.pipeline_registry = {
