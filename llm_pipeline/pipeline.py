@@ -18,8 +18,11 @@ from typing import (
     Any,
     ClassVar,
     Dict,
+    Iterator,
     List,
     Optional,
+    Set,
+    Tuple,
     Type,
     TypeVar,
     TYPE_CHECKING,
@@ -277,9 +280,20 @@ class PipelineConfig(ABC):
         self._current_step: Optional[Type] = None
         self._current_extraction: Optional[Type] = None
 
+        # Step-level dependency graph (step_class -> set of step classes
+        # it depends on). Aggregates two sources: extraction FK chains
+        # (a step extracting WidgetReview FKs into Widget => depends on
+        # whichever step extracts Widget) and FromOutput references in
+        # step / extraction / tool inputs_spec. Built once at __init__
+        # time and used to validate ordering.
+        self._step_deps: Dict[Type, Set[Type]] = {}
+        # Edge provenance for diagnostic messages: (dependent, dep) ->
+        # list of human-readable reasons.
+        self._step_dep_reasons: Dict[Tuple[Type, Type], List[str]] = {}
+
         self._build_execution_order()
-        self._validate_foreign_key_dependencies()
-        self._validate_registry_order()
+        self._build_step_dependency_graph()
+        self._validate_step_dependency_graph()
 
         self.run_id = run_id or str(uuid.uuid4())
 
@@ -441,42 +455,214 @@ class PipelineConfig(ABC):
                             break
         return dependencies
 
-    def _validate_foreign_key_dependencies(self) -> None:
-        if not self.REGISTRY or not hasattr(self.REGISTRY, "MODELS"):
+    # ------------------------------------------------------------------
+    # Step dependency graph
+    #
+    # A unified graph of step-class -> set of step classes it depends on.
+    # Aggregates two sources of edges:
+    #
+    #   1. Extraction FK edges. A step extracting Model M, where M has an
+    #      FK column targeting Model T, depends on whichever step extracts
+    #      T (looked up via ``_model_extraction_step``).
+    #
+    #   2. FromOutput edges. A step / extraction / tool whose
+    #      ``inputs_spec`` contains a ``FromOutput(OtherStep)`` source
+    #      depends on ``OtherStep``.
+    #
+    # Both edge kinds collapse into the same step-level dependency. The
+    # validator (``_validate_step_dependency_graph``) asserts the union
+    # graph is acyclic, contains no references to absent steps, and that
+    # the user's positional binding order is a valid topological sort.
+    #
+    # This subsumes the older split between FK validation and registry-
+    # order validation: same coverage, single graph, single error path.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _iter_from_output_step_classes(
+        spec: "SourcesSpec | None",
+    ) -> Iterator[Type]:
+        """Yield every ``FromOutput.step_cls`` referenced by a SourcesSpec.
+
+        Recurses into ``Computed`` sources (which themselves wrap
+        zero-or-more child sources). ``FromInput`` and ``FromPipeline``
+        produce no step-level dependencies and are skipped.
+        """
+        from llm_pipeline.wiring import (
+            Computed,
+            FromOutput,
+            SourcesSpec,
+        )
+
+        if spec is None:
             return
-        registry_models = self.REGISTRY.MODELS
-        model_positions = {model: i for i, model in enumerate(registry_models)}
-        for model in registry_models:
-            dependencies = self._get_foreign_key_dependencies(model)
-            model_position = model_positions[model]
-            for dependency in dependencies:
-                if dependency not in model_positions:
-                    continue
-                if model_positions[dependency] > model_position:
-                    raise ValueError(
-                        f"Foreign key dependency error in {self.REGISTRY.__name__}:\n"
-                        f"  '{model.__name__}' at position {model_position}, "
-                        f"but FK to '{dependency.__name__}' at position {model_positions[dependency]}.\n"
-                        f"Move '{dependency.__name__}' before '{model.__name__}'."
+        if not isinstance(spec, SourcesSpec):
+            return
+
+        def _walk(source: Any) -> Iterator[Type]:
+            if isinstance(source, FromOutput):
+                yield source.step_cls
+            elif isinstance(source, Computed):
+                for child in source.sources:
+                    yield from _walk(child)
+
+        for src in spec.field_sources.values():
+            yield from _walk(src)
+
+    def _build_step_dependency_graph(self) -> None:
+        """Populate ``_step_deps`` and ``_step_dep_reasons`` from all
+        sources of step-level dependencies declared in the pipeline.
+
+        Runs after ``_build_execution_order`` (which populates
+        ``_step_order`` and ``_model_extraction_step``).
+        """
+        from llm_pipeline.wiring import Bind
+
+        def _record(
+            dependent: Type, dep: Type, reason: str,
+        ) -> None:
+            if dep is dependent:
+                return
+            self._step_deps.setdefault(dependent, set()).add(dep)
+            self._step_dep_reasons.setdefault(
+                (dependent, dep), [],
+            ).append(reason)
+
+        # Walk every binding once, in registration order.
+        for strategy in self._strategies:
+            for bind in strategy.get_bindings():
+                step_def = self._compile_bind_to_step_def(bind)
+                step_class = step_def.step_class
+
+                # 1a. Step-level inputs_spec FromOutput edges
+                for dep in self._iter_from_output_step_classes(step_def.inputs_spec):
+                    _record(
+                        step_class, dep,
+                        f"FromOutput({dep.__name__}) in {step_class.__name__}.inputs",
                     )
 
-    def _validate_registry_order(self) -> None:
-        if not self.REGISTRY or not hasattr(self.REGISTRY, "MODELS"):
-            return
-        registry_models = self.REGISTRY.MODELS
-        extracted_models = [m for m in registry_models if m in self._model_extraction_step]
-        for i, model in enumerate(extracted_models):
-            extraction_step = self._model_extraction_step[model]
-            extraction_position = self._step_order[extraction_step]
-            for prev_model in extracted_models[:i]:
-                prev_step = self._model_extraction_step[prev_model]
-                prev_position = self._step_order[prev_step]
-                if prev_position > extraction_position:
+                # 1b. Extraction-level inputs_spec FromOutput edges
+                for ext_bind in step_def.extraction_binds:
+                    if not isinstance(ext_bind, Bind):
+                        continue
+                    ext_name = (
+                        ext_bind.extraction.__name__
+                        if ext_bind.extraction is not None
+                        else "<extraction>"
+                    )
+                    for dep in self._iter_from_output_step_classes(ext_bind.inputs):
+                        _record(
+                            step_class, dep,
+                            f"FromOutput({dep.__name__}) in "
+                            f"{step_class.__name__}.extractions[{ext_name}].inputs",
+                        )
+
+                # 1c. Tool-level inputs_spec FromOutput edges
+                for tool_bind in step_def.tool_binds:
+                    if not isinstance(tool_bind, Bind):
+                        continue
+                    tool_name = (
+                        tool_bind.tool.__name__
+                        if tool_bind.tool is not None
+                        else "<tool>"
+                    )
+                    for dep in self._iter_from_output_step_classes(tool_bind.inputs):
+                        _record(
+                            step_class, dep,
+                            f"FromOutput({dep.__name__}) in "
+                            f"{step_class.__name__}.tools[{tool_name}].inputs",
+                        )
+
+                # 2. Extraction FK edges. For each extracted model on
+                # this step, follow its FK columns; each FK target's
+                # extracting step (if any) is a dependency.
+                for ext_bind in step_def.extraction_binds:
+                    if not isinstance(ext_bind, Bind) or ext_bind.extraction is None:
+                        continue
+                    ext_model = getattr(ext_bind.extraction, "MODEL", None)
+                    if ext_model is None:
+                        continue
+                    for fk_target in self._get_foreign_key_dependencies(ext_model):
+                        dep_step = self._model_extraction_step.get(fk_target)
+                        if dep_step is None:
+                            continue
+                        _record(
+                            step_class, dep_step,
+                            f"FK on {ext_model.__name__} -> "
+                            f"{fk_target.__name__} (extracted by "
+                            f"{dep_step.__name__})",
+                        )
+
+    def _validate_step_dependency_graph(self) -> None:
+        """Assert the step dependency graph is well-formed.
+
+        Three checks:
+
+        1. Every referenced step class is present in the pipeline (no
+           dangling ``FromOutput`` targets).
+        2. The graph is acyclic (no ``A -> B -> A`` chains).
+        3. The user's positional binding order is a valid topological
+           sort: every dependency appears at a lower position than
+           the step that depends on it.
+        """
+        # 1. Referenced step classes are present.
+        for dependent, deps in self._step_deps.items():
+            for dep in deps:
+                if dep not in self._step_order:
+                    reasons = self._step_dep_reasons.get((dependent, dep), [])
+                    reason_text = (
+                        f" (declared via {reasons[0]})" if reasons else ""
+                    )
                     raise ValueError(
-                        f"Extraction order mismatch in {self.REGISTRY.__name__}:\n"
-                        f"  '{prev_model.__name__}' before '{model.__name__}' in registry, "
-                        f"but extracted later.\n"
-                        f"Reorder registry to match extraction order."
+                        f"Step '{dependent.__name__}' depends on "
+                        f"'{dep.__name__}', but '{dep.__name__}' is not "
+                        f"present in any strategy's bindings"
+                        f"{reason_text}."
+                    )
+
+        # 2. Acyclic (DFS with recursion stack).
+        WHITE, GRAY, BLACK = 0, 1, 2
+        color: Dict[Type, int] = {s: WHITE for s in self._step_order}
+        stack_path: List[Type] = []
+
+        def _dfs(node: Type) -> None:
+            color[node] = GRAY
+            stack_path.append(node)
+            for dep in self._step_deps.get(node, ()):
+                if color.get(dep) == GRAY:
+                    cycle_start = stack_path.index(dep)
+                    cycle = stack_path[cycle_start:] + [dep]
+                    cycle_repr = " -> ".join(c.__name__ for c in cycle)
+                    raise ValueError(
+                        f"Step dependency cycle: {cycle_repr}. "
+                        f"Cannot determine execution order."
+                    )
+                if color.get(dep) == WHITE:
+                    _dfs(dep)
+            stack_path.pop()
+            color[node] = BLACK
+
+        for node in self._step_order:
+            if color[node] == WHITE:
+                _dfs(node)
+
+        # 3. Positional order respects every edge.
+        for dependent, deps in self._step_deps.items():
+            dependent_pos = self._step_order[dependent]
+            for dep in deps:
+                dep_pos = self._step_order[dep]
+                if dep_pos > dependent_pos:
+                    reasons = self._step_dep_reasons.get((dependent, dep), [])
+                    reason_text = (
+                        "\n  Reasons: " + "; ".join(reasons)
+                        if reasons else ""
+                    )
+                    raise ValueError(
+                        f"Step '{dependent.__name__}' at position "
+                        f"{dependent_pos} depends on '{dep.__name__}' "
+                        f"at position {dep_pos}. Reorder so "
+                        f"'{dep.__name__}' precedes "
+                        f"'{dependent.__name__}'.{reason_text}"
                     )
 
     def _validate_step_access(
