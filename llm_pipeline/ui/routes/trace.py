@@ -31,6 +31,7 @@ from sqlmodel import select
 
 from llm_pipeline.state import PipelineRun
 from llm_pipeline.ui.deps import DBSession
+from llm_pipeline.utils.json import maybe_parse_json
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +146,8 @@ def _flatten_observation(raw: Any, trace_id: str) -> TraceObservation:
         output_tokens=usage.get("output") if isinstance(usage, dict) else None,
         total_tokens=usage.get("total") if isinstance(usage, dict) else None,
         total_cost=cost.get("total") if isinstance(cost, dict) else None,
-        input=raw.input,
-        output=raw.output,
+        input=maybe_parse_json(raw.input),
+        output=maybe_parse_json(raw.output),
         metadata=getattr(raw, "metadata", None),
     )
 

@@ -225,16 +225,27 @@ function DataView({
   data,
   maxDepth,
 }: {
-  data: Record<string, unknown> | unknown[] | null
+  data: Record<string, unknown> | unknown[] | string | number | boolean | null
   maxDepth: number
 }) {
   if (data === null || data === undefined) {
     return <span className="text-muted-foreground italic text-xs font-mono">null</span>
   }
 
+  // Top-level primitive (string / number / bool): render as a single
+  // value, not via Object.entries (which would iterate strings
+  // character-by-character).
+  if (!isComplex(data)) {
+    return (
+      <div className="font-mono text-xs">
+        <PrimitiveValue value={data} />
+      </div>
+    )
+  }
+
   const entries = isArray(data)
     ? data.map((v, i) => [String(i), v] as const)
-    : Object.entries(data)
+    : Object.entries(data as Record<string, unknown>)
 
   return (
     <div className="space-y-0">
@@ -559,7 +570,7 @@ function DiffView({
 // ---------------------------------------------------------------------------
 
 type JsonViewerProps =
-  | { data: Record<string, unknown> | unknown[] | null; before?: never; after?: never; maxDepth?: number }
+  | { data: Record<string, unknown> | unknown[] | string | number | boolean | null; before?: never; after?: never; maxDepth?: number }
   | { data?: never; before: Record<string, unknown>; after: Record<string, unknown>; maxDepth?: number }
 
 export function JsonViewer(props: JsonViewerProps) {

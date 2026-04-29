@@ -39,6 +39,8 @@ import threading
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Iterator
 
+from llm_pipeline.utils.json import maybe_parse_json
+
 if TYPE_CHECKING:
     from langfuse import Langfuse
 
@@ -160,12 +162,12 @@ def _span_to_observation(span: Any) -> dict[str, Any]:
     if input_tokens is not None or output_tokens is not None:
         total_tokens = (input_tokens or 0) + (output_tokens or 0)
 
-    obs_input = (
+    obs_input = maybe_parse_json(
         attrs.get("langfuse.observation.input")
         or attrs.get("input.value")
         or attrs.get("gen_ai.prompt")
     )
-    obs_output = (
+    obs_output = maybe_parse_json(
         attrs.get("langfuse.observation.output")
         or attrs.get("output.value")
         or attrs.get("gen_ai.completion")
