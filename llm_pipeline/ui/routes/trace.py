@@ -265,14 +265,28 @@ def _phoenix_span_to_observation(
     start_time = _parse_iso(span.get("start_time"))
     end_time = _parse_iso(span.get("end_time"))
 
-    context = span.get("context") or {}
-    span_id = context.get("span_id") or span.get("id") or ""
+    # Phoenix returns the OTEL span_id at the top level (and also
+    # under context.span_id on some endpoints). The internal id field
+    # (e.g. base64-encoded ``Span:5``) is unsuitable as the observation
+    # id — the WS-pushed and HTTP-fetched observations need to share
+    # the same id space (OTEL hex) so the merge in the frontend cache
+    # dedups correctly.
+    span_id = (
+        span.get("span_id")
+        or (span.get("context") or {}).get("span_id")
+        or span.get("id")
+        or ""
+    )
 
-    parent_phoenix_id = span.get("parent_id")
+    parent_id_raw = span.get("parent_id")
     parent_observation_id: Optional[str] = None
-    if parent_phoenix_id:
+    if parent_id_raw:
+        # Resolve the Phoenix-internal id -> OTEL span_id if the map
+        # has it; otherwise pass the raw value through (covers the
+        # case where Phoenix already exposes OTEL span_ids in
+        # parent_id, which it does for most response shapes).
         parent_observation_id = (
-            id_to_span_id.get(parent_phoenix_id) or parent_phoenix_id
+            id_to_span_id.get(parent_id_raw) or parent_id_raw
         )
 
     return TraceObservation(
@@ -305,6 +319,17 @@ def _phoenix_span_to_observation(
 def _fetch_run_traces(run_id: str) -> List[TraceSummary]:
     """Query Phoenix for every trace tied to this run (session.id=run_id).
 
+    Two-step fetch:
+
+    1. ``GET /v1/projects/{project}/traces?session_identifier={run_id}``
+       — returns trace metadata (id, start/end). The included ``spans``
+       array on this endpoint is stripped (no attributes), so we ignore
+       it.
+    2. For each trace, ``GET /v1/projects/{project}/spans?trace_id=
+       {trace_id}`` — returns the full span detail with attributes,
+       events, and OpenInference classification. This is the only
+       Phoenix endpoint that gives us everything we need to render.
+
     Returns [] when no backend is configured or the project has no
     traces yet (e.g. an active run whose spans are still being
     batched). Errors are logged + swallowed so a missing trace never
@@ -314,81 +339,107 @@ def _fetch_run_traces(run_id: str) -> List[TraceSummary]:
     if base_url is None:
         return []
     project = _phoenix_project()
-    url = f"{base_url}/v1/projects/{project}/traces"
-    params = {"session_identifier": run_id, "include_spans": "true"}
+    project_url = f"{base_url}/v1/projects/{project}"
 
     try:
         with httpx.Client(timeout=5.0, headers=_phoenix_headers()) as client:
-            resp = client.get(url, params=params)
-            if resp.status_code == 404:
+            traces_resp = client.get(
+                f"{project_url}/traces",
+                params={"session_identifier": run_id, "include_spans": "false"},
+            )
+            if traces_resp.status_code == 404:
                 # Project doesn't exist yet (no spans ever ingested).
                 return []
-            resp.raise_for_status()
-            payload = resp.json()
+            traces_resp.raise_for_status()
+            traces_payload = traces_resp.json()
+            raw_traces = traces_payload.get("data") or []
+
+            result: List[TraceSummary] = []
+            for raw in raw_traces:
+                trace_id = raw.get("trace_id") or raw.get("id") or ""
+                if not trace_id:
+                    continue
+
+                spans_resp = client.get(
+                    f"{project_url}/spans",
+                    params={"trace_id": trace_id, "limit": 500},
+                )
+                if spans_resp.status_code != 200:
+                    logger.debug(
+                        "Spans fetch returned %s for trace_id=%s",
+                        spans_resp.status_code, trace_id,
+                    )
+                    continue
+                spans = spans_resp.json().get("data") or []
+
+                # Build a phoenix-id -> otel span_id map for parent
+                # resolution. Phoenix's parent_id refers to a span's
+                # OTEL hex span_id (top-level field on the span), so
+                # the map is keyed on Phoenix's internal id and points
+                # at the same OTEL hex span_id we use as observation
+                # id. Both are also accepted as parent_observation_id
+                # by the frontend renderer.
+                id_to_span_id: Dict[str, str] = {}
+                for s in spans:
+                    phoenix_id = s.get("id")
+                    otel_span_id = (
+                        s.get("span_id")
+                        or (s.get("context") or {}).get("span_id")
+                    )
+                    if phoenix_id and otel_span_id:
+                        id_to_span_id[phoenix_id] = otel_span_id
+
+                observations = [
+                    _phoenix_span_to_observation(s, trace_id, id_to_span_id)
+                    for s in spans
+                ]
+                observations.sort(
+                    key=lambda o: o.start_time
+                    or datetime.min.replace(tzinfo=timezone.utc),
+                )
+
+                start = _parse_iso(raw.get("start_time"))
+                end = _parse_iso(raw.get("end_time"))
+                duration_ms = _ms_between(start, end)
+
+                # session.id, tags, user.id are on the root span's
+                # attributes (the one with no parent). Hoist them up
+                # as trace-level metadata.
+                root_attrs: dict = {}
+                root_name: Optional[str] = None
+                for s in spans:
+                    if not s.get("parent_id"):
+                        root_attrs = s.get("attributes") or {}
+                        root_name = s.get("name")
+                        break
+                tags_raw = root_attrs.get("tag.tags")
+                if isinstance(tags_raw, str):
+                    parsed = maybe_parse_json(tags_raw)
+                    tags = parsed if isinstance(parsed, list) else []
+                elif isinstance(tags_raw, list):
+                    tags = list(tags_raw)
+                else:
+                    tags = []
+                tags = [str(t) for t in tags if t is not None]
+
+                result.append(TraceSummary(
+                    id=trace_id,
+                    name=root_name,
+                    user_id=root_attrs.get("user.id"),
+                    session_id=root_attrs.get("session.id") or run_id,
+                    tags=tags,
+                    start_time=start,
+                    end_time=end,
+                    duration_ms=duration_ms,
+                    total_cost=None,
+                    observations=observations,
+                ))
     except (httpx.HTTPError, ValueError) as exc:
         logger.warning(
             "Failed to fetch traces from Phoenix at %s for run_id=%s: %s",
             base_url, run_id, exc,
         )
         return []
-
-    raw_traces = payload.get("data") or []
-    result: List[TraceSummary] = []
-    for raw in raw_traces:
-        trace_id = raw.get("trace_id") or raw.get("id") or ""
-        spans = raw.get("spans") or []
-
-        # Build a phoenix-id -> otel span_id map for parent resolution.
-        id_to_span_id: Dict[str, str] = {}
-        for s in spans:
-            phoenix_id = s.get("id")
-            otel_span_id = (s.get("context") or {}).get("span_id")
-            if phoenix_id and otel_span_id:
-                id_to_span_id[phoenix_id] = otel_span_id
-
-        observations = [
-            _phoenix_span_to_observation(s, trace_id, id_to_span_id)
-            for s in spans
-        ]
-        observations.sort(
-            key=lambda o: o.start_time or datetime.min.replace(tzinfo=timezone.utc),
-        )
-
-        # Trace-level rollups derived from the spans themselves.
-        start = _parse_iso(raw.get("start_time"))
-        end = _parse_iso(raw.get("end_time"))
-        duration_ms = _ms_between(start, end)
-
-        # session.id and tags are typically on the root span's
-        # attributes, not the trace envelope. Hoist them up.
-        root_attrs: dict = {}
-        for s in spans:
-            if not s.get("parent_id"):
-                root_attrs = s.get("attributes") or {}
-                break
-        tags_raw = root_attrs.get("tag.tags")
-        if isinstance(tags_raw, str):
-            tags = list(maybe_parse_json(tags_raw)) if tags_raw else []
-        elif isinstance(tags_raw, list):
-            tags = list(tags_raw)
-        else:
-            tags = []
-        if not isinstance(tags, list):
-            tags = []
-        tags = [str(t) for t in tags if t is not None]
-
-        result.append(TraceSummary(
-            id=trace_id,
-            name=root_attrs.get("name") or (spans[0].get("name") if spans else None),
-            user_id=root_attrs.get("user.id"),
-            session_id=root_attrs.get("session.id") or run_id,
-            tags=tags,
-            start_time=start,
-            end_time=end,
-            duration_ms=duration_ms,
-            total_cost=None,
-            observations=observations,
-        ))
 
     result.sort(
         key=lambda tr: tr.start_time or datetime.min.replace(tzinfo=timezone.utc),
