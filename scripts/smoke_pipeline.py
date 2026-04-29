@@ -28,10 +28,15 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-required = ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_BASE_URL")
+required = ("OTEL_EXPORTER_OTLP_ENDPOINT",)
 missing = [k for k in required if not os.environ.get(k)]
 if missing:
-    print(f"Missing env vars: {missing}", file=sys.stderr)
+    print(
+        f"Missing env vars: {missing}\n"
+        f"Set OTEL_EXPORTER_OTLP_ENDPOINT to your OTLP backend "
+        f"(e.g. http://localhost:6006 for the docker-compose Phoenix).",
+        file=sys.stderr,
+    )
     sys.exit(1)
 
 from sqlmodel import Field, Session, SQLModel, create_engine  # noqa: E402
@@ -206,9 +211,15 @@ def main() -> None:
     pipeline.execute(input_data={"data": "raw smoke-test input"})
 
     print(f"Run completed. run_id={pipeline.run_id}")
+    # The base URL of the OTLP endpoint is also where the read API
+    # lives for self-hosted Phoenix. Strip /v1/traces if present so
+    # the printed link points at the UI root.
+    backend_url = os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'].rstrip('/')
+    if backend_url.endswith('/v1/traces'):
+        backend_url = backend_url[:-len('/v1/traces')]
     print(
-        f"Open {os.environ['LANGFUSE_BASE_URL']} -> Traces and look for "
-        "'pipeline.smoke_pipeline' (filter by tag = smoke_pipeline)."
+        f"Open {backend_url} -> Traces and look for "
+        "'pipeline.smoke' (session = run_id)."
     )
 
 
