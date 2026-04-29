@@ -1,103 +1,20 @@
-"""Shared fixtures and configuration for benchmark tests.
+"""Benchmark conftest stubbed pending Phase 3b rewrite.
 
-Provides:
-- benchmark_engine: module-scoped in-memory SQLite with PRAGMA optimizations
-- minimal_pipeline: MinimalPipeline concrete subclass for event emission benchmarks
-- pytest.mark.benchmark_group marker for NFR categorization
+The legacy fixtures (``benchmark_engine``, ``minimal_pipeline``)
+declared a ``PipelineConfig`` subclass to exercise event emission
+hot-paths. The pydantic-graph migration retired ``PipelineConfig``;
+the equivalent benchmark fixture against ``run_pipeline`` lands as
+a Phase 3b follow-up.
+
+The ``benchmark_group`` marker registration is preserved so other
+tests using it don't trigger pytest warnings.
 """
 import pytest
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session
-from typing import Any, Dict, List, Optional, Type
-
-from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.pipeline import PipelineConfig
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies
-
-
-# -- Pytest markers ------------------------------------------------------------
 
 
 def pytest_configure(config):
-    """Register custom benchmark markers."""
+    """Register the ``benchmark_group`` marker used by benchmark tests."""
     config.addinivalue_line(
         "markers",
-        "benchmark_group(name): categorize benchmark by NFR group (e.g. NFR-001, NFR-004, NFR-005)",
+        "benchmark_group(name): label benchmarks with an NFR group",
     )
-
-
-# -- MinimalPipeline concrete subclass -----------------------------------------
-
-
-class MinimalRegistry(PipelineDatabaseRegistry, models=[]):
-    pass
-
-
-class _MinimalStrategy(PipelineStrategy):
-    """No-op strategy; benchmarks don't execute steps."""
-
-    def can_handle(self, context: Dict[str, Any]) -> bool:
-        return True
-
-    def get_steps(self) -> list:
-        return []
-
-
-class MinimalStrategies(PipelineStrategies, strategies=[_MinimalStrategy]):
-    pass
-
-
-class MinimalPipeline(
-    PipelineConfig,
-    registry=MinimalRegistry,
-    strategies=MinimalStrategies,
-):
-    """Concrete PipelineConfig with empty registry/strategies for benchmarking _emit()."""
-
-    pass
-
-
-# -- Fixtures ------------------------------------------------------------------
-
-
-@pytest.fixture(scope="module")
-def benchmark_engine():
-    """In-memory SQLite engine with StaticPool and PRAGMA optimizations.
-
-    Module-scoped to share expensive setup across all benchmarks in a module.
-    PRAGMA settings are for benchmark consistency only, not production.
-    """
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragmas(dbapi_conn, connection_record):
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA synchronous = NORMAL")
-        cursor.execute("PRAGMA cache_size = 10000")
-        cursor.execute("PRAGMA mmap_size = 30000000")
-        cursor.close()
-
-    init_pipeline_db(engine)
-    return engine
-
-
-@pytest.fixture
-def minimal_pipeline(benchmark_engine):
-    """MinimalPipeline instance wired to benchmark_engine.
-
-    Function-scoped so each test gets a fresh pipeline state.
-    MinimalPipeline uses no steps, so no AGENT_REGISTRY or LLM mocking needed.
-    """
-    with Session(benchmark_engine) as session:
-        pipeline = MinimalPipeline(
-            engine=benchmark_engine,
-            session=session,
-            model="test-model",
-        )
-        yield pipeline

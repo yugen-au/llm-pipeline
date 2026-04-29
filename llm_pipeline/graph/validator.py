@@ -317,7 +317,7 @@ def _validate_node(
 
 
 def _validate_llm_step(node_cls: type) -> None:
-    from pydantic import BaseModel
+    from llm_pipeline.graph.instructions import LLMResultMixin
 
     inputs_cls = getattr(node_cls, "INPUTS", None)
     instructions_cls = getattr(node_cls, "INSTRUCTIONS", None)
@@ -326,10 +326,12 @@ def _validate_llm_step(node_cls: type) -> None:
         raise TypeError(f"{node_cls.__name__}.INPUTS must be set.")
     if instructions_cls is None:
         raise TypeError(f"{node_cls.__name__}.INSTRUCTIONS must be set.")
-    if not (isinstance(instructions_cls, type) and issubclass(instructions_cls, BaseModel)):
+    if not (isinstance(instructions_cls, type) and issubclass(instructions_cls, LLMResultMixin)):
         raise TypeError(
-            f"{node_cls.__name__}.INSTRUCTIONS must be a Pydantic "
-            f"BaseModel subclass, got {instructions_cls!r}."
+            f"{node_cls.__name__}.INSTRUCTIONS must subclass "
+            f"LLMResultMixin so every output carries confidence_score "
+            f"+ notes and gets example-validated at class-load time. "
+            f"Got {instructions_cls!r}."
         )
 
     # Naming: {Name}Inputs / {Name}Instructions

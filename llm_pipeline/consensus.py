@@ -32,8 +32,7 @@ __all__ = [
 
 def _get_mixin_fields(model_class: type[BaseModel]) -> set[str]:
     """Return field names contributed by LLMResultMixin, or empty set."""
-    # Lazy import to avoid circular dependency (step -> pipeline -> consensus)
-    from llm_pipeline.step import LLMResultMixin
+    from llm_pipeline.graph.instructions import LLMResultMixin
 
     if not issubclass(model_class, LLMResultMixin):
         return set()

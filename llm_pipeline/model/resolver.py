@@ -15,21 +15,25 @@ from the pipeline runtime, the UI endpoint, and the eval runner.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import Any, Optional, Protocol
 
 from sqlmodel import Session, select
 
 from llm_pipeline.db.step_config import StepModelConfig
 
-if TYPE_CHECKING:
-    from llm_pipeline.strategy import StepDefinition
+
+class _StepDefLike(Protocol):
+    """Duck-typed shape of objects accepted by the resolver."""
+
+    step_name: str
+    model: Optional[str]
 
 
 ResolutionSource = str  # Literal["db", "step_definition", "pipeline_default", "none"]
 
 
 def resolve_model_from_step_def(
-    step_def: "StepDefinition",
+    step_def: _StepDefLike,
 ) -> Optional[str]:
     """Return the step-definition model (tier 1) or ``None``.
 
@@ -41,7 +45,7 @@ def resolve_model_from_step_def(
 
 
 def resolve_model_with_fallbacks(
-    step_def: "StepDefinition",
+    step_def: _StepDefLike,
     session: Session,
     pipeline_name: str,
     pipeline_default_model: Optional[str],

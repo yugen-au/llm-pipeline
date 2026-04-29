@@ -25,6 +25,7 @@ so user code only imports from ``llm_pipeline.graph``.
 """
 from __future__ import annotations
 
+from llm_pipeline.graph.instructions import LLMResultMixin
 from llm_pipeline.graph.nodes import (
     ExtractionNode,
     LLMStepNode,
@@ -55,6 +56,8 @@ __all__ = [
     "LLMStepNode",
     "ExtractionNode",
     "ReviewNode",
+    # Output schema base
+    "LLMResultMixin",
     # Pipeline base class + result type
     "Pipeline",
     "PipelineEnd",

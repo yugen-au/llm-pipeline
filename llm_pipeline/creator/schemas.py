@@ -15,7 +15,7 @@ from typing import ClassVar
 
 from pydantic import BaseModel
 
-from llm_pipeline.step import LLMResultMixin
+from llm_pipeline.graph.instructions import LLMResultMixin
 
 from .models import ExtractionTarget, FieldDefinition
 

@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlmodel import SQLModel, Field
 
 from llm_pipeline.inputs import PipelineInputData, StepInputs
-from llm_pipeline.step import LLMResultMixin
+from llm_pipeline.graph import LLMResultMixin
 
 
 # ---------------------------------------------------------------------------

@@ -19,7 +19,7 @@ from llm_pipeline.graph import (
     PipelineInputData,
     StepInputs,
 )
-from llm_pipeline.step import LLMResultMixin
+from llm_pipeline.graph import LLMResultMixin
 
 
 # ---------------------------------------------------------------------------

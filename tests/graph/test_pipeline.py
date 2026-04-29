@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import ClassVar
 
 import pytest
-from pydantic import BaseModel
 from pydantic_graph import End, GraphRunContext
 from sqlmodel import Field, SQLModel
 
@@ -16,6 +15,7 @@ from llm_pipeline.graph import (
     ExtractionNode,
     FromInput,
     FromOutput,
+    LLMResultMixin,
     LLMStepNode,
     Pipeline,
     PipelineDeps,
@@ -39,7 +39,7 @@ class AlphaInputs(StepInputs):
     text: str
 
 
-class AlphaInstructions(BaseModel):
+class AlphaInstructions(LLMResultMixin):
     label: str = ""
 
 
@@ -95,7 +95,7 @@ class TestNamingConventions:
         class NoSuffixInputs(StepInputs):
             text: str
 
-        class NoSuffixInstructions(BaseModel):
+        class NoSuffixInstructions(LLMResultMixin):
             x: str = ""
 
         # Class name doesn't end with "Step".
@@ -118,7 +118,7 @@ class TestNamingConventions:
         class WrongName(StepInputs):
             text: str
 
-        class GammaInstructions(BaseModel):
+        class GammaInstructions(LLMResultMixin):
             x: str = ""
 
         class GammaStep(LLMStepNode):
@@ -147,7 +147,7 @@ class TestSourceSpecValidation:
         class DeltaInputs(StepInputs):
             text: str
 
-        class DeltaInstructions(BaseModel):
+        class DeltaInstructions(LLMResultMixin):
             x: str = ""
 
         class DeltaStep(LLMStepNode):
@@ -170,14 +170,14 @@ class TestSourceSpecValidation:
         class FirstInputs(StepInputs):
             text: str
 
-        class FirstInstructions(BaseModel):
+        class FirstInstructions(LLMResultMixin):
             label: str = ""
 
         # Second step tries to read FirstInstructions.not_a_field.
         class SecondInputs(StepInputs):
             label: str
 
-        class SecondInstructions(BaseModel):
+        class SecondInstructions(LLMResultMixin):
             x: str = ""
 
         class FirstStep(LLMStepNode):
@@ -212,7 +212,7 @@ class TestSourceSpecValidation:
         class ZetaInputs(StepInputs):
             label: str
 
-        class ZetaInstructions(BaseModel):
+        class ZetaInstructions(LLMResultMixin):
             y: str = ""
 
         class ZetaStep(LLMStepNode):
@@ -230,7 +230,7 @@ class TestSourceSpecValidation:
         class ReverseInputs(StepInputs):
             value: str
 
-        class ReverseInstructions(BaseModel):
+        class ReverseInstructions(LLMResultMixin):
             x: str = ""
 
         class ReverseStep(LLMStepNode):
@@ -270,7 +270,7 @@ class TestExtractionValidation:
         class HappyInputs(StepInputs):
             text: str
 
-        class HappyInstructions(BaseModel):
+        class HappyInstructions(LLMResultMixin):
             label: str = ""
 
         class HappyStep(LLMStepNode):
@@ -312,7 +312,7 @@ class TestExtractionValidation:
         class XInputs(StepInputs):
             text: str
 
-        class XInstructions(BaseModel):
+        class XInstructions(LLMResultMixin):
             label: str = ""
 
         class XStep(LLMStepNode):
@@ -355,7 +355,7 @@ class TestExtractionValidation:
         class DownstreamInputs(StepInputs):
             text: str
 
-        class DownstreamInstructions(BaseModel):
+        class DownstreamInstructions(LLMResultMixin):
             label: str = ""
 
         class DownstreamStep(LLMStepNode):
@@ -404,7 +404,7 @@ class TestReviewValidation:
         class FlowInputs(StepInputs):
             text: str
 
-        class FlowInstructions(BaseModel):
+        class FlowInstructions(LLMResultMixin):
             label: str = ""
 
         class FlowStep(LLMStepNode):
@@ -435,7 +435,7 @@ class TestReviewValidation:
         class DangleInputs(StepInputs):
             text: str
 
-        class DangleInstructions(BaseModel):
+        class DangleInstructions(LLMResultMixin):
             x: str = ""
 
         class DangleStep(LLMStepNode):

@@ -26,7 +26,7 @@ from llm_pipeline.graph import (
     StepInputs,
     run_pipeline_in_memory,
 )
-from llm_pipeline.step import LLMResultMixin
+from llm_pipeline.graph import LLMResultMixin
 
 
 # ---------------------------------------------------------------------------

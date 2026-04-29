@@ -1,346 +1,47 @@
+"""Stub — Phase 3b will rebuild creator steps as ``LLMStepNode`` subclasses.
+
+The legacy module declared 4 ``@step_definition``-decorated steps
+(``RequirementsAnalysisStep``, ``CodeGenerationStep``,
+``PromptGenerationStep``, ``CodeValidationStep``) plus a
+``GenerationRecordExtraction`` ``PipelineExtraction`` subclass. The
+pydantic-graph migration retired the legacy bases; the meta-pipeline
+will be re-shaped as a graph in a follow-up.
 """
-Step definitions for the meta-pipeline step generator.
+from __future__ import annotations
 
-4 steps chained sequentially:
-  RequirementsAnalysis -> CodeGeneration -> PromptGeneration -> CodeValidation
+from typing import Any
 
-Each step reads prior step results from self.pipeline.context (flat dict keyed
-by field names of prior PipelineContext subclasses).
-"""
-import ast
-from datetime import datetime, timezone
-
-from llm_pipeline.extraction import PipelineExtraction
-from llm_pipeline.step import LLMStep, step_definition
-
-from .models import FieldDefinition, GenerationRecord
-from .schemas import (
-    CodeGenerationContext,
-    CodeGenerationInstructions,
-    CodeValidationContext,
-    CodeValidationInstructions,
-    PromptGenerationContext,
-    PromptGenerationInstructions,
-    RequirementsAnalysisContext,
-    RequirementsAnalysisInstructions,
+_NOT_IMPLEMENTED = (
+    "Creator step rewrites pending. The pydantic-graph migration "
+    "retired @step_definition + LLMStep + PipelineExtraction. "
+    "Phase 3b rebuilds these as graph nodes."
 )
-from .templates import render_template
-
-try:
-    from .sandbox import StepSandbox
-    from .sample_data import SampleDataGenerator
-
-    _SANDBOX_AVAILABLE = True
-except ImportError:
-    _SANDBOX_AVAILABLE = False
 
 
-# ---------------------------------------------------------------------------
-# Extraction
-# ---------------------------------------------------------------------------
+class _StubStep:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        raise NotImplementedError(_NOT_IMPLEMENTED)
 
 
-class GenerationRecordExtraction(PipelineExtraction, model=GenerationRecord):
-    """Persists one GenerationRecord per code validation result."""
-
-    def default(self, results: list[CodeValidationInstructions]) -> list[GenerationRecord]:
-        """Convert CodeValidationInstructions into GenerationRecord instances."""
-        if not results:
-            return []
-        return [
-            GenerationRecord(
-                run_id=self.pipeline.run_id,
-                step_name_generated=self.pipeline.context.get("step_name", ""),
-                files_generated=list(
-                    self.pipeline.context.get("all_artifacts", {}).keys()
-                ),
-                is_valid=results[0].is_valid,
-                created_at=datetime.now(timezone.utc),
-            )
-        ]
+class RequirementsAnalysisStep(_StubStep):
+    pass
 
 
-# ---------------------------------------------------------------------------
-# Step 1: RequirementsAnalysis
-# ---------------------------------------------------------------------------
+class CodeGenerationStep(_StubStep):
+    pass
 
 
-@step_definition(
-    instructions=RequirementsAnalysisInstructions,
-    context=RequirementsAnalysisContext,
-)
-class RequirementsAnalysisStep(LLMStep):
-    """Parse a natural language step description into structured specification."""
-
-    def prepare_calls(self):
-        return [
-            {
-                "variables": {
-                    "description": self.pipeline.validated_input.description,
-                }
-            }
-        ]
-
-    def process_instructions(self, instructions):
-        inst = instructions[0]
-        return RequirementsAnalysisContext(
-            step_name=inst.step_name,
-            step_class_name=inst.step_class_name,
-            instruction_fields=[f.model_dump() for f in inst.instruction_fields],
-            context_fields=[f.model_dump() for f in inst.context_fields],
-            extraction_targets=[t.model_dump() for t in inst.extraction_targets],
-            input_variables=inst.input_variables,
-            output_context_keys=inst.output_context_keys,
-        )
+class PromptGenerationStep(_StubStep):
+    pass
 
 
-# ---------------------------------------------------------------------------
-# Step 2: CodeGeneration
-# ---------------------------------------------------------------------------
+class CodeValidationStep(_StubStep):
+    pass
 
 
-@step_definition(
-    instructions=CodeGenerationInstructions,
-    context=CodeGenerationContext,
-    agent="code_gen",
-)
-class CodeGenerationStep(LLMStep):
-    """Generate Python method bodies for prepare_calls and process_instructions."""
-
-    def prepare_calls(self):
-        ctx = self.pipeline.context
-        return [
-            {
-                "variables": {
-                    "step_name": ctx.get("step_name", ""),
-                    "step_class_name": ctx.get("step_class_name", ""),
-                    "description": self.pipeline.validated_input.description,
-                    "instruction_fields": ctx.get("instruction_fields", []),
-                    "context_fields": ctx.get("context_fields", []),
-                    "input_variables": ctx.get("input_variables", []),
-                    "output_context_keys": ctx.get("output_context_keys", []),
-                }
-            }
-        ]
-
-    def process_instructions(self, instructions):
-        inst = instructions[0]
-        ctx = self.pipeline.context
-
-        step_name = ctx.get("step_name", "")
-        step_class_name = ctx.get("step_class_name", "")
-        instruction_fields = ctx.get("instruction_fields", [])
-        extraction_targets = ctx.get("extraction_targets", [])
-
-        # Derive prefix and class names from step_class_name
-        # e.g. "SentimentAnalysisStep" -> prefix "SentimentAnalysis"
-        prefix = step_class_name[:-4] if step_class_name.endswith("Step") else step_class_name
-        instructions_class_name = f"{prefix}Instructions"
-        context_class_name = f"{prefix}Context"
-
-        step_code = render_template(
-            "step.py.j2",
-            step_class_name=step_class_name,
-            instructions_class_name=instructions_class_name,
-            context_class_name=context_class_name,
-            step_name=step_name,
-            imports=inst.imports,
-            prepare_calls_body=inst.prepare_calls_body,
-            process_instructions_body=inst.process_instructions_body,
-            should_skip_condition=inst.should_skip_condition,
-            docstring=f"Generated {step_class_name} step.",
-            system_key=step_name,
-            user_key=step_name,
-            extractions=[],
-        )
-
-        instructions_code = render_template(
-            "instructions.py.j2",
-            class_name=instructions_class_name,
-            fields=instruction_fields,
-            example_dict={},
-            docstring=f"Generated {instructions_class_name} instructions.",
-            additional_imports=[],
-        )
-
-        extraction_code: str | None = None
-        if self.pipeline.validated_input.include_extraction and extraction_targets:
-            first_target = extraction_targets[0]
-            extraction_code = render_template(
-                "extraction.py.j2",
-                class_name=f"{first_target['model_name']}Extraction",
-                model_name=first_target["model_name"],
-                instructions_class_name=instructions_class_name,
-                extraction_method_body=inst.extraction_method_body,
-                docstring=f"Generated extraction for {first_target['model_name']}.",
-                model_import=f"from .models import {first_target['model_name']}",
-                instructions_import=f"from .schemas import {instructions_class_name}",
-            )
-
-        return CodeGenerationContext(
-            step_code=step_code,
-            instructions_code=instructions_code,
-            extraction_code=extraction_code,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Step 3: PromptGeneration
-# ---------------------------------------------------------------------------
-
-
-@step_definition(
-    instructions=PromptGenerationInstructions,
-    context=PromptGenerationContext,
-    agent="prompt_gen",
-)
-class PromptGenerationStep(LLMStep):
-    """Generate system and user prompts for the new step."""
-
-    def prepare_calls(self):
-        ctx = self.pipeline.context
-        return [
-            {
-                "variables": {
-                    "step_name": ctx.get("step_name", ""),
-                    "description": self.pipeline.validated_input.description,
-                    "input_variables": ctx.get("input_variables", []),
-                    "instruction_fields": ctx.get("instruction_fields", []),
-                }
-            }
-        ]
-
-    def process_instructions(self, instructions):
-        inst = instructions[0]
-        ctx = self.pipeline.context
-
-        prompt_yaml = render_template(
-            "prompts.yaml.j2",
-            step_name=ctx.get("step_name", ""),
-            step_class_name=ctx.get("step_class_name", ""),
-            system_content=inst.system_prompt_content,
-            user_content=inst.user_prompt_template,
-            required_variables=inst.required_variables,
-            category=inst.prompt_category,
-        )
-
-        return PromptGenerationContext(
-            system_prompt=inst.system_prompt_content,
-            user_prompt_template=inst.user_prompt_template,
-            required_variables=inst.required_variables,
-            prompt_yaml=prompt_yaml,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Step 4: CodeValidation
-# ---------------------------------------------------------------------------
-
-
-def _syntax_check(code: str | None) -> bool:
-    """Return True if code string is syntactically valid Python module source."""
-    if not code:
-        return True
-    try:
-        ast.parse(code, mode="exec")
-        return True
-    except SyntaxError:
-        return False
-
-
-@step_definition(
-    instructions=CodeValidationInstructions,
-    default_extractions=[GenerationRecordExtraction],
-    context=CodeValidationContext,
-)
-class CodeValidationStep(LLMStep):
-    """Validate generated code via AST parse and LLM review."""
-
-    def prepare_calls(self):
-        ctx = self.pipeline.context
-        step_name = ctx.get("step_name", "unknown")
-        step_code = ctx.get("step_code", "")
-        instructions_code = ctx.get("instructions_code", "")
-        extraction_code = ctx.get("extraction_code") or ""
-        system_prompt = ctx.get("system_prompt", "")
-        user_prompt_template = ctx.get("user_prompt_template", "")
-        return [
-            {
-                "variables": {
-                    "step_name": step_name,
-                    "step_code": step_code,
-                    "instructions_code": instructions_code,
-                    "extraction_code": extraction_code,
-                    "system_prompt": system_prompt,
-                    "user_prompt_template": user_prompt_template,
-                }
-            }
-        ]
-
-    def process_instructions(self, instructions):
-        inst = instructions[0]
-        ctx = self.pipeline.context
-
-        step_name = ctx.get("step_name", "unknown")
-        step_code = ctx.get("step_code", "")
-        instructions_code = ctx.get("instructions_code", "")
-        extraction_code = ctx.get("extraction_code")
-        prompt_yaml = ctx.get("prompt_yaml", "")
-
-        # AST syntax checks on the full rendered source files
-        step_syntax_ok = _syntax_check(step_code)
-        instructions_syntax_ok = _syntax_check(instructions_code)
-        extraction_syntax_ok = _syntax_check(extraction_code) if extraction_code else True
-        syntax_valid = step_syntax_ok and instructions_syntax_ok and extraction_syntax_ok
-
-        # Build artifact map: filename -> code string
-        all_artifacts: dict[str, str] = {
-            f"{step_name}_step.py": step_code,
-            f"{step_name}_instructions.py": instructions_code,
-            f"{step_name}_prompts.py": prompt_yaml,
-        }
-        if extraction_code:
-            all_artifacts[f"{step_name}_extraction.py"] = extraction_code
-
-        # Sandbox validation (AST security scan + optional Docker import check)
-        sandbox_valid = False
-        sandbox_skipped = True
-        sandbox_output: str | None = None
-        issues = list(inst.issues)
-
-        if _SANDBOX_AVAILABLE:
-            # Reconstruct FieldDefinition list from context dicts
-            fields_raw = ctx.get("instruction_fields", [])
-            fields = [FieldDefinition(**f) for f in fields_raw]
-
-            sample_data = SampleDataGenerator().generate(fields) if fields else None
-            result = StepSandbox().run(
-                artifacts=all_artifacts, sample_data=sample_data
-            )
-
-            sandbox_valid = result.import_ok
-            sandbox_skipped = result.sandbox_skipped
-            sandbox_output = result.output
-            if result.security_issues:
-                issues.extend(result.security_issues)
-        else:
-            sandbox_output = "sandbox module not available"
-
-        # If sandbox was skipped, don't penalize validity
-        is_valid = syntax_valid and inst.is_valid and (
-            sandbox_valid or sandbox_skipped
-        )
-
-        return CodeValidationContext(
-            is_valid=is_valid,
-            syntax_valid=syntax_valid,
-            llm_review_valid=inst.is_valid,
-            issues=issues,
-            all_artifacts=all_artifacts,
-            sandbox_valid=sandbox_valid,
-            sandbox_skipped=sandbox_skipped,
-            sandbox_output=sandbox_output,
-        )
+class GenerationRecordExtraction(_StubStep):
+    pass
 
 
 __all__ = [

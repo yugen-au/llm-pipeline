@@ -27,7 +27,7 @@ from llm_pipeline.graph import (
     run_pipeline,
 )
 from llm_pipeline.state import PipelineNodeSnapshot, PipelineRun
-from llm_pipeline.step import LLMResultMixin
+from llm_pipeline.graph import LLMResultMixin
 
 
 # ---------------------------------------------------------------------------

@@ -1,67 +1,115 @@
 """
-LLM Pipeline - Declarative LLM pipeline orchestration framework.
+LLM Pipeline — Declarative LLM pipeline orchestration framework.
 
-Usage::
+Pipelines are now graph objects. Declare them via
+``llm_pipeline.graph``::
 
-    # Core orchestration
-    from llm_pipeline import PipelineConfig, LLMStep, LLMResultMixin, step_definition
+    from llm_pipeline.graph import (
+        ExtractionNode,
+        FromInput,
+        FromOutput,
+        LLMResultMixin,
+        LLMStepNode,
+        Pipeline,
+        PipelineInputData,
+        ReviewNode,
+        StepInputs,
+    )
 
-Observability is provided via Langfuse + pydantic-ai's OTEL
-instrumentation, wired by ``llm_pipeline.observability.configure()``.
+Observability is provided via OTEL + pydantic-ai instrumentation,
+wired by ``llm_pipeline.observability.configure()``.
 """
 
-from llm_pipeline.pipeline import PipelineConfig
-from llm_pipeline.step import LLMStep, LLMResultMixin, step_definition
-from llm_pipeline.strategy import PipelineStrategy, PipelineStrategies, StepDefinition
+from llm_pipeline.agent_builders import StepDeps, build_step_agent
+from llm_pipeline.agent_registry import (
+    AgentSpec,
+    clear_agent_registry,
+    get_agent_tools,
+    get_registered_agents,
+    register_agent,
+)
 from llm_pipeline.consensus import (
-    ConsensusStrategy,
-    ConsensusResult,
-    MajorityVoteStrategy,
-    ConfidenceWeightedStrategy,
     AdaptiveStrategy,
+    ConfidenceWeightedStrategy,
+    ConsensusResult,
+    ConsensusStrategy,
+    MajorityVoteStrategy,
     SoftVoteStrategy,
 )
-from llm_pipeline.inputs import PipelineInputData
-from llm_pipeline.extraction import PipelineExtraction
-from llm_pipeline.transformation import PipelineTransformation
-from llm_pipeline.registry import PipelineDatabaseRegistry
-from llm_pipeline.state import PipelineNodeSnapshot, PipelineRunInstance, PipelineRun, DraftStep, DraftPipeline
-from llm_pipeline.types import ArrayValidationConfig, ValidationContext
 from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.session import ReadOnlySession
+from llm_pipeline.graph import (
+    Bind,
+    Computed,
+    ExtractionNode,
+    FromInput,
+    FromOutput,
+    FromPipeline,
+    LLMResultMixin,
+    LLMStepNode,
+    Pipeline,
+    PipelineDeps,
+    PipelineEnd,
+    PipelineInputData,
+    PipelineState,
+    ReviewNode,
+    RunOutcome,
+    SourcesSpec,
+    SqlmodelStatePersistence,
+    StepInputs,
+    resume_pipeline,
+    run_pipeline,
+    run_pipeline_in_memory,
+)
 from llm_pipeline.introspection import PipelineIntrospector
-from llm_pipeline.agent_registry import AgentSpec, register_agent, get_agent_tools, get_registered_agents, clear_agent_registry
-from llm_pipeline.agent_builders import StepDeps, build_step_agent
-from llm_pipeline.validators import not_found_validator, array_length_validator, DEFAULT_NOT_FOUND_INDICATORS
 from llm_pipeline.prompts.variables import (
     register_auto_generate,
     set_auto_generate_base_path,
 )
-
-try:
-    from llm_pipeline.creator import StepCreatorPipeline
-    _has_creator = True
-except ImportError:
-    _has_creator = False
+from llm_pipeline.session import ReadOnlySession
+from llm_pipeline.state import (
+    DraftPipeline,
+    DraftStep,
+    PipelineNodeSnapshot,
+    PipelineRun,
+    PipelineRunInstance,
+)
+from llm_pipeline.types import ArrayValidationConfig, ValidationContext
+from llm_pipeline.validators import (
+    DEFAULT_NOT_FOUND_INDICATORS,
+    array_length_validator,
+    not_found_validator,
+)
 
 __version__ = "0.1.0"
 
 __all__ = [
-    # Core
-    "PipelineConfig",
-    "LLMStep",
+    # Graph base
+    "Pipeline",
+    "PipelineEnd",
+    "PipelineState",
+    "PipelineDeps",
+    # Node base classes
+    "LLMStepNode",
+    "ExtractionNode",
+    "ReviewNode",
+    # Output schema base
     "LLMResultMixin",
-    "step_definition",
-    # Strategy
-    "PipelineStrategy",
-    "PipelineStrategies",
-    "StepDefinition",
-    # Data handling
+    # Inputs + adapter machinery
     "PipelineInputData",
-    "PipelineExtraction",
-    "PipelineTransformation",
-    "PipelineDatabaseRegistry",
-    # State
+    "StepInputs",
+    "Bind",
+    "Computed",
+    "FromInput",
+    "FromOutput",
+    "FromPipeline",
+    "SourcesSpec",
+    # Runtime
+    "run_pipeline",
+    "resume_pipeline",
+    "run_pipeline_in_memory",
+    "RunOutcome",
+    "SqlmodelStatePersistence",
+    # State tables
     "PipelineNodeSnapshot",
     "PipelineRunInstance",
     "PipelineRun",
@@ -70,13 +118,12 @@ __all__ = [
     # Types
     "ArrayValidationConfig",
     "ValidationContext",
-    # DB
+    # DB / session
     "init_pipeline_db",
-    # Session
     "ReadOnlySession",
     # Introspection
     "PipelineIntrospector",
-    # Agent
+    # Agent registry
     "AgentSpec",
     "register_agent",
     "get_agent_tools",
@@ -99,6 +146,3 @@ __all__ = [
     "AdaptiveStrategy",
     "SoftVoteStrategy",
 ]
-
-if _has_creator:
-    __all__ += ["StepCreatorPipeline"]
