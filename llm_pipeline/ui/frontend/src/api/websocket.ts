@@ -160,7 +160,7 @@ function applySpanEvent(
         run_id: runId,
         pipeline_name: '',
         status: 'running',
-        langfuse_configured: true,
+        trace_backend_configured: true,
         traces: [],
         observations: nextObservations,
       }

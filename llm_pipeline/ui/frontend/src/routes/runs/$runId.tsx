@@ -220,8 +220,8 @@ function RunDetailPage() {
               isLoading={traceLoading}
               isError={traceError}
               emptyMessage={
-                trace && !trace.langfuse_configured
-                  ? 'Langfuse is not configured on this backend; trace data is unavailable.'
+                trace && !trace.trace_backend_configured
+                  ? 'No trace backend configured; trace data is unavailable.'
                   : 'No observations yet'
               }
             />

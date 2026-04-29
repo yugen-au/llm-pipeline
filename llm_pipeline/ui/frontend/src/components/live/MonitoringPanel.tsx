@@ -74,8 +74,8 @@ export function MonitoringPanel({ onOpenPicker }: MonitoringPanelProps) {
             isLoading={traceLoading}
             isError={traceError}
             emptyMessage={
-              trace && !trace.langfuse_configured
-                ? 'Langfuse is not configured on the backend; live trace data is unavailable.'
+              trace && !trace.trace_backend_configured
+                ? 'No trace backend configured; live trace data is unavailable.'
                 : 'Waiting for the first observation...'
             }
           />

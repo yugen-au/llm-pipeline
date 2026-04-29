@@ -1,14 +1,13 @@
 """Tests for the /runs/{run_id}/trace endpoint."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
+import httpx
 
 
 # ---------------------------------------------------------------------------
-# 404 + langfuse-unconfigured paths
+# 404 + unconfigured paths
 # ---------------------------------------------------------------------------
 
 
@@ -18,13 +17,13 @@ class TestTraceEndpoint404AndUnconfigured:
         assert resp.status_code == 404
         assert resp.json()["detail"] == "Run not found"
 
-    def test_returns_empty_traces_when_langfuse_unconfigured(
+    def test_returns_empty_when_no_backend_configured(
         self, seeded_app_client, monkeypatch,
     ):
-        """conftest auto-strips LANGFUSE_* in tests; verify the endpoint
-        responds gracefully without Langfuse configuration."""
-        monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
-        monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+        """conftest auto-strips OTEL/Phoenix env vars; verify the
+        endpoint responds gracefully without a backend URL configured."""
+        monkeypatch.delenv("PHOENIX_BASE_URL", raising=False)
+        monkeypatch.delenv("OTEL_EXPORTER_OTLP_ENDPOINT", raising=False)
 
         resp = seeded_app_client.get(
             "/api/runs/aaaaaaaa-0000-0000-0000-000000000001/trace",
@@ -33,152 +32,208 @@ class TestTraceEndpoint404AndUnconfigured:
         body = resp.json()
         assert body["run_id"] == "aaaaaaaa-0000-0000-0000-000000000001"
         assert body["pipeline_name"] == "alpha_pipeline"
-        assert body["langfuse_configured"] is False
+        assert body["trace_backend_configured"] is False
         assert body["traces"] == []
         assert body["observations"] == []
 
 
 # ---------------------------------------------------------------------------
-# Path with mocked Langfuse SDK
+# Phoenix REST happy path
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_observation(
-    *, id: str, name: str, type_: str = "SPAN",
-    parent_id: str | None = None,
-    start_offset: int = 0, end_offset: int = 1000,
-    model: str | None = None, input_tokens: int | None = None,
-    output_tokens: int | None = None, cost: float | None = None,
-):
-    """Build a MagicMock standing in for a Langfuse ObservationsView item."""
-    base = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    obs = MagicMock()
-    obs.id = id
-    obs.name = name
-    obs.type = type_
-    obs.parent_observation_id = parent_id
-    obs.start_time = datetime.fromtimestamp(
-        base.timestamp() + start_offset / 1000, tz=timezone.utc,
-    )
-    obs.end_time = datetime.fromtimestamp(
-        base.timestamp() + end_offset / 1000, tz=timezone.utc,
-    )
-    obs.level = "DEFAULT"
-    obs.status_message = None
-    obs.model = model
-    obs.usage_details = (
-        {"input": input_tokens, "output": output_tokens,
-         "total": (input_tokens or 0) + (output_tokens or 0)}
-        if input_tokens is not None or output_tokens is not None else {}
-    )
-    obs.cost_details = {"total": cost} if cost is not None else {}
-    obs.input = {"q": "hello"} if type_ == "GENERATION" else None
-    obs.output = "hi" if type_ == "GENERATION" else None
-    obs.metadata = {}
-    return obs
+def _phoenix_response(traces):
+    """Build a MagicMock httpx.Response carrying ``{"data": traces}``."""
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 200
+    resp.json.return_value = {"data": traces}
+    resp.raise_for_status.return_value = None
+    return resp
 
 
-class TestTraceEndpointWithMockedLangfuse:
-    def test_returns_traces_with_observations(
+class TestTraceEndpointPhoenixHappyPath:
+    def test_maps_phoenix_spans_to_observations(
         self, seeded_app_client, monkeypatch,
     ):
-        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-fake")
-        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-fake")
+        monkeypatch.setenv("PHOENIX_BASE_URL", "http://phoenix.invalid")
+        monkeypatch.setenv("PHOENIX_PROJECT", "default")
 
-        # Mock the Langfuse SDK's trace API.
-        # `list` returns minimal stubs (only id) — the route then calls
-        # `trace.get` to fetch the full TraceWithFullDetails (including
-        # nested observations with names/inputs/usage).
-        mock_trace_stub = MagicMock()
-        mock_trace_stub.id = "lf-trace-1"
-
-        mock_traces_page = MagicMock()
-        mock_traces_page.data = [mock_trace_stub]
-
-        mock_full_trace = MagicMock()
-        mock_full_trace.id = "lf-trace-1"
-        mock_full_trace.name = "pipeline.alpha_pipeline"
-        mock_full_trace.user_id = None
-        mock_full_trace.session_id = "aaaaaaaa-0000-0000-0000-000000000001"
-        mock_full_trace.tags = ["alpha_pipeline"]
-        mock_full_trace.timestamp = datetime(
-            2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc,
-        )
-        mock_full_trace.latency = 1.234
-        mock_full_trace.observations = [
-            _make_mock_observation(
-                id="obs-root", name="pipeline.alpha_pipeline", type_="SPAN",
-                start_offset=0, end_offset=1234,
-            ),
-            _make_mock_observation(
-                id="obs-step", name="step.detect", type_="SPAN",
-                parent_id="obs-root",
-                start_offset=10, end_offset=900,
-            ),
-            _make_mock_observation(
-                id="obs-llm", name="gen_ai chat openai:gpt-4",
-                type_="GENERATION",
-                parent_id="obs-step",
-                start_offset=20, end_offset=850,
-                model="gpt-4", input_tokens=142, output_tokens=89,
-                cost=0.0011,
-            ),
+        # Phoenix REST shape: trace envelope + nested spans with
+        # OpenInference attributes. parent_id refers to spans by their
+        # OTEL hex span_id (Phoenix mirrors the OTEL ID into both .id
+        # and .context.span_id).
+        traces = [
+            {
+                "id": "trace-internal-1",
+                "trace_id": "abcd1234abcd1234abcd1234abcd1234",
+                "project_id": "UHJvamVjdDox",
+                "start_time": "2026-01-01T12:00:00+00:00",
+                "end_time": "2026-01-01T12:00:01+00:00",
+                "spans": [
+                    {
+                        "id": "span-root",
+                        "name": "pipeline.alpha_pipeline",
+                        "context": {
+                            "trace_id": "abcd1234abcd1234abcd1234abcd1234",
+                            "span_id": "0000000000000001",
+                        },
+                        "span_kind": "INTERNAL",
+                        "parent_id": None,
+                        "start_time": "2026-01-01T12:00:00+00:00",
+                        "end_time": "2026-01-01T12:00:01+00:00",
+                        "status_code": "OK",
+                        "status_message": "",
+                        "attributes": {
+                            "session.id": "aaaaaaaa-0000-0000-0000-000000000001",
+                            "openinference.span.kind": "CHAIN",
+                            "input.value": '{"data": "raw"}',
+                            "input.mime_type": "application/json",
+                            "tag.tags": '["alpha_pipeline"]',
+                        },
+                        "events": [],
+                    },
+                    {
+                        "id": "span-step",
+                        "name": "step.detect",
+                        "context": {
+                            "trace_id": "abcd1234abcd1234abcd1234abcd1234",
+                            "span_id": "0000000000000002",
+                        },
+                        "span_kind": "INTERNAL",
+                        "parent_id": "span-root",
+                        "start_time": "2026-01-01T12:00:00.100+00:00",
+                        "end_time": "2026-01-01T12:00:00.900+00:00",
+                        "status_code": "OK",
+                        "status_message": "",
+                        "attributes": {
+                            "openinference.span.kind": "CHAIN",
+                            "session.id": "aaaaaaaa-0000-0000-0000-000000000001",
+                        },
+                        "events": [],
+                    },
+                    {
+                        "id": "span-llm",
+                        "name": "chat openai:gpt-4",
+                        "context": {
+                            "trace_id": "abcd1234abcd1234abcd1234abcd1234",
+                            "span_id": "0000000000000003",
+                        },
+                        "span_kind": "CLIENT",
+                        "parent_id": "span-step",
+                        "start_time": "2026-01-01T12:00:00.200+00:00",
+                        "end_time": "2026-01-01T12:00:00.850+00:00",
+                        "status_code": "OK",
+                        "status_message": "",
+                        "attributes": {
+                            "gen_ai.request.model": "gpt-4",
+                            "gen_ai.usage.input_tokens": 142,
+                            "gen_ai.usage.output_tokens": 89,
+                        },
+                        "events": [],
+                    },
+                ],
+            },
         ]
 
-        mock_client_cls = MagicMock()
-        mock_client = mock_client_cls.return_value
-        mock_client.api.trace.list.return_value = mock_traces_page
-        mock_client.api.trace.get.return_value = mock_full_trace
-
-        with patch("langfuse.Langfuse", mock_client_cls):
+        with patch("httpx.Client") as client_cls:
+            client = client_cls.return_value.__enter__.return_value
+            client.get.return_value = _phoenix_response(traces)
             resp = seeded_app_client.get(
                 "/api/runs/aaaaaaaa-0000-0000-0000-000000000001/trace",
             )
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["langfuse_configured"] is True
+        assert body["trace_backend_configured"] is True
         assert len(body["traces"]) == 1
 
         trace = body["traces"][0]
-        assert trace["id"] == "lf-trace-1"
-        assert trace["name"] == "pipeline.alpha_pipeline"
+        assert trace["id"] == "abcd1234abcd1234abcd1234abcd1234"
         assert trace["session_id"] == "aaaaaaaa-0000-0000-0000-000000000001"
         assert trace["tags"] == ["alpha_pipeline"]
         assert len(trace["observations"]) == 3
 
-        # Generation observation has token + cost details
+        # Generation classification + token rollup.
         gen = next(o for o in trace["observations"] if o["type"] == "GENERATION")
         assert gen["model"] == "gpt-4"
         assert gen["input_tokens"] == 142
         assert gen["output_tokens"] == 89
-        assert gen["total_cost"] == 0.0011
+        assert gen["total_tokens"] == 142 + 89
 
-        # Flat observations array contains all 3 (sorted by start_time)
+        # parent_observation_id maps phoenix-internal id -> otel span_id.
+        step = next(o for o in trace["observations"] if o["name"] == "step.detect")
+        assert step["parent_observation_id"] == "0000000000000001"  # root's span_id
+        assert gen["parent_observation_id"] == "0000000000000002"   # step's span_id
+
+        # Top-level observations array is the flat union, sorted by
+        # start_time.
         assert len(body["observations"]) == 3
         assert [o["id"] for o in body["observations"]] == [
-            "obs-root", "obs-step", "obs-llm",
+            "0000000000000001",
+            "0000000000000002",
+            "0000000000000003",
         ]
 
-        mock_client.api.trace.list.assert_called_once_with(
-            session_id="aaaaaaaa-0000-0000-0000-000000000001", limit=50,
-        )
+        # Verify the Phoenix REST URL was hit with session + spans param.
+        assert client.get.called
+        url = client.get.call_args[0][0]
+        params = client.get.call_args[1]["params"]
+        assert url.endswith("/v1/projects/default/traces")
+        assert params["session_identifier"] == "aaaaaaaa-0000-0000-0000-000000000001"
+        assert params["include_spans"] == "true"
 
-    def test_swallows_langfuse_errors(self, seeded_app_client, monkeypatch):
-        """If Langfuse SDK throws (network error, auth, etc.), the
-        endpoint returns langfuse_configured=True with empty traces
-        rather than failing the request — the run-detail page must
-        still render."""
-        monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-fake")
-        monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-fake")
+    def test_swallows_phoenix_errors(self, seeded_app_client, monkeypatch):
+        """If Phoenix is unreachable / 5xx, return empty traces (with
+        ``trace_backend_configured=True``) rather than failing the
+        request — the run-detail page must still render."""
+        monkeypatch.setenv("PHOENIX_BASE_URL", "http://phoenix.invalid")
 
-        mock_client_cls = MagicMock(side_effect=RuntimeError("langfuse down"))
-        with patch("langfuse.Langfuse", mock_client_cls):
+        with patch("httpx.Client") as client_cls:
+            client = client_cls.return_value.__enter__.return_value
+            client.get.side_effect = httpx.ConnectError("connection refused")
             resp = seeded_app_client.get(
                 "/api/runs/aaaaaaaa-0000-0000-0000-000000000001/trace",
             )
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["langfuse_configured"] is True
+        assert body["trace_backend_configured"] is True
         assert body["traces"] == []
+
+    def test_404_from_phoenix_returns_empty(self, seeded_app_client, monkeypatch):
+        """Project doesn't exist yet → empty traces, no error surfaced."""
+        monkeypatch.setenv("PHOENIX_BASE_URL", "http://phoenix.invalid")
+
+        with patch("httpx.Client") as client_cls:
+            client = client_cls.return_value.__enter__.return_value
+            resp_obj = MagicMock(spec=httpx.Response)
+            resp_obj.status_code = 404
+            client.get.return_value = resp_obj
+            resp = seeded_app_client.get(
+                "/api/runs/aaaaaaaa-0000-0000-0000-000000000001/trace",
+            )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["traces"] == []
+
+    def test_phoenix_url_derived_from_otlp_endpoint(
+        self, seeded_app_client, monkeypatch,
+    ):
+        """If only OTEL_EXPORTER_OTLP_ENDPOINT is set, derive the
+        Phoenix base URL by stripping the /v1/traces suffix."""
+        monkeypatch.delenv("PHOENIX_BASE_URL", raising=False)
+        monkeypatch.setenv(
+            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:6006/v1/traces",
+        )
+
+        with patch("httpx.Client") as client_cls:
+            client = client_cls.return_value.__enter__.return_value
+            client.get.return_value = _phoenix_response([])
+            seeded_app_client.get(
+                "/api/runs/aaaaaaaa-0000-0000-0000-000000000001/trace",
+            )
+
+        assert client.get.called
+        url = client.get.call_args[0][0]
+        assert url.startswith("http://localhost:6006/v1/projects/")

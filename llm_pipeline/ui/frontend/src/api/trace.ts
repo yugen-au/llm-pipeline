@@ -52,8 +52,8 @@ function mergeTrace(
  *   - Active runs: 10s reconcile poll. WS does the heavy lifting; HTTP
  *     is the safety net + how cost lands once Langfuse computes it.
  *
- * Empty traces with `langfuse_configured: false` indicate the backend
- * has no Langfuse credentials configured. The UI still renders WS-built
+ * Empty traces with `trace_backend_configured: false` indicate no
+ * OTEL backend URL is configured. The UI still renders WS-built
  * observations live; just no historical/canonical reconciliation.
  */
 export function useTrace(runId: string, runStatus?: RunStatus | string) {

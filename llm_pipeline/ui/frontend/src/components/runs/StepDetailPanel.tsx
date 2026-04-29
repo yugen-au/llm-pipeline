@@ -184,21 +184,21 @@ function GenerationsTab({
   observations,
   isLoading,
   isError,
-  langfuseConfigured,
+  traceBackendConfigured,
 }: {
   observations: TraceObservation[]
   isLoading: boolean
   isError: boolean
-  langfuseConfigured: boolean
+  traceBackendConfigured: boolean
 }) {
   const generations = observations.filter(
     (o) => o.type === 'GENERATION' || o.name.startsWith('gen_ai'),
   )
   if (isError) return <EmptyState message="Failed to load trace" />
-  if (!langfuseConfigured && !isLoading) {
+  if (!traceBackendConfigured && !isLoading) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
-        Langfuse is not configured; LLM call detail is unavailable.
+        No trace backend configured; LLM call detail is unavailable.
       </p>
     )
   }
@@ -444,7 +444,7 @@ function StepContent({
           observations={stepObservations}
           isLoading={traceLoading}
           isError={traceError}
-          langfuseConfigured={trace?.langfuse_configured ?? false}
+          traceBackendConfigured={trace?.trace_backend_configured ?? false}
         />
       </TabsContent>
       <TabsContent value="instructions" className="min-h-0 flex-1">

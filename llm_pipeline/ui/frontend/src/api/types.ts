@@ -191,7 +191,7 @@ export interface RunTraceResponse {
   run_id: string
   pipeline_name: string
   status: string
-  langfuse_configured: boolean
+  trace_backend_configured: boolean
   traces: TraceSummary[]
   /** Flat list of every observation across every trace, sorted by start_time. */
   observations: TraceObservation[]
