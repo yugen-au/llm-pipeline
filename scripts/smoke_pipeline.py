@@ -1,30 +1,43 @@
-"""End-to-end smoke test for the framework's full Langfuse instrumentation.
+"""End-to-end smoke test for the pydantic-graph-native framework.
 
-Constructs a minimal real ``PipelineConfig`` (with ``Bind`` + ``StepInputs``,
-a real step + extraction, prompts seeded into SQLite) and runs ``execute()``
-with a ``TestModel`` so no LLM API key is required. Verifies that the
-PipelineObserver emits the full trace structure end-to-end:
+Constructs a minimal real ``Pipeline`` (one ``LLMStepNode`` + one
+``ExtractionNode``) and runs it via ``run_pipeline_in_memory`` with a
+``TestModel`` (no LLM API key required). Verifies the framework emits
+a single Phoenix trace with the expected node-span tree:
 
-    pipeline.smoke_pipeline                     [root span]
-      pipeline-run input/output, session_id=run_id, tags=[smoke_pipeline]
-    +- step.widget_detection                    [step span]
-       +- (cache.lookup, cache.miss span events if use_cache=True)
-       +- TestModel                             [LLM generation, pydantic-ai auto]
-       +- extraction.WidgetExtraction           [extraction span]
+    pipeline.smoke_pipeline                    [graph root span]
+      smoke_pipeline.SmokePipeline.run         [pydantic-graph]
+        SmokePipeline.SentimentAnalysisStep    [pydantic-graph node span]
+          TestModel                            [pydantic-ai LLM call span]
+        SmokePipeline.WidgetExtraction         [pydantic-graph node span]
 
-Run: uv run python scripts/smoke_pipeline.py
-
-Then in Langfuse UI find the trace ``pipeline.smoke_pipeline`` and confirm
-the nesting + span events.
+Run: ``uv run python scripts/smoke_pipeline.py``
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import ClassVar, List, Optional
+from typing import ClassVar, Optional
 
 from dotenv import load_dotenv
+from pydantic_graph import End, GraphRunContext
+
+from llm_pipeline.graph import (
+    ExtractionNode,
+    FromInput,
+    FromOutput,
+    FromPipeline,
+    LLMStepNode,
+    Pipeline,
+    PipelineDeps,
+    PipelineInputData,
+    PipelineState,
+    StepInputs,
+    run_pipeline_in_memory,
+)
+from llm_pipeline.step import LLMResultMixin
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -39,21 +52,7 @@ if missing:
     )
     sys.exit(1)
 
-from sqlmodel import Field, Session, SQLModel, create_engine  # noqa: E402
-
-from llm_pipeline import (  # noqa: E402
-    LLMResultMixin,
-    LLMStep,
-    PipelineConfig,
-    PipelineDatabaseRegistry,
-    PipelineExtraction,
-    PipelineStrategies,
-    PipelineStrategy,
-    step_definition,
-)
-from llm_pipeline.inputs import PipelineInputData, StepInputs  # noqa: E402
-from llm_pipeline.types import StepCallParams  # noqa: E402
-from llm_pipeline.wiring import Bind, FromInput, FromOutput  # noqa: E402
+from sqlmodel import Field, SQLModel, create_engine  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -63,12 +62,13 @@ from llm_pipeline.wiring import Bind, FromInput, FromOutput  # noqa: E402
 
 class Widget(SQLModel, table=True):
     __tablename__ = "smoke_widgets"
+    __table_args__ = {"extend_existing": True}
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
     category: str
 
 
-class WidgetPipelineInput(PipelineInputData):
+class SmokeInputData(PipelineInputData):
     data: str
 
 
@@ -77,8 +77,8 @@ class WidgetDetectionInputs(StepInputs):
 
 
 class WidgetDetectionInstructions(LLMResultMixin):
-    widget_count: int
-    category: str
+    widget_count: int = 0
+    category: str = ""
 
     example: ClassVar[dict] = {
         "widget_count": 3,
@@ -87,71 +87,58 @@ class WidgetDetectionInstructions(LLMResultMixin):
     }
 
 
-class WidgetExtraction(PipelineExtraction, model=Widget):
-    class FromWidgetDetectionInputs(StepInputs):
-        widget_count: int
-        category: str
+class FromWidgetExtractionInputs(StepInputs):
+    widget_count: int
+    category: str
+    run_id: str
 
-    def from_widget_detection(
-        self, inputs: FromWidgetDetectionInputs,
-    ) -> list[Widget]:
+
+class WidgetDetectionStep(LLMStepNode):
+    """Detect widgets in raw input data."""
+
+    INPUTS = WidgetDetectionInputs
+    INSTRUCTIONS = WidgetDetectionInstructions
+    inputs_spec = WidgetDetectionInputs.sources(
+        data=FromInput("data"),
+    )
+
+    async def run(
+        self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+    ) -> WidgetExtraction:
+        await self._run_llm(ctx)
+        return WidgetExtraction()
+
+
+class WidgetExtraction(ExtractionNode):
+    """Convert detected widget counts into ``Widget`` rows."""
+
+    MODEL = Widget
+    INPUTS = FromWidgetExtractionInputs
+    source_step = WidgetDetectionStep
+    inputs_spec = FromWidgetExtractionInputs.sources(
+        widget_count=FromOutput(WidgetDetectionStep, field="widget_count"),
+        category=FromOutput(WidgetDetectionStep, field="category"),
+        run_id=FromPipeline("run_id"),
+    )
+
+    def extract(self, inputs: FromWidgetExtractionInputs) -> list[Widget]:
         return [
             Widget(name=f"widget_{i}", category=inputs.category)
             for i in range(inputs.widget_count)
         ]
 
-
-@step_definition(
-    inputs=WidgetDetectionInputs,
-    instructions=WidgetDetectionInstructions,
-)
-class WidgetDetectionStep(LLMStep):
-    def prepare_calls(self) -> List[StepCallParams]:
-        return [StepCallParams(variables={"data": self.inputs.data})]
+    async def run(
+        self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+    ) -> End[None]:
+        await self._run_extraction(ctx)
+        return End(None)
 
 
-class DefaultStrategy(PipelineStrategy):
-    def can_handle(self, context):
-        return True
+class SmokePipeline(Pipeline):
+    """Smoke pipeline: detect widgets -> extract widget rows."""
 
-    def get_bindings(self) -> List[Bind]:
-        return [
-            Bind(
-                step=WidgetDetectionStep,
-                inputs=WidgetDetectionInputs.sources(
-                    data=FromInput("data"),
-                ),
-                extractions=[
-                    Bind(
-                        extraction=WidgetExtraction,
-                        inputs=WidgetExtraction.FromWidgetDetectionInputs.sources(
-                            widget_count=FromOutput(
-                                WidgetDetectionStep, field="widget_count",
-                            ),
-                            category=FromOutput(
-                                WidgetDetectionStep, field="category",
-                            ),
-                        ),
-                    ),
-                ],
-            ),
-        ]
-
-
-class SmokeRegistry(PipelineDatabaseRegistry, models=[Widget]):
-    pass
-
-
-class SmokeStrategies(PipelineStrategies, strategies=[DefaultStrategy]):
-    pass
-
-
-class SmokePipeline(
-    PipelineConfig,
-    registry=SmokeRegistry,
-    strategies=SmokeStrategies,
-):
-    INPUT_DATA = WidgetPipelineInput
+    INPUT_DATA = SmokeInputData
+    nodes = [WidgetDetectionStep, WidgetExtraction]
 
 
 # ---------------------------------------------------------------------------
@@ -202,11 +189,7 @@ def _seed_phoenix_prompt() -> None:
     )
 
 
-def main() -> None:
-    # check_same_thread=False so the in-memory SQLite engine works with
-    # the framework's threaded execution path (pydantic-ai instrumentation
-    # + flush logic touches the connection from a different thread than
-    # the one that created it).
+async def _amain() -> None:
     engine = create_engine(
         "sqlite:///:memory:",
         echo=False,
@@ -215,29 +198,28 @@ def main() -> None:
     SQLModel.metadata.create_all(engine)
     _seed_phoenix_prompt()
 
-    # The 'test' model string is resolved by pydantic-ai to TestModel,
-    # which returns synthetic structured output matching Instructions
-    # schema (no LLM API key required). pydantic-ai's instrumentation
-    # still produces the generation observation in Langfuse, and the
-    # string is what gets persisted into PipelineStepState.model_name
-    # so SQLite serialization works.
-    pipeline = SmokePipeline(
+    final_state, _end = await run_pipeline_in_memory(
+        SmokePipeline,
+        input_data={"data": "raw smoke-test input"},
         model="test",
         engine=engine,
     )
-    pipeline.execute(input_data={"data": "raw smoke-test input"})
 
-    print(f"Run completed. run_id={pipeline.run_id}")
-    # The base URL of the OTLP endpoint is also where the read API
-    # lives for self-hosted Phoenix. Strip /v1/traces if present so
-    # the printed link points at the UI root.
-    backend_url = os.environ['OTEL_EXPORTER_OTLP_ENDPOINT'].rstrip('/')
-    if backend_url.endswith('/v1/traces'):
-        backend_url = backend_url[:-len('/v1/traces')]
+    print(f"Run completed.")
+    print(f"  outputs: {list(final_state.outputs.keys())}")
+    print(f"  extractions: {list(final_state.extractions.keys())}")
+
+    backend_url = os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"].rstrip("/")
+    if backend_url.endswith("/v1/traces"):
+        backend_url = backend_url[: -len("/v1/traces")]
     print(
         f"Open {backend_url} -> Traces and look for "
-        "'pipeline.smoke' (session = run_id)."
+        "'SmokePipeline' (run-level graph span)."
     )
+
+
+def main() -> None:
+    asyncio.run(_amain())
 
 
 if __name__ == "__main__":

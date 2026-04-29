@@ -1,48 +1,44 @@
-"""Sentiment analysis step with human review and eval evaluators."""
-from dataclasses import dataclass
-from typing import List
+"""Sentiment analysis step (pydantic-graph-native node).
 
-from llm_pipeline.evals.evaluators import FieldMatchEvaluator
-from llm_pipeline.review import DisplayField, ReviewData, StepReview
-from llm_pipeline.step import LLMStep, step_definition
-from llm_pipeline.types import StepCallParams
+The next-node return annotation is a forward-reference string so this
+module doesn't pull in ``topic_extraction`` (which itself reads
+``SentimentAnalysisInstructions`` via ``FromOutput``). pydantic-graph
+resolves the string against the namespace of the module that builds
+the ``Pipeline`` (``pipelines/text_analyzer.py``), where every node
+class is in scope.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from llm_pipeline.graph import FromInput, LLMStepNode
 
 from llm_pipelines.schemas.text_analyzer import (
     SentimentAnalysisInputs,
     SentimentAnalysisInstructions,
 )
 
+if TYPE_CHECKING:
+    from pydantic_graph import GraphRunContext
 
-@dataclass(repr=False)
-class SentimentLabelEvaluator(FieldMatchEvaluator):
-    """Check output.sentiment matches expected_output['sentiment']."""
+    from llm_pipeline.graph import PipelineDeps, PipelineState
 
-    field_name: str = "sentiment"
-
-
-class SentimentAnalysisReview(StepReview):
-    """Review config for sentiment analysis -- always enabled for demo."""
-    pass
+    from llm_pipelines.steps.topic_extraction import TopicExtractionStep
 
 
-@step_definition(
-    inputs=SentimentAnalysisInputs,
-    instructions=SentimentAnalysisInstructions,
-    review=SentimentAnalysisReview,
-    evaluators=[SentimentLabelEvaluator],
-)
-class SentimentAnalysisStep(LLMStep):
-    """Analyze sentiment of the input text."""
+class SentimentAnalysisStep(LLMStepNode):
+    """Analyse sentiment of the input text."""
 
-    def prepare_calls(self) -> List[StepCallParams]:
-        return [StepCallParams(variables={"text": self.inputs.text})]
+    INPUTS = SentimentAnalysisInputs
+    INSTRUCTIONS = SentimentAnalysisInstructions
+    inputs_spec = SentimentAnalysisInputs.sources(
+        text=FromInput("text"),
+    )
 
-    def prepare_review(self, instructions):
-        inst = instructions[0]
-        return ReviewData(
-            display_data=[
-                DisplayField(label="Sentiment", value=inst.sentiment, type="badge"),
-                DisplayField(label="Explanation", value=inst.explanation, type="text"),
-            ],
-            raw_data=inst.model_dump(mode="json"),
-        )
+    async def run(
+        self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+    ) -> TopicExtractionStep:
+        await self._run_llm(ctx)
+        from llm_pipelines.steps.topic_extraction import TopicExtractionStep
+
+        return TopicExtractionStep()

@@ -1,29 +1,38 @@
-"""Summary step."""
-from typing import List
+"""Summary step (pydantic-graph-native node)."""
+from __future__ import annotations
 
-from llm_pipeline.step import LLMStep, step_definition
-from llm_pipeline.types import StepCallParams
+from typing import TYPE_CHECKING
+
+from pydantic_graph import End
+
+from llm_pipeline.graph import FromInput, FromOutput, LLMStepNode
 
 from llm_pipelines.schemas.text_analyzer import (
     SummaryInputs,
     SummaryInstructions,
 )
+from llm_pipelines.steps.sentiment_analysis import SentimentAnalysisStep
+from llm_pipelines.steps.topic_extraction import TopicExtractionStep
+
+if TYPE_CHECKING:
+    from pydantic_graph import GraphRunContext
+
+    from llm_pipeline.graph import PipelineDeps, PipelineState
 
 
-@step_definition(
-    inputs=SummaryInputs,
-    instructions=SummaryInstructions,
-)
-class SummaryStep(LLMStep):
+class SummaryStep(LLMStepNode):
     """Produce a summary incorporating sentiment and topic context."""
 
-    def prepare_calls(self) -> List[StepCallParams]:
-        return [
-            StepCallParams(
-                variables={
-                    "text": self.inputs.text,
-                    "sentiment": self.inputs.sentiment,
-                    "primary_topic": self.inputs.primary_topic,
-                }
-            )
-        ]
+    INPUTS = SummaryInputs
+    INSTRUCTIONS = SummaryInstructions
+    inputs_spec = SummaryInputs.sources(
+        text=FromInput("text"),
+        sentiment=FromOutput(SentimentAnalysisStep, field="sentiment"),
+        primary_topic=FromOutput(TopicExtractionStep, field="primary_topic"),
+    )
+
+    async def run(
+        self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+    ) -> End[None]:
+        await self._run_llm(ctx)
+        return End(None)
