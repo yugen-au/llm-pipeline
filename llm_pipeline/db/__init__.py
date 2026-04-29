@@ -47,6 +47,8 @@ def _migrate_add_columns(engine: Engine) -> None:
         ("prompts", "variable_definitions", "TEXT"),
         ("step_model_configs", "request_limit", "INTEGER"),
         ("pipeline_runs", "error_message", "TEXT"),
+        ("pipeline_runs", "trace_id", "VARCHAR(32)"),
+        ("pipeline_runs", "span_id", "VARCHAR(16)"),
         ("pipeline_reviews", "input_data", "TEXT"),
         ("eval_runs", "variant_id", "INTEGER"),
         ("eval_runs", "delta_snapshot", "TEXT"),

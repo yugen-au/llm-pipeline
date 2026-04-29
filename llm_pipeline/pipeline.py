@@ -690,11 +690,49 @@ class PipelineConfig(ABC):
             and hasattr(self._validated_input, "model_dump")
             else self._validated_input
         )
+
+        # Resume case: re-attach to the original run's root span via
+        # the persisted OTEL trace_id / span_id so resumed step spans
+        # nest under the original trace tree (one trace per run).
+        _resume_from = getattr(self, '_resume_from_step', 0)
+        _is_resume = _resume_from > 0
+        _parent_trace_id = pipeline_run.trace_id if _is_resume else None
+        _parent_span_id = pipeline_run.span_id if _is_resume else None
+
         _root_cm = self._observer.pipeline_run(
             input_data=_observer_input,
             tags=[self.pipeline_name],
+            parent_trace_id=_parent_trace_id,
+            parent_span_id=_parent_span_id,
         )
         _root_cm.__enter__()
+
+        # First-execution path: capture the OTEL trace_id + root span_id
+        # NOW that the root span is open, so a future resume can re-
+        # attach. No-op when Langfuse is unconfigured (current span is
+        # invalid).
+        if not _is_resume and pipeline_run.trace_id is None:
+            try:
+                from opentelemetry import trace as _otel_trace
+                _cur = _otel_trace.get_current_span()
+                _ctx = _cur.get_span_context() if _cur else None
+                if _ctx is not None and _ctx.is_valid:
+                    pipeline_run.trace_id = format(_ctx.trace_id, "032x")
+                    pipeline_run.span_id = format(_ctx.span_id, "016x")
+                    self._real_session.add(pipeline_run)
+                    self._real_session.flush()
+            except Exception:
+                logger.debug(
+                    "Failed to capture OTEL root span IDs for run_id=%s",
+                    self.run_id, exc_info=True,
+                )
+
+        # Resume case: emit a backdated span for the just-completed
+        # review so the trace shows the wait window with decision/notes,
+        # not an unexplained gap. Must happen after _root_cm.__enter__()
+        # so OTEL context is attached.
+        if _is_resume:
+            self._emit_review_span_for_resume()
 
         # Tracks the open observer step span (if any) so the outer
         # except handler can close it on exception. Initialized before
@@ -704,8 +742,6 @@ class PipelineConfig(ABC):
 
         try:
             max_steps = max(len(s.get_bindings()) for s in self._strategies)
-
-            _resume_from = getattr(self, '_resume_from_step', 0)
 
             for step_index in range(max_steps):
                 # Skip steps before resume point (already executed) but
@@ -1092,6 +1128,57 @@ class PipelineConfig(ABC):
         if config and config.request_limit is not None:
             return UsageLimits(request_limit=config.request_limit)
         return None
+
+    def _emit_review_span_for_resume(self) -> None:
+        """Emit a backdated review span for the just-completed review.
+
+        Looks up the most recently completed ``PipelineReview`` for
+        this run and asks the observer to emit a span covering the
+        wait window (``created_at`` -> ``completed_at``). The span
+        nests under the original root via the OTEL parent context
+        attached by ``pipeline_run`` on resume.
+
+        Silent no-op when no completed review record exists (defensive
+        — every resume is triggered by a review submission so a record
+        should always be present).
+        """
+        from datetime import datetime as _dt, timezone as _tz
+        from sqlmodel import select as _sel
+        from llm_pipeline.state import PipelineReview
+
+        try:
+            review = self._real_session.exec(
+                _sel(PipelineReview)
+                .where(PipelineReview.run_id == self.run_id)
+                .where(PipelineReview.status == "completed")
+                .order_by(PipelineReview.completed_at.desc())
+            ).first()
+        except Exception:
+            logger.debug(
+                "Failed to fetch PipelineReview for run_id=%s",
+                self.run_id, exc_info=True,
+            )
+            return
+        if review is None:
+            return
+
+        end_time = review.completed_at or _dt.now(_tz.utc)
+        try:
+            self._observer.review(
+                step_name=review.step_name,
+                start_time=review.created_at,
+                end_time=end_time,
+                decision=review.decision,
+                notes=review.notes,
+                user_id=review.user_id,
+                review_data=review.review_data,
+                token=review.token,
+            )
+        except Exception:
+            logger.debug(
+                "Failed to emit review span for run_id=%s token=%s",
+                self.run_id, review.token, exc_info=True,
+            )
 
     def _hash_step_inputs(self, step, step_number: int) -> str:
         try:

@@ -176,6 +176,20 @@ class PipelineRun(SQLModel, table=True):
     total_time_ms: Optional[int] = Field(default=None)
     error_message: Optional[str] = Field(default=None, description="Error details when status=failed")
 
+    # Captured from the OTEL context the first time pipeline.execute()
+    # opens its root span. Persisted so a paused-and-resumed run can
+    # re-attach its resumed spans to the original trace tree (one trace
+    # per run, even across review pauses), instead of producing a fresh
+    # trace per execute() call.
+    trace_id: Optional[str] = Field(
+        default=None, max_length=32,
+        description="OTEL trace_id of the run's root span (32-char hex)",
+    )
+    span_id: Optional[str] = Field(
+        default=None, max_length=16,
+        description="OTEL span_id of the run's root span (16-char hex)",
+    )
+
     __table_args__ = (
         Index("ix_pipeline_runs_name_started", "pipeline_name", "started_at"),
         Index("ix_pipeline_runs_status", "status"),

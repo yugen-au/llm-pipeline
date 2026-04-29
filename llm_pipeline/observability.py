@@ -474,6 +474,8 @@ class PipelineObserver:
         input_data: Any = None,
         user_id: str | None = None,
         tags: list[str] | None = None,
+        parent_trace_id: str | None = None,
+        parent_span_id: str | None = None,
     ) -> Iterator[Any]:
         """Open the root trace span for this pipeline run.
 
@@ -481,6 +483,15 @@ class PipelineObserver:
         the underlying Langfuse trace via ``propagate_attributes`` so
         the UI can surface the run in listings. Flushes pending traces
         on exit so they ship before the process can terminate.
+
+        Resume semantics: when ``parent_trace_id`` and ``parent_span_id``
+        are provided (re-execution after a review pause), this method
+        does NOT open a new ``pipeline.X`` root span. Instead it
+        attaches the OTEL context to the original run's root span (via
+        ``SpanContext`` reconstruction + ``context.attach``). New step
+        / extraction spans opened inside the with-block then nest under
+        the original root in the same trace, instead of producing a
+        second standalone trace per resume.
         """
         if not self._enabled:
             yield None
@@ -494,6 +505,45 @@ class PipelineObserver:
         if user_id is not None:
             propagate_kwargs["user_id"] = user_id
         propagate_kwargs["tags"] = tags or [self.pipeline_name]
+
+        # Resume path: attach to the original trace's root span as
+        # OTEL parent. Skip opening a new pipeline observation so the
+        # resumed steps appear directly under the original root.
+        if parent_trace_id and parent_span_id:
+            from opentelemetry import context as _otel_context
+            from opentelemetry import trace as _otel_trace
+            from opentelemetry.trace import (
+                NonRecordingSpan,
+                SpanContext,
+                TraceFlags,
+            )
+            try:
+                parent_ctx_obj = SpanContext(
+                    trace_id=int(parent_trace_id, 16),
+                    span_id=int(parent_span_id, 16),
+                    is_remote=True,
+                    trace_flags=TraceFlags(0x01),
+                )
+            except (ValueError, TypeError):
+                logger.debug(
+                    "pipeline_run: invalid parent IDs trace=%s span=%s; "
+                    "falling through to a fresh root span.",
+                    parent_trace_id, parent_span_id,
+                )
+            else:
+                ctx = _otel_trace.set_span_in_context(
+                    NonRecordingSpan(parent_ctx_obj),
+                )
+                token = _otel_context.attach(ctx)
+                try:
+                    with propagate_attributes(**propagate_kwargs):
+                        yield None
+                    self._client.flush()
+                    return
+                finally:
+                    _otel_context.detach(token)
+
+        # First-execution path: open a fresh root span for this run.
         with self._client.start_as_current_observation(
             name=f"pipeline.{self.pipeline_name}",
             as_type="span",
@@ -502,6 +552,74 @@ class PipelineObserver:
             with propagate_attributes(**propagate_kwargs):
                 yield root
         self._client.flush()
+
+    def review(
+        self,
+        *,
+        step_name: str,
+        start_time: datetime,
+        end_time: datetime,
+        decision: str | None = None,
+        notes: str | None = None,
+        user_id: str | None = None,
+        review_data: Any = None,
+        token: str | None = None,
+    ) -> None:
+        """Emit a span representing a completed human review.
+
+        Opens + closes a Langfuse span via the SDK wrapper (raw OTEL
+        spans aren't ingested by Langfuse's processor — only spans
+        created through ``start_observation`` are picked up). Must be
+        called inside the parent-context-attached ``pipeline_run`` on
+        a resume so the span nests under the original root via the
+        active OTEL context.
+
+        The Langfuse SDK doesn't accept an explicit ``start_time``, so
+        the span's wall-clock position is "now" (at review submission)
+        rather than the actual wait window. The wait period is
+        preserved on the observation as metadata: ``requested_at``,
+        ``completed_at`` and ``wait_duration_ms``. The review thus
+        renders as a single visible step in the trace at submission
+        time, with the wait duration available on click-through.
+
+        No-op when Langfuse is unconfigured.
+        """
+        if not self._enabled:
+            return
+        assert self._client is not None
+
+        wait_ms = int((end_time - start_time).total_seconds() * 1000)
+        metadata: dict[str, Any] = {
+            "requested_at": start_time.isoformat(),
+            "completed_at": end_time.isoformat(),
+            "wait_duration_ms": wait_ms,
+        }
+        if token:
+            metadata["token"] = token
+        if user_id:
+            metadata["user_id"] = user_id
+
+        output: dict[str, Any] = {}
+        if decision is not None:
+            output["decision"] = decision
+        if notes is not None:
+            output["notes"] = notes
+
+        span = self._client.start_observation(
+            name=f"review.{step_name}",
+            as_type="span",
+            input=review_data,
+            output=output or None,
+            metadata=metadata,
+            level="ERROR" if (decision or "").lower() in {"rejected", "fail"} else None,
+        )
+        try:
+            span.end()
+        except Exception:
+            logger.debug(
+                "Failed to end review span for step=%s token=%s",
+                step_name, token, exc_info=True,
+            )
 
     @contextlib.contextmanager
     def step(
