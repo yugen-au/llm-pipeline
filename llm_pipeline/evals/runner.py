@@ -39,7 +39,11 @@ if TYPE_CHECKING:
     from pydantic_evals.reporting import EvaluationReport
 
 
-__all__ = ["run_dataset", "EvalTargetError"]
+__all__ = [
+    "run_dataset",
+    "create_experiment_record",
+    "EvalTargetError",
+]
 
 
 logger = logging.getLogger(__name__)
@@ -59,6 +63,7 @@ async def run_dataset(
     run_name: str | None = None,
     max_concurrency: int | None = None,
     client: PhoenixDatasetClient | None = None,
+    experiment_id: str | None = None,
 ) -> "EvaluationReport":
     """Run ``dataset_id`` end-to-end and post results to Phoenix.
 
@@ -78,6 +83,13 @@ async def run_dataset(
             ``{variant_summary}-{timestamp}`` string.
         max_concurrency: Forwarded to ``Dataset.evaluate``.
         client: Optional pre-built Phoenix client (tests inject a stub).
+        experiment_id: Optional pre-existing Phoenix experiment id.
+            When supplied (e.g. by the UI route after pre-creating the
+            experiment so it can return the id immediately), skip the
+            inner ``create_experiment`` call and post per-case runs +
+            evaluations to the existing experiment. ``None`` keeps the
+            legacy behaviour of creating an experiment after the report
+            is built.
     """
     client = client or PhoenixDatasetClient()
 
@@ -128,9 +140,40 @@ async def run_dataset(
         target_name=target_name,
         report=report,
         examples=examples,
+        experiment_id=experiment_id,
     )
 
     return report
+
+
+def create_experiment_record(
+    *,
+    client: PhoenixDatasetClient,
+    dataset_id: str,
+    variant: Variant,
+    target_type: str,
+    target_name: str,
+    run_name: str | None = None,
+) -> dict[str, Any]:
+    """Create a Phoenix experiment row up-front so the UI can navigate immediately.
+
+    The UI route uses this before backgrounding the per-case loop:
+    pre-create the experiment, return its id to the client, then spawn
+    a background task that calls :func:`run_dataset` with the same
+    ``experiment_id`` so we don't create a duplicate experiment.
+
+    Returns the Phoenix experiment record (with ``id``); the caller
+    threads the id through to ``run_dataset(..., experiment_id=...)``.
+    """
+    return client.create_experiment(
+        dataset_id,
+        name=run_name or _default_run_name(variant),
+        metadata={
+            "variant": variant.model_dump(),
+            "target_type": target_type,
+            "target_name": target_name,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,29 +289,31 @@ def _post_results_to_phoenix(
     target_name: str,
     report: "EvaluationReport",
     examples: list[dict[str, Any]],
+    experiment_id: str | None = None,
 ) -> None:
-    """Create an experiment, then a run + evaluation scores per case."""
-    experiment = client.create_experiment(
-        dataset_id,
-        name=report.name,
-        metadata={
-            "variant": variant.model_dump(),
-            "target_type": target_type,
-            "target_name": target_name,
-            # Full report as a backup for fields we don't map onto
-            # Phoenix's structured evaluation surface (failures,
-            # analyses, etc.).
-            "full_report": _safe_dump_report(report),
-        },
-    )
-    experiment_id = experiment.get("id") or experiment.get("experiment_id")
-    if not experiment_id:
-        logger.warning(
-            "Phoenix create_experiment returned no id; "
-            "skipping per-case write-back. payload=%r",
-            experiment,
+    """Create an experiment (if not pre-supplied), then post per-case runs + scores."""
+    if experiment_id is None:
+        experiment = client.create_experiment(
+            dataset_id,
+            name=report.name,
+            metadata={
+                "variant": variant.model_dump(),
+                "target_type": target_type,
+                "target_name": target_name,
+                # Full report as a backup for fields we don't map onto
+                # Phoenix's structured evaluation surface (failures,
+                # analyses, etc.).
+                "full_report": _safe_dump_report(report),
+            },
         )
-        return
+        experiment_id = experiment.get("id") or experiment.get("experiment_id")
+        if not experiment_id:
+            logger.warning(
+                "Phoenix create_experiment returned no id; "
+                "skipping per-case write-back. payload=%r",
+                experiment,
+            )
+            return
 
     name_to_id = {
         ex.get("id") or ex.get("name"): ex.get("id")

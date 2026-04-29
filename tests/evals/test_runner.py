@@ -20,7 +20,11 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel, create_engine
 
 from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.evals.runner import EvalTargetError, run_dataset
+from llm_pipeline.evals.runner import (
+    EvalTargetError,
+    create_experiment_record,
+    run_dataset,
+)
 from llm_pipeline.evals.variants import Variant
 from llm_pipeline.graph import (
     FromInput,
@@ -377,3 +381,88 @@ class TestTargetResolution:
                 engine=_engine,
                 client=stub,
             ))
+
+
+# ---------------------------------------------------------------------------
+# Pre-created experiment passthrough
+# ---------------------------------------------------------------------------
+
+
+class TestPreCreatedExperiment:
+    """Verify the UI's foreground create_experiment + background run_dataset flow."""
+
+    def test_create_experiment_record_returns_id_with_metadata(
+        self, _step_dataset_stub,
+    ):
+        record = create_experiment_record(
+            client=_step_dataset_stub,
+            dataset_id="ds-step-1",
+            variant=Variant(model="m"),
+            target_type="step",
+            target_name="_RunnerStep",
+            run_name="explicit-name",
+        )
+        assert record["id"]
+        # Metadata round-trip: variant + target captured.
+        meta = record["metadata"]
+        assert meta["variant"] == {
+            "model": "m",
+            "prompt_overrides": {},
+            "instructions_delta": [],
+        }
+        assert meta["target_type"] == "step"
+        assert meta["target_name"] == "_RunnerStep"
+        # The single experiment we created is the only one on the stub.
+        assert len(_step_dataset_stub.experiments) == 1
+
+    def test_run_dataset_with_experiment_id_skips_create(
+        self, phoenix_prompt_stub, _engine, _step_dataset_stub,
+    ):
+        """When ``experiment_id`` is supplied, runner does NOT create a new one."""
+        phoenix_prompt_stub.register(
+            "runner", system="Classify.", user="Text: {text}",
+        )
+
+        # Pre-create the experiment (foreground), then run with that id.
+        pre = create_experiment_record(
+            client=_step_dataset_stub,
+            dataset_id="ds-step-1",
+            variant=Variant(),
+            target_type="step",
+            target_name="_RunnerStep",
+        )
+        pre_id = pre["id"]
+        assert len(_step_dataset_stub.experiments) == 1
+
+        asyncio.run(run_dataset(
+            "ds-step-1",
+            Variant(),
+            pipeline_registry={"runner": _RunnerPipeline},
+            model="test",
+            engine=_engine,
+            client=_step_dataset_stub,
+            experiment_id=pre_id,
+        ))
+
+        # Crucially: no second create_experiment call; per-case runs land
+        # under the pre-created id.
+        assert len(_step_dataset_stub.experiments) == 1
+        assert all(r["experiment_id"] == pre_id for r in _step_dataset_stub.runs)
+        assert len(_step_dataset_stub.runs) == 2  # 2 cases in the stub
+
+    def test_run_dataset_without_experiment_id_creates_one(
+        self, phoenix_prompt_stub, _engine, _step_dataset_stub,
+    ):
+        """Default behaviour preserved: no id supplied -> runner creates one."""
+        phoenix_prompt_stub.register(
+            "runner", system="Classify.", user="Text: {text}",
+        )
+        asyncio.run(run_dataset(
+            "ds-step-1",
+            Variant(),
+            pipeline_registry={"runner": _RunnerPipeline},
+            model="test",
+            engine=_engine,
+            client=_step_dataset_stub,
+        ))
+        assert len(_step_dataset_stub.experiments) == 1

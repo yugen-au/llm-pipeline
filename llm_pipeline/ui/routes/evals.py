@@ -43,7 +43,11 @@ from llm_pipeline.evals.phoenix_client import (
     PhoenixDatasetClient,
     PhoenixDatasetError,
 )
-from llm_pipeline.evals.runner import EvalTargetError, run_dataset
+from llm_pipeline.evals.runner import (
+    EvalTargetError,
+    create_experiment_record,
+    run_dataset,
+)
 from llm_pipeline.evals.variants import Variant, get_type_whitelist
 from llm_pipeline.ui.deps import DBSession
 
@@ -272,6 +276,42 @@ def trigger_run(
     engine = request.app.state.engine
     client = _client(request)
 
+    # Pre-create the Phoenix experiment in the foreground so the UI
+    # can navigate to it immediately. We resolve the dataset's
+    # target_type / target_name first so a malformed dataset surfaces
+    # synchronously (instead of failing inside the background task).
+    dataset_record = _phoenix_call(client.get_dataset, dataset_id)
+    metadata = (dataset_record or {}).get("metadata") or {}
+    target_type = metadata.get("target_type")
+    target_name = metadata.get("target_name")
+    if target_type not in {"step", "pipeline"} or not target_name:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Dataset metadata is missing target_type / target_name; "
+                "cannot trigger an evaluation."
+            ),
+        )
+
+    try:
+        experiment = create_experiment_record(
+            client=client,
+            dataset_id=dataset_id,
+            variant=variant,
+            target_type=target_type,
+            target_name=target_name,
+            run_name=req.run_name,
+        )
+    except PhoenixDatasetError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    experiment_id = experiment.get("id") or experiment.get("experiment_id")
+    if not experiment_id:
+        raise HTTPException(
+            status_code=502,
+            detail="Phoenix create_experiment returned no id.",
+        )
+
     def _runner() -> None:
         try:
             asyncio.run(run_dataset(
@@ -283,6 +323,7 @@ def trigger_run(
                 run_name=req.run_name,
                 max_concurrency=req.max_concurrency,
                 client=client,
+                experiment_id=experiment_id,
             ))
         except EvalTargetError:
             logger.exception("Eval target resolution failed")
@@ -290,7 +331,11 @@ def trigger_run(
             logger.exception("Eval run failed")
 
     background.add_task(_runner)
-    return {"status": "accepted", "dataset_id": dataset_id}
+    return {
+        "status": "accepted",
+        "dataset_id": dataset_id,
+        "experiment_id": experiment_id,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +443,85 @@ def get_dataset_prod_model(
     }
 
 
+@router.get("/datasets/{dataset_id}/prod-prompts")
+def get_dataset_prod_prompts(
+    dataset_id: str, request: Request,
+) -> dict:
+    """Return the production system + user prompt content for a step target.
+
+    Used by the variant editor to prefill prompt overrides. Resolves
+    ``dataset.metadata.target_name`` to a node class via the registry,
+    asks the node for its ``resolved_prompt_name()``, then fetches the
+    ``production`` (or ``latest``) Phoenix prompt version. 422 on a
+    pipeline-target dataset (variants are scoped to a single step).
+    """
+    from llm_pipeline.prompts.phoenix_client import (
+        PhoenixError,
+        PhoenixPromptClient,
+        PromptNotFoundError,
+    )
+
+    client = _client(request)
+    record = _phoenix_call(client.get_dataset, dataset_id)
+    metadata = (record or {}).get("metadata") or {}
+    target_type = metadata.get("target_type")
+    target_name = metadata.get("target_name")
+    if target_type != "step" or not target_name:
+        raise HTTPException(
+            status_code=422,
+            detail="prod-prompts endpoint supports step-targets only.",
+        )
+
+    pipeline_registry: dict = getattr(
+        request.app.state, "pipeline_registry", {},
+    )
+    node_cls = _resolve_step_node(pipeline_registry, target_name)
+    prompt_name = node_cls.resolved_prompt_name()
+
+    cached = getattr(request.app.state, "_phoenix_prompt_client", None)
+    try:
+        prompt_client = cached if cached is not None else PhoenixPromptClient()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Phoenix prompt client unavailable: {exc}",
+        ) from exc
+    request.app.state._phoenix_prompt_client = prompt_client
+
+    try:
+        version = prompt_client.get_by_tag(prompt_name, "production")
+    except PromptNotFoundError:
+        try:
+            version = prompt_client.get_latest(prompt_name)
+        except PromptNotFoundError:
+            return {
+                "prompt_name": prompt_name,
+                "system": None,
+                "user": None,
+                "variable_definitions": None,
+            }
+    except PhoenixError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    system_text, user_text = _split_chat_messages(version)
+
+    record_metadata: dict = {}
+    try:
+        for record in (prompt_client.list_prompts(limit=200) or {}).get("data") or []:
+            if record.get("name") == prompt_name:
+                record_metadata = record.get("metadata") or {}
+                break
+    except PhoenixError:
+        pass
+
+    return {
+        "prompt_name": prompt_name,
+        "system": system_text,
+        "user": user_text,
+        "variable_definitions": record_metadata.get("variable_definitions"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Helpers (introspection schema + step lookup)
 # ---------------------------------------------------------------------------
@@ -433,6 +557,57 @@ def _step_schema(target_name: str, registry: dict) -> SchemaResponse:
     raise HTTPException(
         status_code=404, detail=f"Step {target_name!r} not found.",
     )
+
+
+def _resolve_step_node(registry: dict, step_class_name: str) -> Any:
+    """Find the ``LLMStepNode`` subclass with ``__name__ == step_class_name``."""
+    for record in registry.values():
+        pipeline_cls = record.get("pipeline_class") if isinstance(
+            record, dict,
+        ) else record
+        for node_cls in getattr(pipeline_cls, "nodes", []):
+            if node_cls.__name__ == step_class_name:
+                return node_cls
+    raise HTTPException(
+        status_code=404,
+        detail=f"Step {step_class_name!r} not found in any registered pipeline.",
+    )
+
+
+def _split_chat_messages(
+    version: dict[str, Any],
+) -> tuple[Optional[str], Optional[str]]:
+    """Pull system + user message text out of a Phoenix CHAT prompt version."""
+    template = (version or {}).get("template") or {}
+    if template.get("type") == "string":
+        body = template.get("template")
+        return (None, body) if isinstance(body, str) else (None, None)
+    if template.get("type") != "chat":
+        return None, None
+    system_text: Optional[str] = None
+    user_text: Optional[str] = None
+    for msg in template.get("messages") or []:
+        role = msg.get("role")
+        content = msg.get("content")
+        text = _flatten_message_content(content)
+        if role in {"system", "developer"} and system_text is None:
+            system_text = text
+        elif role == "user" and user_text is None:
+            user_text = text
+    return system_text, user_text
+
+
+def _flatten_message_content(content: Any) -> Optional[str]:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            p.get("text") for p in content
+            if isinstance(p, dict) and p.get("type") == "text"
+        ]
+        joined = "".join(t for t in parts if isinstance(t, str))
+        return joined or None
+    return None
 
 
 def _resolve_step_target(
