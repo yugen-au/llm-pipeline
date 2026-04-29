@@ -375,6 +375,17 @@ def create_app(
     # Sync pipeline visibility (draft/published) to DB
     _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))
 
+    # Phase B: push code-derived schemas (response_format / tools /
+    # variable types) onto the Phoenix prompt records for every
+    # registered step. No-op when Phoenix is unconfigured. Idempotent;
+    # only writes when the derived schemas differ.
+    try:
+        from llm_pipeline.prompts.registration import sync_pipelines_to_phoenix
+
+        sync_pipelines_to_phoenix(app.state.introspection_registry)
+    except Exception as exc:  # pragma: no cover - sync should never crash startup
+        logger.warning("Phoenix prompt schema sync failed: %s", exc)
+
     # auto_generate base path: param > env > None
     from llm_pipeline.prompts.variables import set_auto_generate_base_path
     resolved_base = auto_generate_base_path or os.environ.get(
