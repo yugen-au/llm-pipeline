@@ -477,6 +477,7 @@ def get_dataset_prod_prompts(
     )
     node_cls = _resolve_step_node(pipeline_registry, target_name)
     prompt_name = node_cls.resolved_prompt_name()
+    step_name = node_cls.step_name()
 
     cached = getattr(request.app.state, "_phoenix_prompt_client", None)
     try:
@@ -496,6 +497,7 @@ def get_dataset_prod_prompts(
         except PromptNotFoundError:
             return {
                 "prompt_name": prompt_name,
+                "step_name": step_name,
                 "system": None,
                 "user": None,
                 "variable_definitions": None,
@@ -516,6 +518,7 @@ def get_dataset_prod_prompts(
 
     return {
         "prompt_name": prompt_name,
+        "step_name": step_name,
         "system": system_text,
         "user": user_text,
         "variable_definitions": record_metadata.get("variable_definitions"),

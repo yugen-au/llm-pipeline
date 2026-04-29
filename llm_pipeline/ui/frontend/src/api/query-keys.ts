@@ -49,22 +49,18 @@ export const queryKeys = {
   evals: {
     all: ['evals'] as const,
     list: (filters?: Record<string, unknown>) => ['evals', filters] as const,
-    detail: (id: number) => ['evals', id] as const,
-    runs: (datasetId: number) => ['evals', datasetId, 'runs'] as const,
-    run: (datasetId: number, runId: number) =>
-      ['evals', datasetId, 'runs', runId] as const,
+    detail: (datasetId: string) => ['evals', datasetId] as const,
+    experiments: (datasetId: string) =>
+      ['evals', datasetId, 'experiments'] as const,
+    experiment: (datasetId: string, experimentId: string) =>
+      ['evals', datasetId, 'experiments', experimentId] as const,
     schema: (targetType: string, targetName: string) =>
       ['evals', 'schema', targetType, targetName] as const,
-    variants: (datasetId: number) => ['evals', datasetId, 'variants'] as const,
-    variant: (datasetId: number, variantId: number) =>
-      ['evals', datasetId, 'variants', variantId] as const,
     deltaTypeWhitelist: () => ['evals', 'delta-type-whitelist'] as const,
-    prodPrompts: (datasetId: number) =>
+    prodPrompts: (datasetId: string) =>
       ['evals', datasetId, 'prod-prompts'] as const,
-    prodModel: (datasetId: number) =>
+    prodModel: (datasetId: string) =>
       ['evals', datasetId, 'prod-model'] as const,
-    historicalCase: (datasetId: number, caseId: number) =>
-      ['evals', datasetId, 'cases', caseId, 'historical'] as const,
   },
 } as const
 

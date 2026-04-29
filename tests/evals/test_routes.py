@@ -302,6 +302,7 @@ class TestProdPrompts:
         assert resp.status_code == 200
         body = resp.json()
         assert body["prompt_name"] == prompt_name
+        assert body["step_name"] == _RouteStep.step_name()
         assert body["system"] == "System."
         assert body["user"] == "Text: {text}"
         assert body["variable_definitions"] == [{"name": "text"}]

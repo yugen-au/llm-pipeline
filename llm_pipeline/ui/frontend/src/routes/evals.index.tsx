@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Plus, FlaskConical } from 'lucide-react'
 import { useDatasets, useCreateDataset } from '@/api/evals'
-import type { DatasetListItem } from '@/api/evals'
+import type { PhoenixDataset } from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -23,26 +23,17 @@ export const Route = createFileRoute('/evals/')({
   component: EvalDatasetsPage,
 })
 
-function passRateBadge(rate: number | null) {
-  if (rate == null) return <Badge variant="secondary" className="text-xs">--</Badge>
-  const pct = Math.round(rate * 100)
-  let color = 'border-red-500 text-red-500'
-  if (pct > 80) color = 'border-green-500 text-green-500'
-  else if (pct > 50) color = 'border-yellow-500 text-yellow-500'
-  return <Badge variant="outline" className={`text-xs ${color}`}>{pct}%</Badge>
-}
-
 function EvalDatasetsPage() {
   const navigate = useNavigate()
   const { data, isLoading } = useDatasets()
-  const datasets = data?.items ?? []
+  const datasets = data?.data ?? []
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-card-foreground">Evals</h1>
-          <p className="text-sm text-muted-foreground">Evaluation datasets and test cases</p>
+          <p className="text-sm text-muted-foreground">Phoenix datasets and experiments</p>
         </div>
         <NewDatasetDialog />
       </div>
@@ -64,8 +55,8 @@ function EvalDatasetsPage() {
                 <TableRow>
                   <TableHead className="text-xs">Name</TableHead>
                   <TableHead className="text-xs">Target</TableHead>
-                  <TableHead className="text-xs text-center">Cases</TableHead>
-                  <TableHead className="text-xs text-center">Last Run</TableHead>
+                  <TableHead className="text-xs text-center">Examples</TableHead>
+                  <TableHead className="text-xs">Created</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -73,7 +64,7 @@ function EvalDatasetsPage() {
                   <DatasetRow
                     key={ds.id}
                     dataset={ds}
-                    onOpen={() => navigate({ to: `/evals/${ds.id}` as string })}
+                    onOpen={() => navigate({ to: '/evals/$datasetId', params: { datasetId: ds.id } })}
                   />
                 ))}
               </TableBody>
@@ -85,17 +76,24 @@ function EvalDatasetsPage() {
   )
 }
 
-function DatasetRow({ dataset, onOpen }: { dataset: DatasetListItem; onOpen: () => void }) {
+function DatasetRow({ dataset, onOpen }: { dataset: PhoenixDataset; onOpen: () => void }) {
+  const targetType = dataset.metadata?.target_type ?? '—'
+  const targetName = dataset.metadata?.target_name ?? '—'
+  const created = dataset.created_at
+    ? new Date(dataset.created_at).toLocaleDateString()
+    : '—'
   return (
     <TableRow className="cursor-pointer hover:bg-muted/50" onClick={onOpen}>
       <TableCell className="text-sm font-medium">{dataset.name}</TableCell>
       <TableCell>
         <Badge variant="secondary" className="text-xs">
-          {dataset.target_type}: {dataset.target_name}
+          {targetType}: {targetName}
         </Badge>
       </TableCell>
-      <TableCell className="text-center text-sm">{dataset.case_count}</TableCell>
-      <TableCell className="text-center">{passRateBadge(dataset.last_run_pass_rate)}</TableCell>
+      <TableCell className="text-center text-sm">
+        {dataset.example_count ?? '—'}
+      </TableCell>
+      <TableCell className="text-xs text-muted-foreground">{created}</TableCell>
     </TableRow>
   )
 }
@@ -103,7 +101,7 @@ function DatasetRow({ dataset, onOpen }: { dataset: DatasetListItem; onOpen: () 
 function NewDatasetDialog() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [targetType, setTargetType] = useState<string>('step')
+  const [targetType, setTargetType] = useState<'step' | 'pipeline'>('step')
   const [targetName, setTargetName] = useState('')
   const createMutation = useCreateDataset()
 
@@ -111,7 +109,12 @@ function NewDatasetDialog() {
     e.preventDefault()
     if (!name.trim() || !targetName.trim()) return
     createMutation.mutate(
-      { name: name.trim(), target_type: targetType, target_name: targetName.trim() },
+      {
+        name: name.trim(),
+        target_type: targetType,
+        target_name: targetName.trim(),
+        examples: [],
+      },
       {
         onSuccess: () => {
           setOpen(false)
@@ -135,7 +138,11 @@ function NewDatasetDialog() {
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>New Evaluation Dataset</DialogTitle>
-            <DialogDescription>Create a dataset to hold test cases for a step or pipeline.</DialogDescription>
+            <DialogDescription>
+              Create a Phoenix-backed dataset for a step or pipeline. Cases land
+              under <code>metadata.target_name</code>; the runner uses it to pick
+              the right task.
+            </DialogDescription>
           </DialogHeader>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
@@ -144,7 +151,7 @@ function NewDatasetDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="ds-target-type">Target Type</Label>
-              <Select value={targetType} onValueChange={setTargetType}>
+              <Select value={targetType} onValueChange={(v) => setTargetType(v as 'step' | 'pipeline')}>
                 <SelectTrigger id="ds-target-type">
                   <SelectValue />
                 </SelectTrigger>
@@ -156,7 +163,7 @@ function NewDatasetDialog() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="ds-target-name">Target Name</Label>
-              <Input id="ds-target-name" value={targetName} onChange={(e) => setTargetName(e.target.value)} placeholder="e.g. sentiment_analysis" />
+              <Input id="ds-target-name" value={targetName} onChange={(e) => setTargetName(e.target.value)} placeholder="Step class or pipeline class name" />
             </div>
           </div>
           <DialogFooter className="mt-6">

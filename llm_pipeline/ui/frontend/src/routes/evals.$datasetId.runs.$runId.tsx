@@ -1,532 +1,362 @@
 import { useState } from 'react'
-import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
-  ArrowLeft,
-  Check,
-  X,
-  Minus,
-  ChevronDown,
-  ChevronRight,
-  GitCompare,
+  ArrowLeft, Check, GitCompare, ShieldCheck, X,
 } from 'lucide-react'
-import { useEvalRun, useEvalRuns } from '@/api/evals'
-import type { CaseResultItem, RunListItem } from '@/api/evals'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+  flattenExamples,
+  flattenRuns,
+  useAcceptExperiment,
+  useDataset,
+  useExperiment,
+} from '@/api/evals'
+import type {
+  PhoenixExample,
+  PhoenixExperiment,
+  PhoenixRun,
+  Variant,
+} from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
 import { JsonViewer } from '@/components/JsonViewer'
 
 export const Route = createFileRoute('/evals/$datasetId/runs/$runId')({
-  component: EvalRunDetailPage,
+  component: ExperimentDetailPage,
 })
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-type EvalScore = { value: boolean | number | string | null } | boolean | number | string | null
-
-function extractEvaluatorNames(results: CaseResultItem[]): string[] {
-  const names = new Set<string>()
-  for (const r of results) {
-    if (r.evaluator_scores && typeof r.evaluator_scores === 'object') {
-      for (const key of Object.keys(r.evaluator_scores)) {
-        names.add(key)
-      }
-    }
-  }
-  return Array.from(names).sort()
-}
-
-function getScoreValue(raw: EvalScore): boolean | number | null {
-  if (raw == null) return null
-  if (typeof raw === 'boolean') return raw
-  if (typeof raw === 'number') return raw
-  if (typeof raw === 'object' && 'value' in raw) {
-    const v = raw.value
-    if (typeof v === 'boolean') return v
-    if (typeof v === 'number') return v
-    return null
-  }
-  return null
-}
-
-function ScoreCell({ raw }: { raw: EvalScore }) {
-  const value = getScoreValue(raw)
-
-  if (value === null || value === undefined) {
-    return <Minus className="h-4 w-4 text-muted-foreground mx-auto" />
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? (
-      <Check className="h-4 w-4 text-green-600 mx-auto" />
-    ) : (
-      <X className="h-4 w-4 text-red-600 mx-auto" />
-    )
-  }
-
-  // Numeric score: color by threshold
-  const color =
-    value >= 0.8
-      ? 'text-green-600'
-      : value >= 0.5
-        ? 'text-yellow-600'
-        : 'text-red-600'
-  return <span className={`text-xs font-mono font-medium ${color}`}>{value.toFixed(2)}</span>
-}
-
-function OverallCell({ result, evaluatorNames }: { result: CaseResultItem; evaluatorNames: string[] }) {
-  if (!result.evaluator_scores || evaluatorNames.length === 0) {
-    return <Minus className="h-4 w-4 text-muted-foreground mx-auto" />
-  }
-
-  // Use the pre-computed passed field from the backend
-  return result.passed ? (
-    <Check className="h-4 w-4 text-green-600 mx-auto" />
-  ) : (
-    <X className="h-4 w-4 text-red-600 mx-auto" />
-  )
-}
-
-function statusVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'completed':
-      return 'default'
-    case 'failed':
-      return 'destructive'
-    case 'running':
-    case 'pending':
-      return 'secondary'
-    default:
-      return 'outline'
-  }
-}
-
-function statusColor(status: string): string {
-  switch (status) {
-    case 'completed':
-      return 'bg-green-600'
-    case 'failed':
-      return 'bg-red-600'
-    case 'running':
-      return 'bg-yellow-500'
-    default:
-      return 'bg-muted-foreground'
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Expandable row
-// ---------------------------------------------------------------------------
-
-function ExpandableDetail({ result }: { result: CaseResultItem }) {
-  return (
-    <div className="space-y-3 p-4 bg-muted/30">
-      {result.error_message && (
-        <div className="space-y-1">
-          <span className="text-xs font-medium text-destructive">Error</span>
-          <pre className="text-xs font-mono text-destructive bg-destructive/10 rounded p-2 whitespace-pre-wrap">
-            {result.error_message}
-          </pre>
-        </div>
-      )}
-      {result.output_data && (
-        <div className="space-y-1">
-          <span className="text-xs font-medium text-muted-foreground">Output</span>
-          <div className="rounded border bg-background p-2">
-            <JsonViewer data={result.output_data} maxDepth={3} />
-          </div>
-        </div>
-      )}
-      {!result.error_message && !result.output_data && (
-        <p className="text-xs text-muted-foreground">No additional data available.</p>
-      )}
-    </div>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
-function EvalRunDetailPage() {
-  const { datasetId: rawDatasetId, runId: rawRunId } = Route.useParams()
-  const datasetId = Number(rawDatasetId)
-  const runId = Number(rawRunId)
-  const { data: run, isLoading, error } = useEvalRun(datasetId, runId)
+function ExperimentDetailPage() {
+  const { datasetId, runId } = Route.useParams()
   const navigate = useNavigate()
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
-  const [pickerOpen, setPickerOpen] = useState(false)
 
-  const runsQ = useEvalRuns(datasetId)
-  const completedRuns = (runsQ.data ?? [])
-    .filter((r) => r.status === 'completed' && r.id !== runId)
-    .sort((a, b) => {
-      const aTs = a.started_at ? Date.parse(a.started_at) : 0
-      const bTs = b.started_at ? Date.parse(b.started_at) : 0
-      return bTs - aTs
-    })
+  const datasetQuery = useDataset(datasetId)
+  const examples = flattenExamples(datasetQuery.data?.examples)
+  const expectedCaseCount = examples.length || undefined
 
-  function handlePickRun(selectedRunId: number) {
-    setPickerOpen(false)
-    navigate({
-      to: '/evals/$datasetId/compare',
-      params: { datasetId: String(datasetId) },
-      search: { baseRunId: selectedRunId, compareRunId: runId },
-    })
-  }
+  const experimentQuery = useExperiment(datasetId, runId, {
+    pollWhileIncomplete: true,
+    expectedCaseCount,
+  })
 
-  function toggleRow(id: number) {
-    setExpandedRows((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  if (isLoading) {
+  if (datasetQuery.isLoading || experimentQuery.isLoading || !experimentQuery.data) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">Loading run...</p>
+      <div className="flex h-full items-center justify-center p-6">
+        <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     )
   }
 
-  if (error || !run) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-destructive">
-          {(error as { detail?: string })?.detail ?? 'Run not found'}
-        </p>
-      </div>
-    )
-  }
+  const experiment = experimentQuery.data.experiment
+  const runs = flattenRuns(experimentQuery.data.runs)
+  const variant = experiment.metadata?.variant ?? null
+  const inProgress =
+    expectedCaseCount != null && runs.length < expectedCaseCount
 
-  const evaluatorNames = extractEvaluatorNames(run.case_results ?? [])
+  const examplesById = new Map<string, PhoenixExample>()
+  for (const ex of examples) examplesById.set(ex.id, ex)
 
   return (
-    <ScrollArea className="h-full">
-      <div className="mx-auto max-w-5xl space-y-6 p-6">
-        {/* Back + breadcrumb */}
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon-sm" asChild>
-            <Link to="/evals/$datasetId" params={{ datasetId: String(datasetId) }}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
+    <div className="flex h-full flex-col gap-4 p-6">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1"
+            onClick={() =>
+              navigate({ to: '/evals/$datasetId', params: { datasetId } })
+            }
+          >
+            <ArrowLeft className="size-4" />
+            Back
           </Button>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Link
-              to="/evals/$datasetId"
-              params={{ datasetId: String(datasetId) }}
-              className="hover:underline"
-            >
-              Dataset #{datasetId}
-            </Link>
-            <span>/</span>
-            <span className="font-medium text-foreground">Run #{run.id}</span>
-          </div>
-        </div>
-
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold">Evaluation Run #{run.id}</h1>
-            <p className="text-xs text-muted-foreground font-mono">
-              Started {run.started_at ? new Date(run.started_at).toLocaleString() : 'N/A'}
-              {run.completed_at && ` -- completed ${new Date(run.completed_at).toLocaleString()}`}
+          <div>
+            <h1 className="text-xl font-semibold text-card-foreground">
+              {experiment.name}
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              experiment {experiment.id}
             </p>
-            {run.variant_id != null && (
-              <p className="text-xs text-muted-foreground">
-                Variant run (variant #{run.variant_id})
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {completedRuns.length === 0 ? (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled
-                        className="gap-1.5"
-                      >
-                        <GitCompare className="h-4 w-4" />
-                        Compare
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>No other completed runs to compare</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPickerOpen(true)}
-                disabled={runsQ.isLoading}
-                className="gap-1.5"
-              >
-                <GitCompare className="h-4 w-4" />
-                Compare
-              </Button>
-            )}
-            <Badge variant={statusVariant(run.status)} className="gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${statusColor(run.status)}`} />
-              {run.status}
-            </Badge>
           </div>
         </div>
-
-        {/* Stat cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Card>
-            <CardContent className="pt-4 pb-3 text-center">
-              <p className="text-2xl font-bold">{run.total_cases}</p>
-              <p className="text-xs text-muted-foreground">Total Cases</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3 text-center">
-              <p className="text-2xl font-bold text-green-600">{run.passed}</p>
-              <p className="text-xs text-muted-foreground">Passed</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3 text-center">
-              <p className="text-2xl font-bold text-red-600">{run.failed}</p>
-              <p className="text-xs text-muted-foreground">Failed</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4 pb-3 text-center">
-              <p className="text-2xl font-bold text-yellow-600">{run.errored}</p>
-              <p className="text-xs text-muted-foreground">Errored</p>
-            </CardContent>
-          </Card>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() =>
+              navigate({
+                to: '/evals/$datasetId/runs/new',
+                params: { datasetId },
+                search: { from: experiment.id },
+              })
+            }
+          >
+            <GitCompare className="size-4" />
+            Re-run / edit variant
+          </Button>
+          <AcceptExperimentDialog
+            experimentId={experiment.id}
+            variant={variant}
+          />
         </div>
-
-        {/* Results grid */}
-        {(run.case_results ?? []).length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Results</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-8" />
-                    <TableHead>Case</TableHead>
-                    {evaluatorNames.map((name) => (
-                      <TableHead key={name} className="text-center whitespace-nowrap">
-                        {name}
-                      </TableHead>
-                    ))}
-                    <TableHead className="text-center">Overall</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(run.case_results ?? []).map((result) => {
-                    const isExpanded = expandedRows.has(result.id)
-                    const colSpan = evaluatorNames.length + 3
-                    return (
-                      <CaseResultRow
-                        key={result.id}
-                        result={result}
-                        evaluatorNames={evaluatorNames}
-                        isExpanded={isExpanded}
-                        colSpan={colSpan}
-                        onToggle={() => toggleRow(result.id)}
-                      />
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-
-        {(run.case_results ?? []).length === 0 && run.status === 'running' && (
-          <Card>
-            <CardContent className="py-8 text-center text-muted-foreground">
-              Run in progress...
-            </CardContent>
-          </Card>
-        )}
       </div>
 
-      <RunPickerDialog
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        runs={completedRuns}
-        onSelect={handlePickRun}
-      />
-    </ScrollArea>
+      {inProgress && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          Run in progress — {runs.length} / {expectedCaseCount} cases recorded.
+          The page polls until done.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr] min-h-0 flex-1">
+        <VariantPanel variant={variant} experiment={experiment} />
+        <CasesPanel runs={runs} examplesById={examplesById} />
+      </div>
+    </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Run picker dialog
+// Variant panel (read-only)
 // ---------------------------------------------------------------------------
 
-function RunPickerDialog({
-  open,
-  onOpenChange,
-  runs,
-  onSelect,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  runs: RunListItem[]
-  onSelect: (runId: number) => void
-}) {
+function VariantPanel({
+  variant, experiment,
+}: { variant: Variant | null | undefined; experiment: PhoenixExperiment }) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Select a run to compare</DialogTitle>
-          <DialogDescription>
-            Pick a completed run as the base reference for comparison.
-          </DialogDescription>
-        </DialogHeader>
-        <ScrollArea className="max-h-80">
-          <div className="space-y-1 pr-3">
-            {runs.map((r) => {
-              const passRate =
-                r.total_cases > 0
-                  ? `${r.passed}/${r.total_cases}`
-                  : '--'
-              const startedLabel = r.started_at
-                ? new Date(r.started_at).toLocaleString()
-                : 'N/A'
-              const variantLabel =
-                r.variant_id != null ? ` (variant #${r.variant_id})` : ''
-              return (
-                <div
-                  key={r.id}
-                  className="flex items-center justify-between rounded-md border px-3 py-2 text-sm hover:bg-muted/50"
-                >
-                  <div className="space-y-0.5">
-                    <div className="font-medium">
-                      Run #{r.id}
-                      {r.variant_id != null && (
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          (variant #{r.variant_id})
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {startedLabel}
-                      {' -- '}
-                      pass rate {passRate}
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onSelect(r.id)}
-                    aria-label={`Select run #${r.id}${variantLabel} started ${startedLabel} with pass rate ${passRate}`}
-                  >
-                    Select
-                  </Button>
+    <Card className="flex flex-col">
+      <CardHeader className="py-3">
+        <CardTitle className="text-base">Variant</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-xs overflow-auto">
+        <div>
+          <Label className="text-xs text-muted-foreground">Model</Label>
+          <p className="font-mono">{variant?.model ?? '— production —'}</p>
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground">Prompt overrides</Label>
+          {variant?.prompt_overrides && Object.keys(variant.prompt_overrides).length > 0 ? (
+            <div className="space-y-2">
+              {Object.entries(variant.prompt_overrides).map(([step, content]) => (
+                <div key={step} className="rounded border border-border p-2">
+                  <p className="font-mono text-[10px] text-muted-foreground">{step}</p>
+                  <pre className="mt-1 whitespace-pre-wrap font-mono text-[11px]">{content}</pre>
                 </div>
-              )
-            })}
-            {runs.length === 0 && (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                No completed runs available.
-              </p>
-            )}
+              ))}
+            </div>
+          ) : (
+            <p className="font-mono text-muted-foreground">— production —</p>
+          )}
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground">Instructions delta</Label>
+          {variant?.instructions_delta && variant.instructions_delta.length > 0 ? (
+            <div className="space-y-1">
+              {variant.instructions_delta.map((d, i) => (
+                <Badge key={i} variant="secondary" className="text-[10px] mr-1">
+                  {d.op} {d.field}
+                  {d.type_str ? `: ${d.type_str}` : ''}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="font-mono text-muted-foreground">— production —</p>
+          )}
+        </div>
+        <div>
+          <Label className="text-xs text-muted-foreground">Target</Label>
+          <p className="font-mono text-[11px]">
+            {experiment.metadata?.target_type ?? '?'}: {experiment.metadata?.target_name ?? '?'}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Cases panel (per-run results)
+// ---------------------------------------------------------------------------
+
+function CasesPanel({
+  runs, examplesById,
+}: { runs: PhoenixRun[]; examplesById: Map<string, PhoenixExample> }) {
+  return (
+    <Card className="flex min-h-0 flex-col">
+      <CardHeader className="py-3">
+        <CardTitle className="text-base">
+          Cases ({runs.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="min-h-0 flex-1 overflow-hidden p-0">
+        {runs.length === 0 ? (
+          <div className="flex h-full items-center justify-center py-12">
+            <p className="text-sm text-muted-foreground">No runs recorded yet.</p>
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea className="h-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-xs">Example</TableHead>
+                  <TableHead className="text-xs">Output</TableHead>
+                  <TableHead className="text-xs">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {runs.map((run) => (
+                  <CaseRow
+                    key={run.id}
+                    run={run}
+                    example={examplesById.get(run.dataset_example_id)}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function CaseRow({
+  run, example,
+}: { run: PhoenixRun; example: PhoenixExample | undefined }) {
+  return (
+    <TableRow className="align-top">
+      <TableCell className="max-w-xs">
+        {example ? (
+          <JsonViewer data={example.input} />
+        ) : (
+          <span className="text-xs text-muted-foreground font-mono">{run.dataset_example_id}</span>
+        )}
+      </TableCell>
+      <TableCell className="max-w-xs">
+        {run.error ? (
+          <span className="text-xs text-destructive">{run.error}</span>
+        ) : (
+          <JsonViewer data={run.output} />
+        )}
+      </TableCell>
+      <TableCell>
+        {run.error ? (
+          <Badge variant="destructive" className="text-xs gap-1">
+            <X className="size-3" /> error
+          </Badge>
+        ) : (
+          <Badge variant="default" className="text-xs gap-1">
+            <Check className="size-3" /> ok
+          </Badge>
+        )}
+      </TableCell>
+    </TableRow>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Accept dialog
+// ---------------------------------------------------------------------------
+
+function AcceptExperimentDialog({
+  experimentId, variant,
+}: { experimentId: string; variant: Variant | null | undefined }) {
+  const [open, setOpen] = useState(false)
+  const [acceptedBy, setAcceptedBy] = useState('')
+  const [notes, setNotes] = useState('')
+  const acceptMutation = useAcceptExperiment()
+
+  // Don't surface accept on baseline experiments — there's nothing to apply.
+  const isBaseline =
+    !variant
+    || (variant.model == null
+      && Object.keys(variant.prompt_overrides ?? {}).length === 0
+      && (variant.instructions_delta ?? []).length === 0)
+
+  const paths: string[] = []
+  if (variant?.model) paths.push(`Set model to ${variant.model} via StepModelConfig`)
+  const promptCount = Object.keys(variant?.prompt_overrides ?? {}).length
+  if (promptCount) paths.push(`Post ${promptCount} new Phoenix prompt version(s) tagged production`)
+  const deltaCount = (variant?.instructions_delta ?? []).length
+  if (deltaCount) paths.push(`Apply ${deltaCount} instructions delta op(s) via AST rewrite (.bak written)`)
+
+  function handleAccept(e: React.FormEvent) {
+    e.preventDefault()
+    acceptMutation.mutate(
+      {
+        experimentId,
+        accepted_by: acceptedBy.trim() || undefined,
+        notes: notes.trim() || undefined,
+      },
+      { onSuccess: () => setOpen(false) },
+    )
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          size="sm"
+          className="gap-1"
+          disabled={isBaseline}
+          title={isBaseline ? 'Nothing to accept on a baseline run' : ''}
+        >
+          <ShieldCheck className="size-4" />
+          Accept to production
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <form onSubmit={handleAccept}>
+          <DialogHeader>
+            <DialogTitle>Accept variant to production</DialogTitle>
+            <DialogDescription>
+              The accept walk will fire the following. This is destructive on the
+              source-file delta path — back up uncommitted work first.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="mt-3 space-y-1 text-sm list-disc pl-5">
+            {paths.map((p) => <li key={p}>{p}</li>)}
+          </ul>
+          <div className="mt-4 space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="acc-by">Accepted by (optional)</Label>
+              <Input
+                id="acc-by"
+                value={acceptedBy}
+                onChange={(e) => setAcceptedBy(e.target.value)}
+                placeholder="your handle"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="acc-notes">Notes (optional)</Label>
+              <Input
+                id="acc-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-6">
+            <Button type="submit" disabled={acceptMutation.isPending}>
+              {acceptMutation.isPending ? 'Accepting...' : 'Accept'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Case result row (extracted for clarity)
-// ---------------------------------------------------------------------------
-
-function CaseResultRow({
-  result,
-  evaluatorNames,
-  isExpanded,
-  colSpan,
-  onToggle,
-}: {
-  result: CaseResultItem
-  evaluatorNames: string[]
-  isExpanded: boolean
-  colSpan: number
-  onToggle: () => void
-}) {
-  const hasDetail = result.output_data != null || result.error_message != null
-  return (
-    <>
-      <TableRow
-        className={hasDetail ? 'cursor-pointer hover:bg-muted/50' : ''}
-        onClick={hasDetail ? onToggle : undefined}
-      >
-        <TableCell className="w-8 px-2">
-          {hasDetail &&
-            (isExpanded ? (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-            ))}
-        </TableCell>
-        <TableCell className="font-medium text-sm">{result.case_name}</TableCell>
-        {evaluatorNames.map((name) => (
-          <TableCell key={name} className="text-center">
-            <ScoreCell
-              raw={
-                result.evaluator_scores?.[name] as EvalScore
-              }
-            />
-          </TableCell>
-        ))}
-        <TableCell className="text-center">
-          <OverallCell result={result} evaluatorNames={evaluatorNames} />
-        </TableCell>
-      </TableRow>
-      {isExpanded && (
-        <TableRow>
-          <TableCell colSpan={colSpan} className="p-0 border-b">
-            <ExpandableDetail result={result} />
-          </TableCell>
-        </TableRow>
-      )}
-    </>
   )
 }
