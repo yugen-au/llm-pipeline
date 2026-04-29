@@ -1,16 +1,28 @@
-"""Tests for llm_pipeline.observability.PipelineObserver."""
+"""Tests for llm_pipeline.observability.
+
+Vendor-neutral OTEL implementation: spans are emitted via raw OTEL,
+annotated with OpenInference semantic conventions, and shipped to
+whatever backend ``OTEL_EXPORTER_OTLP_ENDPOINT`` names. Tests use
+OTEL's ``InMemorySpanExporter`` to capture spans without a remote
+backend.
+"""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 import pytest
 
 # Import at module top so any transitive load_dotenv() calls (e.g. from
-# llm_pipeline.db package init) run once during test collection. Tests then
-# strip the env vars via monkeypatch fixtures — without the early import the
-# fixture would run before .env loaded and the delenv would be a no-op.
+# llm_pipeline.db package init) run once during test collection. Tests
+# then strip the env vars via the autouse session fixture in conftest.
 from llm_pipeline import observability as obs_mod
-from llm_pipeline.observability import PipelineObserver
+from llm_pipeline.observability import (
+    PipelineObserver,
+    WebSocketBroadcastProcessor,
+    _span_to_observation,
+    configure,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -18,317 +30,359 @@ from llm_pipeline.observability import PipelineObserver
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def no_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Strip Langfuse credentials so the observer falls into no-op mode."""
-    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
-    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
-    monkeypatch.delenv("LANGFUSE_BASE_URL", raising=False)
-
-
-@pytest.fixture
-def with_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Set fake Langfuse credentials and patch the SDK client constructor."""
-    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-lf-test")
-    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-lf-test")
-    monkeypatch.setenv("LANGFUSE_BASE_URL", "https://example.invalid")
-
-
 @pytest.fixture(autouse=True)
 def reset_configure_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Reset the module-level _CONFIGURED flag between tests.
-
-    configure() is intentionally idempotent via a module-level flag so
-    that production code can call it freely. Tests need a clean slate
-    each run or only the first configure-related test would exercise
-    the configuration path.
-    """
+    """Reset the module-level _CONFIGURED flag between tests."""
     monkeypatch.setattr(obs_mod, "_CONFIGURED", False)
 
 
-# ---------------------------------------------------------------------------
-# No-op disabled mode
-# ---------------------------------------------------------------------------
+@pytest.fixture
+def in_memory_exporter():
+    """Install an in-memory span exporter on a fresh TracerProvider.
 
+    Returns the exporter so tests can read out captured spans.
+    Replaces the global tracer provider for the test's duration.
+    """
+    from opentelemetry import trace as otel_trace
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+        InMemorySpanExporter,
+    )
 
-class TestDisabledNoOp:
-    """When Langfuse credentials are absent, every observer method is silent."""
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider(resource=Resource.create({"service.name": "test"}))
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
 
-    def test_init_disables_when_creds_absent(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        assert obs._enabled is False
-        assert obs._client is None
-
-    def test_pipeline_run_yields_none_when_disabled(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        with obs.pipeline_run(input_data={"x": 1}) as root:
-            assert root is None
-
-    def test_step_yields_none_when_disabled(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        with obs.pipeline_run() as _:
-            with obs.step(step_name="s", step_number=1) as span:
-                assert span is None
-
-    def test_extraction_yields_none_when_disabled(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        with obs.extraction(extraction_class="E", model_class="M") as span:
-            assert span is None
-
-    def test_transformation_yields_none_when_disabled(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        with obs.transformation(transformation_class="T") as span:
-            assert span is None
-
-    def test_span_events_are_silent_when_disabled(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        # None of these should raise or contact OTEL
-        obs.cache_lookup(input_hash="abc")
-        obs.cache_hit(input_hash="abc")
-        obs.cache_miss(input_hash="abc")
-        obs.cache_reconstructed(input_hash="abc")
-        obs.step_skipped(reason="cached")
-        obs.consensus_attempt(attempt=1, max_attempts=3, strategy="majority")
-        obs.consensus_reached(attempts_used=2, agreement=0.66)
-        obs.consensus_failed(attempts_used=3, reason="no agreement")
-
-    def test_shutdown_safe_when_disabled(self, no_credentials):
-        obs = PipelineObserver(run_id="r1", pipeline_name="p")
-        obs.shutdown()  # no-op
-        obs.shutdown()  # idempotent
-
-
-# ---------------------------------------------------------------------------
-# Enabled mode (Langfuse client mocked)
-# ---------------------------------------------------------------------------
-
-
-class TestEnabledMode:
-    """When credentials are present, observer talks to the SDK."""
-
-    def _make_observer(self, with_credentials, mock_client_cls):
-        """Construct an observer with the SDK constructor patched."""
-        with patch.object(obs_mod, "_credentials_present", return_value=True):
-            # Patch the deferred import inside __init__
-            with patch("langfuse.Langfuse", mock_client_cls):
-                return PipelineObserver(run_id="r1", pipeline_name="p")
-
-    def test_init_constructs_client_when_creds_present(self, with_credentials):
-        mock_client_cls = MagicMock()
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        assert obs._enabled is True
-        mock_client_cls.assert_called_once_with()
-
-    def test_pipeline_run_opens_root_span_and_propagates_attrs(self, with_credentials):
-        mock_client_cls = MagicMock()
-        mock_client = mock_client_cls.return_value
-        mock_root_span = MagicMock()
-        mock_client.start_as_current_observation.return_value.__enter__.return_value = mock_root_span
-
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        with patch("langfuse.propagate_attributes") as mock_propagate:
-            with obs.pipeline_run(input_data={"q": 1}, user_id="u1", tags=["foo"]) as root:
-                assert root is mock_root_span
-
-        mock_client.start_as_current_observation.assert_called_once()
-        start_kwargs = mock_client.start_as_current_observation.call_args.kwargs
-        assert start_kwargs["name"] == "pipeline.p"
-        assert start_kwargs["as_type"] == "span"
-        assert start_kwargs["input"] == {"q": 1}
-
-        # Trace-level attributes go through the top-level propagate_attributes()
-        # context manager (v4 API exposes it as a free function, not a client method)
-        mock_propagate.assert_called_once_with(
-            session_id="r1", user_id="u1", tags=["foo"],
-        )
-        mock_client.flush.assert_called_once()
-
-    def test_pipeline_run_default_tags_use_pipeline_name(self, with_credentials):
-        mock_client_cls = MagicMock()
-        mock_client = mock_client_cls.return_value
-        mock_root_span = MagicMock()
-        mock_client.start_as_current_observation.return_value.__enter__.return_value = mock_root_span
-
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        with patch("langfuse.propagate_attributes") as mock_propagate:
-            with obs.pipeline_run():
-                pass
-
-        # user_id absent → key is omitted from propagate_attributes (not passed as None)
-        mock_propagate.assert_called_once_with(
-            session_id="r1", tags=["p"],
-        )
-
-    def test_step_opens_span_with_metadata(self, with_credentials):
-        mock_client_cls = MagicMock()
-        mock_client = mock_client_cls.return_value
-        mock_step_span = MagicMock()
-        mock_client.start_as_current_observation.return_value.__enter__.return_value = mock_step_span
-
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        with obs.step(step_name="s", step_number=2, instructions_class="I") as span:
-            assert span is mock_step_span
-
-        kwargs = mock_client.start_as_current_observation.call_args.kwargs
-        assert kwargs["name"] == "step.s"
-        assert kwargs["as_type"] == "span"
-        assert kwargs["input"] == {
-            "step_name": "s",
-            "step_number": 2,
-            "instructions_class": "I",
-        }
-
-    def test_extraction_opens_span_with_metadata(self, with_credentials):
-        mock_client_cls = MagicMock()
-        mock_client = mock_client_cls.return_value
-        mock_span = MagicMock()
-        mock_client.start_as_current_observation.return_value.__enter__.return_value = mock_span
-
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        with obs.extraction(extraction_class="WidgetExtraction", model_class="Widget"):
+    # Force the new provider into the global slot. OTEL guards against
+    # re-setting a provider once one is installed; bypass that by
+    # poking the underlying module global.
+    import opentelemetry.trace as _t
+    saved_provider = _t._TRACER_PROVIDER
+    saved_set_once = _t._TRACER_PROVIDER_SET_ONCE
+    try:
+        _t._TRACER_PROVIDER = provider
+        # Reset the once-flag so ``set_tracer_provider`` doesn't no-op.
+        try:
+            _t._TRACER_PROVIDER_SET_ONCE = type(saved_set_once)()
+        except Exception:
             pass
+        yield exporter
+    finally:
+        _t._TRACER_PROVIDER = saved_provider
+        _t._TRACER_PROVIDER_SET_ONCE = saved_set_once
 
-        kwargs = mock_client.start_as_current_observation.call_args.kwargs
-        assert kwargs["name"] == "extraction.WidgetExtraction"
-        assert kwargs["input"] == {
-            "extraction_class": "WidgetExtraction",
-            "model_class": "Widget",
-        }
 
-    def test_shutdown_flushes_and_clears_client(self, with_credentials):
-        mock_client_cls = MagicMock()
-        mock_client = mock_client_cls.return_value
+def _attrs(span) -> dict:
+    """Snapshot a ReadableSpan's attributes to a plain dict."""
+    return dict(span.attributes or {})
 
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        assert obs._client is mock_client
 
-        obs.shutdown()
-        mock_client.flush.assert_called_once()
-        mock_client.shutdown.assert_called_once()
-        assert obs._client is None
-
-    def test_shutdown_is_idempotent(self, with_credentials):
-        mock_client_cls = MagicMock()
-        obs = self._make_observer(with_credentials, mock_client_cls)
-        obs.shutdown()
-        obs.shutdown()  # second call must not error
+def _by_name(spans, name: str):
+    return next(s for s in spans if s.name == name)
 
 
 # ---------------------------------------------------------------------------
-# Span events attach to the active OTEL span
-# ---------------------------------------------------------------------------
-
-
-class TestSpanEventsAttachToActiveSpan:
-    """When enabled, span event helpers add events to the current OTEL span."""
-
-    @pytest.fixture
-    def patch_active_span(self):
-        with patch("opentelemetry.trace.get_current_span") as get_span:
-            mock_span = MagicMock()
-            get_span.return_value = mock_span
-            yield mock_span
-
-    def _enabled_observer(self):
-        with patch.object(obs_mod, "_credentials_present", return_value=True):
-            with patch("langfuse.Langfuse"):
-                return PipelineObserver(run_id="r1", pipeline_name="p")
-
-    def test_cache_hit_emits_span_event(self, patch_active_span):
-        obs = self._enabled_observer()
-        obs.cache_hit(input_hash="abc")
-        patch_active_span.add_event.assert_called_once_with(
-            "cache.hit", attributes={"input_hash": "abc"},
-        )
-
-    def test_consensus_attempt_emits_span_event(self, patch_active_span):
-        obs = self._enabled_observer()
-        obs.consensus_attempt(attempt=2, max_attempts=3, strategy="majority")
-        patch_active_span.add_event.assert_called_once_with(
-            "consensus.attempt",
-            attributes={"attempt": 2, "max_attempts": 3, "strategy": "majority"},
-        )
-
-    def test_consensus_reached_drops_none_attributes(self, patch_active_span):
-        """OTEL rejects None values; the observer must filter them out."""
-        obs = self._enabled_observer()
-        obs.consensus_reached(attempts_used=2, agreement=None)
-        patch_active_span.add_event.assert_called_once_with(
-            "consensus.reached", attributes={"attempts_used": 2},
-        )
-
-
-# ---------------------------------------------------------------------------
-# configure() bootstrap
+# configure()
 # ---------------------------------------------------------------------------
 
 
 class TestConfigure:
-    """``configure()`` initializes Langfuse + pydantic-ai instrumentation once."""
+    def test_idempotent_second_call_returns_true_without_re_setup(self) -> None:
+        with patch("llm_pipeline.observability.WebSocketBroadcastProcessor") as ws_cls:
+            assert configure(instrument_pydantic_ai=False) is True
+            assert configure(instrument_pydantic_ai=False) is True
+            # Constructor called once even though configure() ran twice.
+            assert ws_cls.call_count == 1
 
-    def test_returns_false_and_noop_when_creds_absent(self, no_credentials):
-        with (
-            patch("langfuse.Langfuse") as mock_langfuse,
-            patch("pydantic_ai.Agent") as mock_agent,
-        ):
-            assert obs_mod.configure() is False
-        mock_langfuse.assert_not_called()
-        mock_agent.instrument_all.assert_not_called()
-        assert obs_mod._CONFIGURED is False
+    def test_no_otlp_exporter_when_endpoint_unset(self) -> None:
+        # Endpoint env var stripped by the autouse session fixture in
+        # tests/conftest.py. configure() should still succeed.
+        with patch(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter"
+        ) as exporter_cls:
+            configure(instrument_pydantic_ai=False)
+            exporter_cls.assert_not_called()
 
-    def test_returns_true_and_initializes_when_creds_present(self, with_credentials):
-        with (
-            patch("langfuse.Langfuse") as mock_langfuse,
-            patch("pydantic_ai.Agent") as mock_agent,
-        ):
-            assert obs_mod.configure() is True
-        mock_langfuse.assert_called_once_with()
-        mock_agent.instrument_all.assert_called_once()
-        assert obs_mod._CONFIGURED is True
-
-    def test_idempotent_second_call_skips_initialization(self, with_credentials):
-        with (
-            patch("langfuse.Langfuse") as mock_langfuse,
-            patch("pydantic_ai.Agent") as mock_agent,
-        ):
-            assert obs_mod.configure() is True
-            assert obs_mod.configure() is True
-        # Initialization happens exactly once across both calls
-        mock_langfuse.assert_called_once()
-        mock_agent.instrument_all.assert_called_once()
-
-    def test_instrument_pydantic_ai_false_skips_agent_instrumentation(
-        self, with_credentials,
-    ):
-        with (
-            patch("langfuse.Langfuse") as mock_langfuse,
-            patch("pydantic_ai.Agent") as mock_agent,
-        ):
-            assert obs_mod.configure(instrument_pydantic_ai=False) is True
-        mock_langfuse.assert_called_once()
-        mock_agent.instrument_all.assert_not_called()
-
-    def test_forwards_environment_release_and_sample_rate(self, with_credentials):
-        with (
-            patch("langfuse.Langfuse") as mock_langfuse,
-            patch("pydantic_ai.Agent"),
-        ):
-            obs_mod.configure(
-                environment="staging",
-                release="v1.2.3",
-                sample_rate=0.5,
-            )
-        mock_langfuse.assert_called_once_with(
-            environment="staging",
-            release="v1.2.3",
-            sample_rate=0.5,
+    def test_otlp_exporter_attached_when_endpoint_set(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv(
+            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:6006",
         )
+        with patch(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter"
+        ) as exporter_cls:
+            configure(instrument_pydantic_ai=False)
+            exporter_cls.assert_called_once()
+            kwargs = exporter_cls.call_args.kwargs
+            # Endpoint normalised to include /v1/traces.
+            assert kwargs["endpoint"] == "http://localhost:6006/v1/traces"
 
-    def test_omits_optional_kwargs_when_not_provided(self, with_credentials):
-        """When None, the kwargs aren't passed — Langfuse SDK uses its own defaults."""
-        with (
-            patch("langfuse.Langfuse") as mock_langfuse,
-            patch("pydantic_ai.Agent"),
+    def test_otlp_exporter_keeps_explicit_v1_traces_path(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setenv(
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "https://example.com/v1/traces",
+        )
+        with patch(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter.OTLPSpanExporter"
+        ) as exporter_cls:
+            configure(instrument_pydantic_ai=False)
+            kwargs = exporter_cls.call_args.kwargs
+            assert kwargs["endpoint"] == "https://example.com/v1/traces"
+
+    def test_websocket_processor_always_attached(self) -> None:
+        with patch("llm_pipeline.observability.WebSocketBroadcastProcessor") as ws_cls:
+            configure(instrument_pydantic_ai=False)
+            ws_cls.assert_called_once()
+
+    def test_pydantic_ai_instrumented_by_default(self) -> None:
+        # Need a tracer provider attached by configure() before
+        # instrument_all is called; patch instrument_all itself to
+        # observe.
+        with patch("pydantic_ai.Agent.instrument_all") as instrument:
+            configure()
+            instrument.assert_called_once()
+
+    def test_pydantic_ai_skipped_when_flag_false(self) -> None:
+        with patch("pydantic_ai.Agent.instrument_all") as instrument:
+            configure(instrument_pydantic_ai=False)
+            instrument.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# PipelineObserver: span attributes
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineRunSpan:
+    def test_emits_root_span_with_session_id_and_input(
+        self, in_memory_exporter,
+    ) -> None:
+        obs = PipelineObserver(run_id="run-abc", pipeline_name="my_pipeline")
+        with obs.pipeline_run(input_data={"data": "raw"}, tags=["my_pipeline"]):
+            pass
+
+        spans = in_memory_exporter.get_finished_spans()
+        root = _by_name(spans, "pipeline.my_pipeline")
+        attrs = _attrs(root)
+        assert attrs["session.id"] == "run-abc"
+        assert attrs["openinference.span.kind"] == "CHAIN"
+        # Input is JSON-encoded with mime type set.
+        assert attrs["input.mime_type"] == "application/json"
+        assert "raw" in attrs["input.value"]
+
+    def test_user_id_propagates_via_attribute(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="run-xyz", pipeline_name="p")
+        with obs.pipeline_run(user_id="user-42"):
+            pass
+        attrs = _attrs(_by_name(in_memory_exporter.get_finished_spans(), "pipeline.p"))
+        assert attrs.get("user.id") == "user-42"
+
+    def test_tags_default_to_pipeline_name(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="alpha")
+        with obs.pipeline_run():
+            pass
+        attrs = _attrs(_by_name(in_memory_exporter.get_finished_spans(), "pipeline.alpha"))
+        # Tags stored as JSON array under tag.tags.
+        assert "alpha" in attrs.get("tag.tags", "")
+
+
+class TestStepSpan:
+    def test_step_carries_metadata_and_session(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="run-1", pipeline_name="p")
+        with obs.pipeline_run():
+            with obs.step(
+                step_name="detect", step_number=1,
+                instructions_class="DetectInstructions",
+            ):
+                pass
+
+        step_span = _by_name(in_memory_exporter.get_finished_spans(), "step.detect")
+        attrs = _attrs(step_span)
+        assert attrs["session.id"] == "run-1"
+        assert attrs["openinference.span.kind"] == "CHAIN"
+        # Metadata about the step is in input.value.
+        assert "detect" in attrs["input.value"]
+        assert "DetectInstructions" in attrs["input.value"]
+
+
+class TestExtractionSpan:
+    def test_extraction_span_carries_classes(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run():
+            with obs.extraction(
+                extraction_class="WidgetExtraction", model_class="Widget",
+            ):
+                pass
+        span = _by_name(
+            in_memory_exporter.get_finished_spans(), "extraction.WidgetExtraction",
+        )
+        attrs = _attrs(span)
+        assert attrs["openinference.span.kind"] == "CHAIN"
+        assert "Widget" in attrs["input.value"]
+
+
+class TestTransformationSpan:
+    def test_transformation_span_carries_class(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run():
+            with obs.transformation(transformation_class="Aggregate"):
+                pass
+        span = _by_name(
+            in_memory_exporter.get_finished_spans(), "transformation.Aggregate",
+        )
+        attrs = _attrs(span)
+        assert "Aggregate" in attrs["input.value"]
+
+
+class TestReviewSpan:
+    def test_emits_backdated_span_with_decision_metadata(
+        self, in_memory_exporter,
+    ) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        start = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        end = datetime(2026, 1, 1, 12, 5, 0, tzinfo=timezone.utc)
+        with obs.pipeline_run():
+            obs.review(
+                step_name="detect",
+                start_time=start,
+                end_time=end,
+                decision="approved",
+                notes="lgtm",
+                user_id="alice",
+                review_data={"output": "thing"},
+                token="tok-1",
+            )
+        review = _by_name(in_memory_exporter.get_finished_spans(), "review.detect")
+        attrs = _attrs(review)
+        assert attrs["openinference.span.kind"] == "EVALUATOR"
+        assert attrs["session.id"] == "r"
+        assert attrs["review.decision"] == "approved"
+        assert attrs["review.token"] == "tok-1"
+        assert attrs["review.user_id"] == "alice"
+        # Backdating: span timestamps land on the supplied start/end.
+        assert review.start_time == int(start.timestamp() * 1_000_000_000)
+        assert review.end_time == int(end.timestamp() * 1_000_000_000)
+        # Wait window persisted in metadata.
+        assert "wait_duration_ms" in attrs["metadata"]
+        # Output JSON contains decision + notes.
+        assert "approved" in attrs["output.value"]
+
+    def test_rejected_decision_marks_span_error(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run():
+            obs.review(
+                step_name="x",
+                start_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                end_time=datetime(2026, 1, 2, tzinfo=timezone.utc),
+                decision="rejected",
+            )
+        review = _by_name(in_memory_exporter.get_finished_spans(), "review.x")
+        from opentelemetry.trace import StatusCode
+        assert review.status.status_code == StatusCode.ERROR
+
+
+# ---------------------------------------------------------------------------
+# Resume parent context propagation
+# ---------------------------------------------------------------------------
+
+
+class TestResumeParentContext:
+    def test_resume_attaches_parent_trace_id(self, in_memory_exporter) -> None:
+        # First run: capture trace_id + span_id.
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run() as root:
+            captured_trace = format(root.get_span_context().trace_id, "032x")
+            captured_span = format(root.get_span_context().span_id, "016x")
+            with obs.step(step_name="s1", step_number=1):
+                pass
+
+        # Resume: pass parent context, open a step inside.
+        in_memory_exporter.clear()
+        with obs.pipeline_run(
+            parent_trace_id=captured_trace,
+            parent_span_id=captured_span,
         ):
-            obs_mod.configure()
-        mock_langfuse.assert_called_once_with()
+            with obs.step(step_name="s2", step_number=2):
+                pass
+
+        spans = in_memory_exporter.get_finished_spans()
+        # No new pipeline.p root span on resume.
+        assert all(s.name != "pipeline.p" for s in spans)
+        # The resumed step's trace_id matches the original.
+        s2 = _by_name(spans, "step.s2")
+        assert format(s2.context.trace_id, "032x") == captured_trace
+        # And its parent is the original root span.
+        assert s2.parent is not None
+        assert format(s2.parent.span_id, "016x") == captured_span
+
+    def test_invalid_parent_ids_fall_through_to_fresh_root(
+        self, in_memory_exporter,
+    ) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run(
+            parent_trace_id="not-hex-at-all",
+            parent_span_id="zzz",
+        ):
+            pass
+        # Falls through to a new root span.
+        spans = in_memory_exporter.get_finished_spans()
+        assert any(s.name == "pipeline.p" for s in spans)
+
+
+# ---------------------------------------------------------------------------
+# Span events
+# ---------------------------------------------------------------------------
+
+
+class TestSpanEvents:
+    def test_cache_hit_attaches_event_to_active_span(
+        self, in_memory_exporter,
+    ) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run():
+            with obs.step(step_name="s", step_number=1):
+                obs.cache_hit(input_hash="abc123")
+        step_span = _by_name(in_memory_exporter.get_finished_spans(), "step.s")
+        events = [e for e in step_span.events if e.name == "cache.hit"]
+        assert len(events) == 1
+        assert events[0].attributes["input_hash"] == "abc123"
+
+    def test_consensus_reached_drops_none_attributes(
+        self, in_memory_exporter,
+    ) -> None:
+        obs = PipelineObserver(run_id="r", pipeline_name="p")
+        with obs.pipeline_run():
+            with obs.step(step_name="s", step_number=1):
+                obs.consensus_reached(attempts_used=3, agreement=None)
+        step_span = _by_name(in_memory_exporter.get_finished_spans(), "step.s")
+        events = [e for e in step_span.events if e.name == "consensus.reached"]
+        assert len(events) == 1
+        # None attributes silently dropped (OTEL rejects None values).
+        assert "agreement" not in events[0].attributes
+        assert events[0].attributes["attempts_used"] == 3
+
+
+# ---------------------------------------------------------------------------
+# WebSocketBroadcastProcessor span -> observation mapping
+# ---------------------------------------------------------------------------
+
+
+class TestSpanToObservation:
+    def test_real_span_maps_to_observation(self, in_memory_exporter) -> None:
+        obs = PipelineObserver(run_id="run-99", pipeline_name="alpha")
+        with obs.pipeline_run(input_data={"data": "x"}):
+            pass
+        spans = in_memory_exporter.get_finished_spans()
+        observation = _span_to_observation(spans[0])
+        assert observation["name"] == "pipeline.alpha"
+        assert observation["type"] == "SPAN"
+        assert observation["level"] == "DEFAULT"
+        assert observation["start_time"] is not None
+        assert observation["end_time"] is not None
+        assert observation["duration_ms"] is not None
+        assert observation["input"] == {"data": "x"}

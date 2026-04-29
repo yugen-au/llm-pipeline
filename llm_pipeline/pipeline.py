@@ -297,9 +297,10 @@ class PipelineConfig(ABC):
 
         self.run_id = run_id or str(uuid.uuid4())
 
-        # Bootstrap Langfuse + pydantic-ai instrumentation (no-op when
-        # LANGFUSE_PUBLIC_KEY/SECRET_KEY are absent — local dev / tests
-        # incur no Langfuse overhead). Idempotent across multiple
+        # Bootstrap OTEL + pydantic-ai instrumentation. Spans ship
+        # off-host only when ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set;
+        # otherwise the framework runs in-process (live UI works,
+        # nothing leaves the host). Idempotent across multiple
         # pipeline instantiations in the same process.
         from llm_pipeline import observability as _obs_mod
         _obs_mod.configure()
