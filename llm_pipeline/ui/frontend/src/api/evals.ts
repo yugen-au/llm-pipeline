@@ -145,6 +145,72 @@ export interface PhoenixEvaluation {
 }
 
 // ===========================================================================
+// pydantic-evals EvaluationReport passthrough (lives on
+// `experiment.metadata.full_report` — written by the backend's
+// `_safe_dump_report` in `llm_pipeline/evals/runner.py`).
+// ===========================================================================
+
+/**
+ * `pydantic_evals.reporting.EvaluationResult[T]` — `value` is left as
+ * `unknown` so the same shape covers assertions (bool), scores
+ * (number), and labels (string). Consumers narrow at the use site.
+ */
+export interface EvaluationResultShape {
+  value: unknown
+  reason?: string | null
+  // Upstream may add fields (source, name, etc.) — ignore the rest.
+  [key: string]: unknown
+}
+
+/**
+ * One per-case entry inside `EvaluationReport.cases`. `name` is the
+ * case name, which the runner sets to the dataset example id (see
+ * `_build_case` in `evals/runner.py`).
+ */
+export interface ReportCase {
+  name: string
+  inputs?: unknown
+  output?: unknown
+  expected_output?: unknown
+  metadata?: Record<string, unknown> | null
+  assertions?: Record<string, EvaluationResultShape>
+  scores?: Record<string, EvaluationResultShape>
+  labels?: Record<string, EvaluationResultShape>
+  // Upstream may carry timing / error / metric fields — keep loose.
+  [key: string]: unknown
+}
+
+/** `pydantic_evals.reporting.EvaluationReport.model_dump(mode='json')`. */
+export interface EvaluationReportShape {
+  name?: string | null
+  cases: ReportCase[]
+  [key: string]: unknown
+}
+
+/**
+ * Pull `experiment.metadata.full_report` and return a `name -> case`
+ * map keyed by the case `name` (which equals the dataset example id).
+ * Returns an empty map when `full_report` is missing or malformed —
+ * old experiments pre-dating the report dump degrade gracefully.
+ */
+export function extractReportCases(
+  experiment: PhoenixExperiment | null | undefined,
+): Map<string, ReportCase> {
+  const out = new Map<string, ReportCase>()
+  const raw = experiment?.metadata?.full_report
+  if (!raw || typeof raw !== 'object') return out
+  const cases = (raw as Record<string, unknown>).cases
+  if (!Array.isArray(cases)) return out
+  for (const c of cases) {
+    if (!c || typeof c !== 'object') continue
+    const name = (c as Record<string, unknown>).name
+    if (typeof name !== 'string') continue
+    out.set(name, c as ReportCase)
+  }
+  return out
+}
+
+// ===========================================================================
 // Composite responses (mirroring routes that bundle a record + its children)
 // ===========================================================================
 

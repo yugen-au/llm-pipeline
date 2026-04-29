@@ -4,6 +4,7 @@ import {
   ArrowLeft, Check, GitCompare, ShieldCheck, X,
 } from 'lucide-react'
 import {
+  extractReportCases,
   flattenExamples,
   flattenRuns,
   useAcceptExperiment,
@@ -11,9 +12,11 @@ import {
   useExperiment,
 } from '@/api/evals'
 import type {
+  EvaluationResultShape,
   PhoenixExample,
   PhoenixExperiment,
   PhoenixRun,
+  ReportCase,
   Variant,
 } from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
@@ -67,6 +70,10 @@ function ExperimentDetailPage() {
 
   const examplesById = new Map<string, PhoenixExample>()
   for (const ex of examples) examplesById.set(ex.id, ex)
+
+  // Map dataset_example_id -> ReportCase. Empty map for old
+  // experiments lacking metadata.full_report — rendering degrades.
+  const reportCasesByExampleId = extractReportCases(experiment)
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
@@ -124,7 +131,11 @@ function ExperimentDetailPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[20rem_1fr] min-h-0 flex-1">
         <VariantPanel variant={variant} experiment={experiment} />
-        <CasesPanel runs={runs} examplesById={examplesById} />
+        <CasesPanel
+          runs={runs}
+          examplesById={examplesById}
+          reportCasesByExampleId={reportCasesByExampleId}
+        />
       </div>
     </div>
   )
@@ -193,8 +204,12 @@ function VariantPanel({
 // ---------------------------------------------------------------------------
 
 function CasesPanel({
-  runs, examplesById,
-}: { runs: PhoenixRun[]; examplesById: Map<string, PhoenixExample> }) {
+  runs, examplesById, reportCasesByExampleId,
+}: {
+  runs: PhoenixRun[]
+  examplesById: Map<string, PhoenixExample>
+  reportCasesByExampleId: Map<string, ReportCase>
+}) {
   return (
     <Card className="flex min-h-0 flex-col">
       <CardHeader className="py-3">
@@ -214,6 +229,8 @@ function CasesPanel({
                 <TableRow>
                   <TableHead className="text-xs">Example</TableHead>
                   <TableHead className="text-xs">Output</TableHead>
+                  <TableHead className="text-xs">Assertions</TableHead>
+                  <TableHead className="text-xs">Scores</TableHead>
                   <TableHead className="text-xs">Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -223,6 +240,7 @@ function CasesPanel({
                     key={run.id}
                     run={run}
                     example={examplesById.get(run.dataset_example_id)}
+                    reportCase={reportCasesByExampleId.get(run.dataset_example_id)}
                   />
                 ))}
               </TableBody>
@@ -235,8 +253,12 @@ function CasesPanel({
 }
 
 function CaseRow({
-  run, example,
-}: { run: PhoenixRun; example: PhoenixExample | undefined }) {
+  run, example, reportCase,
+}: {
+  run: PhoenixRun
+  example: PhoenixExample | undefined
+  reportCase: ReportCase | undefined
+}) {
   return (
     <TableRow className="align-top">
       <TableCell className="max-w-xs">
@@ -253,6 +275,12 @@ function CaseRow({
           <JsonViewer data={run.output} />
         )}
       </TableCell>
+      <TableCell className="max-w-xs">
+        <AssertionsCell assertions={reportCase?.assertions} />
+      </TableCell>
+      <TableCell className="max-w-xs">
+        <ScoresCell scores={reportCase?.scores} />
+      </TableCell>
       <TableCell>
         {run.error ? (
           <Badge variant="destructive" className="text-xs gap-1">
@@ -265,6 +293,69 @@ function CaseRow({
         )}
       </TableCell>
     </TableRow>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Per-evaluator cells (sourced from experiment.metadata.full_report)
+// ---------------------------------------------------------------------------
+
+function AssertionsCell({
+  assertions,
+}: { assertions: Record<string, EvaluationResultShape> | undefined }) {
+  if (!assertions) return <span className="text-xs text-muted-foreground">—</span>
+  const entries = Object.entries(assertions)
+  if (entries.length === 0) return <span className="text-xs text-muted-foreground">—</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {entries.map(([name, result]) => {
+        const passed = result?.value === true
+        const reason = typeof result?.reason === 'string' ? result.reason : ''
+        const tooltip = reason ? `${name}: ${reason}` : name
+        return (
+          <Badge
+            key={name}
+            variant={passed ? 'default' : 'destructive'}
+            className="text-[10px] gap-1"
+            title={tooltip}
+          >
+            {passed
+              ? <Check className="size-3" />
+              : <X className="size-3" />}
+            {name}
+          </Badge>
+        )
+      })}
+    </div>
+  )
+}
+
+function ScoresCell({
+  scores,
+}: { scores: Record<string, EvaluationResultShape> | undefined }) {
+  if (!scores) return <span className="text-xs text-muted-foreground">—</span>
+  const entries = Object.entries(scores)
+  if (entries.length === 0) return <span className="text-xs text-muted-foreground">—</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {entries.map(([name, result]) => {
+        const raw = result?.value
+        const num = typeof raw === 'number' ? raw : Number(raw)
+        const display = Number.isFinite(num) ? num.toFixed(2) : String(raw)
+        const reason = typeof result?.reason === 'string' ? result.reason : ''
+        const tooltip = reason ? `${name}: ${reason}` : name
+        return (
+          <Badge
+            key={name}
+            variant="secondary"
+            className="text-[10px]"
+            title={tooltip}
+          >
+            {name}: {display}
+          </Badge>
+        )
+      })}
+    </div>
   )
 }
 
