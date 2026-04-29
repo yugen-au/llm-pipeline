@@ -17,6 +17,62 @@ def _mock_usage(input_tokens=10, output_tokens=5):
     return usage
 
 
+@pytest.fixture
+def phoenix_prompt_stub(monkeypatch):
+    """Replace ``PromptService`` at the pipeline.execute call site with a
+    fake backed by an in-memory dict, so tests that drive
+    ``pipeline.execute()`` don't need a live Phoenix instance.
+
+    Usage::
+
+        def test_x(phoenix_prompt_stub):
+            phoenix_prompt_stub.register(
+                "gadget", system="...", user="Analyze: {data}",
+            )
+            pipeline.execute(...)
+
+    Tests that don't register anything still get a working
+    ``PromptService`` — calls to ``get_prompt`` for unknown keys raise
+    ``ValueError("Prompt not found: ...")`` exactly like the live
+    Phoenix backend would on a 404.
+    """
+    from llm_pipeline.prompts.phoenix_client import PromptNotFoundError
+    from llm_pipeline.prompts.service import PromptService
+
+    store: dict[str, dict] = {}
+
+    class _Stub:
+        def register(self, name: str, *, system: str | None = None, user: str | None = None) -> None:
+            messages = []
+            if system is not None:
+                messages.append({"role": "system", "content": system})
+            if user is not None:
+                messages.append({"role": "user", "content": user})
+            store[name] = {
+                "id": f"v_{name}",
+                "template": {"type": "chat", "messages": messages},
+                "template_type": "CHAT",
+                "template_format": "F_STRING",
+            }
+
+    class _FakeClient:
+        def get_by_tag(self, name, tag):
+            if name not in store:
+                raise PromptNotFoundError(name)
+            return store[name]
+
+        def get_latest(self, name):
+            return self.get_by_tag(name, "latest")
+
+    def _factory(*args, **kwargs):
+        return PromptService(client=_FakeClient())
+
+    monkeypatch.setattr(
+        "llm_pipeline.prompts.service.PromptService", _factory,
+    )
+    return _Stub()
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _strip_observability_endpoints_from_test_env():
     """Keep observability exporters asleep during the test session.

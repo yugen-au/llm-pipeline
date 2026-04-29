@@ -195,7 +195,15 @@ def tracking_engine():
 
 
 @pytest.fixture
-def seeded_tracking_session(tracking_engine):
+def seeded_tracking_session(tracking_engine, phoenix_prompt_stub):
+    """Open a session against the in-memory tracking DB and register
+    the gadget prompt with the Phoenix stub. The local DB still gets
+    Prompt rows so any code that legitimately reads them during
+    transition keeps working; the prompt service itself goes through
+    Phoenix."""
+    phoenix_prompt_stub.register(
+        "gadget", system="You detect gadgets.", user="Analyze: {data}",
+    )
     with Session(tracking_engine) as session:
         session.add(Prompt(
             prompt_key="gadget.system",

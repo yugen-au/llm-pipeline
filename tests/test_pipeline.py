@@ -199,6 +199,19 @@ def seeded_session(session):
     return session
 
 
+@pytest.fixture
+def stub_phoenix_prompts(phoenix_prompt_stub):
+    """Wraps the shared ``phoenix_prompt_stub`` and pre-registers the
+    ``widget_detection`` prompt content used by the pipeline-execution
+    tests."""
+    phoenix_prompt_stub.register(
+        "widget_detection",
+        system="You are a widget detector.",
+        user="Analyze this data: {data}",
+    )
+    return phoenix_prompt_stub
+
+
 # ---------- Tests ----------
 
 class TestImports:
@@ -291,7 +304,7 @@ class TestPipelineInit:
 
 
 class TestPipelineExecution:
-    def test_full_execution(self, engine, seeded_session):
+    def test_full_execution(self, engine, seeded_session, stub_phoenix_prompts):
         """Full pipeline: execute with mocked agent, verify extractions and state."""
         pipeline = TestPipeline(session=seeded_session, model="test-model")
 
@@ -310,7 +323,7 @@ class TestPipelineExecution:
         # Verify instructions stored
         assert "widget_detection" in pipeline._instructions
 
-    def test_save_persists_to_db(self, engine, seeded_session):
+    def test_save_persists_to_db(self, engine, seeded_session, stub_phoenix_prompts):
         pipeline = TestPipeline(session=seeded_session, model="test-model")
 
         with patch("pydantic_ai.Agent.run_sync", return_value=_make_widget_run_result(widget_count=2, category="tools")):
@@ -325,7 +338,7 @@ class TestPipelineExecution:
         widgets = seeded_session.exec(select(Widget)).all()
         assert len(widgets) == 2
 
-    def test_step_state_saved(self, engine, seeded_session):
+    def test_step_state_saved(self, engine, seeded_session, stub_phoenix_prompts):
         """Verify PipelineStepState is created after execution."""
         pipeline = TestPipeline(session=seeded_session, model="test-model")
 
@@ -340,25 +353,59 @@ class TestPipelineExecution:
 
 
 class TestPromptService:
-    def test_get_prompt(self, seeded_session):
-        service = PromptService(seeded_session)
+    """PromptService now reads from Phoenix; tests use an in-memory fake."""
+
+    @staticmethod
+    def _service_with(prompts):
+        from llm_pipeline.prompts.phoenix_client import PromptNotFoundError
+
+        class FakeClient:
+            def get_by_tag(self, name, tag):
+                if name not in prompts:
+                    raise PromptNotFoundError(name)
+                return prompts[name]
+
+            def get_latest(self, name):
+                if name not in prompts:
+                    raise PromptNotFoundError(name)
+                return prompts[name]
+
+        return PromptService(client=FakeClient())
+
+    @staticmethod
+    def _widget_prompt():
+        return {
+            "id": "v1",
+            "template": {
+                "type": "chat",
+                "messages": [
+                    {"role": "system", "content": "You are a widget detector."},
+                    {"role": "user", "content": "Analyze this data: {data}"},
+                ],
+            },
+            "template_type": "CHAT",
+            "template_format": "F_STRING",
+        }
+
+    def test_get_prompt(self):
+        service = self._service_with({"widget_detection": self._widget_prompt()})
         content = service.get_prompt(
             "widget_detection.system_instruction", prompt_type="system"
         )
         assert "widget detector" in content
 
-    def test_prompt_not_found(self, session):
-        service = PromptService(session)
+    def test_prompt_not_found(self):
+        service = self._service_with({})
         with pytest.raises(ValueError, match="Prompt not found"):
             service.get_prompt("nonexistent")
 
-    def test_prompt_fallback(self, session):
-        service = PromptService(session)
+    def test_prompt_fallback(self):
+        service = self._service_with({})
         content = service.get_prompt("nonexistent", fallback="default text")
         assert content == "default text"
 
-    def test_format_user_prompt(self, seeded_session):
-        service = PromptService(seeded_session)
+    def test_format_user_prompt(self):
+        service = self._service_with({"widget_detection": self._widget_prompt()})
         result = service.get_user_prompt(
             "widget_detection.user_prompt",
             variables={"data": "hello world"},

@@ -14,7 +14,6 @@ missed and the canonical post-run history.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +22,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlmodel import select
 
+from llm_pipeline.prompts import phoenix_config
 from llm_pipeline.state import PipelineRun
 from llm_pipeline.ui.deps import DBSession
 from llm_pipeline.utils.json import maybe_parse_json
@@ -108,49 +108,10 @@ class RunTraceResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _phoenix_base_url() -> Optional[str]:
-    """Resolve the Phoenix HTTP base URL.
-
-    Order:
-      1. Explicit ``PHOENIX_BASE_URL`` (e.g. ``http://localhost:6006``).
-      2. Derived from ``OTEL_EXPORTER_OTLP_ENDPOINT`` (strip
-         ``/v1/traces`` if present) — convenient for setups where the
-         same host runs OTLP ingest + the Phoenix REST API on the
-         same port (the standard self-hosted topology).
-
-    Returns None when no backend is configured.
-    """
-    explicit = os.environ.get("PHOENIX_BASE_URL", "").strip()
-    if explicit:
-        return explicit.rstrip("/")
-    otlp = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip()
-    if otlp:
-        base = otlp.rstrip("/")
-        if base.endswith("/v1/traces"):
-            base = base[: -len("/v1/traces")]
-        return base
-    return None
-
-
-def _phoenix_project() -> str:
-    """Project name to query traces under. Phoenix auto-creates ``default``."""
-    return os.environ.get("PHOENIX_PROJECT", "default")
-
-
-def _trace_backend_configured() -> bool:
-    return _phoenix_base_url() is not None
-
-
-def _phoenix_headers() -> Dict[str, str]:
-    """Auth headers for Phoenix Cloud; empty for self-hosted with no auth."""
-    headers: Dict[str, str] = {}
-    api_key = os.environ.get("PHOENIX_API_KEY", "").strip()
-    if api_key:
-        # Phoenix Cloud expects the API key in this header. Self-hosted
-        # without auth ignores it.
-        headers["api_key"] = api_key
-        headers["Authorization"] = f"Bearer {api_key}"
-    return headers
+_phoenix_base_url = phoenix_config.get_base_url
+_phoenix_project = phoenix_config.get_project
+_phoenix_headers = phoenix_config.get_headers
+_trace_backend_configured = phoenix_config.is_configured
 
 
 # ---------------------------------------------------------------------------

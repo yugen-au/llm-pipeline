@@ -810,8 +810,8 @@ class PipelineConfig(ABC):
         if not self._strategies:
             raise ValueError("No strategies registered in pipeline")
 
-        # Create prompt service from pipeline session
-        prompt_service = PromptService(self._real_session)
+        # Phoenix-backed prompt service; client is built from env vars.
+        prompt_service = PromptService()
 
         # Validate input_data against INPUT_DATA schema if declared
         cls = self.__class__
