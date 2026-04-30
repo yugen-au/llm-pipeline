@@ -5,11 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:analyze": "tsc -b && ANALYZE=true vite build",
+    "build": "tsr generate && tsc -b && vite build",
+    "build:analyze": "tsr generate && tsc -b && ANALYZE=true vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "type-check": "tsc -b --noEmit",
+    "type-check": "tsr generate && tsc -b --noEmit",
     "test": "vitest",
     "test:coverage": "vitest run --coverage"
   },
@@ -19,7 +19,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@monaco-editor/react": "^4.7.0",
-    "monaco-editor": "^0.52.2",
     "@tailwindcss/vite": "^4.2.0",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-router": "^1.161.3",
@@ -30,6 +29,7 @@
     "llm-info": "^1.0.69",
     "lucide-react": "^0.575.0",
     "microdiff": "^1.5.0",
+    "monaco-editor": "^0.52.2",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -45,6 +45,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@tanstack/react-query-devtools": "^5.91.3",
+    "@tanstack/router-cli": "^1.161.3",
     "@tanstack/router-plugin": "^1.161.3",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.3",

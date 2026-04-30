@@ -174,13 +174,13 @@ function ObservationRow({ node }: { node: TreeNode }) {
           {obs.input != null && (
             <div className="mb-2">
               <div className="mb-1 font-medium text-muted-foreground">input</div>
-              <JsonViewer data={obs.input as object} />
+              <JsonViewer data={obs.input as Record<string, unknown>} />
             </div>
           )}
           {obs.output != null && (
             <div>
               <div className="mb-1 font-medium text-muted-foreground">output</div>
-              <JsonViewer data={obs.output as object} />
+              <JsonViewer data={obs.output as Record<string, unknown>} />
             </div>
           )}
         </div>

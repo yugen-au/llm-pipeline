@@ -414,5 +414,5 @@ function RunCell({ run }: { run: PhoenixRun | undefined }) {
   if (run.error) {
     return <span className="text-xs text-destructive">{run.error}</span>
   }
-  return <JsonViewer data={run.output} />
+  return <JsonViewer data={run.output as Record<string, unknown>} />
 }

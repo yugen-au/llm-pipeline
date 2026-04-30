@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/sheet'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
-import { ExtractionDetail } from '@/components/runs/ExtractionDetail'
 import {
   EmptyState,
   TabScrollArea,
@@ -126,12 +125,18 @@ function InputTab({
   if (isError || !step) return <EmptyState message="Failed to load step input" />
   return (
     <TabScrollArea>
-      <BadgeSection>
-        <Badge variant="outline">step #{step.step_number}</Badge>
-        {step.execution_time_ms != null && (
-          <Badge variant="outline">{formatDuration(step.execution_time_ms)}</Badge>
-        )}
-        {step.model && <Badge variant="outline">{step.model}</Badge>}
+      <BadgeSection
+        badge={
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline">step #{step.step_number}</Badge>
+            {step.execution_time_ms != null && (
+              <Badge variant="outline">{formatDuration(step.execution_time_ms)}</Badge>
+            )}
+            {step.model && <Badge variant="outline">{step.model}</Badge>}
+          </div>
+        }
+      >
+        {null}
       </BadgeSection>
       {context?.context_snapshot ? (
         <div className="mt-3">
@@ -232,13 +237,13 @@ function GenerationsTab({
             {g.input != null && (
               <div className="mb-2">
                 <div className="mb-1 text-xs font-medium text-muted-foreground">input</div>
-                <JsonViewer data={g.input as object} />
+                <JsonViewer data={g.input as Record<string, unknown>} />
               </div>
             )}
             {g.output != null && (
               <div>
                 <div className="mb-1 text-xs font-medium text-muted-foreground">output</div>
-                <JsonViewer data={g.output as object} />
+                <JsonViewer data={g.output as Record<string, unknown>} />
               </div>
             )}
           </div>
@@ -284,22 +289,35 @@ function ExtractionsTab({
   return (
     <TabScrollArea>
       <div className="flex flex-col gap-3">
-        {extractions.map((e) => (
-          <ExtractionDetail
-            key={e.id}
-            extractionClass={e.name.slice('extraction.'.length)}
-            modelClass={
-              (e.metadata as { model_class?: string } | null)?.model_class ?? '?'
-            }
-            instanceCount={
-              (e.metadata as { instance_count?: number } | null)?.instance_count ?? 0
-            }
-            executionTimeMs={e.duration_ms != null ? Math.round(e.duration_ms) : 0}
-            timestamp={e.start_time ?? ''}
-            created={[]}
-            updated={[]}
-          />
-        ))}
+        {extractions.map((e) => {
+          const meta = (e.metadata ?? {}) as {
+            model_class?: string
+            instance_count?: number
+          }
+          const extractionClass = e.name.slice('extraction.'.length)
+          const modelClass = meta.model_class ?? '?'
+          const instanceCount = meta.instance_count ?? 0
+          return (
+            <div key={e.id} className="rounded-md border p-3 text-sm space-y-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-medium text-xs">
+                  {extractionClass}{' '}
+                  <span className="text-muted-foreground font-normal">
+                    &rarr; {modelClass}
+                  </span>
+                </span>
+                {e.duration_ms != null && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatDuration(Math.round(e.duration_ms))}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {instanceCount} instance{instanceCount !== 1 ? 's' : ''}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </TabScrollArea>
   )
@@ -321,22 +339,28 @@ function MetaTab({
   if (isError || !step) return <EmptyState message="Failed to load step metadata" />
   return (
     <TabScrollArea>
-      <BadgeSection>
-        <Badge variant="outline">created {formatAbsolute(step.created_at)}</Badge>
-        {step.execution_time_ms != null && (
-          <Badge variant="outline">{formatDuration(step.execution_time_ms)}</Badge>
-        )}
-        {totals.count > 0 && (
-          <>
-            <Badge variant="outline">{totals.count} LLM call{totals.count > 1 ? 's' : ''}</Badge>
-            <Badge variant="outline">
-              {totals.inputTokens}→{totals.outputTokens} tok
-            </Badge>
-            {totals.cost > 0 && (
-              <Badge variant="outline">${totals.cost.toFixed(4)}</Badge>
+      <BadgeSection
+        badge={
+          <div className="flex flex-wrap gap-1">
+            <Badge variant="outline">created {formatAbsolute(step.created_at)}</Badge>
+            {step.execution_time_ms != null && (
+              <Badge variant="outline">{formatDuration(step.execution_time_ms)}</Badge>
             )}
-          </>
-        )}
+            {totals.count > 0 && (
+              <>
+                <Badge variant="outline">{totals.count} LLM call{totals.count > 1 ? 's' : ''}</Badge>
+                <Badge variant="outline">
+                  {totals.inputTokens}→{totals.outputTokens} tok
+                </Badge>
+                {totals.cost > 0 && (
+                  <Badge variant="outline">${totals.cost.toFixed(4)}</Badge>
+                )}
+              </>
+            )}
+          </div>
+        }
+      >
+        {null}
       </BadgeSection>
       <div className="mt-3 space-y-2 text-sm">
         {step.prompt_system_key && (

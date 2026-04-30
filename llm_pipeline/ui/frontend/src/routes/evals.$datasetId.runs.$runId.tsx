@@ -272,7 +272,7 @@ function CaseRow({
         {run.error ? (
           <span className="text-xs text-destructive">{run.error}</span>
         ) : (
-          <JsonViewer data={run.output} />
+          <JsonViewer data={run.output as Record<string, unknown>} />
         )}
       </TableCell>
       <TableCell className="max-w-xs">

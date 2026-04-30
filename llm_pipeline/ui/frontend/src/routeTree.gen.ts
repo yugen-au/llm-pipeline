@@ -23,8 +23,7 @@ import { Route as ReviewTokenRouteImport } from './routes/review/$token'
 import { Route as EvalsDatasetIdRouteImport } from './routes/evals.$datasetId'
 import { Route as EvalsDatasetIdIndexRouteImport } from './routes/evals.$datasetId.index'
 import { Route as EvalsDatasetIdCompareRouteImport } from './routes/evals.$datasetId.compare'
-import { Route as EvalsDatasetIdVariantsNewRouteImport } from './routes/evals.$datasetId.variants.new'
-import { Route as EvalsDatasetIdVariantsVariantIdRouteImport } from './routes/evals.$datasetId.variants.$variantId'
+import { Route as EvalsDatasetIdRunsNewRouteImport } from './routes/evals.$datasetId.runs.new'
 import { Route as EvalsDatasetIdRunsRunIdRouteImport } from './routes/evals.$datasetId.runs.$runId'
 
 const ReviewsRoute = ReviewsRouteImport.update({
@@ -97,18 +96,11 @@ const EvalsDatasetIdCompareRoute = EvalsDatasetIdCompareRouteImport.update({
   path: '/compare',
   getParentRoute: () => EvalsDatasetIdRoute,
 } as any)
-const EvalsDatasetIdVariantsNewRoute =
-  EvalsDatasetIdVariantsNewRouteImport.update({
-    id: '/variants/new',
-    path: '/variants/new',
-    getParentRoute: () => EvalsDatasetIdRoute,
-  } as any)
-const EvalsDatasetIdVariantsVariantIdRoute =
-  EvalsDatasetIdVariantsVariantIdRouteImport.update({
-    id: '/variants/$variantId',
-    path: '/variants/$variantId',
-    getParentRoute: () => EvalsDatasetIdRoute,
-  } as any)
+const EvalsDatasetIdRunsNewRoute = EvalsDatasetIdRunsNewRouteImport.update({
+  id: '/runs/new',
+  path: '/runs/new',
+  getParentRoute: () => EvalsDatasetIdRoute,
+} as any)
 const EvalsDatasetIdRunsRunIdRoute = EvalsDatasetIdRunsRunIdRouteImport.update({
   id: '/runs/$runId',
   path: '/runs/$runId',
@@ -131,8 +123,7 @@ export interface FileRoutesByFullPath {
   '/evals/$datasetId/compare': typeof EvalsDatasetIdCompareRoute
   '/evals/$datasetId/': typeof EvalsDatasetIdIndexRoute
   '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
-  '/evals/$datasetId/variants/$variantId': typeof EvalsDatasetIdVariantsVariantIdRoute
-  '/evals/$datasetId/variants/new': typeof EvalsDatasetIdVariantsNewRoute
+  '/evals/$datasetId/runs/new': typeof EvalsDatasetIdRunsNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -148,8 +139,7 @@ export interface FileRoutesByTo {
   '/evals/$datasetId/compare': typeof EvalsDatasetIdCompareRoute
   '/evals/$datasetId': typeof EvalsDatasetIdIndexRoute
   '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
-  '/evals/$datasetId/variants/$variantId': typeof EvalsDatasetIdVariantsVariantIdRoute
-  '/evals/$datasetId/variants/new': typeof EvalsDatasetIdVariantsNewRoute
+  '/evals/$datasetId/runs/new': typeof EvalsDatasetIdRunsNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -168,8 +158,7 @@ export interface FileRoutesById {
   '/evals/$datasetId/compare': typeof EvalsDatasetIdCompareRoute
   '/evals/$datasetId/': typeof EvalsDatasetIdIndexRoute
   '/evals/$datasetId/runs/$runId': typeof EvalsDatasetIdRunsRunIdRoute
-  '/evals/$datasetId/variants/$variantId': typeof EvalsDatasetIdVariantsVariantIdRoute
-  '/evals/$datasetId/variants/new': typeof EvalsDatasetIdVariantsNewRoute
+  '/evals/$datasetId/runs/new': typeof EvalsDatasetIdRunsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -189,8 +178,7 @@ export interface FileRouteTypes {
     | '/evals/$datasetId/compare'
     | '/evals/$datasetId/'
     | '/evals/$datasetId/runs/$runId'
-    | '/evals/$datasetId/variants/$variantId'
-    | '/evals/$datasetId/variants/new'
+    | '/evals/$datasetId/runs/new'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -206,8 +194,7 @@ export interface FileRouteTypes {
     | '/evals/$datasetId/compare'
     | '/evals/$datasetId'
     | '/evals/$datasetId/runs/$runId'
-    | '/evals/$datasetId/variants/$variantId'
-    | '/evals/$datasetId/variants/new'
+    | '/evals/$datasetId/runs/new'
   id:
     | '__root__'
     | '/'
@@ -225,8 +212,7 @@ export interface FileRouteTypes {
     | '/evals/$datasetId/compare'
     | '/evals/$datasetId/'
     | '/evals/$datasetId/runs/$runId'
-    | '/evals/$datasetId/variants/$variantId'
-    | '/evals/$datasetId/variants/new'
+    | '/evals/$datasetId/runs/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -342,18 +328,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EvalsDatasetIdCompareRouteImport
       parentRoute: typeof EvalsDatasetIdRoute
     }
-    '/evals/$datasetId/variants/new': {
-      id: '/evals/$datasetId/variants/new'
-      path: '/variants/new'
-      fullPath: '/evals/$datasetId/variants/new'
-      preLoaderRoute: typeof EvalsDatasetIdVariantsNewRouteImport
-      parentRoute: typeof EvalsDatasetIdRoute
-    }
-    '/evals/$datasetId/variants/$variantId': {
-      id: '/evals/$datasetId/variants/$variantId'
-      path: '/variants/$variantId'
-      fullPath: '/evals/$datasetId/variants/$variantId'
-      preLoaderRoute: typeof EvalsDatasetIdVariantsVariantIdRouteImport
+    '/evals/$datasetId/runs/new': {
+      id: '/evals/$datasetId/runs/new'
+      path: '/runs/new'
+      fullPath: '/evals/$datasetId/runs/new'
+      preLoaderRoute: typeof EvalsDatasetIdRunsNewRouteImport
       parentRoute: typeof EvalsDatasetIdRoute
     }
     '/evals/$datasetId/runs/$runId': {
@@ -370,16 +349,14 @@ interface EvalsDatasetIdRouteChildren {
   EvalsDatasetIdCompareRoute: typeof EvalsDatasetIdCompareRoute
   EvalsDatasetIdIndexRoute: typeof EvalsDatasetIdIndexRoute
   EvalsDatasetIdRunsRunIdRoute: typeof EvalsDatasetIdRunsRunIdRoute
-  EvalsDatasetIdVariantsVariantIdRoute: typeof EvalsDatasetIdVariantsVariantIdRoute
-  EvalsDatasetIdVariantsNewRoute: typeof EvalsDatasetIdVariantsNewRoute
+  EvalsDatasetIdRunsNewRoute: typeof EvalsDatasetIdRunsNewRoute
 }
 
 const EvalsDatasetIdRouteChildren: EvalsDatasetIdRouteChildren = {
   EvalsDatasetIdCompareRoute: EvalsDatasetIdCompareRoute,
   EvalsDatasetIdIndexRoute: EvalsDatasetIdIndexRoute,
   EvalsDatasetIdRunsRunIdRoute: EvalsDatasetIdRunsRunIdRoute,
-  EvalsDatasetIdVariantsVariantIdRoute: EvalsDatasetIdVariantsVariantIdRoute,
-  EvalsDatasetIdVariantsNewRoute: EvalsDatasetIdVariantsNewRoute,
+  EvalsDatasetIdRunsNewRoute: EvalsDatasetIdRunsNewRoute,
 }
 
 const EvalsDatasetIdRouteWithChildren = EvalsDatasetIdRoute._addFileChildren(

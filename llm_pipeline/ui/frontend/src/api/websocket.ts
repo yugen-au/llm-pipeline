@@ -39,8 +39,6 @@ const BASE_RECONNECT_DELAY = 1_000
 
 let globalWs: WebSocket | null = null
 let pendingMessages: WsClientMessage[] = []
-/** Cached QueryClient reference for imperative subscribeToRun calls. */
-let cachedQueryClient: QueryClient | null = null
 
 /** Tracks active subscriptions so they can be re-sent on reconnect. */
 const activeSubscriptions = new Set<string>()
@@ -219,8 +217,6 @@ export function useGlobalWebSocket(): void {
   const connectRef = useRef<(() => void) | null>(null)
 
   const { setStatus, setError, setLatestRun, incrementReconnect } = useWsStore()
-
-  cachedQueryClient = queryClient
 
   const connect = useCallback(() => {
     if (!mountedRef.current) return
