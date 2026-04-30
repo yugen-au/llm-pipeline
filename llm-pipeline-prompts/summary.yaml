@@ -10,9 +10,8 @@ metadata:
       type: str
       description: Input text to summarize
     sentiment:
-      type: enum
+      type: str
       description: Previously detected sentiment
-      auto_generate: enum_names(Sentiment)
     primary_topic:
       type: str
       description: Primary topic extracted from text

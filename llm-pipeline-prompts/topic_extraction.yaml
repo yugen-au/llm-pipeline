@@ -10,9 +10,8 @@ metadata:
       type: str
       description: Input text to extract topics from
     sentiment:
-      type: enum
+      type: str
       description: Previously detected sentiment
-      auto_generate: enum_names(Sentiment)
 messages:
   - role: system
     content: >-
