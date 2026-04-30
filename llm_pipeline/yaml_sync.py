@@ -182,6 +182,7 @@ def delete_yaml(name: str, dir_: Path) -> bool:
 
 @dataclass
 class SyncReport:
+    # Push direction (YAML -> Phoenix)
     prompts_pushed: list[str] = field(default_factory=list)
     prompts_skipped: list[str] = field(default_factory=list)
     prompts_failed: list[tuple[str, str]] = field(default_factory=list)
@@ -189,6 +190,10 @@ class SyncReport:
     datasets_diffed: list[str] = field(default_factory=list)
     datasets_skipped: list[str] = field(default_factory=list)
     datasets_failed: list[tuple[str, str]] = field(default_factory=list)
+    # Pull direction (Phoenix -> YAML). Populated by pull_phoenix_to_yaml.
+    prompts_pulled: list[str] = field(default_factory=list)
+    prompts_pull_skipped: list[str] = field(default_factory=list)
+    prompts_pull_failed: list[tuple[str, str]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -682,6 +687,118 @@ def _sync_datasets(
 
 
 # ---------------------------------------------------------------------------
+# Pull direction: Phoenix -> YAML (step-driven)
+# ---------------------------------------------------------------------------
+
+
+def pull_phoenix_to_yaml(
+    *,
+    prompts_dir: Path,
+    prompt_client: PhoenixPromptClient,
+    introspection_registry: dict[str, Any],
+) -> SyncReport:
+    """Refresh ``prompts_dir`` from Phoenix for every registered step.
+
+    Iterates the same step classes ``_sync_prompts`` walks (one entry
+    per registered ``LLMStepNode`` subclass). For each step:
+
+    - Fetch Phoenix's current canonical Prompt for ``step_name()``.
+    - If Phoenix has nothing, leave YAML alone — this is a "new step
+      bootstrapping" case and the push direction will create the
+      Phoenix record from YAML in the next stage.
+    - Otherwise compare the existing on-disk YAML (if any) to Phoenix
+      via the YAML-write hash (excludes code-derived fields). If
+      content differs (or YAML is missing), write the canonical
+      Phoenix-shape to disk via :func:`write_prompt_yaml` (idempotent;
+      no-op when the hash already matches).
+
+    Step-driven by design: prompts that exist in Phoenix without a
+    matching ``LLMStepNode`` subclass in the registry are ignored.
+    Phoenix is shared infrastructure; we don't pull every prompt it
+    has — only the ones the framework manages.
+
+    Returns a :class:`SyncReport` populated on the pull-side fields
+    (``prompts_pulled`` / ``prompts_pull_skipped`` /
+    ``prompts_pull_failed``). Callers can merge with a push-direction
+    report to get a single end-to-end view.
+    """
+    report = SyncReport()
+
+    if not introspection_registry:
+        return report
+
+    seen: set[type] = set()
+    for pipeline_cls in introspection_registry.values():
+        for step_cls in iter_step_classes(pipeline_cls):
+            if step_cls in seen:
+                continue
+            seen.add(step_cls)
+            _pull_one_step(
+                step_cls=step_cls,
+                prompts_dir=prompts_dir,
+                client=prompt_client,
+                report=report,
+            )
+
+    return report
+
+
+def _pull_one_step(
+    *,
+    step_cls: type,
+    prompts_dir: Path,
+    client: PhoenixPromptClient,
+    report: SyncReport,
+) -> None:
+    """Pull a single step's prompt from Phoenix to YAML if Phoenix has changes."""
+    prompt_name = step_cls.step_name()
+
+    try:
+        phoenix_record, phoenix_prompt = _fetch_phoenix_prompt(client, prompt_name)
+    except PhoenixError as exc:
+        logger.warning(
+            "yaml_sync pull: %s phoenix lookup failed: %s",
+            prompt_name, exc,
+        )
+        report.prompts_pull_failed.append((prompt_name, f"phoenix: {exc}"))
+        return
+
+    if phoenix_prompt is None:
+        # Phoenix doesn't have this prompt yet — nothing to pull.
+        # The push stage will create it from YAML if YAML exists,
+        # or the validator will surface PromptYamlMissingError if not.
+        logger.info(
+            "yaml_sync pull: %s — Phoenix has no record, skipping pull",
+            prompt_name,
+        )
+        report.prompts_pull_skipped.append(prompt_name)
+        return
+
+    # Always invoke write_prompt_yaml — it's hash-idempotent and
+    # decides internally whether the on-disk file needs to change.
+    try:
+        wrote = write_prompt_yaml(phoenix_prompt, prompts_dir)
+    except OSError as exc:
+        logger.warning(
+            "yaml_sync pull: %s could not write YAML: %s",
+            prompt_name, exc,
+        )
+        report.prompts_pull_failed.append(
+            (prompt_name, f"write: {exc}"),
+        )
+        return
+
+    if wrote:
+        logger.info(
+            "yaml_sync pull: %s — refreshed YAML from Phoenix",
+            prompt_name,
+        )
+        report.prompts_pulled.append(prompt_name)
+    else:
+        report.prompts_pull_skipped.append(prompt_name)
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -729,6 +846,7 @@ _ = DatasetNotFoundError
 
 __all__ = [
     "SyncReport",
+    "pull_phoenix_to_yaml",
     "startup_sync",
     "write_prompt_yaml",
     "write_dataset_yaml",

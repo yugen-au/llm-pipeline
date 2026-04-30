@@ -35,6 +35,7 @@ from llm_pipeline.yaml_sync import (
     _hash_dataset,
     _hash_prompt,
     _hash_prompt_yaml,
+    pull_phoenix_to_yaml,
     startup_sync,
     write_dataset_yaml,
     write_prompt_yaml,
@@ -411,6 +412,144 @@ class TestPromptSync:
         )
         assert report.prompts_pushed == []
         assert "orphan" not in client.records
+
+
+# ---------------------------------------------------------------------------
+# Pull direction (Phoenix -> YAML), step-driven
+# ---------------------------------------------------------------------------
+
+
+class TestPromptPull:
+    def test_pulls_when_phoenix_has_prompt_no_yaml(self, tmp_path: Path):
+        """First-time pull: Phoenix has the prompt; YAML doesn't exist yet."""
+        client = _FakePromptClient()
+        client.seed(_make_prompt("hello", system="S", user="U"))
+        registry = _registry_with("HelloStep")
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=client,
+            introspection_registry=registry,
+        )
+        assert report.prompts_pulled == ["hello"]
+        # YAML file written on disk
+        assert (tmp_path / "hello.yaml").exists()
+
+    def test_pulls_when_phoenix_diverged_from_yaml(self, tmp_path: Path):
+        """Phoenix has changes YAML doesn't — pull overwrites YAML."""
+        # Existing YAML reflects old content
+        write_prompt_yaml(
+            _make_prompt("drifted", system="OLD", user="u"), tmp_path,
+        )
+        # Phoenix has newer content (e.g. someone edited via Playground)
+        client = _FakePromptClient()
+        client.seed(_make_prompt("drifted", system="NEW", user="u"))
+        registry = _registry_with("DriftedStep")
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=client,
+            introspection_registry=registry,
+        )
+        assert report.prompts_pulled == ["drifted"]
+        # YAML now reflects Phoenix's NEW system message
+        loaded = Prompt.model_validate(
+            yaml.safe_load((tmp_path / "drifted.yaml").read_text()),
+        )
+        sys_msg = next(m for m in loaded.messages if m.role == "system")
+        assert sys_msg.content == "NEW"
+
+    def test_skips_when_yaml_already_matches_phoenix(self, tmp_path: Path):
+        """Idempotent pull: matching content → no write, no mtime bump."""
+        prompt = _make_prompt("aligned", system="s", user="u")
+        write_prompt_yaml(prompt, tmp_path)
+        original_mtime = (tmp_path / "aligned.yaml").stat().st_mtime_ns
+        client = _FakePromptClient()
+        client.seed(prompt)
+        registry = _registry_with("AlignedStep")
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=client,
+            introspection_registry=registry,
+        )
+        assert report.prompts_pulled == []
+        assert report.prompts_pull_skipped == ["aligned"]
+        # mtime unchanged — write_prompt_yaml's hash check held
+        assert (tmp_path / "aligned.yaml").stat().st_mtime_ns == original_mtime
+
+    def test_skips_when_phoenix_has_no_prompt(self, tmp_path: Path):
+        """Step exists but Phoenix has nothing — leave YAML alone for bootstrap path."""
+        client = _FakePromptClient()  # no seed; Phoenix is empty
+        registry = _registry_with("NewStep")
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=client,
+            introspection_registry=registry,
+        )
+        assert report.prompts_pulled == []
+        assert report.prompts_pull_skipped == ["new"]
+        assert not (tmp_path / "new.yaml").exists()
+
+    def test_step_driven_phoenix_orphans_ignored(self, tmp_path: Path):
+        """Phoenix prompts without a matching step are ignored entirely."""
+        client = _FakePromptClient()
+        # Phoenix has prompts the framework doesn't know about
+        client.seed(_make_prompt("phoenix_only", system="s", user="u"))
+        client.seed(_make_prompt("another_orphan", system="s", user="u"))
+        # Empty registry: no steps
+        registry: dict = {}
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=client,
+            introspection_registry=registry,
+        )
+        # Nothing pulled — no step references these prompts
+        assert report.prompts_pulled == []
+        assert report.prompts_pull_skipped == []
+        # No YAML files written for the orphans
+        assert not (tmp_path / "phoenix_only.yaml").exists()
+        assert not (tmp_path / "another_orphan.yaml").exists()
+
+    def test_phoenix_transport_failure_recorded(self, tmp_path: Path):
+        """Phoenix lookup failures bucket into prompts_pull_failed."""
+        registry = _registry_with("BoomStep")
+
+        class _ExplodingClient(_FakePromptClient):
+            def get_latest(self, name):
+                raise PhoenixError("simulated outage")
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=_ExplodingClient(),
+            introspection_registry=registry,
+        )
+        assert report.prompts_pulled == []
+        assert len(report.prompts_pull_failed) == 1
+        assert report.prompts_pull_failed[0][0] == "boom"
+        assert "phoenix" in report.prompts_pull_failed[0][1]
+
+    def test_step_seen_only_once_when_shared_across_pipelines(
+        self, tmp_path: Path,
+    ):
+        """Same step referenced by multiple pipelines is deduped."""
+        prompt = _make_prompt("shared", system="s", user="u")
+        client = _FakePromptClient()
+        client.seed(prompt)
+
+        # Two pipelines that share the same SharedStep class.
+        PipelineCls, _ = _make_test_pipeline("SharedStep")
+        registry = {"p1": PipelineCls, "p2": PipelineCls}
+
+        report = pull_phoenix_to_yaml(
+            prompts_dir=tmp_path,
+            prompt_client=client,
+            introspection_registry=registry,
+        )
+        # Pulled exactly once, not duplicated.
+        assert report.prompts_pulled == ["shared"]
 
 
 # ---------------------------------------------------------------------------
