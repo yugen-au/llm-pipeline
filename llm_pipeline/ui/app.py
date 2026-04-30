@@ -140,20 +140,29 @@ def _resolve_dir_arg(
     return Path(raw).expanduser()
 
 
-def _wire_yaml_sync(
+def _wire_phoenix(
     app: "FastAPI",
     *,
     prompts_dir_arg: Optional[str],
     datasets_dir_arg: Optional[str],
     introspection_registry: Optional[dict] = None,
 ) -> None:
-    """Resolve YAML directories, store on app.state, run startup sync.
+    """Resolve YAML dirs, eagerly construct Phoenix clients, run dry-run validator.
 
-    Construction of Phoenix clients is eager here so the sync runs on
-    boot; the same instances are reused by route handlers via
-    ``app.state._phoenix_prompt_client`` / ``_phoenix_dataset_client``.
-    Phoenix-not-configured (or any client construction failure) skips
-    sync silently — same posture as the lazy route-side construction.
+    UI boot is read-only: it never writes to Phoenix. YAML → Phoenix
+    push runs only via ``uv run llm-pipeline build`` (the gate
+    invoked from CI / pre-commit / pre-deploy). At UI boot we only:
+
+    1. Resolve the YAML directories and store them on ``app.state``
+       (route handlers read from there for UI saves).
+    2. Eagerly construct the Phoenix prompt + dataset clients and
+       store them on ``app.state`` so route handlers reuse them.
+       Failure to construct (Phoenix unconfigured / unreachable) is
+       logged once and the framework continues.
+    3. Run :func:`validate_phoenix_alignment` in ``dry-run`` mode.
+       Any code↔YAML↔Phoenix misalignment is logged as a warning
+       (no exception) — devs see what's broken but the UI keeps
+       booting. Run ``build`` to push fixes and re-validate.
     """
     from pathlib import Path  # noqa: F401 — referenced via _resolve_dir_arg
 
@@ -174,7 +183,6 @@ def _wire_yaml_sync(
         return
 
     prompt_client = None
-    dataset_client = None
     if prompts_dir is not None:
         try:
             from llm_pipeline.prompts.phoenix_client import PhoenixPromptClient
@@ -183,7 +191,8 @@ def _wire_yaml_sync(
             app.state._phoenix_prompt_client = prompt_client
         except Exception as exc:
             logger.info(
-                "YAML prompt sync skipped — Phoenix prompt client unavailable: %s",
+                "Phoenix prompt client unavailable at UI boot: %s "
+                "(routes that need Phoenix will surface their own error)",
                 exc,
             )
             prompt_client = None
@@ -191,46 +200,31 @@ def _wire_yaml_sync(
         try:
             from llm_pipeline.evals.phoenix_client import PhoenixDatasetClient
 
-            dataset_client = PhoenixDatasetClient()
-            app.state._phoenix_dataset_client = dataset_client
+            app.state._phoenix_dataset_client = PhoenixDatasetClient()
         except Exception as exc:
             logger.info(
-                "YAML dataset sync skipped — Phoenix dataset client unavailable: %s",
+                "Phoenix dataset client unavailable at UI boot: %s",
                 exc,
             )
-            dataset_client = None
 
-    if prompt_client is None and dataset_client is None:
-        return
-
-    from llm_pipeline.yaml_sync import startup_sync
-
-    try:
-        report = startup_sync(
-            prompts_dir=prompts_dir,
-            datasets_dir=datasets_dir,
-            prompt_client=prompt_client,
-            dataset_client=dataset_client,
-            introspection_registry=introspection_registry,
+    # Dry-run validator. Phoenix-side checks are skipped if the prompt
+    # client failed to construct above; code-side checks always run.
+    if prompts_dir is not None and introspection_registry:
+        from llm_pipeline.prompts.phoenix_validator import (
+            validate_phoenix_alignment,
         )
-    except Exception:
-        logger.exception("YAML startup sync failed; continuing")
-        return
 
-    if report.prompts_pushed or report.datasets_created or report.datasets_diffed:
-        logger.info(
-            "YAML sync: prompts pushed=%d skipped=%d failed=%d; "
-            "datasets created=%d diffed=%d skipped=%d failed=%d",
-            len(report.prompts_pushed), len(report.prompts_skipped),
-            len(report.prompts_failed),
-            len(report.datasets_created), len(report.datasets_diffed),
-            len(report.datasets_skipped), len(report.datasets_failed),
-        )
-    if report.prompts_failed or report.datasets_failed:
-        for name, msg in report.prompts_failed:
-            logger.warning("YAML prompt %s sync failed: %s", name, msg)
-        for name, msg in report.datasets_failed:
-            logger.warning("YAML dataset %s sync failed: %s", name, msg)
+        try:
+            validate_phoenix_alignment(
+                introspection_registry,
+                prompts_dir,
+                prompt_client=prompt_client,
+                mode="dry-run",
+            )
+        except Exception:
+            logger.exception(
+                "Phoenix dry-run validation crashed; continuing UI boot",
+            )
 
 
 def _sync_pipeline_visibility(engine: Engine, pipeline_names: list[str]) -> None:
@@ -416,16 +410,10 @@ def create_app(
     # Sync pipeline visibility (draft/published) to DB
     _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))
 
-    # YAML <-> Phoenix sync. Step-driven: walks the registered LLMSteps,
-    # builds the canonical Prompt (messages + metadata from YAML, plus
-    # response_format + tools derived from each step's INSTRUCTIONS /
-    # DEFAULT_TOOLS), and pushes to Phoenix when content differs.
-    # Per-route write hooks rewrite the matching YAML on UI saves so
-    # git stays canonical across machines. Steps without a YAML file
-    # are skipped — yaml_sync only manages prompts we author. Pass
-    # ``None`` (or set the matching env var to empty) to disable a
-    # given domain.
-    _wire_yaml_sync(
+    # Phoenix wiring at UI boot. Resolves YAML dirs + Phoenix clients,
+    # then runs the validator in dry-run mode (warn-only, no writes).
+    # YAML → Phoenix push happens only via `uv run llm-pipeline build`.
+    _wire_phoenix(
         app,
         prompts_dir_arg=prompts_dir,
         datasets_dir_arg=datasets_dir,
