@@ -81,7 +81,7 @@ def sync_pipelines_to_phoenix(
             if step_cls in seen:
                 continue
             seen.add(step_cls)
-            prompt_name = to_snake_case(step_cls.__name__, strip_suffix="Step")
+            prompt_name = step_cls.step_name()
             try:
                 outcome = sync_step_to_phoenix(
                     step_cls,
@@ -316,26 +316,27 @@ def _strip_id(version: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def iter_step_classes(pipeline_cls: Type):
-    """Yield every LLMStep class reachable from a Pipeline subclass.
+    """Yield every ``LLMStepNode`` subclass reachable from a Pipeline subclass.
 
-    Walks ``pipeline_cls.nodes`` (the pydantic-graph attribute every
-    Pipeline exposes) and filters to classes with an ``INSTRUCTIONS``
-    pydantic model — that's the LLMStep marker. Extractions, reviews,
-    and other graph nodes don't carry ``INSTRUCTIONS`` and are skipped.
+    Walks ``pipeline_cls.nodes`` — a list of ``Step | Extraction |
+    Review`` bindings — and yields the wrapped ``cls`` for any
+    ``Step(...)`` entry. Extractions and reviews are skipped (they're
+    not LLM-call nodes).
     """
-    for step_cls in getattr(pipeline_cls, "nodes", None) or []:
-        if not isinstance(step_cls, type):
+    from llm_pipeline.graph.nodes import LLMStepNode
+
+    for binding in getattr(pipeline_cls, "nodes", None) or []:
+        cls = getattr(binding, "cls", None)
+        if not isinstance(cls, type) or not issubclass(cls, LLMStepNode):
             continue
-        if not getattr(step_cls, "INSTRUCTIONS", None):
-            continue
-        yield step_cls
+        yield cls
 
 
 def find_step_for_prompt(
     prompt_name: str,
     introspection_registry: Dict[str, Type],
 ) -> Optional[Type]:
-    """Locate the step class whose snake_case name equals ``prompt_name``.
+    """Locate the step class whose ``step_name()`` equals ``prompt_name``.
 
     Returns ``None`` when no match exists — yaml_sync calls this to
     decide whether to attach code-derived ``response_format`` / ``tools``
@@ -344,7 +345,7 @@ def find_step_for_prompt(
     """
     for pipeline_cls in introspection_registry.values():
         for step_cls in iter_step_classes(pipeline_cls):
-            if to_snake_case(step_cls.__name__, strip_suffix="Step") == prompt_name:
+            if step_cls.step_name() == prompt_name:
                 return step_cls
     return None
 

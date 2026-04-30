@@ -67,7 +67,6 @@ from llm_pipeline.prompts.phoenix_client import (
     PhoenixPromptClient,
     PromptNotFoundError,
 )
-from llm_pipeline.naming import to_snake_case
 from llm_pipeline.prompts.registration import (
     derive_step_extras,
     iter_step_classes,
@@ -379,7 +378,7 @@ def _sync_one_step(
     client: PhoenixPromptClient,
     report: SyncReport,
 ) -> None:
-    prompt_name = to_snake_case(step_cls.__name__, strip_suffix="Step")
+    prompt_name = step_cls.step_name()
     yaml_path = prompts_dir / f"{prompt_name}.yaml"
 
     payload = _read_yaml(yaml_path)

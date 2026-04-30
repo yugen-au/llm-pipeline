@@ -14,15 +14,21 @@ from typing import Any
 
 import pytest
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_graph import End, GraphRunContext
 
 from llm_pipeline.evals.models import Dataset, Example
 from llm_pipeline.evals.phoenix_client import PhoenixDatasetError
+from llm_pipeline.graph.nodes import LLMStepNode
+from llm_pipeline.graph.state import PipelineDeps, PipelineState
+from llm_pipeline.inputs import StepInputs
 from llm_pipeline.prompts.models import Prompt, PromptMessage, PromptMetadata
 from llm_pipeline.prompts.phoenix_client import (
     PhoenixError,
     PromptNotFoundError,
 )
+from llm_pipeline.prompts.variables import PromptVariables
+from llm_pipeline.wiring import FromInput, Step
 from llm_pipeline.yaml_sync import (
     SyncReport,
     _diff_examples,
@@ -336,7 +342,7 @@ class TestPromptSync:
         write_prompt_yaml(_make_prompt("same", system="s", user="u"), tmp_path)
         # Seed Phoenix with the same content the sync will compute.
         from llm_pipeline.prompts.registration import derive_step_extras
-        rf, tools = derive_step_extras(registry["test_pipeline"].nodes[0])
+        rf, tools = derive_step_extras(registry["test_pipeline"].nodes[0].cls)
         client.seed(
             _make_prompt("same", system="s", user="u").model_copy(update={
                 "response_format": rf, "tools": tools,
@@ -557,19 +563,64 @@ class _FakeInstructions(BaseModel):
     confidence: float
 
 
+class _FakeInputs(StepInputs):
+    text: str
+
+
+class _FakePrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="text")
+
+
+class _FakeStepBase(LLMStepNode):
+    """Base for dynamically-named test step classes.
+
+    Concrete subclasses are constructed in ``_make_test_pipeline`` with
+    distinct ``__name__``s so each test gets its own snake-cased prompt
+    name. The whole class body lives at module scope so ``prepare``'s
+    return-type annotation resolves cleanly under
+    ``typing.get_type_hints``.
+    """
+
+    INPUTS = _FakeInputs
+    INSTRUCTIONS = _FakeInstructions
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _FakeInputs) -> list[_FakePrompt]:
+        return [_FakePrompt(
+            system=_FakePrompt.system(),
+            user=_FakePrompt.user(text=inputs.text),
+        )]
+
+    async def run(
+        self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+    ) -> End[None]:
+        return End(None)
+
+
 def _make_test_pipeline(*step_names: str):
-    """Build a Pipeline subclass with ``nodes`` (pydantic-graph shape).
+    """Build a synthetic pipeline-like object with ``Step``-binding ``nodes``.
 
     Each name is the step class name (must end in ``Step``); its
     snake_case name becomes the prompt name yaml_sync looks for.
+    The synthetic ``Pipeline`` skips the real ``Pipeline.__init_subclass__``
+    machinery (it doesn't inherit from ``Pipeline``) — yaml_sync only
+    needs ``cls.nodes`` to be a list of bindings, so this is sufficient.
     """
     if not step_names:
         step_names = ("FakeStep",)
     step_classes = [
-        type(name, (), {"INSTRUCTIONS": _FakeInstructions})
+        type(name, (_FakeStepBase,), {})
         for name in step_names
     ]
-    PipelineCls = type("Pipeline", (), {"nodes": step_classes})
+    bindings = [
+        Step(cls, inputs_spec=_FakeInputs.sources(text=FromInput("text")))
+        for cls in step_classes
+    ]
+    PipelineCls = type("Pipeline", (), {"nodes": bindings})
     return PipelineCls, step_classes
 
 
