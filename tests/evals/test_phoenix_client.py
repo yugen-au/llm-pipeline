@@ -130,10 +130,18 @@ class TestDatasetEndpoints:
             )
 
     def test_upload_dataset_payload_shape(self):
-        cm, http = _client_with_response(
-            _resp(200, {"data": {"dataset_id": "d1"}}),
-        )
+        # upload_dataset now makes TWO calls: REST upload, then GraphQL
+        # patchDataset to set dataset-level metadata (REST has no
+        # dataset-metadata field). Mock both responses in sequence.
+        cm = patch("httpx.Client")
+        client_cls = cm.start()
         try:
+            http = client_cls.return_value.__enter__.return_value
+            http.request.return_value = _resp(200, {"data": {"dataset_id": "d1"}})
+            http.post.return_value = _resp(
+                200, {"data": {"patchDataset": {"dataset": {"id": "d1"}}}},
+            )
+
             self.client.upload_dataset(
                 name="alpha_dataset",
                 examples=[
@@ -143,6 +151,9 @@ class TestDatasetEndpoints:
                 description="desc",
                 metadata={"target_type": "step", "target_name": "Classify"},
             )
+
+            # REST upload body — note no `dataset_metadata` field anymore;
+            # Phoenix's REST upload schema doesn't accept one.
             args, kwargs = http.request.call_args
             assert args[0] == "POST"
             assert args[1] == "http://phoenix.invalid/v1/datasets/upload"
@@ -153,7 +164,15 @@ class TestDatasetEndpoints:
             assert body["outputs"] == [{"label": "x"}, {}]
             assert body["metadata"] == [{}, {"evaluators": ["foo"]}]
             assert body["description"] == "desc"
-            assert body["dataset_metadata"] == {
+            assert "dataset_metadata" not in body
+
+            # GraphQL patch carries the dataset-level metadata.
+            args2, kwargs2 = http.post.call_args
+            assert args2[0] == "http://phoenix.invalid/graphql"
+            gql_body = kwargs2["json"]
+            assert "patchDataset" in gql_body["query"]
+            assert gql_body["variables"]["input"]["datasetId"] == "d1"
+            assert gql_body["variables"]["input"]["metadata"] == {
                 "target_type": "step",
                 "target_name": "Classify",
             }

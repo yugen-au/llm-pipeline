@@ -1,24 +1,21 @@
-prompt_key: sentiment_analysis
-prompt_name: Sentiment Analysis
-category: text_analyzer
-step_name: sentiment_analysis
-
-system:
-  content: >-
-    You are a sentiment analysis expert. Analyze the sentiment of the
-    provided text and classify it as positive, negative, neutral, or mixed.
-    Provide a brief explanation for your classification and a confidence score.
-  description: System prompt for sentiment analysis step
-  version: "1.0"
-
-user:
-  content: |
-    Analyze the sentiment of the following text:
-
-    {text}
-  description: User prompt for sentiment analysis step
-  version: "1.0"
+name: sentiment_analysis
+description: Sentiment analysis prompt
+metadata:
+  display_name: Sentiment Analysis
+  category: text_analyzer
+  step_name: sentiment_analysis
   variable_definitions:
     text:
       type: str
       description: Input text to analyze
+messages:
+  - role: system
+    content: >-
+      You are a sentiment analysis expert. Analyze the sentiment of the
+      provided text and classify it as positive, negative, neutral, or mixed.
+      Provide a brief explanation for your classification and a confidence score.
+  - role: user
+    content: |
+      Analyze the sentiment of the following text:
+
+      {text}

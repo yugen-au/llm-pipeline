@@ -77,7 +77,7 @@ def sync_pipelines_to_phoenix(
 
     seen: set[Type] = set()
     for pipeline_name, pipeline_cls in introspection_registry.items():
-        for step_cls in _iter_step_classes(pipeline_cls):
+        for step_cls in iter_step_classes(pipeline_cls):
             if step_cls in seen:
                 continue
             seen.add(step_cls)
@@ -115,8 +115,8 @@ def sync_step_to_phoenix(
     Returns ``"updated" | "skipped" | "missing"``. Raises ``PhoenixError``
     only on transport failures; missing prompts return ``"missing"``.
     """
-    response_format = _derive_response_format(getattr(step_cls, "INSTRUCTIONS", None))
-    tools = _derive_tools(step_cls)
+    response_format = derive_response_format(getattr(step_cls, "INSTRUCTIONS", None))
+    tools = derive_tools(step_cls)
 
     try:
         existing = client.get_latest(prompt_name)
@@ -156,7 +156,7 @@ def sync_step_to_phoenix(
 # ---------------------------------------------------------------------------
 
 
-def _derive_response_format(instructions_cls: Optional[Type]) -> Optional[Dict[str, Any]]:
+def derive_response_format(instructions_cls: Optional[Type]) -> Optional[Dict[str, Any]]:
     if instructions_cls is None:
         return None
     if not (isinstance(instructions_cls, type) and issubclass(instructions_cls, BaseModel)):
@@ -173,7 +173,7 @@ def _derive_response_format(instructions_cls: Optional[Type]) -> Optional[Dict[s
     }
 
 
-def _derive_tools(step_cls: Type) -> Optional[Dict[str, Any]]:
+def derive_tools(step_cls: Type) -> Optional[Dict[str, Any]]:
     pipeline_tools: List[Type] = list(getattr(step_cls, "DEFAULT_TOOLS", None) or [])
     agent_callables: List[Callable[..., Any]] = []
     agent_name = getattr(step_cls, "AGENT", None)
@@ -315,34 +315,63 @@ def _strip_id(version: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _iter_step_classes(pipeline_cls: Type):
-    """Yield every step class reachable from a PipelineConfig subclass.
+def iter_step_classes(pipeline_cls: Type):
+    """Yield every LLMStep class reachable from a Pipeline subclass.
 
-    Walks ``STRATEGIES.STRATEGIES`` instances → ``get_bindings()`` →
-    each ``Bind.step``. Falls back to silently emitting nothing when
-    a strategy raises during instantiation (introspection-only path,
-    matches what ``PipelineIntrospector`` does).
+    Walks ``pipeline_cls.nodes`` (the pydantic-graph attribute every
+    Pipeline exposes) and filters to classes with an ``INSTRUCTIONS``
+    pydantic model — that's the LLMStep marker. Extractions, reviews,
+    and other graph nodes don't carry ``INSTRUCTIONS`` and are skipped.
     """
-    strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
-    if strategies_cls is None:
-        return
-    strategy_classes = getattr(strategies_cls, "STRATEGIES", None) or []
-    for s_cls in strategy_classes:
-        try:
-            instance = s_cls()
-            bindings = instance.get_bindings()
-        except Exception:  # pragma: no cover - introspection-only
+    for step_cls in getattr(pipeline_cls, "nodes", None) or []:
+        if not isinstance(step_cls, type):
             continue
-        for bind in bindings:
-            step_cls = getattr(bind, "step", None)
-            if step_cls is None:
-                continue
-            if not getattr(step_cls, "INSTRUCTIONS", None):
-                continue
-            yield step_cls
+        if not getattr(step_cls, "INSTRUCTIONS", None):
+            continue
+        yield step_cls
+
+
+def find_step_for_prompt(
+    prompt_name: str,
+    introspection_registry: Dict[str, Type],
+) -> Optional[Type]:
+    """Locate the step class whose snake_case name equals ``prompt_name``.
+
+    Returns ``None`` when no match exists — yaml_sync calls this to
+    decide whether to attach code-derived ``response_format`` / ``tools``
+    to a Phoenix push, so a missing step just means "no schemas to
+    attach", not an error.
+    """
+    for pipeline_cls in introspection_registry.values():
+        for step_cls in iter_step_classes(pipeline_cls):
+            if to_snake_case(step_cls.__name__, strip_suffix="Step") == prompt_name:
+                return step_cls
+    return None
+
+
+def derive_step_extras(
+    step_cls: Optional[Type],
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """Return ``(response_format, tools)`` derived from a step class.
+
+    Returns ``(None, None)`` when the step is missing or has no
+    schemas to derive. Thin wrapper around the two derivers so callers
+    don't have to import both.
+    """
+    if step_cls is None:
+        return None, None
+    return (
+        derive_response_format(getattr(step_cls, "INSTRUCTIONS", None)),
+        derive_tools(step_cls),
+    )
 
 
 __all__ = [
     "sync_pipelines_to_phoenix",
     "sync_step_to_phoenix",
+    "derive_response_format",
+    "derive_tools",
+    "find_step_for_prompt",
+    "derive_step_extras",
+    "iter_step_classes",
 ]

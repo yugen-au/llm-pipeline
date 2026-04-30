@@ -8,13 +8,18 @@ Phoenix's native CHAT template.
 from __future__ import annotations
 
 import logging
-import re
 from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 
-from llm_pipeline.prompts.models import Prompt, PromptMessage, PromptMetadata
+from llm_pipeline.prompts.models import (
+    Prompt,
+    PromptNameError,
+    phoenix_to_prompt,
+    prompt_to_phoenix_payloads,
+    sanitise_prompt_name,
+)
 from llm_pipeline.prompts.phoenix_client import (
     PhoenixError,
     PhoenixNotConfiguredError,
@@ -48,21 +53,16 @@ class PromptListParams(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Phoenix <-> canonical model mapping
+# Helpers
 # ---------------------------------------------------------------------------
 
 
-_NAME_INVALID_RE = re.compile(r"[^a-z0-9_-]+")
-_SYSTEM_ROLES = frozenset({"system", "developer"})
-
-
-def _sanitise_name(raw: str) -> str:
-    s = raw.lower()
-    s = _NAME_INVALID_RE.sub("_", s)
-    s = re.sub(r"_+", "_", s).strip("_-")
-    if not s:
-        raise HTTPException(status_code=422, detail=f"Invalid prompt name {raw!r}")
-    return s
+def _sanitise_or_422(name: str) -> str:
+    """Wrap ``sanitise_prompt_name`` to raise HTTP 422 on invalid input."""
+    try:
+        return sanitise_prompt_name(name)
+    except PromptNameError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _get_client(request: Request) -> PhoenixPromptClient:
@@ -78,99 +78,6 @@ def _get_client(request: Request) -> PhoenixPromptClient:
     return client
 
 
-def _extract_messages(version: Dict[str, Any]) -> List[PromptMessage]:
-    """Pull messages out of a Phoenix version's CHAT/STR template."""
-    template = version.get("template") or {}
-    template_type = template.get("type")
-    if template_type == "string":
-        body = template.get("template")
-        if isinstance(body, str):
-            return [PromptMessage(role="system", content=body)]
-        return []
-    if template_type != "chat":
-        return []
-    out: List[PromptMessage] = []
-    for msg in template.get("messages") or []:
-        role = msg.get("role")
-        content = msg.get("content")
-        if isinstance(content, list):
-            content = "".join(
-                p.get("text", "")
-                for p in content
-                if isinstance(p, dict) and p.get("type") == "text"
-            )
-        if not isinstance(content, str):
-            continue
-        ui_role = "system" if role in _SYSTEM_ROLES else "user" if role == "user" else None
-        if ui_role is None:
-            continue
-        out.append(PromptMessage(role=ui_role, content=content))
-    return out
-
-
-def _record_metadata(record: Dict[str, Any]) -> Dict[str, Any]:
-    md = record.get("metadata")
-    return md if isinstance(md, dict) else {}
-
-
-def _phoenix_to_prompt(
-    record: Dict[str, Any], version: Dict[str, Any],
-) -> Prompt:
-    """Build a canonical ``Prompt`` from Phoenix record + version."""
-    raw_meta = _record_metadata(record)
-    metadata = PromptMetadata.model_validate(raw_meta)
-    return Prompt(
-        name=record.get("name") or "",
-        description=version.get("description") or record.get("description"),
-        metadata=metadata,
-        messages=_extract_messages(version),
-        version_id=version.get("id"),
-    )
-
-
-def _prompt_to_phoenix_payloads(
-    payload: Prompt,
-    *,
-    base_version: Optional[Dict[str, Any]] = None,
-) -> tuple[Dict[str, Any], Dict[str, Any]]:
-    """Map a ``Prompt`` write payload onto Phoenix's ``prompt`` + ``version`` shapes.
-
-    ``base_version`` carries forward model + invocation params + any
-    response_format / tools settings on updates so we don't lose them
-    when only messages change.
-    """
-    name = _sanitise_name(payload.name)
-    metadata: Dict[str, Any] = payload.metadata.model_dump(exclude_none=True)
-    metadata.setdefault("managed_by", "llm-pipeline")
-
-    prompt_data: Dict[str, Any] = {"name": name, "metadata": metadata}
-    if payload.description is not None:
-        prompt_data["description"] = payload.description
-
-    base = base_version or {}
-    messages = [
-        {"role": m.role, "content": m.content} for m in payload.messages
-    ]
-    messages.sort(key=lambda m: 0 if m["role"] == "system" else 1)
-    version_data: Dict[str, Any] = {
-        "model_provider": base.get("model_provider", "OPENAI"),
-        "model_name": base.get("model_name", "gpt-4o-mini"),
-        "template": {"type": "chat", "messages": messages},
-        "template_type": "CHAT",
-        "template_format": base.get("template_format", "F_STRING"),
-        "invocation_parameters": base.get(
-            "invocation_parameters", {"type": "openai", "openai": {}},
-        ),
-    }
-    if payload.description is not None:
-        version_data["description"] = payload.description
-    if base.get("response_format") is not None:
-        version_data["response_format"] = base["response_format"]
-    if base.get("tools") is not None:
-        version_data["tools"] = base["tools"]
-    return prompt_data, version_data
-
-
 def _tag_production(client: PhoenixPromptClient, version: Dict[str, Any]) -> None:
     version_id = version.get("id")
     if not version_id:
@@ -179,6 +86,58 @@ def _tag_production(client: PhoenixPromptClient, version: Dict[str, Any]) -> Non
         client.add_tag(version_id, "production", description="UI save")
     except PhoenixError as exc:
         logger.warning("Phoenix tag failed for version %s: %s", version_id, exc)
+
+
+def _enrich_with_step(prompt: Prompt, request: Request) -> Prompt:
+    """Fill in code-derived ``response_format`` / ``tools`` from the matching step.
+
+    UI saves don't author response_format / tools — those come from the
+    step's ``INSTRUCTIONS`` / ``DEFAULT_TOOLS``. Resolves the step from
+    ``app.state.introspection_registry`` and stamps the canonical model
+    before it goes to Phoenix; falls through unchanged when no step is
+    registered for the name.
+    """
+    registry = getattr(request.app.state, "introspection_registry", None) or {}
+    if not registry:
+        return prompt
+    from llm_pipeline.prompts.registration import (
+        derive_step_extras,
+        find_step_for_prompt,
+    )
+
+    step_cls = find_step_for_prompt(prompt.name, registry)
+    if step_cls is None:
+        return prompt
+    response_format, tools = derive_step_extras(step_cls)
+    return prompt.model_copy(update={
+        "response_format": response_format,
+        "tools": tools,
+    })
+
+
+def _yaml_write_prompt(prompt: Prompt, request: Request) -> None:
+    """Best-effort YAML write hook; failures log but don't break the route."""
+    prompts_dir = getattr(request.app.state, "prompts_dir", None)
+    if prompts_dir is None:
+        return
+    from llm_pipeline.yaml_sync import write_prompt_yaml
+
+    try:
+        write_prompt_yaml(prompt, prompts_dir)
+    except Exception:
+        logger.exception("YAML write failed for prompt %s", prompt.name)
+
+
+def _yaml_delete_prompt(name: str, request: Request) -> None:
+    prompts_dir = getattr(request.app.state, "prompts_dir", None)
+    if prompts_dir is None:
+        return
+    from llm_pipeline.yaml_sync import delete_yaml
+
+    try:
+        delete_yaml(name, prompts_dir)
+    except Exception:
+        logger.exception("YAML delete failed for prompt %s", name)
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +168,7 @@ def list_prompts(
                 version = client.get_latest(name)
             except (PromptNotFoundError, PhoenixUnavailableError):
                 continue
-            items.append(_phoenix_to_prompt(record, version))
+            items.append(phoenix_to_prompt(record, version))
         cursor = page.get("next_cursor")
         if not cursor:
             break
@@ -230,7 +189,7 @@ def list_prompts(
 @router.get("/{name}", response_model=Prompt)
 def get_prompt(name: str, request: Request) -> Prompt:
     client = _get_client(request)
-    sanitised = _sanitise_name(name)
+    sanitised = _sanitise_or_422(name)
     try:
         version = client.get_latest(sanitised)
     except PromptNotFoundError:
@@ -240,7 +199,7 @@ def get_prompt(name: str, request: Request) -> Prompt:
     record = _find_record(client, sanitised)
     if record is None:
         record = {"name": sanitised}
-    return _phoenix_to_prompt(record, version)
+    return phoenix_to_prompt(record, version)
 
 
 @router.post("", response_model=Prompt, status_code=201)
@@ -253,16 +212,17 @@ def create_prompt(body: Prompt, request: Request) -> Prompt:
     versions (Phoenix behavior).
     """
     client = _get_client(request)
+    enriched = _enrich_with_step(body, request)
 
     try:
-        existing_version = client.get_latest(_sanitise_name(body.name))
+        existing_version = client.get_latest(_sanitise_or_422(enriched.name))
     except PromptNotFoundError:
         existing_version = None
     except PhoenixUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    prompt_data, version_data = _prompt_to_phoenix_payloads(
-        body, base_version=existing_version,
+    prompt_data, version_data = prompt_to_phoenix_payloads(
+        enriched, base_version=existing_version,
     )
 
     try:
@@ -273,7 +233,9 @@ def create_prompt(body: Prompt, request: Request) -> Prompt:
     _tag_production(client, new_version)
 
     record = _find_record(client, prompt_data["name"]) or prompt_data
-    return _phoenix_to_prompt(record, new_version)
+    result = phoenix_to_prompt(record, new_version)
+    _yaml_write_prompt(result, request)
+    return result
 
 
 @router.put("/{name}", response_model=Prompt)
@@ -284,7 +246,7 @@ def update_prompt(name: str, body: Prompt, request: Request) -> Prompt:
     only change the version's content (messages, description, etc.).
     """
     client = _get_client(request)
-    sanitised = _sanitise_name(name)
+    sanitised = _sanitise_or_422(name)
     try:
         existing_version = client.get_latest(sanitised)
     except PromptNotFoundError:
@@ -292,8 +254,8 @@ def update_prompt(name: str, body: Prompt, request: Request) -> Prompt:
     except PhoenixUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 
-    payload = body.model_copy(update={"name": sanitised})
-    prompt_data, version_data = _prompt_to_phoenix_payloads(
+    payload = _enrich_with_step(body.model_copy(update={"name": sanitised}), request)
+    prompt_data, version_data = prompt_to_phoenix_payloads(
         payload, base_version=existing_version,
     )
 
@@ -305,19 +267,22 @@ def update_prompt(name: str, body: Prompt, request: Request) -> Prompt:
     _tag_production(client, new_version)
 
     record = _find_record(client, sanitised) or prompt_data
-    return _phoenix_to_prompt(record, new_version)
+    result = phoenix_to_prompt(record, new_version)
+    _yaml_write_prompt(result, request)
+    return result
 
 
 @router.delete("/{name}", status_code=204)
 def delete_prompt(name: str, request: Request) -> Response:
     client = _get_client(request)
-    sanitised = _sanitise_name(name)
+    sanitised = _sanitise_or_422(name)
     try:
         client.delete(sanitised)
     except PromptNotFoundError:
         raise HTTPException(status_code=404, detail="Prompt not found")
     except PhoenixUnavailableError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+    _yaml_delete_prompt(sanitised, request)
     return Response(status_code=204)
 
 
@@ -330,10 +295,10 @@ def delete_prompt(name: str, request: Request) -> Response:
 def get_prompt_variable_schema(name: str, request: Request) -> dict:
     """Merged variable schema: Phoenix metadata + StepInputs introspection."""
     client = _get_client(request)
-    sanitised = _sanitise_name(name)
+    sanitised = _sanitise_or_422(name)
 
     record = _find_record(client, sanitised) or {}
-    metadata = _record_metadata(record)
+    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
     raw_defs = metadata.get("variable_definitions")
     db_defs: Dict[str, Dict[str, Any]] = (
         raw_defs if isinstance(raw_defs, dict) else {}

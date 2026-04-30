@@ -125,6 +125,33 @@ class PhoenixPromptClient:
                 f"Phoenix {method} {path} returned non-JSON body"
             ) from exc
 
+    def _graphql(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
+        """POST a GraphQL query/mutation. Phoenix exposes mutations
+        the REST surface doesn't (notably ``patchPrompt`` for prompt-
+        level metadata updates)."""
+        url = f"{self._base_url}/graphql"
+        try:
+            with httpx.Client(timeout=self._timeout, headers=self._headers) as client:
+                resp = client.post(url, json={"query": query, "variables": variables})
+        except httpx.HTTPError as exc:
+            raise PhoenixUnavailableError(
+                f"Phoenix GraphQL request failed: {exc}"
+            ) from exc
+        if resp.status_code >= 400:
+            raise PhoenixUnavailableError(
+                f"Phoenix GraphQL returned {resp.status_code}: {resp.text[:200]}"
+            )
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise PhoenixUnavailableError(
+                "Phoenix GraphQL returned non-JSON body"
+            ) from exc
+        errors = payload.get("errors")
+        if errors:
+            raise PhoenixUnavailableError(f"Phoenix GraphQL errors: {errors}")
+        return payload.get("data") or {}
+
     # ----- prompts ------------------------------------------------------------
 
     def list_prompts(
@@ -161,6 +188,41 @@ class PhoenixPromptClient:
         """``DELETE /v1/prompts/{name}`` — delete a prompt and all versions."""
         _validate_identifier(name)
         self._request("DELETE", f"/v1/prompts/{name}")
+
+    def patch_prompt(
+        self,
+        prompt_id: str,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        description: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """GraphQL ``patchPrompt`` — update prompt-level metadata / description.
+
+        Phoenix's REST ``POST /v1/prompts`` only sets metadata on the
+        first create; subsequent posts under the same name silently
+        ignore metadata changes. ``patchPrompt`` (GraphQL) is the only
+        endpoint that updates a prompt's metadata after creation, so
+        ``yaml_sync`` calls it whenever the YAML's authored metadata
+        diverges from Phoenix's stored copy (variable_definitions,
+        category, display_name, step_name, ...).
+
+        ``prompt_id`` is the GraphQL node id (base64) returned in the
+        ``id`` field on REST list/get responses.
+        """
+        if metadata is None and description is None:
+            return {}
+        input_obj: Dict[str, Any] = {"promptId": prompt_id}
+        if metadata is not None:
+            input_obj["metadata"] = metadata
+        if description is not None:
+            input_obj["description"] = description
+        query = (
+            "mutation P($input: PatchPromptInput!) { "
+            "patchPrompt(input: $input) { id name description metadata } "
+            "}"
+        )
+        data = self._graphql(query, {"input": input_obj})
+        return data.get("patchPrompt") or {}
 
     def get_latest(self, name: str) -> Dict[str, Any]:
         """``GET /v1/prompts/{name}/latest`` — newest version."""

@@ -125,6 +125,114 @@ def _load_pipeline_modules(
     return pipeline_reg, introspection_reg
 
 
+def _resolve_dir_arg(
+    *, arg: Optional[str], env_var: str, default: str,
+) -> Optional["Path"]:
+    """arg > env > default. Empty string anywhere disables the dir."""
+    from pathlib import Path
+
+    raw = arg if arg is not None else os.environ.get(env_var)
+    if raw is None:
+        raw = default
+    raw = raw.strip()
+    if not raw:
+        return None
+    return Path(raw).expanduser()
+
+
+def _wire_yaml_sync(
+    app: "FastAPI",
+    *,
+    prompts_dir_arg: Optional[str],
+    datasets_dir_arg: Optional[str],
+    introspection_registry: Optional[dict] = None,
+) -> None:
+    """Resolve YAML directories, store on app.state, run startup sync.
+
+    Construction of Phoenix clients is eager here so the sync runs on
+    boot; the same instances are reused by route handlers via
+    ``app.state._phoenix_prompt_client`` / ``_phoenix_dataset_client``.
+    Phoenix-not-configured (or any client construction failure) skips
+    sync silently — same posture as the lazy route-side construction.
+    """
+    from pathlib import Path  # noqa: F401 — referenced via _resolve_dir_arg
+
+    prompts_dir = _resolve_dir_arg(
+        arg=prompts_dir_arg,
+        env_var="LLM_PIPELINE_PROMPTS_DIR",
+        default="./llm-pipeline-prompts",
+    )
+    datasets_dir = _resolve_dir_arg(
+        arg=datasets_dir_arg,
+        env_var="LLM_PIPELINE_EVALS_DIR",
+        default="./llm-pipeline-evals",
+    )
+    app.state.prompts_dir = prompts_dir
+    app.state.datasets_dir = datasets_dir
+
+    if prompts_dir is None and datasets_dir is None:
+        return
+
+    prompt_client = None
+    dataset_client = None
+    if prompts_dir is not None:
+        try:
+            from llm_pipeline.prompts.phoenix_client import PhoenixPromptClient
+
+            prompt_client = PhoenixPromptClient()
+            app.state._phoenix_prompt_client = prompt_client
+        except Exception as exc:
+            logger.info(
+                "YAML prompt sync skipped — Phoenix prompt client unavailable: %s",
+                exc,
+            )
+            prompt_client = None
+    if datasets_dir is not None:
+        try:
+            from llm_pipeline.evals.phoenix_client import PhoenixDatasetClient
+
+            dataset_client = PhoenixDatasetClient()
+            app.state._phoenix_dataset_client = dataset_client
+        except Exception as exc:
+            logger.info(
+                "YAML dataset sync skipped — Phoenix dataset client unavailable: %s",
+                exc,
+            )
+            dataset_client = None
+
+    if prompt_client is None and dataset_client is None:
+        return
+
+    from llm_pipeline.yaml_sync import startup_sync
+
+    try:
+        report = startup_sync(
+            prompts_dir=prompts_dir,
+            datasets_dir=datasets_dir,
+            prompt_client=prompt_client,
+            dataset_client=dataset_client,
+            introspection_registry=introspection_registry,
+        )
+    except Exception:
+        logger.exception("YAML startup sync failed; continuing")
+        return
+
+    if report.prompts_pushed or report.datasets_created or report.datasets_diffed:
+        logger.info(
+            "YAML sync: prompts pushed=%d skipped=%d failed=%d; "
+            "datasets created=%d diffed=%d skipped=%d failed=%d",
+            len(report.prompts_pushed), len(report.prompts_skipped),
+            len(report.prompts_failed),
+            len(report.datasets_created), len(report.datasets_diffed),
+            len(report.datasets_skipped), len(report.datasets_failed),
+        )
+    if report.prompts_failed or report.datasets_failed:
+        for name, msg in report.prompts_failed:
+            logger.warning("YAML prompt %s sync failed: %s", name, msg)
+        for name, msg in report.datasets_failed:
+            logger.warning("YAML dataset %s sync failed: %s", name, msg)
+
+
 def _sync_pipeline_visibility(engine: Engine, pipeline_names: list[str]) -> None:
     """Ensure each discovered pipeline has a PipelineVisibility row in DB."""
     from datetime import datetime, timezone
@@ -173,6 +281,8 @@ def create_app(
     pipeline_modules: Optional[List[str]] = None,
     auto_generate_base_path: Optional[str] = None,
     demo_mode: bool = False,
+    prompts_dir: Optional[str] = None,
+    datasets_dir: Optional[str] = None,
 ) -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -306,16 +416,21 @@ def create_app(
     # Sync pipeline visibility (draft/published) to DB
     _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))
 
-    # Phase B: push code-derived schemas (response_format / tools /
-    # variable types) onto the Phoenix prompt records for every
-    # registered step. No-op when Phoenix is unconfigured. Idempotent;
-    # only writes when the derived schemas differ.
-    try:
-        from llm_pipeline.prompts.registration import sync_pipelines_to_phoenix
-
-        sync_pipelines_to_phoenix(app.state.introspection_registry)
-    except Exception as exc:  # pragma: no cover - sync should never crash startup
-        logger.warning("Phoenix prompt schema sync failed: %s", exc)
+    # YAML <-> Phoenix sync. Step-driven: walks the registered LLMSteps,
+    # builds the canonical Prompt (messages + metadata from YAML, plus
+    # response_format + tools derived from each step's INSTRUCTIONS /
+    # DEFAULT_TOOLS), and pushes to Phoenix when content differs.
+    # Per-route write hooks rewrite the matching YAML on UI saves so
+    # git stays canonical across machines. Steps without a YAML file
+    # are skipped — yaml_sync only manages prompts we author. Pass
+    # ``None`` (or set the matching env var to empty) to disable a
+    # given domain.
+    _wire_yaml_sync(
+        app,
+        prompts_dir_arg=prompts_dir,
+        datasets_dir_arg=datasets_dir,
+        introspection_registry=app.state.introspection_registry,
+    )
 
     # auto_generate base path: param > env > None
     from llm_pipeline.prompts.variables import set_auto_generate_base_path
@@ -324,11 +439,6 @@ def create_app(
     )
     if resolved_base:
         set_auto_generate_base_path(resolved_base)
-
-    # Phase E (prompts) + Phase 3 (evals): both YAML/local-DB layers
-    # retired. Phoenix is the source of truth for prompts AND eval
-    # datasets/experiments. ``--prompts-dir``, ``--evals-dir``, and
-    # the matching env vars are accepted by the CLI but ignored.
 
     # Route modules
     from llm_pipeline.ui.routes.runs import router as runs_router

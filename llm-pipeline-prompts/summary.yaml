@@ -1,24 +1,9 @@
-prompt_key: summary
-prompt_name: Summary
-category: text_analyzer
-step_name: summary
-
-system:
-  content: >-
-    You are a text summarization expert. Produce a concise summary of the
-    provided text that incorporates the identified sentiment and primary topic.
-    The summary should capture the key points while reflecting the overall tone.
-  description: System prompt for summary step
-  version: "1.0"
-
-user:
-  content: |
-    Summarize the following text. The sentiment is {sentiment} and the primary topic is {primary_topic}.
-
-    Text:
-    {text}
-  description: User prompt for summary step
-  version: "1.1"
+name: summary
+description: Summary prompt
+metadata:
+  display_name: Summary
+  category: text_analyzer
+  step_name: summary
   variable_definitions:
     text:
       type: str
@@ -30,3 +15,15 @@ user:
     primary_topic:
       type: str
       description: Primary topic extracted from text
+messages:
+  - role: system
+    content: >-
+      You are a text summarization expert. Produce a concise summary of the
+      provided text that incorporates the identified sentiment and primary topic.
+      The summary should capture the key points while reflecting the overall tone.
+  - role: user
+    content: |
+      Summarize the following text. The sentiment is {sentiment} and the primary topic is {primary_topic}.
+
+      Text:
+      {text}

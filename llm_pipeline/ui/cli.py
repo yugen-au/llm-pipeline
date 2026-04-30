@@ -42,10 +42,24 @@ def main() -> None:
         help="Python module path to scan for PipelineConfig subclasses (repeatable)",
     )
     ui_parser.add_argument(
+        "--prompts-dir",
+        type=str,
+        default=None,
+        help=(
+            "Directory of YAML prompt files synced bidirectionally with "
+            "Phoenix on boot and after every UI save. Defaults to "
+            "./llm-pipeline-prompts (skipped if missing)."
+        ),
+    )
+    ui_parser.add_argument(
         "--evals-dir",
         type=str,
         default=None,
-        help="(Retired flag — Phoenix is the source of truth for eval datasets.)",
+        help=(
+            "Directory of YAML eval-dataset files synced bidirectionally "
+            "with Phoenix on boot and after every UI save. Defaults to "
+            "./llm-pipeline-evals (skipped if missing)."
+        ),
     )
     ui_parser.add_argument(
         "--demo",
@@ -181,6 +195,8 @@ def _run_ui(args: argparse.Namespace) -> None:
                 default_model=args.model,
                 pipeline_modules=args.pipelines,
                 demo_mode=args.demo,
+                prompts_dir=args.prompts_dir,
+                datasets_dir=args.evals_dir,
             )
             _write_pid_file()
             _run_prod_mode(app, args.port)
@@ -224,7 +240,12 @@ def _run_dev_mode(args: argparse.Namespace) -> None:
         os.environ["LLM_PIPELINE_MODEL"] = args.model
     if args.pipelines:
         os.environ["LLM_PIPELINE_PIPELINES"] = ",".join(args.pipelines)
-    # ``--evals-dir`` is retired; flag is accepted but ignored.
+    prompts_dir = getattr(args, "prompts_dir", None)
+    if isinstance(prompts_dir, str) and prompts_dir:
+        os.environ["LLM_PIPELINE_PROMPTS_DIR"] = prompts_dir
+    evals_dir = getattr(args, "evals_dir", None)
+    if isinstance(evals_dir, str) and evals_dir:
+        os.environ["LLM_PIPELINE_EVALS_DIR"] = evals_dir
     if getattr(args, "demo", False):
         os.environ["LLM_PIPELINE_DEMO_MODE"] = "true"
 

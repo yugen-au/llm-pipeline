@@ -14,8 +14,8 @@ from llm_pipeline.prompts.phoenix_client import (
 from llm_pipeline.prompts.registration import (
     _callable_to_phoenix,
     _compose_updated_version,
-    _derive_response_format,
-    _derive_tools,
+    derive_response_format,
+    derive_tools,
     _equivalent,
     sync_step_to_phoenix,
 )
@@ -58,7 +58,7 @@ def _step_double(*, instructions=None, inputs=None, agent=None, default_tools=No
 
 class TestDeriveResponseFormat:
     def test_returns_phoenix_json_schema_payload(self):
-        rf = _derive_response_format(WidgetInstructions)
+        rf = derive_response_format(WidgetInstructions)
         assert rf is not None
         assert rf["type"] == "json_schema"
         assert rf["json_schema"]["name"] == "WidgetInstructions"
@@ -66,13 +66,13 @@ class TestDeriveResponseFormat:
         assert rf["json_schema"]["description"] == "Output schema for the widget step."
 
     def test_returns_none_for_missing_instructions(self):
-        assert _derive_response_format(None) is None
+        assert derive_response_format(None) is None
 
 
 class TestDeriveTools:
     def test_returns_none_when_no_tools_configured(self):
         step = _step_double(instructions=WidgetInstructions, inputs=WidgetInputs)
-        assert _derive_tools(step) is None
+        assert derive_tools(step) is None
 
     def test_pipeline_tool_subclass_uses_args_schema(self):
         from llm_pipeline.tool import PipelineTool
@@ -96,7 +96,7 @@ class TestDeriveTools:
             instructions=WidgetInstructions, inputs=WidgetInputs,
             default_tools=[FetchDocsTool],
         )
-        tools = _derive_tools(step)
+        tools = derive_tools(step)
         assert tools is not None
         assert tools["type"] == "tools"
         assert len(tools["tools"]) == 1
@@ -125,7 +125,7 @@ class TestDeriveTools:
         step = _step_double(
             instructions=WidgetInstructions, inputs=WidgetInputs, agent="code_gen",
         )
-        tools = _derive_tools(step)
+        tools = derive_tools(step)
         assert tools is not None
         entry = tools["tools"][0]
         assert entry["function"]["name"] == "search_docs"
@@ -227,7 +227,7 @@ class TestSyncStepToPhoenix:
 
     def test_no_change_returns_skipped(self):
         # Existing already carries the same response_format we'd derive.
-        rf = _derive_response_format(WidgetInstructions)
+        rf = derive_response_format(WidgetInstructions)
         existing = {
             "id": "v_old",
             "model_provider": "OPENAI",

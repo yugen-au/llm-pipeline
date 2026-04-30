@@ -127,6 +127,36 @@ class PhoenixDatasetClient:
                 f"Phoenix {method} {path} returned non-JSON body"
             ) from exc
 
+    def _graphql(self, query: str, variables: Dict[str, Any]) -> Dict[str, Any]:
+        """POST a GraphQL query/mutation. Phoenix exposes mutations the
+        REST surface doesn't (notably ``patchDataset`` for dataset-level
+        metadata updates — REST's ``/v1/datasets/upload`` body has no
+        dataset-level metadata field, so the only way to set it is here)."""
+        url = f"{self._base_url}/graphql"
+        try:
+            with httpx.Client(timeout=self._timeout, headers=self._headers) as client:
+                resp = client.post(url, json={"query": query, "variables": variables})
+        except httpx.HTTPError as exc:
+            raise PhoenixDatasetUnavailableError(
+                f"Phoenix GraphQL request failed: {exc}"
+            ) from exc
+        if resp.status_code >= 400:
+            raise PhoenixDatasetUnavailableError(
+                f"Phoenix GraphQL returned {resp.status_code}: {resp.text[:200]}"
+            )
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise PhoenixDatasetUnavailableError(
+                "Phoenix GraphQL returned non-JSON body"
+            ) from exc
+        errors = payload.get("errors")
+        if errors:
+            raise PhoenixDatasetUnavailableError(
+                f"Phoenix GraphQL errors: {errors}"
+            )
+        return payload.get("data") or {}
+
     # ----- datasets -----------------------------------------------------------
 
     def list_datasets(
@@ -160,13 +190,20 @@ class PhoenixDatasetClient:
 
         Each example is a dict with ``input`` (dict), ``output`` (dict,
         optional — the expected output for this case) and ``metadata``
-        (dict, optional). ``metadata`` is the per-example bag we use
-        for custom evaluator hooks (``evaluators``: list[name]).
+        (dict, optional — the per-example bag we use for custom
+        evaluator hooks via ``evaluators: list[name]``).
 
-        The dataset-level ``metadata`` we conventionally include:
+        Dataset-level ``metadata`` we conventionally include:
 
         - ``target_type``: ``"step"`` or ``"pipeline"``
         - ``target_name``: step class name or pipeline class name
+
+        Phoenix's REST upload body has no dataset-metadata slot — REST
+        only accepts per-example metadata. To make ``metadata`` actually
+        land on the dataset record, we follow the REST upload with a
+        GraphQL ``patchDataset`` call. Returns the REST response (with
+        ``dataset_id`` etc.) unchanged so callers don't need to know
+        about the second hop.
         """
         _validate_identifier(name)
         body: Dict[str, Any] = {
@@ -178,10 +215,57 @@ class PhoenixDatasetClient:
         }
         if description is not None:
             body["description"] = description
-        if metadata is not None:
-            body["dataset_metadata"] = metadata
         resp = self._request("POST", "/v1/datasets/upload", json=body)
-        return (resp or {}).get("data") or {}
+        record = (resp or {}).get("data") or {}
+
+        # REST silently drops dataset-level metadata; layer it in via
+        # GraphQL when we have any to set.
+        dataset_id = record.get("dataset_id") or record.get("id")
+        if metadata and dataset_id:
+            try:
+                self.patch_dataset(dataset_id, metadata=metadata)
+            except PhoenixDatasetError:
+                # Don't fail the whole upload over a metadata patch —
+                # surface it via the response/log path the caller controls.
+                raise
+        return record
+
+    def patch_dataset(
+        self,
+        dataset_id: str,
+        *,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """GraphQL ``patchDataset`` — update dataset-level fields.
+
+        REST has no patch path; this is the only way to update
+        ``metadata`` (carrying ``target_type`` / ``target_name``),
+        ``description``, or ``name`` after creation.
+
+        ``dataset_id`` is the GraphQL node id (base64) returned in
+        ``id`` on REST list/get responses.
+        """
+        if name is None and description is None and metadata is None:
+            return {}
+        input_obj: Dict[str, Any] = {"datasetId": dataset_id}
+        if name is not None:
+            input_obj["name"] = name
+        if description is not None:
+            input_obj["description"] = description
+        if metadata is not None:
+            input_obj["metadata"] = metadata
+        query = (
+            "mutation P($input: PatchDatasetInput!) { "
+            "patchDataset(input: $input) { "
+            "  dataset { id name description metadata } "
+            "} "
+            "}"
+        )
+        data = self._graphql(query, {"input": input_obj})
+        payload = data.get("patchDataset") or {}
+        return payload.get("dataset") or {}
 
     # ----- examples -----------------------------------------------------------
 

@@ -135,6 +135,31 @@ def _fetch_dataset(client: PhoenixDatasetClient, dataset_id: str) -> Dataset:
     return phoenix_to_dataset(record, examples_payload)
 
 
+def _yaml_write_dataset(dataset: Dataset, request: Request) -> None:
+    """Best-effort YAML write hook; failures log but don't break the route."""
+    datasets_dir = getattr(request.app.state, "datasets_dir", None)
+    if datasets_dir is None:
+        return
+    from llm_pipeline.yaml_sync import write_dataset_yaml
+
+    try:
+        write_dataset_yaml(dataset, datasets_dir)
+    except Exception:
+        logger.exception("YAML write failed for dataset %s", dataset.name)
+
+
+def _yaml_delete_dataset(name: str, request: Request) -> None:
+    datasets_dir = getattr(request.app.state, "datasets_dir", None)
+    if datasets_dir is None:
+        return
+    from llm_pipeline.yaml_sync import delete_yaml
+
+    try:
+        delete_yaml(name, datasets_dir)
+    except Exception:
+        logger.exception("YAML delete failed for dataset %s", name)
+
+
 # ---------------------------------------------------------------------------
 # Static endpoints (registered before parameterised paths)
 # ---------------------------------------------------------------------------
@@ -183,9 +208,16 @@ def list_datasets(
 @router.post("/datasets", response_model=Dataset, status_code=201)
 def upload_dataset(body: Dataset, request: Request) -> Dataset:
     """Create a new Phoenix dataset from a canonical ``Dataset`` payload."""
+    client = _client(request)
     kwargs = dataset_to_phoenix_upload_kwargs(body)
-    record = _phoenix_call(_client(request).upload_dataset, **kwargs)
-    return phoenix_to_dataset(record)
+    record = _phoenix_call(client.upload_dataset, **kwargs)
+    new_id = record.get("id")
+    if new_id:
+        result = _fetch_dataset(client, new_id)
+    else:
+        result = phoenix_to_dataset(record)
+    _yaml_write_dataset(result, request)
+    return result
 
 
 @router.get("/datasets/{dataset_id}", response_model=Dataset)
@@ -196,7 +228,14 @@ def get_dataset(dataset_id: str, request: Request) -> Dataset:
 
 @router.delete("/datasets/{dataset_id}", status_code=204)
 def delete_dataset(dataset_id: str, request: Request) -> Response:
-    _phoenix_call(_client(request).delete_dataset, dataset_id)
+    client = _client(request)
+    # Fetch first so we know the name for the YAML cleanup; surfaces a
+    # clean 404 instead of leaking the dataset client error.
+    record = _phoenix_call(client.get_dataset, dataset_id)
+    name = record.get("name")
+    _phoenix_call(client.delete_dataset, dataset_id)
+    if isinstance(name, str) and name:
+        _yaml_delete_dataset(name, request)
     return Response(status_code=204)
 
 
@@ -217,7 +256,9 @@ def add_examples(
         dataset_id,
         [example_to_phoenix_payload(ex) for ex in body],
     )
-    return _fetch_dataset(client, dataset_id)
+    result = _fetch_dataset(client, dataset_id)
+    _yaml_write_dataset(result, request)
+    return result
 
 
 @router.delete(
@@ -226,7 +267,15 @@ def add_examples(
 def delete_example(
     dataset_id: str, example_id: str, request: Request,
 ) -> Response:
-    _phoenix_call(_client(request).delete_example, dataset_id, example_id)
+    client = _client(request)
+    _phoenix_call(client.delete_example, dataset_id, example_id)
+    # Re-fetch so the YAML reflects the post-delete state.
+    try:
+        result = _fetch_dataset(client, dataset_id)
+    except HTTPException:
+        result = None
+    if result is not None:
+        _yaml_write_dataset(result, request)
     return Response(status_code=204)
 
 
@@ -544,7 +593,7 @@ def _step_schema(target_name: str, registry: dict) -> SchemaResponse:
             record, dict,
         ) else record
         for node_cls in getattr(pipeline_cls, "nodes", []):
-            if node_cls.__name__ == target_name:
+            if node_cls.step_name() == target_name:
                 inputs_cls = getattr(node_cls, "INPUTS", None)
                 if inputs_cls is None:
                     return SchemaResponse(schema_={})
@@ -554,18 +603,18 @@ def _step_schema(target_name: str, registry: dict) -> SchemaResponse:
     )
 
 
-def _resolve_step_node(registry: dict, step_class_name: str) -> Any:
-    """Find the ``LLMStepNode`` subclass with ``__name__ == step_class_name``."""
+def _resolve_step_node(registry: dict, step_name: str) -> Any:
+    """Find the ``LLMStepNode`` subclass with ``step_name() == step_name``."""
     for record in registry.values():
         pipeline_cls = record.get("pipeline_class") if isinstance(
             record, dict,
         ) else record
         for node_cls in getattr(pipeline_cls, "nodes", []):
-            if node_cls.__name__ == step_class_name:
+            if node_cls.step_name() == step_name:
                 return node_cls
     raise HTTPException(
         status_code=404,
-        detail=f"Step {step_class_name!r} not found in any registered pipeline.",
+        detail=f"Step {step_name!r} not found in any registered pipeline.",
     )
 
 
@@ -606,16 +655,16 @@ def _flatten_message_content(content: Any) -> Optional[str]:
 
 
 def _resolve_step_target(
-    registry: dict, step_class_name: str,
+    registry: dict, step_name: str,
 ) -> tuple[str, str]:
     for record in registry.values():
         pipeline_cls = record.get("pipeline_class") if isinstance(
             record, dict,
         ) else record
         for node_cls in getattr(pipeline_cls, "nodes", []):
-            if node_cls.__name__ == step_class_name:
+            if node_cls.step_name() == step_name:
                 return pipeline_cls.pipeline_name(), node_cls.step_name()
     raise HTTPException(
         status_code=404,
-        detail=f"Step {step_class_name!r} not found in any registered pipeline.",
+        detail=f"Step {step_name!r} not found in any registered pipeline.",
     )

@@ -219,14 +219,15 @@ def _resolve_pipeline_and_step(
             )
         return pipeline_cls, None
 
-    # target_type == "step": target_name is the step class name. We
-    # locate the owning pipeline by scanning registry entries — usually
-    # exactly one match; ambiguity is a registration bug callers should
-    # see surfaced.
+    # target_type == "step": target_name is the canonical snake_case
+    # step name (matching ``LLMStepNode.step_name()`` and the Phoenix
+    # prompt name). We locate the owning pipeline by scanning registry
+    # entries — usually exactly one match; ambiguity is a registration
+    # bug callers should see surfaced.
     matches: list[tuple[type["Pipeline"], type]] = []
     for pipeline_cls in pipeline_registry.values():
         for node_cls in pipeline_cls.nodes:
-            if node_cls.__name__ == target_name:
+            if node_cls.step_name() == target_name:
                 matches.append((pipeline_cls, node_cls))
     if not matches:
         raise EvalTargetError(

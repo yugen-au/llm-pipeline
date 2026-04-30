@@ -231,7 +231,7 @@ def _resolve_pipeline_and_step(
     matches: list[tuple[type["Pipeline"], type]] = []
     for pipeline_cls in pipeline_registry.values():
         for node_cls in pipeline_cls.nodes:
-            if node_cls.__name__ == target_name:
+            if node_cls.step_name() == target_name:
                 matches.append((pipeline_cls, node_cls))
     if not matches:
         raise AcceptanceError(
