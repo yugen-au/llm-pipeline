@@ -34,6 +34,7 @@ from typing import Any, ClassVar
 
 from pydantic_graph import Graph
 
+from llm_pipeline.graph.spec import PipelineSpec, build_pipeline_spec
 from llm_pipeline.graph.state import PipelineDeps, PipelineState
 from llm_pipeline.graph.validator import validate_pipeline
 from llm_pipeline.inputs import PipelineInputData
@@ -95,6 +96,11 @@ class Pipeline:
     # Wiring dict keyed by node base class. Threaded into PipelineDeps
     # by the runtime so node bodies read their wiring from there.
     _wiring: ClassVar[dict[type, NodeBinding]] = {}
+    # Typed introspection surface, built once at __init_subclass__
+    # and surfaced via ``Pipeline.inspect()``. Phoenix-aware fields on
+    # each node's ``prompt`` start as ``None`` and are filled in by
+    # the discovery-time Phoenix validator.
+    _spec: ClassVar[PipelineSpec | None] = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -147,6 +153,11 @@ class Pipeline:
         cls._graph = Graph(nodes=tuple(raw_nodes), name=cls.__name__)
         cls._node_classes = {n.__name__: n for n in raw_nodes}
 
+        # Build the typed introspection surface. Phoenix-aware fields
+        # on each node's prompt are populated later at discovery time;
+        # everything code-derivable is available now.
+        cls._spec = build_pipeline_spec(cls)
+
     @classmethod
     def graph(cls) -> Graph[PipelineState, PipelineDeps, Any]:
         """Return the compiled ``pydantic_graph.Graph`` for this pipeline."""
@@ -163,3 +174,19 @@ class Pipeline:
         from llm_pipeline.naming import to_snake_case
 
         return to_snake_case(cls.__name__, strip_suffix="Pipeline")
+
+    @classmethod
+    def inspect(cls) -> PipelineSpec:
+        """Return the typed ``PipelineSpec`` introspection surface.
+
+        Built once at ``__init_subclass__`` time and cached. The same
+        instance is returned on every call. Phoenix-aware fields on
+        each node's ``prompt`` are populated by the discovery-time
+        Phoenix validator; ``None`` until that runs.
+        """
+        if cls._spec is None:
+            raise RuntimeError(
+                f"{cls.__name__} has no compiled spec — declare "
+                f"`nodes = [...]` and re-import the module."
+            )
+        return cls._spec
