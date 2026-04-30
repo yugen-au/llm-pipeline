@@ -1,5 +1,6 @@
 name: summary
 description: Summary prompt
+model: google-gla:gemini-3.1-flash-lite
 metadata:
   display_name: Summary
   category: text_analyzer

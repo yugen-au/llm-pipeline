@@ -1,5 +1,6 @@
 name: topic_extraction
 description: Topic extraction prompt
+model: google-gla:gemini-3.1-flash-lite
 metadata:
   display_name: Topic Extraction
   category: text_analyzer

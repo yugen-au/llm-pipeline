@@ -331,10 +331,11 @@ def _prompt_level_differs(yaml_prompt: Prompt, phoenix_prompt: Prompt) -> bool:
 
 
 def _version_level_differs(yaml_prompt: Prompt, phoenix_prompt: Prompt) -> bool:
-    """True iff version-level (template/schemas) fields differ."""
+    """True iff version-level (template/model/schemas) fields differ."""
     return (
         [m.model_dump() for m in yaml_prompt.messages]
         != [m.model_dump() for m in phoenix_prompt.messages]
+        or yaml_prompt.model != phoenix_prompt.model
         or yaml_prompt.response_format != phoenix_prompt.response_format
         or yaml_prompt.tools != phoenix_prompt.tools
     )

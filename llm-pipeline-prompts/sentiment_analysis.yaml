@@ -1,5 +1,6 @@
 name: sentiment_analysis
 description: Sentiment analysis prompt
+model: google-gla:gemini-3.1-flash-lite
 metadata:
   display_name: Sentiment Analysis
   category: text_analyzer

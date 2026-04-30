@@ -94,24 +94,31 @@ class _FakePromptClient:
             record["description"] = prompt.description
         self.records[prompt.name] = record
         messages = [{"role": m.role, "content": m.content} for m in prompt.messages]
-        version = self._make_version(messages)
+        version = self._make_version(messages, model=prompt.model)
         if prompt.response_format is not None:
             version["response_format"] = prompt.response_format
         if prompt.tools is not None:
             version["tools"] = prompt.tools
         self.versions.setdefault(prompt.name, []).append(version)
 
-    def _make_version(self, messages: list[dict[str, str]]) -> dict[str, Any]:
+    def _make_version(
+        self, messages: list[dict[str, str]], *, model: str | None = None,
+    ) -> dict[str, Any]:
+        from llm_pipeline.prompts.models import pai_model_to_phoenix
+
         self._next += 1
-        return {
+        version: dict[str, Any] = {
             "id": f"v_{self._next:03d}",
             "template": {"type": "chat", "messages": messages},
             "template_type": "CHAT",
             "template_format": "F_STRING",
-            "model_provider": "OPENAI",
-            "model_name": "gpt-4o-mini",
             "invocation_parameters": {"type": "openai", "openai": {}},
         }
+        if model:
+            provider, name = pai_model_to_phoenix(model)
+            version["model_provider"] = provider
+            version["model_name"] = name
+        return version
 
     # ---- PhoenixPromptClient surface ----
 
@@ -136,7 +143,10 @@ class _FakePromptClient:
         new_v = self._make_version(version["template"]["messages"])
         # Carry over the optional version fields so tests can assert
         # what the route/yaml_sync sent through.
-        for k in ("description", "response_format", "tools"):
+        for k in (
+            "description", "response_format", "tools",
+            "model_provider", "model_name",
+        ):
             if k in version:
                 new_v[k] = version[k]
         self.versions.setdefault(name, []).append(new_v)

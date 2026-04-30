@@ -44,16 +44,22 @@ class Prompt(BaseModel):
     Phoenix's prompt and our LLMStep are the same record — same parts:
     system + user messages, ``tools``, ``response_format``, plus
     metadata for things our UI adds on top (auto-generated variables).
-    The ``messages`` and ``metadata`` slices are human-authored (live
-    in YAML); ``response_format`` and ``tools`` are code-derived from
-    the step's ``INSTRUCTIONS`` class and ``DEFAULT_TOOLS`` (set at
-    push time, not in YAML).
+    The ``messages``, ``model``, and ``metadata`` slices are
+    human-authored (live in YAML); ``response_format`` and ``tools``
+    are code-derived from the step's ``INSTRUCTIONS`` class and
+    ``DEFAULT_TOOLS`` (set at push time, not in YAML).
+
+    ``model`` is a pydantic-ai-format string (``provider:name``, e.g.
+    ``openai:gpt-5``). It maps bidirectionally to Phoenix's
+    ``model_provider`` + ``model_name`` pair via :func:`pai_model_to_phoenix`
+    / :func:`phoenix_model_to_pai`.
     """
 
     name: str
     description: str | None = None
     metadata: PromptMetadata = Field(default_factory=PromptMetadata)
     messages: list[PromptMessage]
+    model: str | None = None
     response_format: dict[str, Any] | None = None
     tools: dict[str, Any] | None = None
     version_id: str | None = None
@@ -66,6 +72,77 @@ class Prompt(BaseModel):
 
 _NAME_INVALID_RE = re.compile(r"[^a-z0-9_-]+")
 _SYSTEM_ROLES = frozenset({"system", "developer"})
+
+
+# pydantic-ai uses lowercase ``provider:name`` strings; Phoenix's REST
+# API expects an uppercase ``model_provider`` enum + ``model_name``.
+# Most mappings are direct uppercase, but a few diverge (notably
+# ``google-gla`` ↔ ``GEMINI``). The two tables are NOT exact inverses —
+# multiple pydantic-ai providers (e.g. google-gla / google-vertex) can
+# back the same Phoenix provider, so the Phoenix→pai direction picks
+# the most-common variant.
+_PAI_TO_PHOENIX_PROVIDER: dict[str, str] = {
+    "openai": "OPENAI",
+    "azure": "AZURE_OPENAI",
+    "anthropic": "ANTHROPIC",
+    "google-gla": "GEMINI",
+    "google-vertex": "GEMINI",
+    "groq": "GROQ",
+    "mistral": "MISTRAL",
+    "deepseek": "DEEPSEEK",
+    "ollama": "OLLAMA",
+    "bedrock": "AWS",
+}
+_PHOENIX_TO_PAI_PROVIDER: dict[str, str] = {
+    "OPENAI": "openai",
+    "AZURE_OPENAI": "azure",
+    "ANTHROPIC": "anthropic",
+    "GEMINI": "google-gla",
+    "GROQ": "groq",
+    "MISTRAL": "mistral",
+    "DEEPSEEK": "deepseek",
+    "OLLAMA": "ollama",
+    "AWS": "bedrock",
+}
+
+
+class ModelStringError(ValueError):
+    """Raised when a pydantic-ai model string can't be parsed."""
+
+
+def pai_model_to_phoenix(pai_model: str) -> tuple[str, str]:
+    """Split a pydantic-ai ``provider:name`` string into Phoenix shape.
+
+    Returns ``(model_provider, model_name)`` where ``model_provider`` is
+    Phoenix's uppercase enum value. Unknown pydantic-ai providers fall
+    through to a direct uppercase conversion (caller should still
+    validate the resulting pair against Phoenix on push).
+    """
+    if ":" not in pai_model:
+        raise ModelStringError(
+            f"Model string {pai_model!r} must be of the form "
+            f"'provider:name' (e.g. 'openai:gpt-5')."
+        )
+    provider, _, name = pai_model.partition(":")
+    if not provider or not name:
+        raise ModelStringError(
+            f"Model string {pai_model!r} has empty provider or name."
+        )
+    phoenix_provider = _PAI_TO_PHOENIX_PROVIDER.get(provider, provider.upper())
+    return phoenix_provider, name
+
+
+def phoenix_model_to_pai(provider: str | None, name: str | None) -> str | None:
+    """Combine Phoenix ``model_provider`` + ``model_name`` back to pai format.
+
+    Returns ``None`` when either side is missing — caller decides whether
+    that's an error. Unknown Phoenix providers fall through to a direct
+    lowercase conversion.
+    """
+    if not provider or not name:
+        return None
+    pai_provider = _PHOENIX_TO_PAI_PROVIDER.get(provider, provider.lower())
+    return f"{pai_provider}:{name}"
 
 
 class PromptNameError(ValueError):
@@ -137,6 +214,9 @@ def phoenix_to_prompt(
         description=version.get("description") or record.get("description"),
         metadata=metadata,
         messages=_extract_messages(version),
+        model=phoenix_model_to_pai(
+            version.get("model_provider"), version.get("model_name"),
+        ),
         response_format=rf if isinstance(rf, dict) else None,
         tools=tools if isinstance(tools, dict) else None,
         version_id=version.get("id"),
@@ -153,10 +233,13 @@ def prompt_to_phoenix_payloads(
     ``response_format`` / ``tools`` come from the payload (callers fill
     them in from the step before calling — see
     :func:`derive_phoenix_extras_for_step` and
-    :mod:`llm_pipeline.prompts.registration`). ``base_version`` is a
-    legacy fallback for callers that don't have the step in hand:
-    model + invocation params and any ``response_format`` / ``tools``
-    already on Phoenix carry forward when payload has nothing set.
+    :mod:`llm_pipeline.prompts.registration`). ``payload.model`` (a
+    pydantic-ai ``provider:name`` string) splits into Phoenix's
+    ``model_provider`` + ``model_name`` pair when set; otherwise the
+    pair carries forward from ``base_version``, falling back to
+    ``OPENAI`` / ``gpt-4o-mini`` only when nothing is known.
+    ``base_version`` is the existing Phoenix version (for inheriting
+    invocation_parameters etc. when the payload is partial).
     """
     name = sanitise_prompt_name(payload.name)
     metadata: dict[str, Any] = payload.metadata.model_dump(exclude_none=True)
@@ -170,9 +253,18 @@ def prompt_to_phoenix_payloads(
         {"role": m.role, "content": m.content} for m in payload.messages
     ]
     messages.sort(key=lambda m: 0 if m["role"] == "system" else 1)
+
+    # Model resolution: payload.model wins; else carry forward from
+    # base_version; else last-resort default.
+    if payload.model:
+        model_provider, model_name = pai_model_to_phoenix(payload.model)
+    else:
+        model_provider = base.get("model_provider", "OPENAI")
+        model_name = base.get("model_name", "gpt-4o-mini")
+
     version_data: dict[str, Any] = {
-        "model_provider": base.get("model_provider", "OPENAI"),
-        "model_name": base.get("model_name", "gpt-4o-mini"),
+        "model_provider": model_provider,
+        "model_name": model_name,
         "template": {"type": "chat", "messages": messages},
         "template_type": "CHAT",
         "template_format": base.get("template_format", "F_STRING"),
@@ -194,11 +286,14 @@ def prompt_to_phoenix_payloads(
 
 
 __all__ = [
+    "ModelStringError",
     "Prompt",
     "PromptMessage",
     "PromptMetadata",
     "PromptNameError",
-    "sanitise_prompt_name",
+    "pai_model_to_phoenix",
+    "phoenix_model_to_pai",
     "phoenix_to_prompt",
     "prompt_to_phoenix_payloads",
+    "sanitise_prompt_name",
 ]
