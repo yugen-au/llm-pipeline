@@ -14,7 +14,9 @@ under a single ``EvaluationAcceptance`` row:
 2. ``variant.instructions_delta`` -> AST-rewrite the step's
    ``INSTRUCTIONS`` source file (resolved via
    ``inspect.getsourcefile``) using
-   :func:`llm_pipeline.creator.ast_modifier.apply_instructions_delta_to_file`.
+   :func:`llm_pipeline.codegen.api.apply_instructions_delta`. The
+   codegen path-guard ensures the rewrite only lands under
+   ``llm_pipelines/`` — framework code is structurally unreachable.
    Writes a ``.bak`` next to the source.
 
 If ``variant.model`` is set, ``accept_experiment`` raises
@@ -418,7 +420,13 @@ def _accept_instructions_delta(
     step_cls: type["LLMStepNode"],
     delta: list[dict],
 ) -> dict[str, Any]:
-    """AST-rewrite the step's INSTRUCTIONS class file."""
+    """AST-rewrite the step's INSTRUCTIONS class file via codegen.
+
+    The path guard inside :func:`codegen.apply_instructions_delta`
+    will reject the write if the source file isn't under the
+    configured ``llm_pipelines/`` root — that's intentional and
+    structural: accept-experiment must never touch framework code.
+    """
     instructions_cls = step_cls.INSTRUCTIONS
     if instructions_cls is None:
         raise AcceptanceError(
@@ -431,13 +439,16 @@ def _accept_instructions_delta(
             f"{instructions_cls.__module__}.{instructions_cls.__name__}",
         )
 
-    from llm_pipeline.creator.ast_modifier import apply_instructions_delta_to_file
+    from llm_pipeline.codegen.api import CodegenError, apply_instructions_delta
 
-    return apply_instructions_delta_to_file(
-        source_file=Path(source_file),
-        class_name=instructions_cls.__name__,
-        delta=delta,
-    )
+    try:
+        return apply_instructions_delta(
+            source_file=Path(source_file),
+            class_name=instructions_cls.__name__,
+            delta=delta,
+        )
+    except CodegenError as exc:
+        raise AcceptanceError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
