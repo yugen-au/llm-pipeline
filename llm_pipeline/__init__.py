@@ -38,8 +38,8 @@ from llm_pipeline.consensus import (
 )
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.graph import (
-    Bind,
     Computed,
+    Extraction,
     ExtractionNode,
     FromInput,
     FromOutput,
@@ -51,10 +51,12 @@ from llm_pipeline.graph import (
     PipelineEnd,
     PipelineInputData,
     PipelineState,
+    Review,
     ReviewNode,
     RunOutcome,
     SourcesSpec,
     SqlmodelStatePersistence,
+    Step,
     StepInputs,
     resume_pipeline,
     run_pipeline,
@@ -97,7 +99,11 @@ __all__ = [
     # Inputs + adapter machinery
     "PipelineInputData",
     "StepInputs",
-    "Bind",
+    # Per-node bindings used in Pipeline.nodes
+    "Step",
+    "Extraction",
+    "Review",
+    # Source types + spec
     "Computed",
     "FromInput",
     "FromOutput",

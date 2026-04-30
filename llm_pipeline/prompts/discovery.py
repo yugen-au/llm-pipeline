@@ -1,0 +1,49 @@
+"""Auto-discovery of ``PromptVariables`` subclasses from convention dirs.
+
+Walks loaded modules in ``llm_pipelines/variables/`` and registers every
+``PromptVariables`` subclass into the global registry by snake_case
+class name (with the ``Prompt`` suffix stripped).
+
+Hooked into the existing convention discovery in ``llm_pipeline.discovery``
+via the new ``variables`` subfolder in the load order. Variables load
+*before* steps so that step files can ``from llm_pipelines.variables.*``
+import their paired prompt class at module import time.
+"""
+from __future__ import annotations
+
+import inspect
+import logging
+from types import ModuleType
+
+from llm_pipeline.naming import to_snake_case
+from llm_pipeline.prompts.variables import (
+    PromptVariables,
+    register_prompt_variables,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def discover_prompt_variables(modules: list[ModuleType]) -> None:
+    """Walk loaded modules and register their ``PromptVariables`` subclasses.
+
+    Idempotent: re-registering the same class under the same name is a
+    no-op (see ``register_prompt_variables``). Re-registering a *different*
+    class under the same name raises ``ValueError``.
+    """
+    for mod in modules:
+        for _, cls in inspect.getmembers(mod, inspect.isclass):
+            if (
+                issubclass(cls, PromptVariables)
+                and cls is not PromptVariables
+                and cls.__module__ == mod.__name__
+            ):
+                key = to_snake_case(cls.__name__, strip_suffix="Prompt")
+                register_prompt_variables(key, cls)
+                logger.debug(
+                    "Registered PromptVariables: %s -> %s.%s",
+                    key, cls.__module__, cls.__name__,
+                )
+
+
+__all__ = ["discover_prompt_variables"]

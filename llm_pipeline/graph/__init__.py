@@ -18,10 +18,11 @@ field=X)`` resolves against ``StepCls.INSTRUCTIONS.model_fields``;
 every edge target is in ``nodes``; naming conventions hold; the graph
 is acyclic; ``FromInput`` paths resolve against ``INPUT_DATA``.
 
-Adapter machinery (``Bind``, ``SourcesSpec``, ``FromInput``,
-``FromOutput``, ``FromPipeline``, ``Computed``, ``StepInputs``) is
-re-exported from ``llm_pipeline.wiring`` and ``llm_pipeline.inputs``
-so user code only imports from ``llm_pipeline.graph``.
+Pipeline-level bindings (``Step``, ``Extraction``, ``Review``) plus
+adapter machinery (``SourcesSpec``, ``FromInput``, ``FromOutput``,
+``FromPipeline``, ``Computed``, ``StepInputs``) are re-exported from
+``llm_pipeline.wiring`` and ``llm_pipeline.inputs`` so user code only
+imports from ``llm_pipeline.graph``.
 """
 from __future__ import annotations
 
@@ -43,12 +44,14 @@ from llm_pipeline.graph.runtime import (
 from llm_pipeline.graph.state import PipelineState
 from llm_pipeline.inputs import PipelineInputData, StepInputs
 from llm_pipeline.wiring import (
-    Bind,
     Computed,
+    Extraction,
     FromInput,
     FromOutput,
     FromPipeline,
+    Review,
     SourcesSpec,
+    Step,
 )
 
 __all__ = [
@@ -73,7 +76,11 @@ __all__ = [
     # Re-exports for convenience (so user code only imports from llm_pipeline.graph)
     "PipelineInputData",
     "StepInputs",
-    "Bind",
+    # Per-node bindings used in Pipeline.nodes
+    "Step",
+    "Extraction",
+    "Review",
+    # Source types + spec
     "Computed",
     "FromInput",
     "FromOutput",

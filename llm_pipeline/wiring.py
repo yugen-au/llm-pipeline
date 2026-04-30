@@ -1,17 +1,19 @@
-"""Adapter source types and Bind dataclass for declarative pipeline wiring.
+"""Adapter source types + per-node binding dataclasses for pipeline wiring.
 
-Sources describe how a step's (or extraction pathway's) inputs are
-assembled from pipeline input + prior step outputs at adapter-resolve
-time. The closed set is: FromInput, FromOutput, FromPipeline, Computed.
+Sources describe how a node's inputs are assembled from pipeline input,
+prior node outputs, or pipeline-level attributes at adapter-resolve
+time. The closed set is: ``FromInput``, ``FromOutput``, ``FromPipeline``,
+``Computed``.
 
-Bind pairs a step (or extraction) with a SourcesSpec describing how its
-inputs are sourced. Strategies return a list of Bind instances from
-``get_bindings()``.
+Per-node bindings (``Step``, ``Extraction``, ``Review``) pair a node
+class with a ``SourcesSpec`` describing how its inputs are sourced.
+``Pipeline.nodes`` is a list of these wrappers — wiring is fully
+pipeline-level, never on the node class.
 """
 from __future__ import annotations
 
 import typing
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from types import UnionType
 from typing import Any, Callable
 
@@ -19,14 +21,15 @@ from pydantic import BaseModel
 
 __all__ = [
     "AdapterContext",
-    "Bind",
     "Computed",
+    "Extraction",
     "FromInput",
     "FromOutput",
     "FromPipeline",
+    "Review",
     "Source",
     "SourcesSpec",
-    "validate_bindings",
+    "Step",
 ]
 
 
@@ -148,209 +151,139 @@ class SourcesSpec:
         return self.inputs_cls(**resolved)
 
 
+# ---------------------------------------------------------------------------
+# Per-node bindings: Step / Extraction / Review
+# ---------------------------------------------------------------------------
+
+
 @dataclass
-class Bind:
-    """Wires a step, extraction, or tool with its input adapter.
+class Step:
+    """Pipeline-level binding for an ``LLMStepNode`` subclass.
 
-    Exactly one of ``step`` / ``extraction`` / ``tool`` must be set.
-    ``extractions`` and ``tools`` lists are only valid when ``step``
-    is set (nested binds under a step bind).
+    Pairs a step class (the *contract* — INPUTS, INSTRUCTIONS,
+    DEFAULT_TOOLS, ``prepare()``) with its *wiring* (the
+    ``SourcesSpec`` saying where each INPUTS field comes from).
 
-    ``consensus_strategy`` is a per-step concern and is only valid when
-    ``step`` is set; it's passed through to the compiled StepDefinition.
-
-    ``prompt_name`` overrides the default Phoenix prompt name (which is
-    ``to_snake_case(step.__name__, strip='Step')``) for a strategy-
-    specific variant — e.g. ``Bind(step=SummaryStep,
-    prompt_name="summary_formal")`` to drive the same step against a
-    different Phoenix-stored template at runtime. ``prompt_name`` is
-    only valid when ``step`` is set.
+    The ``inputs_spec``'s ``inputs_cls`` must match ``cls.INPUTS``;
+    enforced in ``__post_init__``.
     """
-    step: type | None = None
-    extraction: type | None = None
-    tool: type | None = None
-    inputs: SourcesSpec | None = None
-    extractions: list["Bind"] = field(default_factory=list)
-    tools: list["Bind"] = field(default_factory=list)
-    consensus_strategy: Any | None = None
-    prompt_name: str | None = None
+
+    cls: type
+    inputs_spec: SourcesSpec
 
     def __post_init__(self) -> None:
-        set_count = sum([
-            self.step is not None,
-            self.extraction is not None,
-            self.tool is not None,
-        ])
-        if set_count != 1:
-            raise ValueError(
-                "Bind must have exactly one of step=, extraction=, or tool= "
-                f"set; got step={self.step!r}, extraction={self.extraction!r}, "
-                f"tool={self.tool!r}"
+        if not isinstance(self.cls, type):
+            raise TypeError(
+                f"Step.cls must be a class, got {self.cls!r}"
             )
-        is_step = self.step is not None
-        if self.inputs is None and not is_step:
-            raise ValueError(
-                "Bind requires inputs= (a SourcesSpec) for extraction "
-                "and tool binds"
+        if not isinstance(self.inputs_spec, SourcesSpec):
+            raise TypeError(
+                f"Step.inputs_spec must be a SourcesSpec, got "
+                f"{type(self.inputs_spec).__name__}"
             )
-        if self.extractions and not is_step:
+        inputs_cls = getattr(self.cls, "INPUTS", None)
+        if inputs_cls is not None and self.inputs_spec.inputs_cls is not inputs_cls:
             raise ValueError(
-                "Nested extractions are only valid when step= is set"
+                f"Step({self.cls.__name__}, inputs_spec=...): "
+                f"inputs_spec.inputs_cls is "
+                f"{self.inputs_spec.inputs_cls.__name__}, but "
+                f"{self.cls.__name__}.INPUTS is "
+                f"{inputs_cls.__name__}. They must match."
             )
-        if self.tools and not is_step:
-            raise ValueError(
-                "Nested tools are only valid when step= is set"
-            )
-        if self.consensus_strategy is not None and not is_step:
-            raise ValueError(
-                "consensus_strategy is only valid when step= is set"
-            )
-        if self.prompt_name is not None and not is_step:
-            raise ValueError(
-                "prompt_name is only valid when step= is set"
-            )
-        for child in self.extractions:
-            if child.extraction is None:
-                raise ValueError(
-                    "Nested extraction Binds must have extraction= set"
-                )
-        for child in self.tools:
-            if child.tool is None:
-                raise ValueError(
-                    "Nested tool Binds must have tool= set"
-                )
 
 
-# ---------------------------------------------------------------------------
-# Static analysis
-# ---------------------------------------------------------------------------
+@dataclass
+class Extraction:
+    """Pipeline-level binding for an ``ExtractionNode`` subclass.
 
-
-def validate_bindings(
-    bindings: list[Bind],
-    *,
-    input_cls: type[BaseModel],
-) -> None:
-    """Statically verify a strategy's bindings against pipeline INPUT_DATA and step INSTRUCTIONS.
-
-    Raises ``ValueError`` on any violation:
-
-    - Top-level ``Bind`` with ``extraction=`` (instead of ``step=``).
-    - ``FromInput(path)`` referencing a path that does not exist on ``input_cls``.
-    - ``FromOutput(step_cls, ...)`` referencing a step that does not appear
-      earlier in the bindings list. An extraction nested under a step may
-      reference that step's output (it runs after the step completes).
-    - ``FromOutput(step_cls, field=X)`` where ``X`` is not a field on
-      ``step_cls.INSTRUCTIONS`` (checked only when ``INSTRUCTIONS`` is set).
-    - ``Computed`` with an invalid nested source (recursive validation).
-
-    ``FromPipeline`` sources are not checked statically — pipeline attrs are
-    too dynamic to verify at strategy-class time.
-
-    Designed to be called at pipeline class creation / strategy instantiation
-    so errors surface at import rather than at pipeline run.
+    Same shape as ``Step`` — the extraction's contract (INPUTS, MODEL,
+    ``extract()``) is on the class; the wiring is here. The framework
+    runs ``extract()`` and writes its rows both to the DB and to
+    ``state.outputs[ExtractionCls.__name__]`` so downstream
+    ``FromOutput(MyExtraction, ...)`` works.
     """
-    steps_seen: set[type] = set()
 
-    for i, bind in enumerate(bindings):
-        if bind.step is None:
+    cls: type
+    inputs_spec: SourcesSpec
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.cls, type):
+            raise TypeError(
+                f"Extraction.cls must be a class, got {self.cls!r}"
+            )
+        if not isinstance(self.inputs_spec, SourcesSpec):
+            raise TypeError(
+                f"Extraction.inputs_spec must be a SourcesSpec, got "
+                f"{type(self.inputs_spec).__name__}"
+            )
+        inputs_cls = getattr(self.cls, "INPUTS", None)
+        if inputs_cls is not None and self.inputs_spec.inputs_cls is not inputs_cls:
             raise ValueError(
-                f"validate_bindings: binding[{i}] has no step "
-                f"(extractions cannot be top-level bindings)"
-            )
-        step_label = f"binding[{i}] step={bind.step.__name__}"
-
-        # Step's own inputs adapter — may only read from strictly earlier steps.
-        _validate_spec(
-            bind.inputs,
-            input_cls=input_cls,
-            steps_seen=steps_seen,
-            location=step_label,
-        )
-
-        # Nested extraction binds — may additionally reference the owning step.
-        extended_seen = steps_seen | {bind.step}
-        for j, ext_bind in enumerate(bind.extractions):
-            if ext_bind.extraction is None:
-                # Guarded by Bind.__post_init__, but kept defensive.
-                raise ValueError(
-                    f"{step_label} extractions[{j}]: missing extraction="
-                )
-            ext_label = (
-                f"{step_label} extractions[{j}] "
-                f"extraction={ext_bind.extraction.__name__}"
-            )
-            _validate_spec(
-                ext_bind.inputs,
-                input_cls=input_cls,
-                steps_seen=extended_seen,
-                location=ext_label,
+                f"Extraction({self.cls.__name__}, inputs_spec=...): "
+                f"inputs_spec.inputs_cls is "
+                f"{self.inputs_spec.inputs_cls.__name__}, but "
+                f"{self.cls.__name__}.INPUTS is "
+                f"{inputs_cls.__name__}. They must match."
             )
 
-        steps_seen.add(bind.step)
 
+@dataclass
+class Review:
+    """Pipeline-level binding for a ``ReviewNode`` subclass.
 
-def _validate_spec(
-    spec: SourcesSpec | None,
-    *,
-    input_cls: type[BaseModel],
-    steps_seen: set[type],
-    location: str,
-) -> None:
-    if spec is None:
-        # Guarded by Bind.__post_init__, but kept defensive.
-        raise ValueError(f"{location}: missing inputs SourcesSpec")
-    for field_name, source in spec.field_sources.items():
-        _validate_source(
-            source,
-            input_cls=input_cls,
-            steps_seen=steps_seen,
-            location=f"{location} field={field_name}",
-        )
+    Same shape as the others. ``ReviewNode`` declares INPUTS (what
+    the reviewer sees) and OUTPUT (the reviewer's structured
+    response). Reviewer response is recorded at
+    ``state.outputs[ReviewCls.__name__]`` on resume.
+    """
 
+    cls: type
+    inputs_spec: SourcesSpec
 
-def _validate_source(
-    source: Source,
-    *,
-    input_cls: type[BaseModel],
-    steps_seen: set[type],
-    location: str,
-) -> None:
-    if isinstance(source, FromInput):
-        _validate_dotted_path(input_cls, source.path, location=location)
-    elif isinstance(source, FromOutput):
-        if source.step_cls not in steps_seen:
+    def __post_init__(self) -> None:
+        if not isinstance(self.cls, type):
+            raise TypeError(
+                f"Review.cls must be a class, got {self.cls!r}"
+            )
+        if not isinstance(self.inputs_spec, SourcesSpec):
+            raise TypeError(
+                f"Review.inputs_spec must be a SourcesSpec, got "
+                f"{type(self.inputs_spec).__name__}"
+            )
+        inputs_cls = getattr(self.cls, "INPUTS", None)
+        if inputs_cls is not None and self.inputs_spec.inputs_cls is not inputs_cls:
             raise ValueError(
-                f"{location}: FromOutput references step "
-                f"{source.step_cls.__name__}, which does not appear earlier "
-                f"in the bindings (or is not in this strategy)"
+                f"Review({self.cls.__name__}, inputs_spec=...): "
+                f"inputs_spec.inputs_cls is "
+                f"{self.inputs_spec.inputs_cls.__name__}, but "
+                f"{self.cls.__name__}.INPUTS is "
+                f"{inputs_cls.__name__}. They must match."
             )
-        if source.field is not None:
-            _validate_instructions_field(
-                source.step_cls, source.field, location=location
-            )
-    elif isinstance(source, FromPipeline):
-        # Pipeline attrs are too dynamic (session, logger, user-defined) to
-        # verify statically. Skipped intentionally.
-        return
-    elif isinstance(source, Computed):
-        for inner in source.sources:
-            _validate_source(
-                inner,
-                input_cls=input_cls,
-                steps_seen=steps_seen,
-                location=location,
-            )
-    else:
-        raise TypeError(
-            f"{location}: unknown Source subclass {type(source).__name__}"
-        )
+
+
+# ---------------------------------------------------------------------------
+# Helper utilities (used by graph validator + others)
+# ---------------------------------------------------------------------------
+
+
+def _unwrap_optional(annotation: Any) -> Any:
+    """Unwrap ``Optional[X]`` / ``X | None`` to ``X``. Leaves other types as-is."""
+    origin = typing.get_origin(annotation)
+    if origin is typing.Union or origin is UnionType:
+        args = [a for a in typing.get_args(annotation) if a is not type(None)]
+        if len(args) == 1:
+            return args[0]
+    return annotation
 
 
 def _validate_dotted_path(
     model_cls: type[BaseModel], path: str, *, location: str
 ) -> None:
-    """Walk a dotted path through nested BaseModels. Raise on missing field."""
+    """Walk a dotted path through nested BaseModels. Raise on missing field.
+
+    Used by the graph validator to statically check ``FromInput(path)``
+    references against ``Pipeline.INPUT_DATA``.
+    """
     parts = path.split(".")
     current: Any = model_cls
     for part in parts:
@@ -367,23 +300,16 @@ def _validate_dotted_path(
         current = _unwrap_optional(annotation)
 
 
-def _unwrap_optional(annotation: Any) -> Any:
-    """Unwrap ``Optional[X]`` / ``X | None`` to ``X``. Leaves other types as-is."""
-    origin = typing.get_origin(annotation)
-    if origin is typing.Union or origin is UnionType:
-        args = [a for a in typing.get_args(annotation) if a is not type(None)]
-        if len(args) == 1:
-            return args[0]
-    return annotation
-
-
 def _validate_instructions_field(
     step_cls: type, field_name: str, *, location: str
 ) -> None:
-    """Check ``field_name`` exists on ``step_cls.INSTRUCTIONS`` if present."""
+    """Check ``field_name`` exists on ``step_cls.INSTRUCTIONS`` if present.
+
+    Used by the graph validator to statically check
+    ``FromOutput(step_cls, field=...)`` references.
+    """
     instructions_cls = getattr(step_cls, "INSTRUCTIONS", None)
     if instructions_cls is None:
-        # Step not migrated / not decorated with @step_definition — skip.
         return
     fields = getattr(instructions_cls, "model_fields", None)
     if fields is None:

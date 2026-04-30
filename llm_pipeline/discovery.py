@@ -14,11 +14,14 @@ from typing import Any, Callable, Dict, Optional, Tuple, Type
 
 logger = logging.getLogger(__name__)
 
-# Subfolder load order (dependencies first)
+# Subfolder load order (dependencies first).
+# ``variables`` loads before ``steps`` because step files import their
+# paired ``PromptVariables`` subclass at module-import time.
 _LOAD_ORDER = [
     "enums",
     "constants",
     "schemas",
+    "variables",
     "extractions",
     "tools",
     "steps",
@@ -203,6 +206,11 @@ def discover_from_convention(
 
             if subfolder in ("enums", "constants"):
                 _register_enums_constants(modules)
+            elif subfolder == "variables":
+                from llm_pipeline.prompts.discovery import (
+                    discover_prompt_variables,
+                )
+                discover_prompt_variables(modules)
             elif subfolder == "pipelines":
                 p_reg, i_reg = _discover_pipelines_from_modules(
                     modules, default_model, engine,

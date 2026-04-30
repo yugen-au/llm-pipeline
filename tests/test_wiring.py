@@ -1,6 +1,5 @@
-"""Tests for llm_pipeline.wiring: Source types, AdapterContext, SourcesSpec, Bind,
-and validate_bindings static analysis.
-"""
+"""Tests for llm_pipeline.wiring: Source types, AdapterContext, SourcesSpec,
+and the per-node binding wrappers (Step / Extraction / Review)."""
 from dataclasses import FrozenInstanceError
 from types import SimpleNamespace
 
@@ -9,13 +8,14 @@ from pydantic import BaseModel, ValidationError
 
 from llm_pipeline.wiring import (
     AdapterContext,
-    Bind,
     Computed,
+    Extraction,
     FromInput,
     FromOutput,
     FromPipeline,
+    Review,
     SourcesSpec,
-    validate_bindings,
+    Step,
 )
 
 
@@ -249,328 +249,78 @@ class TestSourcesSpec:
 
 
 # ---------------------------------------------------------------------------
-# Bind
+# Per-node bindings: Step / Extraction / Review
 # ---------------------------------------------------------------------------
 
 
-class _FakeStep:
-    pass
+class _BindingInputs(BaseModel):
+    name: str
 
 
-class _FakeExtraction:
-    pass
+class _OtherInputs(BaseModel):
+    name: str
 
 
-def _spec() -> SourcesSpec:
+class _NodeWithInputs:
+    INPUTS = _BindingInputs
+
+
+class _NodeWithoutInputs:
+    """Node-like class without an INPUTS ClassVar — Step still constructs."""
+
+
+def _binding_spec(inputs_cls: type[BaseModel] = _BindingInputs) -> SourcesSpec:
     return SourcesSpec(
-        inputs_cls=_MyInputs,
-        field_sources={
-            "name": FromInput("name"),
-            "count": FromInput("count"),
-        },
+        inputs_cls=inputs_cls,
+        field_sources={"name": FromInput("name")},
     )
 
 
-class TestBind:
-    def test_step_bind_valid(self):
-        b = Bind(step=_FakeStep, inputs=_spec())
-        assert b.step is _FakeStep
-        assert b.extraction is None
-        assert b.extractions == []
+class TestStepBinding:
+    def test_valid_construction(self):
+        binding = Step(_NodeWithInputs, inputs_spec=_binding_spec())
+        assert binding.cls is _NodeWithInputs
+        assert binding.inputs_spec.inputs_cls is _BindingInputs
 
-    def test_extraction_bind_valid(self):
-        b = Bind(extraction=_FakeExtraction, inputs=_spec())
-        assert b.extraction is _FakeExtraction
-        assert b.step is None
+    def test_rejects_non_class_cls(self):
+        with pytest.raises(TypeError, match="must be a class"):
+            Step("not a class", inputs_spec=_binding_spec())  # type: ignore[arg-type]
 
-    def test_rejects_both_step_and_extraction(self):
-        with pytest.raises(ValueError, match="exactly one"):
-            Bind(step=_FakeStep, extraction=_FakeExtraction, inputs=_spec())
+    def test_rejects_non_sources_spec(self):
+        with pytest.raises(TypeError, match="must be a SourcesSpec"):
+            Step(_NodeWithInputs, inputs_spec="oops")  # type: ignore[arg-type]
 
-    def test_rejects_neither_step_nor_extraction(self):
-        with pytest.raises(ValueError, match="exactly one"):
-            Bind(inputs=_spec())
+    def test_rejects_inputs_cls_mismatch(self):
+        spec = _binding_spec(inputs_cls=_OtherInputs)
+        with pytest.raises(ValueError, match="must match"):
+            Step(_NodeWithInputs, inputs_spec=spec)
 
-    def test_step_bind_allows_no_inputs(self):
-        # Steps without a declared INPUTS class can omit inputs=
-        b = Bind(step=_FakeStep)
-        assert b.inputs is None
-
-    def test_extraction_bind_requires_inputs(self):
-        with pytest.raises(ValueError, match="inputs="):
-            Bind(extraction=_FakeExtraction)
-
-    def test_nested_extractions_under_step_ok(self):
-        child = Bind(extraction=_FakeExtraction, inputs=_spec())
-        b = Bind(step=_FakeStep, inputs=_spec(), extractions=[child])
-        assert b.extractions == [child]
-
-    def test_nested_extractions_under_extraction_rejected(self):
-        child = Bind(extraction=_FakeExtraction, inputs=_spec())
-        with pytest.raises(ValueError, match="Nested extractions"):
-            Bind(extraction=_FakeExtraction, inputs=_spec(), extractions=[child])
-
-    def test_nested_step_under_step_rejected(self):
-        child = Bind(step=_FakeStep, inputs=_spec())
-        with pytest.raises(ValueError, match="extraction="):
-            Bind(step=_FakeStep, inputs=_spec(), extractions=[child])
+    def test_no_inputs_classvar_skips_match_check(self):
+        # If the node class has no INPUTS, the binding can't enforce the
+        # match — just accepts whatever spec the caller provides.
+        binding = Step(_NodeWithoutInputs, inputs_spec=_binding_spec())
+        assert binding.cls is _NodeWithoutInputs
 
 
-# ---------------------------------------------------------------------------
-# validate_bindings — static analysis
-# ---------------------------------------------------------------------------
+class TestExtractionBinding:
+    def test_valid_construction(self):
+        binding = Extraction(_NodeWithInputs, inputs_spec=_binding_spec())
+        assert binding.cls is _NodeWithInputs
+        assert binding.inputs_spec.inputs_cls is _BindingInputs
+
+    def test_rejects_inputs_cls_mismatch(self):
+        spec = _binding_spec(inputs_cls=_OtherInputs)
+        with pytest.raises(ValueError, match="must match"):
+            Extraction(_NodeWithInputs, inputs_spec=spec)
 
 
-class _InnerInput(BaseModel):
-    email: str
+class TestReviewBinding:
+    def test_valid_construction(self):
+        binding = Review(_NodeWithInputs, inputs_spec=_binding_spec())
+        assert binding.cls is _NodeWithInputs
+        assert binding.inputs_spec.inputs_cls is _BindingInputs
 
-
-class _ValidateInput(BaseModel):
-    """INPUT_DATA fixture for validate_bindings tests."""
-    name: str
-    count: int
-    user: _InnerInput | None = None
-
-
-class _StepOneInstructions(BaseModel):
-    confidence: float
-    label: str
-
-
-class _StepOne:
-    INSTRUCTIONS = _StepOneInstructions
-
-
-class _StepTwoInstructions(BaseModel):
-    summary: str
-
-
-class _StepTwo:
-    INSTRUCTIONS = _StepTwoInstructions
-
-
-class _StepWithoutInstructions:
-    """Step-like class without INSTRUCTIONS — validate_bindings should skip
-    field-existence checks for FromOutput(..., field=X) gracefully."""
-
-
-class _ExtractionA:
-    pass
-
-
-def _mk_spec(inputs_cls: type[BaseModel], **field_sources) -> SourcesSpec:
-    """Construct a SourcesSpec directly for tests (bypasses .sources() validation
-    to let us build deliberately invalid specs)."""
-    return SourcesSpec(inputs_cls=inputs_cls, field_sources=field_sources)
-
-
-class _StepInputs(BaseModel):
-    """Minimal target inputs class used to satisfy SourcesSpec construction."""
-    x: str
-
-
-class TestValidateBindingsHappyPath:
-    def test_empty_bindings(self):
-        validate_bindings([], input_cls=_ValidateInput)
-
-    def test_single_step_from_input(self):
-        spec = _mk_spec(_StepInputs, x=FromInput("name"))
-        validate_bindings(
-            [Bind(step=_StepOne, inputs=spec)],
-            input_cls=_ValidateInput,
-        )
-
-    def test_dotted_from_input_through_nested_basemodel(self):
-        spec = _mk_spec(_StepInputs, x=FromInput("user.email"))
-        validate_bindings(
-            [Bind(step=_StepOne, inputs=spec)],
-            input_cls=_ValidateInput,
-        )
-
-    def test_step_reads_prior_step_output(self):
-        spec_a = _mk_spec(_StepInputs, x=FromInput("name"))
-        spec_b = _mk_spec(_StepInputs, x=FromOutput(_StepOne, field="label"))
-        validate_bindings(
-            [
-                Bind(step=_StepOne, inputs=spec_a),
-                Bind(step=_StepTwo, inputs=spec_b),
-            ],
-            input_cls=_ValidateInput,
-        )
-
-    def test_nested_extraction_reads_owning_step(self):
-        step_spec = _mk_spec(_StepInputs, x=FromInput("name"))
-        ext_spec = _mk_spec(_StepInputs, x=FromOutput(_StepOne, field="label"))
-        validate_bindings(
-            [
-                Bind(
-                    step=_StepOne,
-                    inputs=step_spec,
-                    extractions=[
-                        Bind(extraction=_ExtractionA, inputs=ext_spec),
-                    ],
-                ),
-            ],
-            input_cls=_ValidateInput,
-        )
-
-    def test_from_pipeline_always_passes(self):
-        spec = _mk_spec(_StepInputs, x=FromPipeline("session"))
-        validate_bindings(
-            [Bind(step=_StepOne, inputs=spec)],
-            input_cls=_ValidateInput,
-        )
-
-    def test_computed_with_valid_nested_sources(self):
-        spec = _mk_spec(
-            _StepInputs,
-            x=Computed(
-                lambda a, b: f"{a}:{b}",
-                FromInput("name"),
-                FromInput("count"),
-            ),
-        )
-        validate_bindings(
-            [Bind(step=_StepOne, inputs=spec)],
-            input_cls=_ValidateInput,
-        )
-
-    def test_from_output_whole_instruction_no_field(self):
-        spec_a = _mk_spec(_StepInputs, x=FromInput("name"))
-        spec_b = _mk_spec(_StepInputs, x=FromOutput(_StepOne))  # no field
-        validate_bindings(
-            [
-                Bind(step=_StepOne, inputs=spec_a),
-                Bind(step=_StepTwo, inputs=spec_b),
-            ],
-            input_cls=_ValidateInput,
-        )
-
-    def test_step_without_instructions_attr_skips_field_check(self):
-        spec_a = _mk_spec(_StepInputs, x=FromInput("name"))
-        # FromOutput with field=X on a step that has no INSTRUCTIONS — no raise.
-        spec_b = _mk_spec(
-            _StepInputs,
-            x=FromOutput(_StepWithoutInstructions, field="anything"),
-        )
-        validate_bindings(
-            [
-                Bind(step=_StepWithoutInstructions, inputs=spec_a),
-                Bind(step=_StepOne, inputs=spec_b),
-            ],
-            input_cls=_ValidateInput,
-        )
-
-
-class TestValidateBindingsFailures:
-    def test_top_level_extraction_rejected(self):
-        spec = _mk_spec(_StepInputs, x=FromInput("name"))
-        with pytest.raises(ValueError, match="no step"):
-            validate_bindings(
-                [Bind(extraction=_ExtractionA, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-
-    def test_from_input_missing_field(self):
-        spec = _mk_spec(_StepInputs, x=FromInput("missing"))
-        with pytest.raises(ValueError, match="missing"):
-            validate_bindings(
-                [Bind(step=_StepOne, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-
-    def test_from_input_dotted_path_missing_intermediate(self):
-        spec = _mk_spec(_StepInputs, x=FromInput("user.missing"))
-        with pytest.raises(ValueError, match="missing"):
-            validate_bindings(
-                [Bind(step=_StepOne, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-
-    def test_from_output_unknown_step(self):
-        spec = _mk_spec(_StepInputs, x=FromOutput(_StepTwo, field="summary"))
-        with pytest.raises(ValueError, match="_StepTwo"):
-            validate_bindings(
-                [Bind(step=_StepOne, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-
-    def test_from_output_later_step_rejected(self):
-        # Step one tries to read from step two (which runs later)
-        spec_a = _mk_spec(_StepInputs, x=FromOutput(_StepTwo, field="summary"))
-        spec_b = _mk_spec(_StepInputs, x=FromInput("name"))
-        with pytest.raises(ValueError, match="_StepTwo"):
-            validate_bindings(
-                [
-                    Bind(step=_StepOne, inputs=spec_a),
-                    Bind(step=_StepTwo, inputs=spec_b),
-                ],
-                input_cls=_ValidateInput,
-            )
-
-    def test_step_cannot_reference_itself(self):
-        # Step one's own inputs adapter references step one's output (not allowed
-        # — the step hasn't run at the time its inputs are resolved).
-        spec = _mk_spec(_StepInputs, x=FromOutput(_StepOne, field="label"))
-        with pytest.raises(ValueError, match="_StepOne"):
-            validate_bindings(
-                [Bind(step=_StepOne, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-
-    def test_from_output_bad_instructions_field(self):
-        spec_a = _mk_spec(_StepInputs, x=FromInput("name"))
-        spec_b = _mk_spec(
-            _StepInputs, x=FromOutput(_StepOne, field="nonexistent_field")
-        )
-        with pytest.raises(ValueError, match="nonexistent_field"):
-            validate_bindings(
-                [
-                    Bind(step=_StepOne, inputs=spec_a),
-                    Bind(step=_StepTwo, inputs=spec_b),
-                ],
-                input_cls=_ValidateInput,
-            )
-
-    def test_computed_with_bad_nested_source(self):
-        spec = _mk_spec(
-            _StepInputs,
-            x=Computed(
-                lambda a: a,
-                FromInput("missing"),
-            ),
-        )
-        with pytest.raises(ValueError, match="missing"):
-            validate_bindings(
-                [Bind(step=_StepOne, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-
-    def test_nested_extraction_bad_source(self):
-        step_spec = _mk_spec(_StepInputs, x=FromInput("name"))
-        ext_spec = _mk_spec(_StepInputs, x=FromInput("bogus"))
-        with pytest.raises(ValueError, match="bogus"):
-            validate_bindings(
-                [
-                    Bind(
-                        step=_StepOne,
-                        inputs=step_spec,
-                        extractions=[
-                            Bind(extraction=_ExtractionA, inputs=ext_spec),
-                        ],
-                    ),
-                ],
-                input_cls=_ValidateInput,
-            )
-
-    def test_error_message_includes_location(self):
-        spec = _mk_spec(_StepInputs, x=FromInput("missing"))
-        with pytest.raises(ValueError) as exc_info:
-            validate_bindings(
-                [Bind(step=_StepOne, inputs=spec)],
-                input_cls=_ValidateInput,
-            )
-        msg = str(exc_info.value)
-        assert "binding[0]" in msg
-        assert "_StepOne" in msg
-        assert "field=x" in msg
+    def test_rejects_inputs_cls_mismatch(self):
+        spec = _binding_spec(inputs_cls=_OtherInputs)
+        with pytest.raises(ValueError, match="must match"):
+            Review(_NodeWithInputs, inputs_spec=spec)
