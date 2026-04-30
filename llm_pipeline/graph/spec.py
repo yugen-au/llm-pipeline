@@ -110,11 +110,12 @@ class PromptSpec(BaseModel):
     name: str  # step_name() — 1:1 with the Phoenix prompt name
     prompt_variables_cls: str  # fully-qualified XxxPrompt class
 
-    # Code-derived schemas (always available).
-    system_variable_definitions: dict[str, Any]  # JSON Schema for .system
-    user_variable_definitions: dict[str, Any]    # JSON Schema for .user
-    response_format: dict[str, Any]              # INSTRUCTIONS schema
-    tools: list[ToolSpec]                        # DEFAULT_TOOLS contract
+    # Code-derived schemas (always available). variable_definitions is
+    # message-agnostic — same flat shape Phoenix uses internally.
+    variable_definitions: dict[str, Any]   # JSON Schema for the prompt's vars
+    auto_vars: dict[str, str]              # framework-supplied placeholders
+    response_format: dict[str, Any]        # INSTRUCTIONS schema
+    tools: list[ToolSpec]                  # DEFAULT_TOOLS contract
 
     # Phoenix-aware (populated at discovery; None at __init_subclass__).
     system_template: str | None = None
@@ -243,8 +244,8 @@ def _build_prompt_spec(step_cls: type) -> PromptSpec:
     return PromptSpec(
         name=step_cls.step_name(),
         prompt_variables_cls=_qualname(prompt_cls),
-        system_variable_definitions=prompt_cls.system.model_json_schema(),
-        user_variable_definitions=prompt_cls.user.model_json_schema(),
+        variable_definitions=prompt_cls.model_json_schema(),
+        auto_vars=dict(getattr(prompt_cls, "auto_vars", {})),
         response_format=step_cls.INSTRUCTIONS.model_json_schema(),
         tools=[_build_tool_spec(t) for t in step_cls.DEFAULT_TOOLS],
     )

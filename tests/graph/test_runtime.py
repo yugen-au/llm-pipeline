@@ -54,11 +54,7 @@ class _DBClassifyInstructions(LLMResultMixin):
 
 
 class _DBClassifyPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _DBClassifyStep(LLMStepNode):
@@ -68,9 +64,7 @@ class _DBClassifyStep(LLMStepNode):
 
     def prepare(self, inputs: _DBClassifyInputs) -> list[_DBClassifyPrompt]:
         return [_DBClassifyPrompt(
-            system=_DBClassifyPrompt.system(),
-            user=_DBClassifyPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

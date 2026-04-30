@@ -44,11 +44,7 @@ class _SpecAInstructions(LLMResultMixin):
 
 
 class _SpecAPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _SpecRow(SQLModel, table=True):
@@ -72,9 +68,7 @@ class _SpecAStep(LLMStepNode):
 
     def prepare(self, inputs: _SpecAInputs) -> list[_SpecAPrompt]:
         return [_SpecAPrompt(
-            system=_SpecAPrompt.system(),
-            user=_SpecAPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -108,11 +102,7 @@ class _SpecBInstructions(LLMResultMixin):
 
 
 class _SpecBPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        label: str = Field(description="label")
+    label: str = Field(description="label")
 
 
 class _SpecBStep(LLMStepNode):
@@ -124,9 +114,7 @@ class _SpecBStep(LLMStepNode):
 
     def prepare(self, inputs: _SpecBInputs) -> list[_SpecBPrompt]:
         return [_SpecBPrompt(
-            system=_SpecBPrompt.system(),
-            user=_SpecBPrompt.user(label=inputs.label),
-        )]
+            label=inputs.label)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -200,10 +188,12 @@ class TestNodeSpecs:
         spec = _SpecPipeline.inspect()
         node = next(n for n in spec.nodes if n.cls.endswith("_SpecAStep"))
         assert node.prompt is not None
-        # System has no fields; user has 'text'.
-        assert node.prompt.system_variable_definitions.get("properties", {}) == {}
-        user_props = node.prompt.user_variable_definitions.get("properties", {})
-        assert "text" in user_props
+        # variable_definitions is flat (Phoenix-shaped); the only
+        # declared variable is 'text'.
+        props = node.prompt.variable_definitions.get("properties", {})
+        assert "text" in props
+        # auto_vars is a separate dict; empty in this fixture.
+        assert node.prompt.auto_vars == {}
 
     def test_step_node_response_format_from_instructions(self):
         spec = _SpecPipeline.inspect()

@@ -29,8 +29,7 @@ from llm_pipeline.prompts.phoenix_validator import (
     PromptMessagesShapeError,
     PromptModelMissingError,
     PromptNameMismatchError,
-    PromptSystemVariableDriftError,
-    PromptUserVariableDriftError,
+    PromptVariableDriftError,
     PromptVariablesMissingError,
     PromptVariablesRegistryMismatchError,
     PromptYamlInvalidError,
@@ -60,20 +59,12 @@ class _FixtureInstructions(BaseModel):
 
 
 class _FixturePrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _MultiVarPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
-        sentiment: str = Field(description="sentiment")
+    text: str = Field(description="text")
+    sentiment: str = Field(description="sentiment")
 
 
 class _FixtureStepBase(LLMStepNode):
@@ -82,10 +73,7 @@ class _FixtureStepBase(LLMStepNode):
     DEFAULT_TOOLS: list[type] = []
 
     def prepare(self, inputs: _FixtureInputs) -> list[_FixturePrompt]:
-        return [_FixturePrompt(
-            system=_FixturePrompt.system(),
-            user=_FixturePrompt.user(text=inputs.text),
-        )]
+        return [_FixturePrompt(text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -99,10 +87,7 @@ class _MultiVarStepBase(LLMStepNode):
     DEFAULT_TOOLS: list[type] = []
 
     def prepare(self, inputs: _FixtureInputs) -> list[_MultiVarPrompt]:
-        return [_MultiVarPrompt(
-            system=_MultiVarPrompt.system(),
-            user=_MultiVarPrompt.user(text=inputs.text, sentiment="x"),
-        )]
+        return [_MultiVarPrompt(text=inputs.text, sentiment="x")]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -396,7 +381,7 @@ class TestCodeSideErrors:
             )
         errors = exc_info.value.errors
         assert any(
-            isinstance(e, PromptSystemVariableDriftError) for e in errors
+            isinstance(e, PromptVariableDriftError) for e in errors
         )
 
     def test_user_drift_template_missing_declared_field(self, tmp_path: Path):
@@ -412,7 +397,7 @@ class TestCodeSideErrors:
                 registry, tmp_path, prompt_client=client, mode="build",
             )
         errors = exc_info.value.errors
-        assert any(isinstance(e, PromptUserVariableDriftError) for e in errors)
+        assert any(isinstance(e, PromptVariableDriftError) for e in errors)
 
 
 # ---------------------------------------------------------------------------

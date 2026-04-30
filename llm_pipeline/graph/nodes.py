@@ -366,14 +366,17 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
             )
         call = prompt_calls[0]
 
-        # Eval-runner per-run override path: render the override
-        # template directly with the user-message variables. Skips the
-        # Phoenix fetch.
-        user_vars = call.user.model_dump()
+        # Variables flow into both system and user message templates
+        # from the same flat dict (Phoenix's variable_definitions is
+        # message-agnostic). prepare()-supplied vars come from the
+        # PromptVariables instance; auto_generate-supplied vars are
+        # resolved at render time in step B.5 (currently empty for
+        # the demo so the merge is a no-op).
+        prompt_vars = call.model_dump()
         prompt_override = (ctx.deps.prompt_overrides or {}).get(cls.step_name())
         if prompt_override is not None:
             try:
-                user_prompt = prompt_override.format(**user_vars)
+                user_prompt = prompt_override.format(**prompt_vars)
             except (KeyError, IndexError) as exc:
                 raise ValueError(
                     f"prompt override for step {cls.step_name()!r} references "
@@ -382,15 +385,13 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         else:
             user_prompt = ctx.deps.prompt_service.get_user_prompt(
                 prompt_key=cls.step_name(),
-                variables=user_vars,
+                variables=prompt_vars,
             )
 
-        # System-message variables are validated against the prompt
-        # template at discovery time but not threaded into agent
-        # construction yet — the prompts service / agent_builders
-        # don't accept system-side variables in the current shape.
-        # TODO: thread call.system.model_dump() through agent's
-        # @agent.instructions hook in step 7 (Phoenix sync extension).
+        # System-message rendering with auto_vars-resolved values lands
+        # in step B.5 (Restore _run_llm system+user rendering). Today
+        # the @agent.instructions hook fetches the raw system template
+        # from Phoenix without substitution.
 
         review_ctx = ctx.deps.review_context
         if review_ctx:

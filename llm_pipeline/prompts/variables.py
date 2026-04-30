@@ -1,26 +1,32 @@
 """``PromptVariables`` base class + registry, plus ``auto_generate`` evaluator.
 
-``PromptVariables`` declares the typed contract for the variables rendered
-into a Phoenix prompt template. Each subclass has two nested Pydantic
-classes — ``system`` and ``user`` — corresponding to Phoenix's two
-messages. Every field uses ``Field(description="...")`` (enforced at
-class-definition time).
+``PromptVariables`` is a Pydantic ``BaseModel``. Subclasses declare
+each prompt variable as a Pydantic field with
+``Field(description="...")``. Variables are *message-agnostic* — a
+placeholder ``{x}`` in either the system or user message renders to
+the same value at request time, matching Phoenix's flat
+``variable_definitions`` data model.
 
 Subclasses live in ``llm_pipelines/variables/{prompt_name}.py`` and are
 auto-discovered into ``PROMPT_VARIABLES_REGISTRY`` by snake_case class
 name (sans the ``Prompt`` suffix). The registry keys map 1:1 to step
 ``step_name()`` and Phoenix prompt names.
 
-The ``auto_generate`` evaluator (``enum_values(X)``, ``enum_names(X)``,
-``enum_value(X, MEMBER)``, ``constant(value)``) lives on as a separate
-concern — used by the prompts UI when computing default text snippets.
+A ``auto_vars: ClassVar[dict[str, str]]`` declares placeholders the
+framework fills at render time from auto_generate expressions
+(``enum_values(X)``, ``enum_names(X)``, ``enum_value(X, MEMBER)``,
+``constant(value)``). Those placeholders are NOT constructor args —
+LLM-authors cannot override them by accident — so override-prevention
+is structural. ``__init_subclass__`` enforces mutual exclusion: a
+name MUST be either a Pydantic field (prepare-supplied) OR an
+``auto_vars`` entry (framework-supplied), never both.
 """
 from __future__ import annotations
 
 import importlib
 import logging
 import re
-from typing import Any, Callable
+from typing import Any, Callable, ClassVar
 
 from pydantic import BaseModel
 
@@ -32,84 +38,88 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class PromptVariables:
-    """Container for one prompt's variables: a ``system`` part and a ``user`` part.
+class PromptVariables(BaseModel):
+    """Container for one prompt's variables — declared as Pydantic fields.
 
-    Each subclass declares two nested Pydantic classes — ``system`` and
-    ``user`` — describing the variables for the corresponding Phoenix
-    messages. Every field on those nested classes must use
-    ``Field(description="...")``; this is enforced at class-definition
-    time.
+    Subclass and declare each variable as a Pydantic field. Every field
+    must use ``Field(description="...")``; this is enforced at
+    class-definition time.
 
     The class name (with the ``Prompt`` suffix stripped, snake-cased)
     maps 1:1 to the Phoenix prompt name and the owning ``LLMStepNode``
     subclass's ``step_name()``.
 
-    Instances hold validated ``system`` and ``user`` Pydantic instances;
-    the framework reads ``instance.system.model_dump()`` and
-    ``instance.user.model_dump()`` to render Phoenix's message templates.
+    Instances hold validated variable values; the framework reads
+    ``instance.model_dump()`` to render *both* the system and user
+    Phoenix message templates with the same variable namespace.
 
     Example::
 
-        class SentimentAnalysisPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
+        class TopicExtractionPrompt(PromptVariables):
+            text: str = Field(description="Input text")
+            sentiment: str = Field(description="Detected sentiment")
 
-            class user(BaseModel):
-                text: str = Field(description="Input text to analyse")
+            auto_vars: ClassVar[dict[str, str]] = {
+                "sentiment_options": "enum_names(Sentiment)",
+            }
 
-        SentimentAnalysisPrompt(
-            system=SentimentAnalysisPrompt.system(),
-            user=SentimentAnalysisPrompt.user(text="hi"),
-        )
+        TopicExtractionPrompt(text="hi", sentiment="POSITIVE")
 
-    Not a Pydantic ``BaseModel`` — those treat nested classes as
-    annotations rather than instance fields. A plain class with an
-    explicit ``__init__`` is simpler and lets ``.system`` / ``.user``
-    behave as ordinary attributes.
+    The ``auto_vars`` ClassVar is a class-level constant (Pydantic
+    respects ``ClassVar`` and excludes it from ``model_fields``).
+    Its keys are placeholders filled by the framework at render time
+    from auto_generate expressions; LLM-authors cannot pass them as
+    constructor args.
     """
 
-    # Subclasses override these via the nested-class declaration.
-    system: type[BaseModel]
-    user: type[BaseModel]
+    auto_vars: ClassVar[dict[str, str]] = {}
 
-    def __init__(
-        self,
-        *,
-        system: BaseModel,
-        user: BaseModel,
-    ) -> None:
-        cls = type(self)
-        if not isinstance(system, cls.system):
-            raise TypeError(
-                f"{cls.__name__}.system expects a {cls.system.__name__} "
-                f"instance, got {type(system).__name__}."
-            )
-        if not isinstance(user, cls.user):
-            raise TypeError(
-                f"{cls.__name__}.user expects a {cls.user.__name__} "
-                f"instance, got {type(user).__name__}."
-            )
-        self.system = system
-        self.user = user
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        # Pydantic's hook (instead of __init_subclass__) — guaranteed
+        # to run AFTER Pydantic has finalized model_fields, so the
+        # field-iteration below sees the complete picture.
+        super().__pydantic_init_subclass__(**kwargs)
 
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        for nested_name in ("system", "user"):
-            nested = cls.__dict__.get(nested_name)
-            if nested is None or not (
-                isinstance(nested, type) and issubclass(nested, BaseModel)
-            ):
-                raise TypeError(
-                    f"{cls.__name__}.{nested_name} must be a Pydantic "
-                    f"BaseModel subclass declared inside the class body."
+        # 1. Every field must use Field(description=...).
+        for field_name, field_info in cls.model_fields.items():
+            if not field_info.description:
+                raise ValueError(
+                    f"{cls.__name__}.{field_name} must use "
+                    f"Field(description='...')."
                 )
-            for field_name, field_info in nested.model_fields.items():
-                if not field_info.description:
-                    raise ValueError(
-                        f"{cls.__name__}.{nested_name}.{field_name} must "
-                        f"use Field(description='...')."
-                    )
+
+        # 2. auto_vars shape: dict[str, str] with non-empty keys/values.
+        auto_vars = cls.__dict__.get("auto_vars", {})
+        if auto_vars and not isinstance(auto_vars, dict):
+            raise TypeError(
+                f"{cls.__name__}.auto_vars must be a dict[str, str] "
+                f"of placeholder -> auto_generate expression; got "
+                f"{type(auto_vars).__name__}."
+            )
+        for placeholder, expr in auto_vars.items():
+            if not isinstance(placeholder, str) or not placeholder:
+                raise TypeError(
+                    f"{cls.__name__}.auto_vars: placeholder names "
+                    f"must be non-empty strings; got {placeholder!r}."
+                )
+            if not isinstance(expr, str) or not expr:
+                raise TypeError(
+                    f"{cls.__name__}.auto_vars[{placeholder!r}] "
+                    f"must be a non-empty auto_generate expression "
+                    f"string; got {expr!r}."
+                )
+
+        # 3. Mutual exclusion: no name in both fields and auto_vars.
+        overlap = set(cls.model_fields.keys()) & set(auto_vars.keys())
+        if overlap:
+            raise ValueError(
+                f"{cls.__name__}: placeholder name(s) "
+                f"{sorted(overlap)!r} appear in BOTH model_fields "
+                f"and auto_vars. A placeholder is either "
+                f"prepare-supplied (a Pydantic field) or framework-"
+                f"supplied (an auto_vars entry), never both."
+            )
 
 
 # Module-global registry. Keyed by snake_case class name with ``Prompt``

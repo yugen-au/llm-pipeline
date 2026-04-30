@@ -32,12 +32,7 @@ class SentimentAnalysisStep(LLMStepNode):
     DEFAULT_TOOLS: list[type] = []
 
     def prepare(self, inputs: SentimentAnalysisInputs) -> list[SentimentAnalysisPrompt]:
-        return [
-            SentimentAnalysisPrompt(
-                system=SentimentAnalysisPrompt.system(),
-                user=SentimentAnalysisPrompt.user(text=inputs.text),
-            ),
-        ]
+        return [SentimentAnalysisPrompt(text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

@@ -60,11 +60,7 @@ class _ClassifyInstructions(LLMResultMixin):
 
 
 class _ClassifyPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="Input text")
+    text: str = Field(description="Input text")
 
 
 class _ClassifyStep(LLMStepNode):
@@ -75,9 +71,7 @@ class _ClassifyStep(LLMStepNode):
     def prepare(self, inputs: _ClassifyInputs) -> list[_ClassifyPrompt]:
         return [
             _ClassifyPrompt(
-                system=_ClassifyPrompt.system(),
-                user=_ClassifyPrompt.user(text=inputs.text),
-            ),
+                text=inputs.text),
         ]
 
     async def run(

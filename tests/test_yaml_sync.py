@@ -578,11 +578,7 @@ class _FakeInputs(StepInputs):
 
 
 class _FakePrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _FakeStepBase(LLMStepNode):
@@ -601,9 +597,7 @@ class _FakeStepBase(LLMStepNode):
 
     def prepare(self, inputs: _FakeInputs) -> list[_FakePrompt]:
         return [_FakePrompt(
-            system=_FakePrompt.system(),
-            user=_FakePrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

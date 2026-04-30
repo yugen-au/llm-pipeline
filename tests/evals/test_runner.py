@@ -62,11 +62,7 @@ class _RunnerInstructions(LLMResultMixin):
 
 
 class _RunnerPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _RunnerStep(LLMStepNode):
@@ -76,9 +72,7 @@ class _RunnerStep(LLMStepNode):
 
     def prepare(self, inputs: _RunnerInputs) -> list[_RunnerPrompt]:
         return [_RunnerPrompt(
-            system=_RunnerPrompt.system(),
-            user=_RunnerPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

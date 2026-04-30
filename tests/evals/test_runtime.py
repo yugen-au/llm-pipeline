@@ -59,11 +59,7 @@ class _ClassifyInstructions(LLMResultMixin):
 
 
 class _ClassifyPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _ClassifyStep(LLMStepNode):
@@ -73,9 +69,7 @@ class _ClassifyStep(LLMStepNode):
 
     def prepare(self, inputs: _ClassifyInputs) -> list[_ClassifyPrompt]:
         return [_ClassifyPrompt(
-            system=_ClassifyPrompt.system(),
-            user=_ClassifyPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -95,11 +89,7 @@ class _SummaryInstructions(LLMResultMixin):
 
 
 class _SummaryPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        label: str = Field(description="label")
+    label: str = Field(description="label")
 
 
 class _SummaryStep(LLMStepNode):
@@ -109,9 +99,7 @@ class _SummaryStep(LLMStepNode):
 
     def prepare(self, inputs: _SummaryInputs) -> list[_SummaryPrompt]:
         return [_SummaryPrompt(
-            system=_SummaryPrompt.system(),
-            user=_SummaryPrompt.user(label=inputs.label),
-        )]
+            label=inputs.label)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

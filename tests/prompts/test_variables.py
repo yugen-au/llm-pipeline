@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import sys
 from types import ModuleType
+from typing import ClassVar
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from llm_pipeline.prompts.discovery import discover_prompt_variables
 from llm_pipeline.prompts.variables import (
@@ -25,98 +26,120 @@ def _clear_registry():
 
 
 class TestPromptVariablesBase:
-    def test_valid_subclass_with_both_nested_classes(self):
+    def test_valid_subclass_with_fields(self):
         class WidgetDetectionPrompt(PromptVariables):
-            class system(BaseModel):
-                tone: str = Field(description="Voice tone")
+            tone: str = Field(description="Voice tone")
+            text: str = Field(description="Text to inspect")
 
-            class user(BaseModel):
-                text: str = Field(description="Text to inspect")
+        assert "tone" in WidgetDetectionPrompt.model_fields
+        assert "text" in WidgetDetectionPrompt.model_fields
 
-        assert issubclass(WidgetDetectionPrompt.system, BaseModel)
-        assert issubclass(WidgetDetectionPrompt.user, BaseModel)
-        assert "tone" in WidgetDetectionPrompt.system.model_fields
-        assert "text" in WidgetDetectionPrompt.user.model_fields
-
-    def test_empty_nested_classes_allowed(self):
+    def test_empty_class_allowed(self):
         class NoVarsPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
+            pass
 
-            class user(BaseModel):
-                pass
-
-        assert NoVarsPrompt.system.model_fields == {}
-        assert NoVarsPrompt.user.model_fields == {}
-
-    def test_missing_system_raises(self):
-        with pytest.raises(TypeError, match="must be a Pydantic BaseModel subclass"):
-
-            class MissingSystemPrompt(PromptVariables):
-                class user(BaseModel):
-                    text: str = Field(description="Text")
-
-    def test_missing_user_raises(self):
-        with pytest.raises(TypeError, match="must be a Pydantic BaseModel subclass"):
-
-            class MissingUserPrompt(PromptVariables):
-                class system(BaseModel):
-                    pass
-
-    def test_system_not_a_basemodel_raises(self):
-        with pytest.raises(TypeError, match="must be a Pydantic BaseModel subclass"):
-
-            class BadSystemPrompt(PromptVariables):
-                class system:  # bare class — not a BaseModel
-                    pass
-
-                class user(BaseModel):
-                    pass
+        assert NoVarsPrompt.model_fields == {}
+        # Empty subclass instantiates with no args
+        NoVarsPrompt()
 
     def test_field_without_description_raises(self):
         with pytest.raises(ValueError, match="must use Field"):
 
             class NoDescPrompt(PromptVariables):
-                class system(BaseModel):
-                    pass
-
-                class user(BaseModel):
-                    text: str = Field()  # no description
+                text: str = Field()  # no description
 
     def test_plain_default_without_field_raises(self):
-        # text: str = "hi" — no Field() at all, no description
+        # text: str = "hi" — no Field(), no description
         with pytest.raises(ValueError, match="must use Field"):
 
             class PlainDefaultPrompt(PromptVariables):
-                class system(BaseModel):
-                    pass
-
-                class user(BaseModel):
-                    text: str = "default"  # type: ignore[assignment]
+                text: str = "default"  # type: ignore[assignment]
 
     def test_instance_validates_like_normal_pydantic(self):
         class ValidPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
+            text: str = Field(description="Text")
 
-            class user(BaseModel):
+        instance = ValidPrompt(text="hi")
+        assert instance.text == "hi"
+
+    def test_model_dump_yields_flat_dict(self):
+        class FlatPrompt(PromptVariables):
+            text: str = Field(description="Text")
+            count: int = Field(description="Count", default=0)
+
+        instance = FlatPrompt(text="hi", count=3)
+        assert instance.model_dump() == {"text": "hi", "count": 3}
+
+
+class TestAutoVars:
+    def test_default_is_empty_dict(self):
+        class NoAutoPrompt(PromptVariables):
+            text: str = Field(description="Text")
+
+        # Inherits the empty default from the base class
+        assert NoAutoPrompt.auto_vars == {}
+
+    def test_auto_vars_classvar(self):
+        class AutoPrompt(PromptVariables):
+            text: str = Field(description="Text")
+            auto_vars: ClassVar[dict[str, str]] = {
+                "labels": "enum_names(Label)",
+            }
+
+        assert AutoPrompt.auto_vars == {"labels": "enum_names(Label)"}
+        # auto_vars is NOT a Pydantic field — model_fields excludes it
+        assert "auto_vars" not in AutoPrompt.model_fields
+
+    def test_auto_vars_not_a_constructor_arg(self):
+        # Structural override-prevention: passing auto_vars at
+        # construction time is rejected by Pydantic (extra='forbid' by
+        # default, but ClassVar isn't a field anyway).
+        class AutoPrompt(PromptVariables):
+            text: str = Field(description="Text")
+            auto_vars: ClassVar[dict[str, str]] = {"x": "constant(y)"}
+
+        # Pydantic ignores ClassVar in __init__
+        instance = AutoPrompt(text="hi")
+        # The class-level dict is still intact; the LLM-author can't
+        # have changed it via construction.
+        assert AutoPrompt.auto_vars == {"x": "constant(y)"}
+        assert instance.text == "hi"
+
+    def test_auto_vars_overlap_with_field_raises(self):
+        with pytest.raises(ValueError, match="appear in BOTH"):
+
+            class OverlapPrompt(PromptVariables):
+                sentiment: str = Field(description="The sentiment")
+                auto_vars: ClassVar[dict[str, str]] = {
+                    "sentiment": "enum_names(Sentiment)",  # collides with field
+                }
+
+    def test_auto_vars_non_dict_raises(self):
+        with pytest.raises(TypeError, match="must be a dict"):
+
+            class BadAutoPrompt(PromptVariables):
                 text: str = Field(description="Text")
+                auto_vars: ClassVar = ["enum_names(Sentiment)"]  # type: ignore[assignment]
 
-        instance = ValidPrompt(
-            system=ValidPrompt.system(),
-            user=ValidPrompt.user(text="hi"),
-        )
-        assert instance.user.text == "hi"
+    def test_auto_vars_empty_value_raises(self):
+        with pytest.raises(TypeError, match="non-empty auto_generate"):
+
+            class EmptyValuePrompt(PromptVariables):
+                text: str = Field(description="Text")
+                auto_vars: ClassVar[dict[str, str]] = {"labels": ""}
+
+    def test_auto_vars_empty_key_raises(self):
+        with pytest.raises(TypeError, match="non-empty strings"):
+
+            class EmptyKeyPrompt(PromptVariables):
+                text: str = Field(description="Text")
+                auto_vars: ClassVar[dict[str, str]] = {"": "constant(x)"}
 
 
 class TestRegistry:
     def test_register_and_lookup(self):
         class FooPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
-
-            class user(BaseModel):
-                pass
+            pass
 
         register_prompt_variables("foo", FooPrompt)
         assert get_prompt_variables("foo") is FooPrompt
@@ -126,11 +149,7 @@ class TestRegistry:
 
     def test_register_duplicate_same_class_is_noop(self):
         class FooPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
-
-            class user(BaseModel):
-                pass
+            pass
 
         register_prompt_variables("foo", FooPrompt)
         register_prompt_variables("foo", FooPrompt)  # second call should not raise
@@ -138,18 +157,10 @@ class TestRegistry:
 
     def test_register_duplicate_different_class_raises(self):
         class FooPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
-
-            class user(BaseModel):
-                pass
+            pass
 
         class BarPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
-
-            class user(BaseModel):
-                pass
+            pass
 
         register_prompt_variables("foo", FooPrompt)
         with pytest.raises(ValueError, match="Duplicate PromptVariables"):
@@ -157,11 +168,7 @@ class TestRegistry:
 
     def test_get_all_returns_copy(self):
         class FooPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
-
-            class user(BaseModel):
-                pass
+            pass
 
         register_prompt_variables("foo", FooPrompt)
         snapshot = get_all_prompt_variables()
@@ -179,13 +186,10 @@ class TestDiscovery:
         mod = self._make_module("test_pv_discovery_a")
         # Define inside the module so cls.__module__ matches
         exec(
-            "from pydantic import BaseModel, Field\n"
+            "from pydantic import Field\n"
             "from llm_pipeline.prompts.variables import PromptVariables\n"
             "class SentimentAnalysisPrompt(PromptVariables):\n"
-            "    class system(BaseModel):\n"
-            "        pass\n"
-            "    class user(BaseModel):\n"
-            "        text: str = Field(description='Text')\n",
+            "    text: str = Field(description='Text')\n",
             mod.__dict__,
         )
 
@@ -198,13 +202,9 @@ class TestDiscovery:
         # Define class in module A
         mod_a = self._make_module("test_pv_discovery_b_origin")
         exec(
-            "from pydantic import BaseModel, Field\n"
             "from llm_pipeline.prompts.variables import PromptVariables\n"
             "class FooPrompt(PromptVariables):\n"
-            "    class system(BaseModel):\n"
-            "        pass\n"
-            "    class user(BaseModel):\n"
-            "        pass\n",
+            "    pass\n",
             mod_a.__dict__,
         )
         # Module B re-exports it but didn't define it
@@ -218,13 +218,9 @@ class TestDiscovery:
     def test_idempotent_double_discovery(self):
         mod = self._make_module("test_pv_discovery_c")
         exec(
-            "from pydantic import BaseModel, Field\n"
             "from llm_pipeline.prompts.variables import PromptVariables\n"
             "class WidgetPrompt(PromptVariables):\n"
-            "    class system(BaseModel):\n"
-            "        pass\n"
-            "    class user(BaseModel):\n"
-            "        pass\n",
+            "    pass\n",
             mod.__dict__,
         )
 

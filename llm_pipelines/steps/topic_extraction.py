@@ -27,15 +27,10 @@ class TopicExtractionStep(LLMStepNode):
     DEFAULT_TOOLS: list[type] = []
 
     def prepare(self, inputs: TopicExtractionInputs) -> list[TopicExtractionPrompt]:
-        return [
-            TopicExtractionPrompt(
-                system=TopicExtractionPrompt.system(),
-                user=TopicExtractionPrompt.user(
-                    text=inputs.text,
-                    sentiment=inputs.sentiment,
-                ),
-            ),
-        ]
+        return [TopicExtractionPrompt(
+            text=inputs.text,
+            sentiment=inputs.sentiment,
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

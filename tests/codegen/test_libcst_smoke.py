@@ -273,48 +273,30 @@ class TestCSTTransformer:
 class TestPromptVariablesGeneratorPattern:
     """End-to-end smoke for the build-time generator we're going to write.
 
-    Mimics the structure of ``llm_pipelines/variables/{name}.py``:
+    Mimics the structure of ``llm_pipelines/variables/{name}.py``
+    (flat shape — fields declared directly on the class):
 
         from typing import ClassVar
-        from pydantic import BaseModel, Field
+        from pydantic import Field
         from llm_pipeline.prompts.variables import PromptVariables
 
 
         class TopicExtractionPrompt(PromptVariables):
-            class system(BaseModel):
-                pass
-
-            class user(BaseModel):
-                text: str = Field(description="Input text")
-                sentiment: str = Field(description="Detected sentiment")
+            text: str = Field(description="Input text")
+            sentiment: str = Field(description="Detected sentiment")
 
             auto_vars: ClassVar[dict[str, str]] = {
                 "sentiment_options": "enum_names(Sentiment)",
             }
     """
 
-    def _build_pydantic_class(
-        self, name: str, fields: list[tuple[str, str, str]],
-    ) -> cst.ClassDef:
-        """Helper: build a ``class name(BaseModel): ...`` with annotated fields.
-
-        Each field is ``(field_name, annotation, description)``.
-        Returns a ClassDef ready to drop into a module body.
-        """
-        if not fields:
-            body_stmts: list = [cst.parse_statement("pass")]
-        else:
-            body_stmts = [
-                cst.parse_statement(
-                    f"{field_name}: {annotation} = "
-                    f"Field(description={description!r})"
-                )
-                for field_name, annotation, description in fields
-            ]
-        return cst.ClassDef(
-            name=cst.Name(name),
-            bases=[cst.Arg(value=cst.Name("BaseModel"))],
-            body=cst.IndentedBlock(body=body_stmts),
+    def _build_field_stmt(
+        self, name: str, annotation: str, description: str,
+    ) -> cst.SimpleStatementLine:
+        """Build ``{name}: {annotation} = Field(description={...})`` line."""
+        return cst.parse_statement(
+            f"{name}: {annotation} = "
+            f"Field(description={description!r})"
         )
 
     def _build_classvar_dict(self, auto_vars: dict[str, str]) -> cst.SimpleStatementLine:
@@ -331,15 +313,11 @@ class TestPromptVariablesGeneratorPattern:
         )
 
     def test_build_full_prompt_variables_module(self):
-        # System has no fields; user has two; one auto_var.
-        system_class = self._build_pydantic_class("system", fields=[])
-        user_class = self._build_pydantic_class(
-            "user",
-            fields=[
-                ("text", "str", "Input text"),
-                ("sentiment", "str", "Detected sentiment"),
-            ],
-        )
+        # Fields declared directly on the prompt class; one auto_var.
+        field_stmts = [
+            self._build_field_stmt("text", "str", "Input text"),
+            self._build_field_stmt("sentiment", "str", "Detected sentiment"),
+        ]
         auto_vars_stmt = self._build_classvar_dict({
             "sentiment_options": "enum_names(Sentiment)",
         })
@@ -347,16 +325,12 @@ class TestPromptVariablesGeneratorPattern:
         outer_class = cst.ClassDef(
             name=cst.Name("TopicExtractionPrompt"),
             bases=[cst.Arg(value=cst.Name("PromptVariables"))],
-            body=cst.IndentedBlock(body=[
-                system_class,
-                user_class,
-                auto_vars_stmt,
-            ]),
+            body=cst.IndentedBlock(body=[*field_stmts, auto_vars_stmt]),
         )
 
         module = cst.Module(body=[
             cst.parse_statement("from typing import ClassVar"),
-            cst.parse_statement("from pydantic import BaseModel, Field"),
+            cst.parse_statement("from pydantic import Field"),
             cst.parse_statement(
                 "from llm_pipeline.prompts.variables import PromptVariables"
             ),
@@ -366,9 +340,6 @@ class TestPromptVariablesGeneratorPattern:
 
         # Sanity: every part is in the rendered output
         assert "class TopicExtractionPrompt(PromptVariables):" in rendered
-        assert "class system(BaseModel):" in rendered
-        assert "pass" in rendered
-        assert "class user(BaseModel):" in rendered
         assert "text: str = Field(description='Input text')" in rendered
         assert "sentiment: str = Field(description='Detected sentiment')" in rendered
         assert "auto_vars: ClassVar[dict[str, str]]" in rendered

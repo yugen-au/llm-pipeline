@@ -60,11 +60,7 @@ class _RouteInstructions(LLMResultMixin):
 
 
 class _RoutePrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class _RouteStep(LLMStepNode):
@@ -74,9 +70,7 @@ class _RouteStep(LLMStepNode):
 
     def prepare(self, inputs: _RouteInputs) -> list[_RoutePrompt]:
         return [_RoutePrompt(
-            system=_RoutePrompt.system(),
-            user=_RoutePrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

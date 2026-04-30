@@ -55,11 +55,7 @@ class AlphaInstructions(LLMResultMixin):
 
 
 class AlphaPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class AlphaStep(LLMStepNode):
@@ -69,9 +65,7 @@ class AlphaStep(LLMStepNode):
 
     def prepare(self, inputs: AlphaInputs) -> list[AlphaPrompt]:
         return [AlphaPrompt(
-            system=AlphaPrompt.system(),
-            user=AlphaPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -97,11 +91,7 @@ class NoSuffixInstructions(LLMResultMixin):
 
 
 class NoSuffixPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class BetaButNotS(LLMStepNode):
@@ -111,9 +101,7 @@ class BetaButNotS(LLMStepNode):
 
     def prepare(self, inputs: NoSuffixInputs) -> list[NoSuffixPrompt]:
         return [NoSuffixPrompt(
-            system=NoSuffixPrompt.system(),
-            user=NoSuffixPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -135,11 +123,7 @@ class GammaInstructions(LLMResultMixin):
 
 
 class GammaPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class GammaStep(LLMStepNode):
@@ -149,9 +133,7 @@ class GammaStep(LLMStepNode):
 
     def prepare(self, inputs: WrongName) -> list[GammaPrompt]:
         return [GammaPrompt(
-            system=GammaPrompt.system(),
-            user=GammaPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -173,11 +155,7 @@ class DeltaInstructions(LLMResultMixin):
 
 
 class DeltaPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class DeltaStep(LLMStepNode):
@@ -187,9 +165,7 @@ class DeltaStep(LLMStepNode):
 
     def prepare(self, inputs: DeltaInputs) -> list[DeltaPrompt]:
         return [DeltaPrompt(
-            system=DeltaPrompt.system(),
-            user=DeltaPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -211,11 +187,7 @@ class FirstInstructions(LLMResultMixin):
 
 
 class FirstPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class SecondInputs(StepInputs):
@@ -227,11 +199,7 @@ class SecondInstructions(LLMResultMixin):
 
 
 class SecondPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        label: str = Field(description="label")
+    label: str = Field(description="label")
 
 
 class FirstStep(LLMStepNode):
@@ -241,9 +209,7 @@ class FirstStep(LLMStepNode):
 
     def prepare(self, inputs: FirstInputs) -> list[FirstPrompt]:
         return [FirstPrompt(
-            system=FirstPrompt.system(),
-            user=FirstPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -258,9 +224,7 @@ class SecondStep(LLMStepNode):
 
     def prepare(self, inputs: SecondInputs) -> list[SecondPrompt]:
         return [SecondPrompt(
-            system=SecondPrompt.system(),
-            user=SecondPrompt.user(label=inputs.label),
-        )]
+            label=inputs.label)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -282,11 +246,7 @@ class ZetaInstructions(LLMResultMixin):
 
 
 class ZetaPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        label: str = Field(description="label")
+    label: str = Field(description="label")
 
 
 class ZetaStep(LLMStepNode):
@@ -296,9 +256,7 @@ class ZetaStep(LLMStepNode):
 
     def prepare(self, inputs: ZetaInputs) -> list[ZetaPrompt]:
         return [ZetaPrompt(
-            system=ZetaPrompt.system(),
-            user=ZetaPrompt.user(label=inputs.label),
-        )]
+            label=inputs.label)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -315,11 +273,7 @@ class ReverseInstructions(LLMResultMixin):
 
 
 class ReversePrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        value: str = Field(description="value")
+    value: str = Field(description="value")
 
 
 class ReverseStep(LLMStepNode):
@@ -329,9 +283,7 @@ class ReverseStep(LLMStepNode):
 
     def prepare(self, inputs: ReverseInputs) -> list[ReversePrompt]:
         return [ReversePrompt(
-            system=ReversePrompt.system(),
-            user=ReversePrompt.user(value=inputs.value),
-        )]
+            value=inputs.value)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -360,11 +312,7 @@ class HappyInstructions(LLMResultMixin):
 
 
 class HappyPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class HappyStep(LLMStepNode):
@@ -374,9 +322,7 @@ class HappyStep(LLMStepNode):
 
     def prepare(self, inputs: HappyInputs) -> list[HappyPrompt]:
         return [HappyPrompt(
-            system=HappyPrompt.system(),
-            user=HappyPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -415,11 +361,7 @@ class XInstructions(LLMResultMixin):
 
 
 class XPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class XStep(LLMStepNode):
@@ -429,9 +371,7 @@ class XStep(LLMStepNode):
 
     def prepare(self, inputs: XInputs) -> list[XPrompt]:
         return [XPrompt(
-            system=XPrompt.system(),
-            user=XPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -472,11 +412,7 @@ class DownstreamInstructions(LLMResultMixin):
 
 
 class DownstreamPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class DownstreamStep(LLMStepNode):
@@ -486,9 +422,7 @@ class DownstreamStep(LLMStepNode):
 
     def prepare(self, inputs: DownstreamInputs) -> list[DownstreamPrompt]:
         return [DownstreamPrompt(
-            system=DownstreamPrompt.system(),
-            user=DownstreamPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -531,11 +465,7 @@ class FlowInstructions(LLMResultMixin):
 
 
 class FlowPrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class FlowStep(LLMStepNode):
@@ -545,9 +475,7 @@ class FlowStep(LLMStepNode):
 
     def prepare(self, inputs: FlowInputs) -> list[FlowPrompt]:
         return [FlowPrompt(
-            system=FlowPrompt.system(),
-            user=FlowPrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -583,11 +511,7 @@ class DangleInstructions(LLMResultMixin):
 
 
 class DanglePrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="text")
+    text: str = Field(description="text")
 
 
 class DangleStep(LLMStepNode):
@@ -597,9 +521,7 @@ class DangleStep(LLMStepNode):
 
     def prepare(self, inputs: DangleInputs) -> list[DanglePrompt]:
         return [DanglePrompt(
-            system=DanglePrompt.system(),
-            user=DanglePrompt.user(text=inputs.text),
-        )]
+            text=inputs.text)]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

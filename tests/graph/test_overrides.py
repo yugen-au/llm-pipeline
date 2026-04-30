@@ -54,11 +54,7 @@ class _OverrideInstructions(LLMResultMixin):
 
 
 class _OverridePrompt(PromptVariables):
-    class system(BaseModel):
-        pass
-
-    class user(BaseModel):
-        text: str = Field(description="Input text")
+    text: str = Field(description="Input text")
 
 
 class _OverrideStep(LLMStepNode):
@@ -69,9 +65,7 @@ class _OverrideStep(LLMStepNode):
     def prepare(self, inputs: _OverrideInputs) -> list[_OverridePrompt]:
         return [
             _OverridePrompt(
-                system=_OverridePrompt.system(),
-                user=_OverridePrompt.user(text=inputs.text),
-            ),
+                text=inputs.text),
         ]
 
     async def run(

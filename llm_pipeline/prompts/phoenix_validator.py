@@ -76,8 +76,7 @@ __all__ = [
     "PromptModelMissingError",
     "ModelNotRecognisedError",
     "PromptMessagesShapeError",
-    "PromptSystemVariableDriftError",
-    "PromptUserVariableDriftError",
+    "PromptVariableDriftError",
     "PhoenixPromptMissingError",
 ]
 
@@ -152,12 +151,15 @@ class PromptMessagesShapeError(PhoenixValidationError):
     """YAML messages don't carry exactly one system + one user message."""
 
 
-class PromptSystemVariableDriftError(PhoenixValidationError):
-    """System message placeholders don't match ``XxxPrompt.system`` fields."""
+class PromptVariableDriftError(PhoenixValidationError):
+    """Template placeholders don't match the prompt's declared variables.
 
-
-class PromptUserVariableDriftError(PhoenixValidationError):
-    """User message placeholders don't match ``XxxPrompt.user`` fields."""
+    Phoenix's variable model is flat (one ``variable_definitions`` blob
+    per prompt, message-agnostic) so this check operates at the
+    prompt level: the union of placeholders across the system + user
+    messages must equal the union of ``model_fields`` + ``auto_vars``
+    on the ``XxxPrompt`` subclass.
+    """
 
 
 class PhoenixPromptMissingError(PhoenixValidationError):
@@ -496,7 +498,21 @@ def _check_placeholder_bijection(
     step_name: str,
     result: StepValidationResult,
 ) -> None:
-    """Compare each message's ``{var}`` placeholders to PromptVariables fields."""
+    """Verify the prompt's placeholders match its declared variables.
+
+    Phoenix's variable model is message-agnostic, so the check is
+    prompt-level rather than per-message: every placeholder across
+    both messages must be a known variable, and every declared
+    variable must appear as a placeholder in at least one message.
+    Variables come from two complementary sources on the
+    ``XxxPrompt`` subclass:
+
+    - ``model_fields``: prepare-supplied (Pydantic fields)
+    - ``auto_vars``: framework-supplied (auto_generate expressions)
+
+    Mutual exclusion between those two sources is enforced at
+    ``__init_subclass__`` time, so a name is at most one of them.
+    """
     sys_content = next(
         (m.content for m in yaml_prompt.messages if m.role == "system"), None,
     )
@@ -504,56 +520,69 @@ def _check_placeholder_bijection(
         (m.content for m in yaml_prompt.messages if m.role == "user"), None,
     )
 
-    if sys_content is not None:
-        sys_placeholders = set(extract_variables_from_content(sys_content))
-        sys_fields = set(prompt_cls.system.model_fields.keys())
-        missing_in_class = sys_placeholders - sys_fields
-        missing_in_template = sys_fields - sys_placeholders
-        if missing_in_class or missing_in_template:
-            result.errors.append(PromptSystemVariableDriftError(
-                _format_drift(
-                    "system", missing_in_template, missing_in_class,
-                    prompt_cls.system,
-                ),
-                pipeline_name=pipeline_name, step_name=step_name,
-            ))
+    sys_placeholders = (
+        set(extract_variables_from_content(sys_content))
+        if sys_content else set()
+    )
+    user_placeholders = (
+        set(extract_variables_from_content(user_content))
+        if user_content else set()
+    )
+    all_placeholders = sys_placeholders | user_placeholders
 
-    if user_content is not None:
-        user_placeholders = set(extract_variables_from_content(user_content))
-        user_fields = set(prompt_cls.user.model_fields.keys())
-        missing_in_class = user_placeholders - user_fields
-        missing_in_template = user_fields - user_placeholders
-        if missing_in_class or missing_in_template:
-            result.errors.append(PromptUserVariableDriftError(
-                _format_drift(
-                    "user", missing_in_template, missing_in_class,
-                    prompt_cls.user,
-                ),
-                pipeline_name=pipeline_name, step_name=step_name,
-            ))
+    declared_fields = set(prompt_cls.model_fields.keys())
+    declared_auto = set(getattr(prompt_cls, "auto_vars", {}).keys())
+    declared = declared_fields | declared_auto
+
+    missing_in_class = all_placeholders - declared
+    missing_in_template = declared - all_placeholders
+
+    if missing_in_class or missing_in_template:
+        result.errors.append(PromptVariableDriftError(
+            _format_drift(
+                prompt_cls=prompt_cls,
+                sys_placeholders=sys_placeholders,
+                user_placeholders=user_placeholders,
+                missing_in_template=missing_in_template,
+                missing_in_class=missing_in_class,
+            ),
+            pipeline_name=pipeline_name, step_name=step_name,
+        ))
 
 
 def _format_drift(
-    role: str,
+    *,
+    prompt_cls: type,
+    sys_placeholders: set[str],
+    user_placeholders: set[str],
     missing_in_template: set[str],
     missing_in_class: set[str],
-    nested_cls: type,
 ) -> str:
-    """Build a readable diff message for placeholder/field drift."""
+    """Build a readable diff message for placeholder/variable drift."""
     parts: list[str] = [
-        f"{role} message placeholders are not bijective with "
-        f"{nested_cls.__qualname__} fields."
+        f"{prompt_cls.__qualname__} placeholders are not bijective with "
+        f"its declared variables (model_fields ∪ auto_vars)."
     ]
     if missing_in_template:
         parts.append(
-            f"Declared in {nested_cls.__qualname__} but missing from "
-            f"the template: {sorted(missing_in_template)!r}."
+            f"Declared on {prompt_cls.__qualname__} but missing from "
+            f"both messages: {sorted(missing_in_template)!r}."
         )
     if missing_in_class:
-        parts.append(
-            f"Used as {{placeholder}}s in the template but not declared "
-            f"in {nested_cls.__qualname__}: {sorted(missing_in_class)!r}."
-        )
+        # Try to attribute each unknown placeholder to its message
+        # for a more useful error.
+        unknown_in_system = sorted(missing_in_class & sys_placeholders)
+        unknown_in_user = sorted(missing_in_class & user_placeholders)
+        if unknown_in_system:
+            parts.append(
+                f"Used in the system message but not declared on "
+                f"{prompt_cls.__qualname__}: {unknown_in_system!r}."
+            )
+        if unknown_in_user:
+            parts.append(
+                f"Used in the user message but not declared on "
+                f"{prompt_cls.__qualname__}: {unknown_in_user!r}."
+            )
     return " ".join(parts)
 
 

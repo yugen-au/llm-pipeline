@@ -27,16 +27,11 @@ class SummaryStep(LLMStepNode):
     DEFAULT_TOOLS: list[type] = []
 
     def prepare(self, inputs: SummaryInputs) -> list[SummaryPrompt]:
-        return [
-            SummaryPrompt(
-                system=SummaryPrompt.system(),
-                user=SummaryPrompt.user(
-                    text=inputs.text,
-                    sentiment=inputs.sentiment,
-                    primary_topic=inputs.primary_topic,
-                ),
-            ),
-        ]
+        return [SummaryPrompt(
+            text=inputs.text,
+            sentiment=inputs.sentiment,
+            primary_topic=inputs.primary_topic,
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
