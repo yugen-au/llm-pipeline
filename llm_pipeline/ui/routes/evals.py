@@ -1,42 +1,54 @@
 """Eval system endpoints — thin Phoenix-backed passthrough.
 
-Phase-3 rewrite: Phoenix is the source of truth for datasets, examples,
-experiments, runs, and per-case results. The framework keeps just one
-local table (``EvaluationAcceptance``) for the audit row written by
-the accept-to-production walk.
+Phoenix is the source of truth for datasets, examples, experiments,
+runs, and per-case results. The framework keeps one local table
+(``EvaluationAcceptance``) for the audit row written by the
+accept-to-production walk.
 
-Route surface (preserved from the legacy file's URL shapes):
+Datasets and examples cross every layer as the canonical ``Dataset`` /
+``Example`` models defined in :mod:`llm_pipeline.evals.models`. The
+translation from raw Phoenix dicts to those models happens here at
+the route layer; consumers further in (runner, acceptance, frontend
+types) only see the canonical shape.
+
+Route surface:
 
 - ``GET    /api/evals/datasets``                          list datasets
-- ``GET    /api/evals/datasets/{dataset_id}``             one dataset + its examples
+- ``GET    /api/evals/datasets/{dataset_id}``             one dataset + examples
 - ``POST   /api/evals/datasets``                          upload a new dataset
 - ``DELETE /api/evals/datasets/{dataset_id}``             delete a dataset
-- ``POST   /api/evals/datasets/{dataset_id}/cases``       add examples to a dataset
+- ``POST   /api/evals/datasets/{dataset_id}/cases``       add examples
 - ``DELETE /api/evals/datasets/{dataset_id}/cases/{ex}``  delete one example
-- ``GET    /api/evals/datasets/{dataset_id}/runs``        list experiments for the dataset
+- ``GET    /api/evals/datasets/{dataset_id}/runs``        list experiments
 - ``GET    /api/evals/datasets/{dataset_id}/runs/{exp}``  one experiment + per-case runs
 - ``POST   /api/evals/datasets/{dataset_id}/runs``        trigger an evaluation
 - ``POST   /api/evals/experiments/{exp_id}/accept``       accept-to-production walk
 - ``GET    /api/evals/schema``                            JSON Schema for a target
 - ``GET    /api/evals/delta-type-whitelist``              type whitelist for variant editor
-- ``GET    /api/evals/datasets/{dataset_id}/prod-prompts``    resolved system+user prompts
-- ``GET    /api/evals/datasets/{dataset_id}/prod-model``      resolved StepModelConfig
+- ``GET    /api/evals/datasets/{dataset_id}/prod-prompts`` resolved system+user prompts
+- ``GET    /api/evals/datasets/{dataset_id}/prod-model``   resolved StepModelConfig
 
 Eval runs execute in a background task because ``Dataset.evaluate`` is
-async + multi-case + Phoenix-bound (potentially slow). Every other
-endpoint is synchronous.
+async + multi-case + Phoenix-bound. Every other endpoint is sync.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, List, Literal, Optional
+from typing import Any, List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlmodel import select
 
 from llm_pipeline.evals.acceptance import AcceptanceError, accept_experiment
+from llm_pipeline.evals.models import (
+    Dataset,
+    Example,
+    dataset_to_phoenix_upload_kwargs,
+    example_to_phoenix_payload,
+    phoenix_to_dataset,
+)
 from llm_pipeline.evals.phoenix_client import (
     DatasetNotFoundError,
     ExperimentNotFoundError,
@@ -57,20 +69,13 @@ router = APIRouter(prefix="/evals", tags=["evals"])
 
 
 # ---------------------------------------------------------------------------
-# Request / response shapes
+# Request / response shapes (only the ones that don't fit the canonical model)
 # ---------------------------------------------------------------------------
 
 
-class DatasetUploadRequest(BaseModel):
-    name: str
-    target_type: Literal["step", "pipeline"]
-    target_name: str
-    examples: List[dict]
-    description: Optional[str] = None
-
-
-class CaseAddRequest(BaseModel):
-    examples: List[dict]
+class DatasetListResponse(BaseModel):
+    items: List[Dataset]
+    next_cursor: Optional[str] = None
 
 
 class RunTriggerRequest(BaseModel):
@@ -98,7 +103,6 @@ class SchemaResponse(BaseModel):
 
 
 def _client(request: Request) -> PhoenixDatasetClient:
-    """Resolve (and cache) the Phoenix datasets/experiments client."""
     cached = getattr(request.app.state, "_phoenix_dataset_client", None)
     if cached is not None:
         return cached
@@ -124,6 +128,13 @@ def _phoenix_call(fn, *args, **kwargs):
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
+def _fetch_dataset(client: PhoenixDatasetClient, dataset_id: str) -> Dataset:
+    """Phoenix get_dataset + list_examples joined into the canonical model."""
+    record = _phoenix_call(client.get_dataset, dataset_id)
+    examples_payload = _phoenix_call(client.list_examples, dataset_id)
+    return phoenix_to_dataset(record, examples_payload)
+
+
 # ---------------------------------------------------------------------------
 # Static endpoints (registered before parameterised paths)
 # ---------------------------------------------------------------------------
@@ -144,9 +155,7 @@ def get_input_schema(
     return _step_schema(target_name, introspection_registry)
 
 
-@router.get(
-    "/delta-type-whitelist", response_model=TypeWhitelistResponse,
-)
+@router.get("/delta-type-whitelist", response_model=TypeWhitelistResponse)
 def get_delta_type_whitelist() -> TypeWhitelistResponse:
     """Allowed ``type_str`` values for the variant editor's instruction-delta UI."""
     return TypeWhitelistResponse(types=get_type_whitelist())
@@ -157,51 +166,58 @@ def get_delta_type_whitelist() -> TypeWhitelistResponse:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/datasets")
+@router.get("/datasets", response_model=DatasetListResponse)
 def list_datasets(
     request: Request,
     limit: int = Query(100, ge=1, le=500),
     cursor: Optional[str] = Query(None),
-) -> dict:
-    return _phoenix_call(
+) -> DatasetListResponse:
+    """List datasets — one row per Phoenix dataset, examples not populated."""
+    payload = _phoenix_call(
         _client(request).list_datasets, limit=limit, cursor=cursor,
     )
+    items = [phoenix_to_dataset(r) for r in (payload.get("data") or [])]
+    return DatasetListResponse(items=items, next_cursor=payload.get("next_cursor"))
 
 
-@router.post("/datasets", status_code=201)
-def upload_dataset(req: DatasetUploadRequest, request: Request) -> dict:
-    return _phoenix_call(
-        _client(request).upload_dataset,
-        name=req.name,
-        examples=req.examples,
-        description=req.description,
-        metadata={
-            "target_type": req.target_type,
-            "target_name": req.target_name,
-        },
-    )
+@router.post("/datasets", response_model=Dataset, status_code=201)
+def upload_dataset(body: Dataset, request: Request) -> Dataset:
+    """Create a new Phoenix dataset from a canonical ``Dataset`` payload."""
+    kwargs = dataset_to_phoenix_upload_kwargs(body)
+    record = _phoenix_call(_client(request).upload_dataset, **kwargs)
+    return phoenix_to_dataset(record)
 
 
-@router.get("/datasets/{dataset_id}")
-def get_dataset(dataset_id: str, request: Request) -> dict:
-    client = _client(request)
-    record = _phoenix_call(client.get_dataset, dataset_id)
-    examples = _phoenix_call(client.list_examples, dataset_id)
-    return {"dataset": record, "examples": examples}
+@router.get("/datasets/{dataset_id}", response_model=Dataset)
+def get_dataset(dataset_id: str, request: Request) -> Dataset:
+    """One dataset with its examples populated."""
+    return _fetch_dataset(_client(request), dataset_id)
 
 
 @router.delete("/datasets/{dataset_id}", status_code=204)
-def delete_dataset(dataset_id: str, request: Request) -> None:
+def delete_dataset(dataset_id: str, request: Request) -> Response:
     _phoenix_call(_client(request).delete_dataset, dataset_id)
+    return Response(status_code=204)
 
 
-@router.post("/datasets/{dataset_id}/cases", status_code=201)
+@router.post(
+    "/datasets/{dataset_id}/cases",
+    response_model=Dataset,
+    status_code=201,
+)
 def add_examples(
-    dataset_id: str, req: CaseAddRequest, request: Request,
-) -> dict:
-    return _phoenix_call(
-        _client(request).add_examples, dataset_id, req.examples,
+    dataset_id: str,
+    body: List[Example],
+    request: Request,
+) -> Dataset:
+    """Append examples; return the updated dataset (with all examples)."""
+    client = _client(request)
+    _phoenix_call(
+        client.add_examples,
+        dataset_id,
+        [example_to_phoenix_payload(ex) for ex in body],
     )
+    return _fetch_dataset(client, dataset_id)
 
 
 @router.delete(
@@ -209,8 +225,9 @@ def add_examples(
 )
 def delete_example(
     dataset_id: str, example_id: str, request: Request,
-) -> None:
+) -> Response:
     _phoenix_call(_client(request).delete_example, dataset_id, example_id)
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------
@@ -233,9 +250,7 @@ def get_experiment(
     return {"experiment": experiment, "runs": runs}
 
 
-@router.post(
-    "/datasets/{dataset_id}/runs", status_code=202,
-)
+@router.post("/datasets/{dataset_id}/runs", status_code=202)
 def trigger_run(
     dataset_id: str,
     req: RunTriggerRequest,
@@ -269,22 +284,19 @@ def trigger_run(
         variant = Variant.model_validate(req.variant or {})
     except Exception as exc:
         raise HTTPException(
-            status_code=422,
-            detail=f"variant payload invalid: {exc}",
+            status_code=422, detail=f"variant payload invalid: {exc}",
         ) from exc
 
     engine = request.app.state.engine
     client = _client(request)
 
-    # Pre-create the Phoenix experiment in the foreground so the UI
-    # can navigate to it immediately. We resolve the dataset's
-    # target_type / target_name first so a malformed dataset surfaces
-    # synchronously (instead of failing inside the background task).
-    dataset_record = _phoenix_call(client.get_dataset, dataset_id)
-    metadata = (dataset_record or {}).get("metadata") or {}
-    target_type = metadata.get("target_type")
-    target_name = metadata.get("target_name")
-    if target_type not in {"step", "pipeline"} or not target_name:
+    # Resolve the dataset's target_type / target_name first so a malformed
+    # dataset surfaces synchronously (not buried inside the background task).
+    record = _phoenix_call(client.get_dataset, dataset_id)
+    dataset = phoenix_to_dataset(record)
+    target_type = dataset.metadata.target_type
+    target_name = dataset.metadata.target_name
+    if target_type is None or not target_name:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -350,20 +362,12 @@ def post_accept_experiment(
     request: Request,
     db: DBSession,
 ) -> dict:
-    """Walk the variant delta into production surfaces.
-
-    Surfaces touched: ``StepModelConfig`` (model), Phoenix prompt
-    versions (prompt overrides), source files (instructions delta).
-    Inserts an ``EvaluationAcceptance`` audit row; returns it.
-    """
+    """Walk the variant delta into production surfaces."""
     pipeline_registry: dict = getattr(
         request.app.state, "pipeline_registry", {},
     )
     if not pipeline_registry:
-        raise HTTPException(
-            status_code=422,
-            detail="No pipelines registered.",
-        )
+        raise HTTPException(status_code=422, detail="No pipelines registered.")
     engine = request.app.state.engine
     client = _client(request)
 
@@ -398,7 +402,7 @@ def post_accept_experiment(
 
 
 # ---------------------------------------------------------------------------
-# Production-config introspection (unchanged surface)
+# Production-config introspection
 # ---------------------------------------------------------------------------
 
 
@@ -409,10 +413,8 @@ def get_dataset_prod_model(
     """Return the ``StepModelConfig`` row for the dataset's step target."""
     client = _client(request)
     record = _phoenix_call(client.get_dataset, dataset_id)
-    metadata = (record or {}).get("metadata") or {}
-    target_type = metadata.get("target_type")
-    target_name = metadata.get("target_name")
-    if target_type != "step" or not target_name:
+    dataset = phoenix_to_dataset(record)
+    if dataset.metadata.target_type != "step" or not dataset.metadata.target_name:
         raise HTTPException(
             status_code=422,
             detail="prod-model endpoint supports step-targets only.",
@@ -422,7 +424,7 @@ def get_dataset_prod_model(
         request.app.state, "pipeline_registry", {},
     )
     pipeline_name, step_name = _resolve_step_target(
-        pipeline_registry, target_name,
+        pipeline_registry, dataset.metadata.target_name,
     )
 
     from llm_pipeline.db.step_config import StepModelConfig
@@ -447,14 +449,7 @@ def get_dataset_prod_model(
 def get_dataset_prod_prompts(
     dataset_id: str, request: Request,
 ) -> dict:
-    """Return the production system + user prompt content for a step target.
-
-    Used by the variant editor to prefill prompt overrides. Resolves
-    ``dataset.metadata.target_name`` to a node class via the registry,
-    asks the node for its ``resolved_prompt_name()``, then fetches the
-    ``production`` (or ``latest``) Phoenix prompt version. 422 on a
-    pipeline-target dataset (variants are scoped to a single step).
-    """
+    """Return the production system + user prompt content for a step target."""
     from llm_pipeline.prompts.phoenix_client import (
         PhoenixError,
         PhoenixPromptClient,
@@ -463,10 +458,8 @@ def get_dataset_prod_prompts(
 
     client = _client(request)
     record = _phoenix_call(client.get_dataset, dataset_id)
-    metadata = (record or {}).get("metadata") or {}
-    target_type = metadata.get("target_type")
-    target_name = metadata.get("target_name")
-    if target_type != "step" or not target_name:
+    dataset = phoenix_to_dataset(record)
+    if dataset.metadata.target_type != "step" or not dataset.metadata.target_name:
         raise HTTPException(
             status_code=422,
             detail="prod-prompts endpoint supports step-targets only.",
@@ -475,7 +468,7 @@ def get_dataset_prod_prompts(
     pipeline_registry: dict = getattr(
         request.app.state, "pipeline_registry", {},
     )
-    node_cls = _resolve_step_node(pipeline_registry, target_name)
+    node_cls = _resolve_step_node(pipeline_registry, dataset.metadata.target_name)
     prompt_name = node_cls.resolved_prompt_name()
     step_name = node_cls.step_name()
 
@@ -534,8 +527,7 @@ def _pipeline_schema(target_name: str, registry: dict) -> SchemaResponse:
     pipeline_record = registry.get(target_name)
     if pipeline_record is None:
         raise HTTPException(
-            status_code=404,
-            detail=f"Pipeline {target_name!r} not found.",
+            status_code=404, detail=f"Pipeline {target_name!r} not found.",
         )
     pipeline_cls = pipeline_record.get("pipeline_class") if isinstance(
         pipeline_record, dict,

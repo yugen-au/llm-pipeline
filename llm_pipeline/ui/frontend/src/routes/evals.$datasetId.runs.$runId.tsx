@@ -5,7 +5,6 @@ import {
 } from 'lucide-react'
 import {
   extractReportCases,
-  flattenExamples,
   flattenRuns,
   useAcceptExperiment,
   useDataset,
@@ -13,7 +12,7 @@ import {
 } from '@/api/evals'
 import type {
   EvaluationResultShape,
-  PhoenixExample,
+  Example,
   PhoenixExperiment,
   PhoenixRun,
   ReportCase,
@@ -46,7 +45,7 @@ function ExperimentDetailPage() {
   const navigate = useNavigate()
 
   const datasetQuery = useDataset(datasetId)
-  const examples = flattenExamples(datasetQuery.data?.examples)
+  const examples = datasetQuery.data?.examples ?? []
   const expectedCaseCount = examples.length || undefined
 
   const experimentQuery = useExperiment(datasetId, runId, {
@@ -68,8 +67,10 @@ function ExperimentDetailPage() {
   const inProgress =
     expectedCaseCount != null && runs.length < expectedCaseCount
 
-  const examplesById = new Map<string, PhoenixExample>()
-  for (const ex of examples) examplesById.set(ex.id, ex)
+  const examplesById = new Map<string, Example>()
+  for (const ex of examples) {
+    if (ex.id) examplesById.set(ex.id, ex)
+  }
 
   // Map dataset_example_id -> ReportCase. Empty map for old
   // experiments lacking metadata.full_report — rendering degrades.
@@ -207,7 +208,7 @@ function CasesPanel({
   runs, examplesById, reportCasesByExampleId,
 }: {
   runs: PhoenixRun[]
-  examplesById: Map<string, PhoenixExample>
+  examplesById: Map<string, Example>
   reportCasesByExampleId: Map<string, ReportCase>
 }) {
   return (
@@ -256,7 +257,7 @@ function CaseRow({
   run, example, reportCase,
 }: {
   run: PhoenixRun
-  example: PhoenixExample | undefined
+  example: Example | undefined
   reportCase: ReportCase | undefined
 }) {
   return (

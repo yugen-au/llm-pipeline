@@ -27,6 +27,11 @@ from typing import TYPE_CHECKING, Any
 from pydantic_evals import Case, Dataset
 
 from llm_pipeline.evals.evaluators import build_case_evaluators
+from llm_pipeline.evals.models import (
+    Dataset as CanonicalDataset,
+    Example,
+    phoenix_to_dataset,
+)
 from llm_pipeline.evals.phoenix_client import PhoenixDatasetClient
 from llm_pipeline.evals.runtime import build_pipeline_task, build_step_task
 from llm_pipeline.evals.variants import Variant
@@ -93,11 +98,11 @@ async def run_dataset(
     """
     client = client or PhoenixDatasetClient()
 
-    dataset_record = client.get_dataset(dataset_id)
+    record = client.get_dataset(dataset_id)
     examples_payload = client.list_examples(dataset_id)
-    examples = _normalise_examples(examples_payload)
+    dataset = phoenix_to_dataset(record, examples_payload)
 
-    target_type, target_name = _resolve_target(dataset_record)
+    target_type, target_name = _resolve_target(dataset)
     pipeline_cls, step_cls = _resolve_pipeline_and_step(
         pipeline_registry=pipeline_registry,
         target_type=target_type,
@@ -120,7 +125,7 @@ async def run_dataset(
             example,
             instructions_cls=instructions_cls_for_evaluators,
         )
-        for example in examples
+        for example in dataset.examples
     ]
 
     eval_dataset: Dataset[Any, Any, Any] = Dataset(cases=cases)
@@ -139,7 +144,7 @@ async def run_dataset(
         target_type=target_type,
         target_name=target_name,
         report=report,
-        examples=examples,
+        examples=dataset.examples,
         experiment_id=experiment_id,
     )
 
@@ -177,33 +182,14 @@ def create_experiment_record(
 
 
 # ---------------------------------------------------------------------------
-# Phoenix payload normalisation
+# Target resolution
 # ---------------------------------------------------------------------------
 
 
-def _normalise_examples(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Coerce Phoenix's ``list_examples`` payload to the runner's case shape.
-
-    Phoenix's ``GET /v1/datasets/{id}/examples`` returns
-    ``{"data": {"examples": [...]}}`` (or similar — the wrapper
-    accommodates both flat and nested layouts that have shipped over
-    the project's lifetime).
-    """
-    data = payload.get("data") if isinstance(payload, dict) else None
-    if isinstance(data, dict):
-        examples = data.get("examples") or data.get("items") or []
-    elif isinstance(data, list):
-        examples = data
-    else:
-        examples = payload.get("examples") if isinstance(payload, dict) else []
-    return list(examples or [])
-
-
-def _resolve_target(dataset_record: dict[str, Any]) -> tuple[str, str]:
-    """Read ``target_type`` and ``target_name`` from dataset metadata."""
-    metadata = (dataset_record or {}).get("metadata") or {}
-    target_type = metadata.get("target_type")
-    target_name = metadata.get("target_name")
+def _resolve_target(dataset: CanonicalDataset) -> tuple[str, str]:
+    """Read ``target_type`` and ``target_name`` from a canonical Dataset."""
+    target_type = dataset.metadata.target_type
+    target_name = dataset.metadata.target_name
     if target_type not in {"step", "pipeline"}:
         raise EvalTargetError(
             f"dataset metadata.target_type must be 'step' or 'pipeline'; "
@@ -257,20 +243,20 @@ def _resolve_pipeline_and_step(
 
 
 def _build_case(
-    example: dict[str, Any],
+    example: Example,
     *,
     instructions_cls: type | None,
 ) -> Case[Any, Any, Any]:
-    """Translate a Phoenix example record to a ``pydantic-evals`` Case."""
-    custom_names = (example.get("metadata") or {}).get("evaluators") or []
+    """Translate a canonical ``Example`` to a ``pydantic-evals`` Case."""
+    custom_names = example.metadata.get("evaluators") or []
     evaluators = tuple(
         build_case_evaluators(instructions_cls, list(custom_names)),
     )
     return Case(
-        name=example.get("id") or example.get("name"),
-        inputs=example.get("input") or example.get("inputs") or {},
-        expected_output=example.get("output") or example.get("expected_output"),
-        metadata=example.get("metadata") or None,
+        name=example.id,
+        inputs=example.input,
+        expected_output=example.output or None,
+        metadata=example.metadata or None,
         evaluators=evaluators,
     )
 
@@ -288,7 +274,7 @@ def _post_results_to_phoenix(
     target_type: str,
     target_name: str,
     report: "EvaluationReport",
-    examples: list[dict[str, Any]],
+    examples: list[Example],
     experiment_id: str | None = None,
 ) -> None:
     """Create an experiment (if not pre-supplied), then post per-case runs + scores."""
@@ -315,10 +301,7 @@ def _post_results_to_phoenix(
             )
             return
 
-    name_to_id = {
-        ex.get("id") or ex.get("name"): ex.get("id")
-        for ex in examples
-    }
+    name_to_id = {ex.id: ex.id for ex in examples if ex.id is not None}
 
     for case in report.cases:
         example_id = name_to_id.get(case.name)

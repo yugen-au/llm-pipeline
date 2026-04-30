@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from llm_pipeline.evals.models import phoenix_to_dataset
 from llm_pipeline.evals.phoenix_client import (
     DatasetNotFoundError,
     ExperimentNotFoundError,
@@ -195,16 +196,15 @@ def _resolve_target(
         return target_type, target_name, dataset_id, pipeline_name
 
     try:
-        dataset = dataset_client.get_dataset(dataset_id)
+        dataset = phoenix_to_dataset(dataset_client.get_dataset(dataset_id))
     except DatasetNotFoundError as exc:
         raise AcceptanceError(
             f"dataset {dataset_id!r} not found while resolving "
             f"experiment target",
         ) from exc
 
-    ds_meta = (dataset or {}).get("metadata") or {}
-    target_type = target_type or ds_meta.get("target_type")
-    target_name = target_name or ds_meta.get("target_name")
+    target_type = target_type or dataset.metadata.target_type
+    target_name = target_name or dataset.metadata.target_name
     if target_type not in {"step", "pipeline"} or not target_name:
         raise AcceptanceError(
             f"could not resolve target_type/target_name for "

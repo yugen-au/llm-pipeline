@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Plus, Play, Trash2, FlaskConical, BeakerIcon } from 'lucide-react'
 import {
-  flattenExamples,
   flattenExperiments,
   useAddExamples,
   useDataset,
@@ -11,8 +10,8 @@ import {
   useExperiments,
 } from '@/api/evals'
 import type {
-  PhoenixDataset,
-  PhoenixExample,
+  Dataset,
+  Example,
   PhoenixExperiment,
   Variant,
 } from '@/api/evals'
@@ -52,8 +51,8 @@ function DatasetDetailPage() {
     )
   }
 
-  const dataset = data.dataset
-  const examples = flattenExamples(data.examples)
+  const dataset = data
+  const examples = data.examples
   const targetType = dataset.metadata?.target_type ?? '—'
   const targetName = dataset.metadata?.target_name ?? '—'
 
@@ -132,8 +131,8 @@ function ExamplesTab({
   datasetId, examples, dataset,
 }: {
   datasetId: string
-  examples: PhoenixExample[]
-  dataset: PhoenixDataset
+  examples: Example[]
+  dataset: Dataset
 }) {
   return (
     <Card className="flex h-full flex-col">
@@ -159,8 +158,8 @@ function ExamplesTab({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {examples.map((ex) => (
-                  <ExampleRow key={ex.id} datasetId={datasetId} example={ex} />
+                {examples.map((ex, idx) => (
+                  <ExampleRow key={ex.id ?? idx} datasetId={datasetId} example={ex} />
                 ))}
               </TableBody>
             </Table>
@@ -173,11 +172,11 @@ function ExamplesTab({
 
 function ExampleRow({
   datasetId, example,
-}: { datasetId: string; example: PhoenixExample }) {
+}: { datasetId: string; example: Example }) {
   const deleteMutation = useDeleteExample(datasetId)
   return (
     <TableRow>
-      <TableCell className="font-mono text-xs">{example.id}</TableCell>
+      <TableCell className="font-mono text-xs">{example.id ?? '—'}</TableCell>
       <TableCell className="font-mono text-xs">
         <pre className="max-w-[20rem] truncate">
           {JSON.stringify(example.input)}
@@ -185,7 +184,7 @@ function ExampleRow({
       </TableCell>
       <TableCell className="font-mono text-xs">
         <pre className="max-w-[20rem] truncate">
-          {example.output ? JSON.stringify(example.output) : '—'}
+          {Object.keys(example.output).length ? JSON.stringify(example.output) : '—'}
         </pre>
       </TableCell>
       <TableCell>
@@ -194,10 +193,11 @@ function ExampleRow({
           size="sm"
           className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
           onClick={() => {
+            if (!example.id) return
             if (!confirm('Delete this example?')) return
             deleteMutation.mutate(example.id)
           }}
-          disabled={deleteMutation.isPending}
+          disabled={deleteMutation.isPending || !example.id}
         >
           <Trash2 className="size-3.5" />
         </Button>
@@ -208,7 +208,7 @@ function ExampleRow({
 
 function AddExampleDialog({
   datasetId, dataset: _dataset,
-}: { datasetId: string; dataset: PhoenixDataset }) {
+}: { datasetId: string; dataset: Dataset }) {
   const [open, setOpen] = useState(false)
   const [inputJson, setInputJson] = useState('{}')
   const [outputJson, setOutputJson] = useState('')
@@ -221,10 +221,10 @@ function AddExampleDialog({
     setError(null)
     try {
       const input = JSON.parse(inputJson)
-      const output = outputJson.trim() ? JSON.parse(outputJson) : undefined
-      const metadata = metadataJson.trim() ? JSON.parse(metadataJson) : undefined
+      const output = outputJson.trim() ? JSON.parse(outputJson) : {}
+      const metadata = metadataJson.trim() ? JSON.parse(metadataJson) : {}
       addMutation.mutate(
-        { examples: [{ input, output, metadata }] },
+        [{ id: null, input, output, metadata }],
         {
           onSuccess: () => {
             setOpen(false)

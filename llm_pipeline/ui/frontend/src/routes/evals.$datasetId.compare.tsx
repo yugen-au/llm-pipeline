@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, ArrowRight, GitCompare } from 'lucide-react'
 import {
-  flattenExamples,
   flattenExperiments,
   flattenRuns,
   useDataset,
@@ -9,7 +8,7 @@ import {
   useExperiments,
 } from '@/api/evals'
 import type {
-  PhoenixExample,
+  Example,
   PhoenixExperiment,
   PhoenixRun,
   Variant,
@@ -54,9 +53,11 @@ function ComparePage() {
     datasetId, compareRunId ?? '', {},
   )
 
-  const examples = flattenExamples(datasetQuery.data?.examples)
-  const examplesById = new Map<string, PhoenixExample>()
-  for (const ex of examples) examplesById.set(ex.id, ex)
+  const examples = datasetQuery.data?.examples ?? []
+  const examplesById = new Map<string, Example>()
+  for (const ex of examples) {
+    if (ex.id) examplesById.set(ex.id, ex)
+  }
 
   const allExperiments = flattenExperiments(experimentsQuery.data)
 
@@ -185,7 +186,7 @@ function CompareBody({
   baseRuns: PhoenixRun[]
   compare: PhoenixExperiment
   compareRuns: PhoenixRun[]
-  examplesById: Map<string, PhoenixExample>
+  examplesById: Map<string, Example>
 }) {
   const baseVariant = base.metadata?.variant ?? null
   const compareVariant = compare.metadata?.variant ?? null
@@ -341,7 +342,7 @@ function CaseDiffTable({
 }: {
   baseRunsById: Map<string, PhoenixRun>
   compareRunsById: Map<string, PhoenixRun>
-  examplesById: Map<string, PhoenixExample>
+  examplesById: Map<string, Example>
   allExampleIds: string[]
 }) {
   return (
@@ -377,7 +378,7 @@ function CaseDiffTable({
 
 function CaseDiffRow({
   example, a, b,
-}: { example: PhoenixExample | undefined; a: PhoenixRun | undefined; b: PhoenixRun | undefined }) {
+}: { example: Example | undefined; a: PhoenixRun | undefined; b: PhoenixRun | undefined }) {
   const changed = JSON.stringify(a?.output ?? null) !== JSON.stringify(b?.output ?? null)
   return (
     <TableRow className="align-top">

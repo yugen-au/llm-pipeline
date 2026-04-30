@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Plus, FlaskConical } from 'lucide-react'
 import { useDatasets, useCreateDataset } from '@/api/evals'
-import type { PhoenixDataset } from '@/api/evals'
+import type { Dataset } from '@/api/evals'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -26,7 +26,7 @@ export const Route = createFileRoute('/evals/')({
 function EvalDatasetsPage() {
   const navigate = useNavigate()
   const { data, isLoading } = useDatasets()
-  const datasets = data?.data ?? []
+  const datasets = data?.items ?? []
 
   return (
     <div className="flex h-full flex-col gap-4 p-6">
@@ -60,11 +60,15 @@ function EvalDatasetsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {datasets.map((ds) => (
+                {datasets.map((ds, idx) => (
                   <DatasetRow
-                    key={ds.id}
+                    key={ds.id ?? idx}
                     dataset={ds}
-                    onOpen={() => navigate({ to: '/evals/$datasetId', params: { datasetId: ds.id } })}
+                    onOpen={() => {
+                      if (ds.id) {
+                        navigate({ to: '/evals/$datasetId', params: { datasetId: ds.id } })
+                      }
+                    }}
                   />
                 ))}
               </TableBody>
@@ -76,7 +80,7 @@ function EvalDatasetsPage() {
   )
 }
 
-function DatasetRow({ dataset, onOpen }: { dataset: PhoenixDataset; onOpen: () => void }) {
+function DatasetRow({ dataset, onOpen }: { dataset: Dataset; onOpen: () => void }) {
   const targetType = dataset.metadata?.target_type ?? '—'
   const targetName = dataset.metadata?.target_name ?? '—'
   const created = dataset.created_at
@@ -110,10 +114,13 @@ function NewDatasetDialog() {
     if (!name.trim() || !targetName.trim()) return
     createMutation.mutate(
       {
+        id: null,
         name: name.trim(),
-        target_type: targetType,
-        target_name: targetName.trim(),
+        description: null,
+        metadata: { target_type: targetType, target_name: targetName.trim() },
         examples: [],
+        created_at: null,
+        example_count: null,
       },
       {
         onSuccess: () => {

@@ -1,13 +1,14 @@
 /**
  * TanStack Query hooks for the Phoenix-backed Evals API.
  *
- * Phase-3 contract: Phoenix is the source of truth for datasets,
- * examples, experiments, runs, and per-case results. The framework
- * keeps only `EvaluationAcceptance` locally (audit row written by
- * `accept_experiment`).
+ * Datasets and examples cross every layer as the canonical Dataset /
+ * Example shapes (mirrored from llm_pipeline/evals/models.py).
+ * Translation from raw Phoenix dicts happens once, at the route
+ * layer, so the frontend only sees the canonical model.
  *
- * All identifiers are STRINGS (Phoenix uses string ids — UUID-like).
- * The legacy integer-id contract is gone.
+ * Experiments / runs / evaluations stay Phoenix-shape passthroughs —
+ * they're runtime artifacts, not authored content, so canonicalising
+ * them would be premature.
  */
 
 import {
@@ -72,39 +73,41 @@ export interface TypeWhitelistResponse {
 }
 
 // ===========================================================================
-// Phoenix shapes (datasets / examples / experiments / runs / evaluations)
+// Canonical Dataset / Example (mirrors llm_pipeline/evals/models.py)
 // ===========================================================================
 
-/** Single Phoenix dataset record. */
-export interface PhoenixDataset {
-  id: string
-  name: string
-  description?: string | null
-  metadata: {
-    target_type?: 'step' | 'pipeline'
-    target_name?: string
-    [key: string]: unknown
-  }
-  created_at?: string
-  updated_at?: string
-  example_count?: number
-}
-
-/** Phoenix example (== a "case" in the legacy vocabulary). */
-export interface PhoenixExample {
-  id: string
+export interface Example {
+  id: string | null
   input: Record<string, unknown>
-  output?: Record<string, unknown> | null
-  metadata?: Record<string, unknown> | null
-  // Phoenix may surface its own version id on the example.
-  version_id?: string | null
+  output: Record<string, unknown>
+  metadata: Record<string, unknown>
 }
 
-/**
- * Phoenix experiment record. The experiment's `metadata.variant` is
- * the canonical "saved variant" — clicking a past experiment in the
- * UI prefills the variant editor from this.
- */
+export interface DatasetMetadata {
+  target_type?: string | null
+  target_name?: string | null
+  // Forward-compat for Phoenix-side metadata fields.
+  [key: string]: unknown
+}
+
+export interface Dataset {
+  id: string | null
+  name: string
+  description: string | null
+  metadata: DatasetMetadata
+  examples: Example[]
+  created_at: string | null
+  example_count: number | null
+}
+
+// ===========================================================================
+// Phoenix-shape passthroughs (experiments / runs / evaluations)
+//
+// These are intentionally NOT canonicalised — they're runtime artifacts,
+// never authored or hashed. The flatten* helpers absorb Phoenix's
+// shipped wire-shape variants.
+// ===========================================================================
+
 export interface PhoenixExperiment {
   id: string
   dataset_id: string
@@ -120,7 +123,6 @@ export interface PhoenixExperiment {
   created_at?: string
 }
 
-/** A single per-case run inside an experiment. */
 export interface PhoenixRun {
   id: string
   experiment_id: string
@@ -133,7 +135,6 @@ export interface PhoenixRun {
   trace_id?: string | null
 }
 
-/** A Phoenix evaluation score attached to a per-case run. */
 export interface PhoenixEvaluation {
   id?: string
   run_id?: string
@@ -150,23 +151,12 @@ export interface PhoenixEvaluation {
 // `_safe_dump_report` in `llm_pipeline/evals/runner.py`).
 // ===========================================================================
 
-/**
- * `pydantic_evals.reporting.EvaluationResult[T]` — `value` is left as
- * `unknown` so the same shape covers assertions (bool), scores
- * (number), and labels (string). Consumers narrow at the use site.
- */
 export interface EvaluationResultShape {
   value: unknown
   reason?: string | null
-  // Upstream may add fields (source, name, etc.) — ignore the rest.
   [key: string]: unknown
 }
 
-/**
- * One per-case entry inside `EvaluationReport.cases`. `name` is the
- * case name, which the runner sets to the dataset example id (see
- * `_build_case` in `evals/runner.py`).
- */
 export interface ReportCase {
   name: string
   inputs?: unknown
@@ -176,11 +166,9 @@ export interface ReportCase {
   assertions?: Record<string, EvaluationResultShape>
   scores?: Record<string, EvaluationResultShape>
   labels?: Record<string, EvaluationResultShape>
-  // Upstream may carry timing / error / metric fields — keep loose.
   [key: string]: unknown
 }
 
-/** `pydantic_evals.reporting.EvaluationReport.model_dump(mode='json')`. */
 export interface EvaluationReportShape {
   name?: string | null
   cases: ReportCase[]
@@ -190,8 +178,6 @@ export interface EvaluationReportShape {
 /**
  * Pull `experiment.metadata.full_report` and return a `name -> case`
  * map keyed by the case `name` (which equals the dataset example id).
- * Returns an empty map when `full_report` is missing or malformed —
- * old experiments pre-dating the report dump degrade gracefully.
  */
 export function extractReportCases(
   experiment: PhoenixExperiment | null | undefined,
@@ -211,17 +197,12 @@ export function extractReportCases(
 }
 
 // ===========================================================================
-// Composite responses (mirroring routes that bundle a record + its children)
+// List + composite responses
 // ===========================================================================
 
 export interface DatasetListResponse {
-  data: PhoenixDataset[]
-  next_cursor?: string | null
-}
-
-export interface DatasetDetailResponse {
-  dataset: PhoenixDataset
-  examples: { data?: { examples?: PhoenixExample[] } | PhoenixExample[] } | { data?: PhoenixExample[] }
+  items: Dataset[]
+  next_cursor: string | null
 }
 
 export interface ExperimentListResponse {
@@ -261,28 +242,8 @@ export interface SchemaResponse {
 }
 
 // ===========================================================================
-// Request shapes
+// Mutation request shapes that aren't the canonical model
 // ===========================================================================
-
-export interface DatasetUploadRequest {
-  name: string
-  target_type: 'step' | 'pipeline'
-  target_name: string
-  examples: Array<{
-    input: Record<string, unknown>
-    output?: Record<string, unknown>
-    metadata?: Record<string, unknown>
-  }>
-  description?: string
-}
-
-export interface AddExamplesRequest {
-  examples: Array<{
-    input: Record<string, unknown>
-    output?: Record<string, unknown>
-    metadata?: Record<string, unknown>
-  }>
-}
 
 export interface RunTriggerRequest {
   variant?: Variant
@@ -325,25 +286,10 @@ function toSearchParams(params: Record<string, unknown>): string {
 }
 
 /**
- * Phoenix's example list endpoint has shipped a few wrapper shapes
- * over time (`{data: {examples: [...]}}`, `{data: [...]}`,
- * `{examples: [...]}`). Squash to a flat array so callers can rely on
- * a single shape.
+ * Phoenix's run-list endpoint has shipped a few wrapper shapes
+ * over time (`{data: [...]}`, `{data: {runs: [...]}}`). Squash to
+ * a flat array.
  */
-export function flattenExamples(payload: unknown): PhoenixExample[] {
-  if (!payload || typeof payload !== 'object') return []
-  const data = (payload as Record<string, unknown>).data
-  if (Array.isArray(data)) return data as PhoenixExample[]
-  if (data && typeof data === 'object') {
-    const inner = (data as Record<string, unknown>).examples
-      ?? (data as Record<string, unknown>).items
-    if (Array.isArray(inner)) return inner as PhoenixExample[]
-  }
-  const flat = (payload as Record<string, unknown>).examples
-  if (Array.isArray(flat)) return flat as PhoenixExample[]
-  return []
-}
-
 export function flattenRuns(payload: unknown): PhoenixRun[] {
   if (!payload || typeof payload !== 'object') return []
   const data = (payload as Record<string, unknown>).data
@@ -383,7 +329,7 @@ export function useDatasets(filters: { limit?: number; cursor?: string } = {}) {
 export function useDataset(datasetId: string) {
   return useQuery({
     queryKey: queryKeys.evals.detail(datasetId),
-    queryFn: () => apiClient<DatasetDetailResponse>(`/evals/datasets/${datasetId}`),
+    queryFn: () => apiClient<Dataset>(`/evals/datasets/${datasetId}`),
     enabled: !!datasetId,
   })
 }
@@ -510,11 +456,11 @@ export function useDeltaTypeWhitelist() {
 export function useCreateDataset() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (req: DatasetUploadRequest) =>
-      apiClient<PhoenixDataset>('/evals/datasets', {
+    mutationFn: (payload: Dataset) =>
+      apiClient<Dataset>('/evals/datasets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
+        body: JSON.stringify(payload),
       }),
     onSuccess: (data) => {
       toast.success(`Dataset "${data.name ?? data.id}" created`)
@@ -538,11 +484,11 @@ export function useDeleteDataset(datasetId: string) {
 export function useAddExamples(datasetId: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (req: AddExamplesRequest) =>
-      apiClient<unknown>(`/evals/datasets/${datasetId}/cases`, {
+    mutationFn: (examples: Example[]) =>
+      apiClient<Dataset>(`/evals/datasets/${datasetId}/cases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
+        body: JSON.stringify(examples),
       }),
     onSuccess: () => {
       toast.success('Examples added')
