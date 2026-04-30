@@ -215,20 +215,18 @@ export function AutoGenerateSelector({
 export function VariableDefinitionsEditor({
   content,
   promptKey,
-  promptType,
   value,
   onChange,
   readOnly = false,
 }: {
   content: string
   promptKey?: string
-  promptType?: string
   value: VarDefs
   onChange: (defs: VarDefs) => void
   readOnly?: boolean
 }) {
   const vars = useMemo(() => extractVariables(content), [content])
-  const { data: schema } = usePromptVariableSchema(promptKey ?? '', promptType ?? '')
+  const { data: schema } = usePromptVariableSchema(promptKey ?? '')
   const { data: autoGenData } = useAutoGenerateObjects()
   const autoGenObjects = autoGenData?.objects ?? []
 

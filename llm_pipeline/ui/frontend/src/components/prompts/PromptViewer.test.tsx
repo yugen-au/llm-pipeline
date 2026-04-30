@@ -1,30 +1,53 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, beforeEach } from 'vitest'
+import { describe, expect, it, beforeEach, beforeAll, afterAll } from 'vitest'
 import { PromptViewer } from './PromptViewer'
-import type { PromptVariant } from '@/api/types'
+import type { Prompt } from '@/api/types'
 
-// Mock usePromptDetail hook
+// Radix ScrollArea uses ResizeObserver internally; polyfill for jsdom
+const originalRO = globalThis.ResizeObserver
+beforeAll(() => {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver
+})
+afterAll(() => {
+  globalThis.ResizeObserver = originalRO
+})
+
+// Mock TanStack hooks (Monaco-based editor + mutation hooks need plumbing).
 const mockUsePromptDetail = vi.fn()
-vi.mock('@/api/prompts', () => ({
-  usePromptDetail: (...args: unknown[]) => mockUsePromptDetail(...args),
+vi.mock('@/api/prompts', () => {
+  const noopMutation = () => ({ mutate: vi.fn(), isPending: false })
+  return {
+    usePromptDetail: (...args: unknown[]) => mockUsePromptDetail(...args),
+    useCreatePrompt: noopMutation,
+    useUpdatePrompt: noopMutation,
+    useDeletePrompt: noopMutation,
+    usePromptVariableSchema: () => ({ data: undefined }),
+    useAutoGenerateObjects: () => ({ data: { objects: [] } }),
+  }
+})
+
+// Stub Monaco editor: it doesn't render in jsdom and isn't load-bearing here.
+vi.mock('@monaco-editor/react', () => ({
+  __esModule: true,
+  default: ({ value }: { value: string }) => (
+    <textarea data-testid="monaco-stub" value={value} readOnly />
+  ),
 }))
 
-function makeVariant(overrides: Partial<PromptVariant> = {}): PromptVariant {
+function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
   return {
-    id: 1,
-    prompt_key: 'test_prompt',
-    prompt_name: 'Test Prompt',
-    prompt_type: 'system',
-    category: null,
-    step_name: null,
-    content: 'Hello world',
-    required_variables: null,
+    name: 'test_prompt',
     description: null,
-    version: '1',
-    is_active: true,
-    created_at: '2025-06-01T00:00:00Z',
-    updated_at: '2025-06-01T00:00:00Z',
-    created_by: null,
+    metadata: { display_name: 'Test Prompt' },
+    messages: [
+      { role: 'system', content: 'system content' },
+      { role: 'user', content: 'user content' },
+    ],
+    version_id: 'v_001',
     ...overrides,
   }
 }
@@ -57,57 +80,37 @@ describe('PromptViewer', () => {
     expect(screen.getByText('Failed to load prompt')).toBeInTheDocument()
   })
 
-  it('renders prompt content for single variant (no tabs)', () => {
-    const variant = makeVariant({ content: 'Single variant content', prompt_type: 'system' })
+  it('renders both system and user editors stacked (no tabs)', () => {
+    const prompt = makePrompt()
     mockUsePromptDetail.mockReturnValue({
-      data: { prompt_key: 'my_prompt', variants: [variant] },
+      data: prompt,
       isLoading: false,
       error: null,
     })
-    render(<PromptViewer promptKey="my_prompt" />)
+    render(<PromptViewer promptKey="test_prompt" />)
 
-    // Prompt key heading visible
-    expect(screen.getByText('my_prompt')).toBeInTheDocument()
-    // Content visible
-    expect(screen.getByText('Single variant content')).toBeInTheDocument()
-    // No tab triggers (single variant = no tabs)
+    // Heading shows the prompt name
+    expect(screen.getByText('test_prompt')).toBeInTheDocument()
+    // Both message editors are visible — labels rendered for each
+    expect(screen.getByText('System message')).toBeInTheDocument()
+    expect(screen.getByText('User message')).toBeInTheDocument()
+    // No tablist (collapsed editor renders both inline)
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument()
+    // Two Monaco stubs (one per message)
+    expect(screen.getAllByTestId('monaco-stub')).toHaveLength(2)
   })
 
-  it('renders Tabs for multiple variants', () => {
-    const v1 = makeVariant({ prompt_type: 'system', content: 'system content' })
-    const v2 = makeVariant({ id: 2, prompt_type: 'user', content: 'user content' })
+  it('renders editors even when only one message exists', () => {
+    const prompt = makePrompt({
+      messages: [{ role: 'system', content: 'just system' }],
+    })
     mockUsePromptDetail.mockReturnValue({
-      data: { prompt_key: 'multi_prompt', variants: [v1, v2] },
+      data: prompt,
       isLoading: false,
       error: null,
     })
-    render(<PromptViewer promptKey="multi_prompt" />)
-
-    // Heading visible
-    expect(screen.getByText('multi_prompt')).toBeInTheDocument()
-    // Tab triggers present
-    expect(screen.getByRole('tablist')).toBeInTheDocument()
-    const tabs = screen.getAllByRole('tab')
-    expect(tabs.length).toBe(2)
-    // Tab labels match prompt_type values
-    expect(tabs.some((t) => t.textContent === 'system')).toBe(true)
-    expect(tabs.some((t) => t.textContent === 'user')).toBe(true)
-  })
-
-  it('highlights {variable} placeholders in content', () => {
-    const variant = makeVariant({ content: 'Hello {name}, your order is {order_id}' })
-    mockUsePromptDetail.mockReturnValue({
-      data: { prompt_key: 'var_prompt', variants: [variant] },
-      isLoading: false,
-      error: null,
-    })
-    const { container } = render(<PromptViewer promptKey="var_prompt" />)
-
-    // Highlighted spans have bg-primary/20 class
-    const highlighted = container.querySelectorAll('span.text-primary')
-    expect(highlighted.length).toBe(2)
-    expect(highlighted[0].textContent).toBe('{name}')
-    expect(highlighted[1].textContent).toBe('{order_id}')
+    render(<PromptViewer promptKey="test_prompt" />)
+    // Both editors still mount (user message editor stays visible to allow add).
+    expect(screen.getAllByTestId('monaco-stub')).toHaveLength(2)
   })
 })

@@ -174,13 +174,15 @@ function PromptsTab({
   }
   return (
     <TabScrollArea>
-      {prompts.map((p) => (
-        <LabeledPre
-          key={p.prompt_key}
-          label={`${p.prompt_type} — ${p.prompt_key} (v${p.version})`}
-          content={p.content}
-        />
-      ))}
+      {prompts.map((p) =>
+        p.messages.map((m, idx) => (
+          <LabeledPre
+            key={`${p.name}-${m.role}-${idx}`}
+            label={`${m.role} — ${p.name} (${p.version_id.slice(0, 8)})`}
+            content={m.content}
+          />
+        )),
+      )}
     </TabScrollArea>
   )
 }
@@ -363,16 +365,10 @@ function MetaTab({
         {null}
       </BadgeSection>
       <div className="mt-3 space-y-2 text-sm">
-        {step.prompt_system_key && (
+        {step.prompt_name && (
           <div>
-            <span className="text-muted-foreground">system: </span>
-            <code>{step.prompt_system_key}</code>
-          </div>
-        )}
-        {step.prompt_user_key && (
-          <div>
-            <span className="text-muted-foreground">user: </span>
-            <code>{step.prompt_user_key}</code>
+            <span className="text-muted-foreground">prompt: </span>
+            <code>{step.prompt_name}</code>
           </div>
         )}
         {step.input_hash && (

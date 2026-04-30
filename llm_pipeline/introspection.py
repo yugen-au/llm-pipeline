@@ -86,8 +86,6 @@ class PipelineIntrospector:
             "step_name": self._step_name(node),
             "class_name": node.__name__,
             "prompt_name": prompt_name,
-            "system_key": f"{prompt_name}.system_instruction",
-            "user_key": f"{prompt_name}.user_prompt",
             "instructions_class": (
                 node.INSTRUCTIONS.__name__ if node.INSTRUCTIONS else None
             ),

@@ -18,16 +18,11 @@ afterAll(() => {
 
 function makePrompt(overrides: Partial<Prompt> = {}): Prompt {
   return {
-    id: 1,
-    prompt_key: 'key-1',
-    prompt_name: 'Prompt One',
-    prompt_type: 'chat',
-    category: null,
-    step_name: null,
-    content: '',
-    required_variables: null,
+    name: 'prompt_one',
     description: null,
-    version: '1',
+    metadata: { display_name: 'Prompt One' },
+    messages: [{ role: 'system', content: 'hi' }],
+    version_id: 'v_001',
     ...overrides,
   }
 }
@@ -71,10 +66,10 @@ describe('PromptList', () => {
     expect(emptyEl).toHaveTextContent('No prompts match filters')
   })
 
-  it('renders a button per prompt', () => {
+  it('renders a button per prompt with display_name when present', () => {
     const prompts = [
-      makePrompt({ prompt_key: 'a', prompt_name: 'Alpha' }),
-      makePrompt({ id: 2, prompt_key: 'b', prompt_name: 'Beta' }),
+      makePrompt({ name: 'a', metadata: { display_name: 'Alpha' } }),
+      makePrompt({ name: 'b', metadata: { display_name: 'Beta' } }),
     ]
     render(<PromptList {...defaultProps} prompts={prompts} />)
 
@@ -84,10 +79,16 @@ describe('PromptList', () => {
     expect(screen.getByText('Beta')).toBeInTheDocument()
   })
 
+  it('falls back to name when metadata.display_name is missing', () => {
+    const prompts = [makePrompt({ name: 'lonely_prompt', metadata: {} })]
+    render(<PromptList {...defaultProps} prompts={prompts} />)
+    expect(screen.getByText('lonely_prompt')).toBeInTheDocument()
+  })
+
   it('highlights selected prompt', () => {
     const prompts = [
-      makePrompt({ prompt_key: 'a', prompt_name: 'Alpha' }),
-      makePrompt({ id: 2, prompt_key: 'b', prompt_name: 'Beta' }),
+      makePrompt({ name: 'a', metadata: { display_name: 'Alpha' } }),
+      makePrompt({ name: 'b', metadata: { display_name: 'Beta' } }),
     ]
     render(
       <PromptList {...defaultProps} prompts={prompts} selectedKey="b" />,
@@ -101,12 +102,12 @@ describe('PromptList', () => {
     expect(unselectedBtn).not.toHaveClass('bg-accent')
   })
 
-  it('calls onSelect with prompt key on click', async () => {
+  it('calls onSelect with prompt name on click', async () => {
     const onSelect = vi.fn()
     const user = userEvent.setup()
     const prompts = [
-      makePrompt({ prompt_key: 'a', prompt_name: 'Alpha' }),
-      makePrompt({ id: 2, prompt_key: 'b', prompt_name: 'Beta' }),
+      makePrompt({ name: 'a', metadata: { display_name: 'Alpha' } }),
+      makePrompt({ name: 'b', metadata: { display_name: 'Beta' } }),
     ]
     render(
       <PromptList {...defaultProps} prompts={prompts} onSelect={onSelect} />,

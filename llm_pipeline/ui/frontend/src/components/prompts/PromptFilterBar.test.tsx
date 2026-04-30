@@ -4,11 +4,8 @@ import { PromptFilterBar } from './PromptFilterBar'
 
 describe('PromptFilterBar', () => {
   const defaultProps = {
-    promptTypes: [] as string[],
     pipelineNames: [] as string[],
-    selectedType: '',
     selectedPipeline: '',
-    onTypeChange: vi.fn(),
     onPipelineChange: vi.fn(),
     searchText: '',
     onSearchChange: vi.fn(),
@@ -38,36 +35,6 @@ describe('PromptFilterBar', () => {
     expect(onSearchChange).toHaveBeenCalledTimes(2)
     expect(onSearchChange).toHaveBeenNthCalledWith(1, 'h')
     expect(onSearchChange).toHaveBeenNthCalledWith(2, 'i')
-  })
-
-  it('shows "All types" option in type select', async () => {
-    const user = userEvent.setup()
-    render(<PromptFilterBar {...defaultProps} />)
-
-    await user.click(
-      screen.getByRole('combobox', { name: /filter by prompt type/i }),
-    )
-
-    expect(screen.getByRole('option', { name: 'All types' })).toBeInTheDocument()
-  })
-
-  it('calls onTypeChange with value on selection', async () => {
-    const onTypeChange = vi.fn()
-    const user = userEvent.setup()
-    render(
-      <PromptFilterBar
-        {...defaultProps}
-        promptTypes={['chat', 'embed']}
-        onTypeChange={onTypeChange}
-      />,
-    )
-
-    await user.click(
-      screen.getByRole('combobox', { name: /filter by prompt type/i }),
-    )
-    await user.click(screen.getByRole('option', { name: 'chat' }))
-
-    expect(onTypeChange).toHaveBeenCalledWith('chat')
   })
 
   it('shows "All pipelines" option in pipeline select', async () => {
@@ -102,20 +69,20 @@ describe('PromptFilterBar', () => {
     expect(onPipelineChange).toHaveBeenCalledWith('ingest')
   })
 
-  it('populates type options from promptTypes prop', async () => {
+  it('populates pipeline options from pipelineNames prop', async () => {
     const user = userEvent.setup()
     render(
       <PromptFilterBar
         {...defaultProps}
-        promptTypes={['chat', 'embed']}
+        pipelineNames={['ingest', 'transform']}
       />,
     )
 
     await user.click(
-      screen.getByRole('combobox', { name: /filter by prompt type/i }),
+      screen.getByRole('combobox', { name: /filter by pipeline/i }),
     )
 
-    expect(screen.getByRole('option', { name: 'chat' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: 'embed' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'ingest' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'transform' })).toBeInTheDocument()
   })
 })

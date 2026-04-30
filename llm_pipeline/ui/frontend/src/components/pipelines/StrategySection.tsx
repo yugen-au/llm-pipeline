@@ -94,32 +94,18 @@ function StepRow({ step, pipelineName }: StepRowProps) {
             modelSource={modelSource}
           />
 
-          {/* Prompt keys */}
-          {(step.system_key || step.user_key) && (
+          {/* Prompt */}
+          {step.prompt_name && (
             <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Prompt Keys</p>
-              <div className="flex flex-wrap gap-2">
-                {step.system_key && (
-                  <Link
-                    from="/pipelines"
-                    to="/prompts"
-                    search={{ key: step.system_key }}
-                    className="font-mono text-xs text-primary underline"
-                  >
-                    system: {step.system_key}
-                  </Link>
-                )}
-                {step.user_key && (
-                  <Link
-                    from="/pipelines"
-                    to="/prompts"
-                    search={{ key: step.user_key }}
-                    className="font-mono text-xs text-primary underline"
-                  >
-                    user: {step.user_key}
-                  </Link>
-                )}
-              </div>
+              <p className="text-xs font-medium text-muted-foreground">Prompt</p>
+              <Link
+                from="/pipelines"
+                to="/prompts"
+                search={{ key: step.prompt_name }}
+                className="font-mono text-xs text-primary underline"
+              >
+                {step.prompt_name}
+              </Link>
             </div>
           )}
 

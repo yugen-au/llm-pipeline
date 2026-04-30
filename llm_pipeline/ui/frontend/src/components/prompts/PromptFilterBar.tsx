@@ -11,32 +11,21 @@ import {
 const ALL_SENTINEL = '__all'
 
 interface PromptFilterBarProps {
-  promptTypes: string[]
   pipelineNames: string[]
-  selectedType: string
   selectedPipeline: string
-  onTypeChange: (v: string) => void
   onPipelineChange: (v: string) => void
   searchText: string
   onSearchChange: (v: string) => void
 }
 
 export function PromptFilterBar({
-  promptTypes,
   pipelineNames,
-  selectedType,
   selectedPipeline,
-  onTypeChange,
   onPipelineChange,
   searchText,
   onSearchChange,
 }: PromptFilterBarProps) {
-  const typeValue = selectedType || ALL_SENTINEL
   const pipelineValue = selectedPipeline || ALL_SENTINEL
-
-  function handleTypeChange(value: string) {
-    onTypeChange(value === ALL_SENTINEL ? '' : value)
-  }
 
   function handlePipelineChange(value: string) {
     onPipelineChange(value === ALL_SENTINEL ? '' : value)
@@ -50,34 +39,19 @@ export function PromptFilterBar({
         value={searchText}
         onChange={(e) => onSearchChange(e.target.value)}
       />
-      <div className="flex items-center gap-2">
-        <Select value={typeValue} onValueChange={handleTypeChange}>
-          <SelectTrigger aria-label="Filter by prompt type" className="w-full">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_SENTINEL}>All types</SelectItem>
-            {promptTypes.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={pipelineValue} onValueChange={handlePipelineChange}>
-          <SelectTrigger aria-label="Filter by pipeline" className="w-full">
-            <SelectValue placeholder="All pipelines" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_SENTINEL}>All pipelines</SelectItem>
-            {pipelineNames.map((name) => (
-              <SelectItem key={name} value={name}>
-                {name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <Select value={pipelineValue} onValueChange={handlePipelineChange}>
+        <SelectTrigger aria-label="Filter by pipeline" className="w-full">
+          <SelectValue placeholder="All pipelines" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL_SENTINEL}>All pipelines</SelectItem>
+          {pipelineNames.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

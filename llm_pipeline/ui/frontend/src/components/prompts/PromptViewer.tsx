@@ -6,18 +6,12 @@ import {
   useUpdatePrompt,
   useDeletePrompt,
 } from '@/api/prompts'
-import type { PromptCreateRequest, PromptUpdateRequest } from '@/api/prompts'
-import type { PromptVariant } from '@/api/types'
+import type { Prompt } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   PromptContentEditor,
   useIsDark,
@@ -26,48 +20,73 @@ import {
 import { VariableDefinitionsEditor } from './VariableDefinitionsEditor'
 
 // ---------------------------------------------------------------------------
-// Types
+// Form state — one record per prompt, both messages stacked.
 // ---------------------------------------------------------------------------
 
-interface PromptViewerProps {
-  promptKey: string | null
-  isCreating?: boolean
-  onCreated?: (promptKey: string) => void
-}
-
-interface VariantFormState {
-  prompt_name: string
+interface FormState {
+  name: string
   description: string
+  display_name: string
   category: string
   step_name: string
-  content: string
-  is_active: boolean
+  system: string
+  user: string
 }
 
-function emptyForm(): VariantFormState {
-  return { prompt_name: '', description: '', category: '', step_name: '', content: '', is_active: true }
-}
-
-function formFromVariant(v: PromptVariant): VariantFormState {
+function emptyForm(): FormState {
   return {
-    prompt_name: v.prompt_name,
-    description: v.description ?? '',
-    category: v.category ?? '',
-    step_name: v.step_name ?? '',
-    content: v.content,
-    is_active: v.is_active,
+    name: '',
+    description: '',
+    display_name: '',
+    category: '',
+    step_name: '',
+    system: '',
+    user: '',
   }
 }
 
-function formDirty(form: VariantFormState, original: VariantFormState): boolean {
+function formFromPrompt(p: Prompt): FormState {
+  const sysMsg = p.messages.find((m) => m.role === 'system')
+  const userMsg = p.messages.find((m) => m.role === 'user')
+  return {
+    name: p.name,
+    description: p.description ?? '',
+    display_name: p.metadata.display_name ?? '',
+    category: p.metadata.category ?? '',
+    step_name: p.metadata.step_name ?? '',
+    system: sysMsg?.content ?? '',
+    user: userMsg?.content ?? '',
+  }
+}
+
+function formDirty(form: FormState, original: FormState): boolean {
   return (
-    form.prompt_name !== original.prompt_name ||
+    form.name !== original.name ||
     form.description !== original.description ||
+    form.display_name !== original.display_name ||
     form.category !== original.category ||
     form.step_name !== original.step_name ||
-    form.content !== original.content ||
-    form.is_active !== original.is_active
+    form.system !== original.system ||
+    form.user !== original.user
   )
+}
+
+function buildPromptPayload(form: FormState, varDefs: VarDefs): Prompt {
+  const messages: Prompt['messages'] = []
+  if (form.system) messages.push({ role: 'system', content: form.system })
+  if (form.user) messages.push({ role: 'user', content: form.user })
+  return {
+    name: form.name.trim(),
+    description: form.description || null,
+    metadata: {
+      display_name: form.display_name || null,
+      category: form.category || null,
+      step_name: form.step_name || null,
+      variable_definitions: Object.keys(varDefs).length > 0 ? varDefs : null,
+    },
+    messages,
+    version_id: null,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,20 +96,34 @@ function formDirty(form: VariantFormState, original: VariantFormState): boolean 
 function MetadataGrid({
   form,
   onChange,
-  version,
+  versionId,
+  nameEditable,
 }: {
-  form: VariantFormState
-  onChange: (patch: Partial<VariantFormState>) => void
-  version?: string
+  form: FormState
+  onChange: (patch: Partial<FormState>) => void
+  versionId?: string | null
+  nameEditable: boolean
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
       <div className="space-y-1">
-        <Label className="text-xs">Prompt Name</Label>
+        <Label className="text-xs">
+          Name {nameEditable && <span className="text-destructive">*</span>}
+        </Label>
         <Input
-          value={form.prompt_name}
-          onChange={(e) => onChange({ prompt_name: e.target.value })}
+          value={form.name}
+          onChange={(e) => onChange({ name: e.target.value })}
           placeholder="prompt_name"
+          className="h-8 text-xs"
+          disabled={!nameEditable}
+        />
+      </div>
+      <div className="space-y-1">
+        <Label className="text-xs">Display Name</Label>
+        <Input
+          value={form.display_name}
+          onChange={(e) => onChange({ display_name: e.target.value })}
+          placeholder="display name"
           className="h-8 text-xs"
         />
       </div>
@@ -121,210 +154,205 @@ function MetadataGrid({
           className="h-8 text-xs"
         />
       </div>
-      <div className="space-y-1">
-        <Label className="text-xs">Version</Label>
-        <Badge variant="secondary" className="mt-1">
-          v{version ?? '1'}
-        </Badge>
-      </div>
-      <div className="flex items-end gap-2 pb-0.5">
-        <Checkbox
-          id="is_active"
-          checked={form.is_active}
-          onCheckedChange={(v) => onChange({ is_active: v === true })}
-        />
-        <Label htmlFor="is_active" className="text-xs">
-          Active
-        </Label>
-      </div>
+      {versionId && (
+        <div className="space-y-1">
+          <Label className="text-xs">Version</Label>
+          <Badge variant="secondary" className="mt-1 font-mono text-[10px]">
+            {versionId.slice(0, 12)}
+          </Badge>
+        </div>
+      )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// VariantEditor (single tab content)
+// Stacked message editors (system + user)
 // ---------------------------------------------------------------------------
 
-function VariantEditor({
-  variant,
-  promptKey,
+function MessageEditors({
+  form,
+  varDefs,
+  setVarDefs,
+  onChange,
+  promptName,
+  isDark,
+}: {
+  form: FormState
+  varDefs: VarDefs
+  setVarDefs: (d: VarDefs) => void
+  onChange: (patch: Partial<FormState>) => void
+  promptName: string
+  isDark: boolean
+}) {
+  const combinedContent = useMemo(
+    () => `${form.system}\n${form.user}`,
+    [form.system, form.user],
+  )
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">System message</Label>
+        <PromptContentEditor
+          value={form.system}
+          onChange={(v) => onChange({ system: v })}
+          varDefs={varDefs}
+          isDark={isDark}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs font-medium">User message</Label>
+        <PromptContentEditor
+          value={form.user}
+          onChange={(v) => onChange({ user: v })}
+          varDefs={varDefs}
+          isDark={isDark}
+        />
+      </div>
+      <VariableDefinitionsEditor
+        content={combinedContent}
+        promptKey={promptName}
+        value={varDefs}
+        onChange={setVarDefs}
+      />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Edit existing prompt
+// ---------------------------------------------------------------------------
+
+function EditForm({
+  prompt,
   onDeleted,
 }: {
-  variant: PromptVariant
-  promptKey: string
+  prompt: Prompt
   onDeleted?: () => void
 }) {
   const isDark = useIsDark()
+  const original = useMemo(() => formFromPrompt(prompt), [prompt])
+  const [form, setForm] = useState<FormState>(original)
+  const initialVarDefs = (prompt.metadata.variable_definitions ?? {}) as VarDefs
+  const [varDefs, setVarDefs] = useState<VarDefs>(initialVarDefs)
 
-  const original = useMemo(() => formFromVariant(variant), [variant])
-  const [form, setForm] = useState<VariantFormState>(original)
-  const [varDefs, setVarDefs] = useState<VarDefs>(variant.variable_definitions ?? {})
-
-  // Reset when upstream data changes (e.g. after save)
   useEffect(() => {
-    setForm(formFromVariant(variant))
-    setVarDefs(variant.variable_definitions ?? {})
-  }, [variant])
+    setForm(formFromPrompt(prompt))
+    setVarDefs((prompt.metadata.variable_definitions ?? {}) as VarDefs)
+  }, [prompt])
 
-  const dirty = formDirty(form, original) ||
-    JSON.stringify(varDefs) !== JSON.stringify(variant.variable_definitions ?? {})
+  const dirty =
+    formDirty(form, original) ||
+    JSON.stringify(varDefs) !== JSON.stringify(initialVarDefs)
 
-  const updateMutation = useUpdatePrompt(promptKey, variant.prompt_type)
-  const deleteMutation = useDeletePrompt(promptKey, variant.prompt_type)
+  const updateMutation = useUpdatePrompt(prompt.name)
+  const deleteMutation = useDeletePrompt(prompt.name)
 
-  function patch(p: Partial<VariantFormState>) {
+  function patch(p: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...p }))
   }
 
   function handleSave() {
-    const body: PromptUpdateRequest = {
-      prompt_name: form.prompt_name || null,
-      content: form.content || null,
-      category: form.category || null,
-      step_name: form.step_name || null,
-      description: form.description || null,
-      variable_definitions: Object.keys(varDefs).length > 0 ? varDefs : null,
-    }
-    updateMutation.mutate(body)
+    updateMutation.mutate(buildPromptPayload(form, varDefs))
   }
 
   function handleDiscard() {
     setForm(original)
-    setVarDefs(variant.variable_definitions ?? {})
+    setVarDefs(initialVarDefs)
   }
 
   function handleDelete() {
-    if (!window.confirm(`Deactivate "${promptKey}" (${variant.prompt_type})?`)) return
+    if (!window.confirm(`Delete prompt "${prompt.name}"? This removes all versions.`))
+      return
     deleteMutation.mutate(undefined, { onSuccess: () => onDeleted?.() })
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <MetadataGrid form={form} onChange={patch} version={variant.version} />
-
-      <PromptContentEditor
-        value={form.content}
-        onChange={(v) => patch({ content: v })}
-        varDefs={varDefs}
-        isDark={isDark}
-      />
-
-      <VariableDefinitionsEditor
-        content={form.content}
-        promptKey={promptKey}
-        promptType={variant.prompt_type}
-        value={varDefs}
-        onChange={setVarDefs}
-      />
-
-      <div className="flex items-center gap-2 border-t pt-3">
-        <Button size="sm" disabled={!dirty || updateMutation.isPending} onClick={handleSave}>
-          <Save className="size-3.5" />
-          Save
-        </Button>
-        <Button size="sm" variant="ghost" disabled={!dirty} onClick={handleDiscard}>
-          <Undo2 className="size-3.5" />
-          Discard
-        </Button>
-        <div className="flex-1" />
-        <Button
-          size="sm"
-          variant="destructive"
-          disabled={deleteMutation.isPending}
-          onClick={handleDelete}
-        >
-          <Trash2 className="size-3.5" />
-          Delete
-        </Button>
+    <ScrollArea className="h-full">
+      <div className="space-y-4 p-4">
+        <h2 className="text-lg font-semibold">{prompt.name}</h2>
+        <MetadataGrid
+          form={form}
+          onChange={patch}
+          versionId={prompt.version_id}
+          nameEditable={false}
+        />
+        <MessageEditors
+          form={form}
+          varDefs={varDefs}
+          setVarDefs={setVarDefs}
+          onChange={patch}
+          promptName={prompt.name}
+          isDark={isDark}
+        />
+        <div className="flex items-center gap-2 border-t pt-3">
+          <Button
+            size="sm"
+            disabled={!dirty || updateMutation.isPending}
+            onClick={handleSave}
+          >
+            <Save className="size-3.5" />
+            Save
+          </Button>
+          <Button size="sm" variant="ghost" disabled={!dirty} onClick={handleDiscard}>
+            <Undo2 className="size-3.5" />
+            Discard
+          </Button>
+          <div className="flex-1" />
+          <Button
+            size="sm"
+            variant="destructive"
+            disabled={deleteMutation.isPending}
+            onClick={handleDelete}
+          >
+            <Trash2 className="size-3.5" />
+            Delete
+          </Button>
+        </div>
       </div>
-    </div>
+    </ScrollArea>
   )
 }
 
 // ---------------------------------------------------------------------------
-// CreateForm
+// Create new prompt
 // ---------------------------------------------------------------------------
 
-function CreateForm({ onCreated }: { onCreated?: (key: string) => void }) {
+function CreateForm({ onCreated }: { onCreated?: (name: string) => void }) {
   const isDark = useIsDark()
-  const [promptKey, setPromptKey] = useState('')
-  const [promptType, setPromptType] = useState('system')
-  const [form, setForm] = useState<VariantFormState>(emptyForm())
+  const [form, setForm] = useState<FormState>(emptyForm())
   const [varDefs, setVarDefs] = useState<VarDefs>({})
-
   const createMutation = useCreatePrompt()
 
-  function patch(p: Partial<VariantFormState>) {
+  function patch(p: Partial<FormState>) {
     setForm((prev) => ({ ...prev, ...p }))
   }
 
   function handleSave() {
-    if (!promptKey.trim() || !promptType) return
-    const body: PromptCreateRequest = {
-      prompt_key: promptKey.trim(),
-      prompt_name: form.prompt_name || promptKey.trim(),
-      prompt_type: promptType,
-      content: form.content,
-      category: form.category || undefined,
-      step_name: form.step_name || undefined,
-      description: form.description || undefined,
-      variable_definitions: Object.keys(varDefs).length > 0 ? varDefs : undefined,
-    }
-    createMutation.mutate(body, {
-      onSuccess: () => onCreated?.(promptKey.trim()),
+    const name = form.name.trim()
+    if (!name) return
+    if (!form.system && !form.user) return
+    createMutation.mutate(buildPromptPayload(form, varDefs), {
+      onSuccess: () => onCreated?.(name),
     })
   }
 
-  const canSave = promptKey.trim().length > 0 && form.content.length > 0
+  const canSave =
+    form.name.trim().length > 0 && (form.system.length > 0 || form.user.length > 0)
 
   return (
     <ScrollArea className="h-full">
       <div className="space-y-4 p-4">
         <h2 className="text-lg font-semibold">New Prompt</h2>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <Label className="text-xs">
-              Prompt Key <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              value={promptKey}
-              onChange={(e) => setPromptKey(e.target.value)}
-              placeholder="e.g. rate_card_system"
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">
-              Prompt Type <span className="text-destructive">*</span>
-            </Label>
-            <Select value={promptType} onValueChange={setPromptType}>
-              <SelectTrigger className="h-8 w-full text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="system">system</SelectItem>
-                <SelectItem value="user">user</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <MetadataGrid form={form} onChange={patch} />
-
-        <PromptContentEditor
-          value={form.content}
-          onChange={(v) => patch({ content: v })}
+        <MetadataGrid form={form} onChange={patch} nameEditable={true} />
+        <MessageEditors
+          form={form}
           varDefs={varDefs}
+          setVarDefs={setVarDefs}
+          onChange={patch}
+          promptName={form.name.trim()}
           isDark={isDark}
         />
-
-        <VariableDefinitionsEditor
-          content={form.content}
-          value={varDefs}
-          onChange={setVarDefs}
-        />
-
         <div className="flex items-center gap-2 border-t pt-3">
           <Button
             size="sm"
@@ -344,15 +372,19 @@ function CreateForm({ onCreated }: { onCreated?: (key: string) => void }) {
 // PromptViewer (main export)
 // ---------------------------------------------------------------------------
 
+interface PromptViewerProps {
+  promptKey: string | null
+  isCreating?: boolean
+  onCreated?: (promptName: string) => void
+}
+
 export function PromptViewer({ promptKey, isCreating, onCreated }: PromptViewerProps) {
   const { data, isLoading, error } = usePromptDetail(promptKey ?? '')
 
-  // Create mode
   if (isCreating) {
     return <CreateForm onCreated={onCreated} />
   }
 
-  // Empty state
   if (!promptKey) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -381,42 +413,5 @@ export function PromptViewer({ promptKey, isCreating, onCreated }: PromptViewerP
 
   if (!data) return null
 
-  const { variants } = data
-
-  // Single variant
-  if (variants.length <= 1) {
-    return (
-      <ScrollArea className="h-full">
-        <div className="space-y-4 p-4">
-          <h2 className="text-lg font-semibold">{data.prompt_key}</h2>
-          {variants[0] && (
-            <VariantEditor variant={variants[0]} promptKey={data.prompt_key} />
-          )}
-        </div>
-      </ScrollArea>
-    )
-  }
-
-  // Multiple variants in tabs
-  return (
-    <ScrollArea className="h-full">
-      <div className="space-y-4 p-4">
-        <h2 className="text-lg font-semibold">{data.prompt_key}</h2>
-        <Tabs defaultValue={variants[0].prompt_type}>
-          <TabsList>
-            {variants.map((v) => (
-              <TabsTrigger key={v.prompt_type} value={v.prompt_type}>
-                {v.prompt_type}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          {variants.map((v) => (
-            <TabsContent key={v.prompt_type} value={v.prompt_type}>
-              <VariantEditor variant={v} promptKey={data.prompt_key} />
-            </TabsContent>
-          ))}
-        </Tabs>
-      </div>
-    </ScrollArea>
-  )
+  return <EditForm prompt={data} />
 }

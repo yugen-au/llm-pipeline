@@ -130,8 +130,7 @@ export interface StepDetail {
   input_hash: string
   result_data: Record<string, unknown>
   context_snapshot: Record<string, unknown>
-  prompt_system_key: string | null
-  prompt_user_key: string | null
+  prompt_name: string | null
   prompt_version: string | null
   model: string | null
   execution_time_ms: number | null
@@ -201,13 +200,11 @@ export interface RunTraceResponse {
 // Step prompt content (GET /api/pipelines/{name}/steps/{step_name}/prompts)
 // ---------------------------------------------------------------------------
 
-/** Single prompt item within a step's prompt content response. */
+/** Single prompt within a step's prompt content response. */
 export interface StepPromptItem {
-  prompt_key: string
-  prompt_type: string
-  content: string
-  required_variables: string[] | null
-  version: string
+  name: string
+  messages: PromptMessage[]
+  version_id: string
 }
 
 /** GET /api/pipelines/{name}/steps/{step_name}/prompts response body. */
@@ -218,26 +215,39 @@ export interface StepPromptsResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Prompts
+// Prompts (one record carries every message — Phoenix-shaped)
 // ---------------------------------------------------------------------------
 
-/** Prompt entity matching llm_pipeline/db/prompt.py SQLModel fields. */
-export interface Prompt {
-  id: number
-  prompt_key: string
-  prompt_name: string
-  prompt_type: string
-  category: string | null
-  step_name: string | null
+/** One message in a prompt's CHAT template. */
+export interface PromptMessage {
+  role: 'system' | 'user'
   content: string
-  required_variables: string[] | null
-  variable_definitions: Record<string, { type: string; description: string; auto_generate?: string }> | null
+}
+
+/** Variable definition stored in Phoenix metadata. */
+export interface VariableDef {
+  type: string
+  description: string
+  auto_generate?: string
+}
+
+/** Phoenix-side prompt-level metadata (set-once on first POST). */
+export interface PromptMetadata {
+  display_name?: string | null
+  category?: string | null
+  step_name?: string | null
+  variable_definitions?: Record<string, VariableDef> | null
+  // Phoenix may carry extra fields; allow them for forward-compat.
+  [key: string]: unknown
+}
+
+/** Canonical prompt — used for both responses and request bodies. */
+export interface Prompt {
+  name: string
   description: string | null
-  version: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-  created_by: string | null
+  metadata: PromptMetadata
+  messages: PromptMessage[]
+  version_id: string | null
 }
 
 /** GET /api/prompts response body. */
@@ -248,37 +258,10 @@ export interface PromptListResponse {
   limit: number
 }
 
-/** Single variant (system or user) within a grouped prompt detail response. */
-export interface PromptVariant {
-  id: number
-  prompt_key: string
-  prompt_name: string
-  prompt_type: string
-  category: string | null
-  step_name: string | null
-  content: string
-  required_variables: string[] | null
-  variable_definitions: Record<string, { type: string; description: string; auto_generate?: string }> | null
-  description: string | null
-  version: string
-  is_active: boolean
-  created_at: string
-  updated_at: string
-  created_by: string | null
-}
-
-/** GET /api/prompts/{prompt_key} response body -- grouped wrapper with variants. */
-export interface PromptDetail {
-  prompt_key: string
-  variants: PromptVariant[]
-}
-
-/** Query params for GET /api/prompts. All fields optional for partial filtering. */
+/** Query params for GET /api/prompts. All fields optional. */
 export interface PromptListParams {
-  prompt_type?: string
   category?: string
   step_name?: string
-  is_active?: boolean
   offset?: number
   limit?: number
 }
@@ -315,8 +298,7 @@ export interface TransformationMetadata {
 export interface PipelineStepMetadata {
   step_name: string
   class_name: string
-  system_key: string | null
-  user_key: string | null
+  prompt_name: string | null
   instructions_class: string | null
   instructions_schema: Record<string, unknown> | null
   context_class: string | null

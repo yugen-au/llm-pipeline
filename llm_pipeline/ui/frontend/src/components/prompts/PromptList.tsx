@@ -1,5 +1,4 @@
 import type { Prompt } from '@/api/types'
-import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 
@@ -66,22 +65,22 @@ export function PromptList({
     <ScrollArea className="min-h-0 flex-1">
       <div className="space-y-1 p-2">
         {prompts.map((prompt) => {
-          const isSelected = selectedKey === prompt.prompt_key
+          const isSelected = selectedKey === prompt.name
+          const label = prompt.metadata.display_name ?? prompt.name
           return (
             <button
-              key={prompt.prompt_key}
+              key={prompt.name}
               type="button"
               className={cn(
                 'flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors',
                 'cursor-pointer hover:bg-muted/30',
                 isSelected && 'bg-accent',
               )}
-              onClick={() => onSelect(prompt.prompt_key)}
+              onClick={() => onSelect(prompt.name)}
             >
               <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                {prompt.prompt_name}
+                {label}
               </span>
-              <Badge variant="secondary">{prompt.prompt_type}</Badge>
             </button>
           )
         })}

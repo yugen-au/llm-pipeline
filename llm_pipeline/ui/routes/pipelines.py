@@ -12,6 +12,7 @@ from sqlmodel import select
 from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.introspection import PipelineIntrospector, enrich_with_prompt_readiness
+from llm_pipeline.prompts.models import PromptMessage
 from llm_pipeline.ui.deps import DBSession, WritableDBSession
 
 logger = logging.getLogger(__name__)
@@ -42,8 +43,7 @@ class StepMetadata(BaseModel):
 
     step_name: str
     class_name: str
-    system_key: Optional[str] = None
-    user_key: Optional[str] = None
+    prompt_name: Optional[str] = None
     instructions_class: Optional[str] = None
     instructions_schema: Optional[Any] = None
     context_class: Optional[str] = None
@@ -75,11 +75,9 @@ class StepModelRequest(BaseModel):
 
 
 class StepPromptItem(BaseModel):
-    prompt_key: str
-    prompt_type: str
-    content: str
-    required_variables: Optional[List[str]] = None
-    version: str
+    name: str
+    messages: List[PromptMessage]
+    version_id: str
 
 
 class StepPromptsResponse(BaseModel):
@@ -174,7 +172,6 @@ def get_step_prompts(
         PhoenixPromptClient,
         PromptNotFoundError,
     )
-    from llm_pipeline.prompts.utils import extract_variables_from_content
 
     registry: dict = getattr(request.app.state, "introspection_registry", {})
     if name not in registry:
@@ -245,29 +242,26 @@ def get_step_prompts(
         template = version.get("template") or {}
         if template.get("type") != "chat":
             continue
+        messages: List[PromptMessage] = []
         for msg in template.get("messages") or []:
             role = msg.get("role")
             content = msg.get("content")
             if not isinstance(content, str):
                 continue
-            ui_role = (
-                "system" if role in ("system", "developer")
-                else "user" if role == "user"
-                else role
+            if role in ("system", "developer"):
+                ui_role = "system"
+            elif role == "user":
+                ui_role = "user"
+            else:
+                continue
+            messages.append(PromptMessage(role=ui_role, content=content))
+        if not messages:
+            continue
+        items.append(
+            StepPromptItem(
+                name=prompt_name, messages=messages, version_id=version_id,
             )
-            suffix = (
-                "system_instruction" if ui_role == "system"
-                else "user_prompt"
-            )
-            items.append(
-                StepPromptItem(
-                    prompt_key=f"{prompt_name}.{suffix}",
-                    prompt_type=ui_role,
-                    content=content,
-                    required_variables=extract_variables_from_content(content),
-                    version=version_id,
-                )
-            )
+        )
 
     return StepPromptsResponse(
         pipeline_name=name, step_name=step_name, prompts=items,

@@ -1,8 +1,9 @@
 /**
  * TanStack Query hooks for the Prompts API.
  *
- * @remarks These hooks target /api/prompts endpoints implemented by Task 22.
- * They will return 404 until that task is complete.
+ * One Prompt record carries both system + user messages (Phoenix shape).
+ * Mutations send the canonical Prompt body; the backend accepts it for
+ * both POST (create) and PUT (replace messages array).
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -10,45 +11,13 @@ import { toast } from 'sonner'
 import { apiClient } from './client'
 import { queryKeys } from './query-keys'
 import { toSearchParams } from './types'
-import type { PromptDetail, PromptListParams, PromptListResponse, PromptVariant } from './types'
-
-/** Request body for POST /api/prompts */
-export interface PromptCreateRequest {
-  prompt_key: string
-  prompt_name: string
-  prompt_type: string
-  content: string
-  category?: string | null
-  step_name?: string | null
-  description?: string | null
-  version?: string
-  created_by?: string | null
-  variable_definitions?: Record<string, { type: string; description: string; auto_generate?: string }> | null
-}
-
-/** Request body for PUT /api/prompts/{key}/{type} */
-export interface PromptUpdateRequest {
-  prompt_name?: string | null
-  content?: string | null
-  category?: string | null
-  step_name?: string | null
-  description?: string | null
-  version?: string | null
-  created_by?: string | null
-  variable_definitions?: Record<string, { type: string; description: string; auto_generate?: string }> | null
-}
+import type { Prompt, PromptListParams, PromptListResponse } from './types'
 
 /**
  * Fetch a paginated list of prompts with optional filtering.
  *
  * Prompts are static reference data so the default 30s staleTime
- * from the global QueryClient config is sufficient -- no per-hook
- * override or polling needed.
- *
- * @provisional - will 404 until backend task 22 lands.
- *
- * @param filters - Optional prompt_type, category, step_name,
- *   is_active, offset, limit filters
+ * from the global QueryClient config is sufficient.
  */
 export function usePrompts(filters: Partial<PromptListParams> = {}) {
   return useQuery({
@@ -58,69 +27,64 @@ export function usePrompts(filters: Partial<PromptListParams> = {}) {
 }
 
 /**
- * Fetch grouped prompt detail (all variants) for a single prompt key.
+ * Fetch a single prompt by name.
  *
- * Uses the default 30s staleTime -- prompt content is static reference data.
- * Disabled when `promptKey` is falsy so callers can pass an empty string
+ * Disabled when ``name`` is falsy so callers can pass an empty string
  * before a selection is made.
- *
- * @provisional - will 404 until backend task 22 lands.
- *
- * @param promptKey - The prompt_key to fetch (e.g. "rate_card_system")
  */
-export function usePromptDetail(promptKey: string) {
+export function usePromptDetail(name: string) {
   return useQuery({
-    queryKey: queryKeys.prompts.detail(promptKey),
-    queryFn: () => apiClient<PromptDetail>('/prompts/' + promptKey),
-    enabled: Boolean(promptKey),
+    queryKey: queryKeys.prompts.detail(name),
+    queryFn: () => apiClient<Prompt>('/prompts/' + name),
+    enabled: Boolean(name),
   })
 }
 
-/** Create a new prompt. */
+/** Create a new prompt (or push a new version under an existing name). */
 export function useCreatePrompt() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: PromptCreateRequest) =>
-      apiClient<PromptVariant>('/prompts', {
+    mutationFn: (data: Prompt) =>
+      apiClient<Prompt>('/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
     onSuccess: (created) => {
-      toast.success(`Prompt "${created.prompt_key}" created`)
+      toast.success(`Prompt "${created.name}" created`)
       qc.invalidateQueries({ queryKey: queryKeys.prompts.all })
     },
   })
 }
 
-/** Update an existing prompt variant. */
-export function useUpdatePrompt(promptKey: string, promptType: string) {
+/** Replace a prompt's messages array atomically. */
+export function useUpdatePrompt(name: string) {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: PromptUpdateRequest) =>
-      apiClient<PromptVariant>(`/prompts/${promptKey}/${promptType}`, {
+    mutationFn: (data: Prompt) =>
+      apiClient<Prompt>(`/prompts/${name}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       }),
     onSuccess: () => {
       toast.success('Prompt saved')
-      qc.invalidateQueries({ queryKey: queryKeys.prompts.detail(promptKey) })
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.detail(name) })
       qc.invalidateQueries({ queryKey: queryKeys.prompts.all })
     },
   })
 }
 
-/** Soft-delete a prompt variant. */
-export function useDeletePrompt(promptKey: string, promptType: string) {
+/** Delete a prompt and all its versions. */
+export function useDeletePrompt(name: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () =>
-      apiClient(`/prompts/${promptKey}/${promptType}`, { method: 'DELETE' }),
+      apiClient(`/prompts/${name}`, { method: 'DELETE' }),
     onSuccess: () => {
-      toast.success('Prompt deactivated')
+      toast.success('Prompt deleted')
       qc.invalidateQueries({ queryKey: queryKeys.prompts.all })
-      qc.invalidateQueries({ queryKey: queryKeys.prompts.detail(promptKey) })
+      qc.invalidateQueries({ queryKey: queryKeys.prompts.detail(name) })
     },
   })
 }
@@ -145,11 +109,11 @@ interface VariableSchemaResponse {
   code_class_name: string | null
 }
 
-export function usePromptVariableSchema(promptKey: string, promptType: string) {
+export function usePromptVariableSchema(name: string) {
   return useQuery({
-    queryKey: ['prompts', promptKey, promptType, 'variables'] as const,
-    queryFn: () => apiClient<VariableSchemaResponse>(`/prompts/${promptKey}/${promptType}/variables`),
-    enabled: Boolean(promptKey && promptType),
+    queryKey: ['prompts', name, 'variables'] as const,
+    queryFn: () => apiClient<VariableSchemaResponse>(`/prompts/${name}/variables`),
+    enabled: Boolean(name),
     staleTime: Infinity,
   })
 }

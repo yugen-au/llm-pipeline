@@ -47,7 +47,7 @@ class TestGetStep:
         expected = (
             "step_name", "step_number", "pipeline_name", "run_id",
             "input_hash", "result_data", "context_snapshot",
-            "prompt_system_key", "prompt_user_key", "prompt_version",
+            "prompt_name", "prompt_version",
             "model", "execution_time_ms", "created_at",
         )
         for field in expected:

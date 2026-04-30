@@ -47,8 +47,7 @@ class StepDetail(BaseModel):
     input_hash: str
     result_data: Any
     context_snapshot: dict
-    prompt_system_key: Optional[str] = None
-    prompt_user_key: Optional[str] = None
+    prompt_name: Optional[str] = None
     prompt_version: Optional[str] = None
     model: Optional[str] = None
     execution_time_ms: Optional[int] = None
@@ -101,17 +100,11 @@ def _step_output(snap: PipelineNodeSnapshot) -> Any:
     return items[0] if isinstance(items, list) and len(items) == 1 else items
 
 
-def _prompt_keys(class_name: str) -> tuple[Optional[str], Optional[str]]:
-    """Phase-C-style legacy split keys for the prompt name.
-
-    The frontend still asks for ``prompt_system_key`` / ``prompt_user_key``
-    even though Phoenix owns prompts; we synthesise the same shape so
-    no UI repoint is needed in Phase 2.
-    """
+def _prompt_name(class_name: str) -> Optional[str]:
+    """Phoenix prompt name for a step class, derived from its snake-case name."""
     if not class_name.endswith("Step"):
-        return None, None
-    base = to_snake_case(class_name, strip_suffix="Step")
-    return f"{base}.system_instruction", f"{base}.user_prompt"
+        return None
+    return to_snake_case(class_name, strip_suffix="Step")
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +163,6 @@ def get_step(run_id: str, step_number: int, db: DBSession) -> StepDetail:
     if snap is None:
         raise HTTPException(status_code=404, detail="Step not found")
 
-    system_key, user_key = _prompt_keys(snap.node_class_name)
     metadata = (snap.state_snapshot or {}).get("metadata", {}) or {}
 
     return StepDetail(
@@ -181,8 +173,7 @@ def get_step(run_id: str, step_number: int, db: DBSession) -> StepDetail:
         input_hash="",  # No longer stored — caching dropped in pydantic-graph migration.
         result_data=_step_output(snap),
         context_snapshot=metadata,
-        prompt_system_key=system_key,
-        prompt_user_key=user_key,
+        prompt_name=_prompt_name(snap.node_class_name),
         prompt_version=None,
         model=metadata.get("__step_model__"),
         execution_time_ms=_duration_ms(snap.duration),

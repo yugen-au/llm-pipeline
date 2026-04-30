@@ -36,22 +36,18 @@ function PromptsPage() {
   const navigate = useNavigate({ from: '/prompts' })
   const [isCreating, setIsCreating] = useState(false)
 
-  // Data fetching
   const prompts = usePrompts({ limit: 200 })
   const pipelines = usePipelines()
 
-  // Filter state
-  const [selectedType, setSelectedType] = useState('')
   const [selectedPipeline, setSelectedPipeline] = useState('')
   const [searchText, setSearchText] = useState('')
 
-  // Derive pipeline names for filter dropdown
   const pipelineNames = useMemo(
     () => pipelines.data?.pipelines.map((p) => p.name) ?? [],
     [pipelines.data],
   )
 
-  // Build prompt_key -> pipeline_name[] map via combine (structurally shared)
+  // Build prompt name -> pipeline_name[] map via combine (structurally shared).
   const combinePipelineMeta = useCallback(
     (results: { data: PipelineMetadata | undefined }[]) => {
       const map = new Map<string, string[]>()
@@ -60,16 +56,14 @@ function PromptsPage() {
         const pipelineName = pipelineNames[idx]
         for (const strategy of q.data.strategies) {
           for (const step of strategy.steps) {
-            for (const promptKey of [step.system_key, step.user_key]) {
-              if (!promptKey) continue
-              const existing = map.get(promptKey)
-              if (existing) {
-                if (!existing.includes(pipelineName)) {
-                  existing.push(pipelineName)
-                }
-              } else {
-                map.set(promptKey, [pipelineName])
+            if (!step.prompt_name) continue
+            const existing = map.get(step.prompt_name)
+            if (existing) {
+              if (!existing.includes(pipelineName)) {
+                existing.push(pipelineName)
               }
+            } else {
+              map.set(step.prompt_name, [pipelineName])
             }
           }
         }
@@ -79,7 +73,7 @@ function PromptsPage() {
     [pipelineNames],
   )
 
-  const promptKeyToPipelines = useQueries({
+  const promptNameToPipelines = useQueries({
     queries: pipelineNames.map((name) => ({
       queryKey: queryKeys.pipelines.detail(name),
       queryFn: () => apiClient<PipelineMetadata>('/pipelines/' + name),
@@ -88,51 +82,28 @@ function PromptsPage() {
     combine: combinePipelineMeta,
   })
 
-  // Derive unique prompt types for filter dropdown
-  const promptTypes = useMemo(
-    () => [...new Set(prompts.data?.items.map((p) => p.prompt_type) ?? [])],
-    [prompts.data],
-  )
-
-  // Filter and deduplicate prompts
   const filteredPrompts = useMemo(() => {
     const items = prompts.data?.items ?? []
     const lowerSearch = searchText.toLowerCase()
 
-    const filtered = items.filter((p) => {
-      // Type filter
-      if (selectedType && p.prompt_type !== selectedType) return false
-
-      // Pipeline filter
+    return items.filter((p) => {
       if (selectedPipeline) {
-        const pipelinesForKey = promptKeyToPipelines.get(p.prompt_key)
-        if (!pipelinesForKey || !pipelinesForKey.includes(selectedPipeline)) return false
+        const pipelinesForName = promptNameToPipelines.get(p.name)
+        if (!pipelinesForName || !pipelinesForName.includes(selectedPipeline)) return false
       }
-
-      // Text search (case-insensitive on prompt_name and prompt_key)
       if (lowerSearch) {
-        const matchesName = p.prompt_name.toLowerCase().includes(lowerSearch)
-        const matchesKey = p.prompt_key.toLowerCase().includes(lowerSearch)
-        if (!matchesName && !matchesKey) return false
+        const label = p.metadata.display_name ?? p.name
+        const matchesLabel = label.toLowerCase().includes(lowerSearch)
+        const matchesName = p.name.toLowerCase().includes(lowerSearch)
+        if (!matchesLabel && !matchesName) return false
       }
-
       return true
     })
+  }, [prompts.data, selectedPipeline, searchText, promptNameToPipelines])
 
-    // Deduplicate by prompt_key (one row per unique key for the list)
-    const seen = new Map<string, (typeof filtered)[0]>()
-    for (const p of filtered) {
-      if (!seen.has(p.prompt_key)) {
-        seen.set(p.prompt_key, p)
-      }
-    }
-    return [...seen.values()]
-  }, [prompts.data, selectedType, selectedPipeline, searchText, promptKeyToPipelines])
-
-  // Selection handler -- update URL search param
-  function handleSelect(promptKey: string) {
+  function handleSelect(promptName: string) {
     setIsCreating(false)
-    navigate({ search: { key: promptKey } })
+    navigate({ search: { key: promptName } })
   }
 
   function handleNewPrompt() {
@@ -140,9 +111,9 @@ function PromptsPage() {
     navigate({ search: { key: '' } })
   }
 
-  function handleCreated(newKey: string) {
+  function handleCreated(newName: string) {
     setIsCreating(false)
-    navigate({ search: { key: newKey } })
+    navigate({ search: { key: newName } })
   }
 
   return (
@@ -156,14 +127,10 @@ function PromptsPage() {
       </div>
 
       <div className="flex min-h-0 flex-1 gap-4">
-        {/* Left panel: filter bar + prompt list */}
         <div className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border">
           <PromptFilterBar
-            promptTypes={promptTypes}
             pipelineNames={pipelineNames}
-            selectedType={selectedType}
             selectedPipeline={selectedPipeline}
-            onTypeChange={setSelectedType}
             onPipelineChange={setSelectedPipeline}
             searchText={searchText}
             onSearchChange={setSearchText}
@@ -177,7 +144,6 @@ function PromptsPage() {
           />
         </div>
 
-        {/* Right panel: prompt detail viewer */}
         <div className="flex-1 overflow-auto rounded-xl border">
           <PromptViewer
             promptKey={key || null}
