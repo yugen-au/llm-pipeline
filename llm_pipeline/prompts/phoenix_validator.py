@@ -78,6 +78,7 @@ __all__ = [
     "PromptMessagesShapeError",
     "PromptVariableDriftError",
     "PhoenixPromptMissingError",
+    "AutoGenerateExpressionError",
 ]
 
 
@@ -164,6 +165,24 @@ class PromptVariableDriftError(PhoenixValidationError):
 
 class PhoenixPromptMissingError(PhoenixValidationError):
     """Phoenix has no prompt with this step's name."""
+
+
+class AutoGenerateExpressionError(PhoenixValidationError):
+    """An ``auto_vars`` expression failed build-time validation.
+
+    The check runs in four tiers; this error fires on the first one
+    that fails:
+
+    1. ``build_auto_generate_factory(expr)`` raises — the expression
+       didn't parse, or the function name isn't recognised.
+    2. The named object doesn't resolve in
+       ``_AUTO_GENERATE_REGISTRY`` (or the discovery base path).
+    3. The factory raises at invoke — e.g. ``enum_names(X)`` where
+       ``X`` is registered but isn't an ``enum.Enum`` subclass.
+    4. The factory's output is empty (e.g. an empty enum) or
+       contains literal ``{`` / ``}`` that would corrupt subsequent
+       ``str.format`` substitution.
+    """
 
 
 @dataclass
@@ -365,6 +384,15 @@ def _validate_one_step(
     if yaml_prompt is not None and prompt_cls is not None:
         _check_placeholder_bijection(
             yaml_prompt=yaml_prompt,
+            prompt_cls=prompt_cls,
+            pipeline_name=pipeline_name,
+            step_name=name,
+            result=result,
+        )
+
+    # 10b: auto_vars expressions resolve + invoke + produce safe output.
+    if prompt_cls is not None:
+        _check_auto_vars_expressions(
             prompt_cls=prompt_cls,
             pipeline_name=pipeline_name,
             step_name=name,
@@ -584,6 +612,96 @@ def _format_drift(
                 f"{prompt_cls.__qualname__}: {unknown_in_user!r}."
             )
     return " ".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# auto_vars expression validation
+# ---------------------------------------------------------------------------
+
+
+def _check_auto_vars_expressions(
+    *,
+    prompt_cls: type,
+    pipeline_name: str,
+    step_name: str,
+    result: StepValidationResult,
+) -> None:
+    """Validate every ``auto_vars`` expression on ``prompt_cls``.
+
+    Four-tier check, fails fast at the first failing tier:
+
+    1. ``build_auto_generate_factory(expr)`` — parse + recognise the
+       function name (``enum_values`` / ``enum_names`` / ``enum_value``
+       / ``constant``).
+    2. The factory's ``_resolve_object`` finds the named target in
+       the auto_generate registry (or via discovery base path).
+    3. The factory invokes successfully — catches type mismatches
+       (e.g. ``enum_names(X)`` where ``X`` is a constant, not an Enum).
+    4. The factory's output is a non-empty string AND doesn't contain
+       literal ``{`` / ``}`` that would corrupt the next
+       ``str.format`` pass during template rendering.
+
+    Records each failure as a separate
+    :class:`AutoGenerateExpressionError` so a prompt with several
+    bad entries surfaces all of them in one run.
+    """
+    from llm_pipeline.prompts.variables import build_auto_generate_factory
+
+    auto_vars: dict[str, str] = getattr(prompt_cls, "auto_vars", {})
+    for placeholder, expr in auto_vars.items():
+        # Tiers 1+2: parse + resolution.
+        try:
+            factory = build_auto_generate_factory(expr)
+        except Exception as exc:  # noqa: BLE001 — parser raises ValueError; resolver may raise others
+            result.errors.append(AutoGenerateExpressionError(
+                f"{prompt_cls.__qualname__}.auto_vars[{placeholder!r}] "
+                f"= {expr!r}: failed to build factory: {exc}",
+                pipeline_name=pipeline_name, step_name=step_name,
+            ))
+            continue
+
+        # Tier 3: invoke. The factory may resolve its target lazily,
+        # so name-resolution failures (Enum not registered, etc.)
+        # surface here too.
+        try:
+            output = factory()
+        except Exception as exc:  # noqa: BLE001
+            result.errors.append(AutoGenerateExpressionError(
+                f"{prompt_cls.__qualname__}.auto_vars[{placeholder!r}] "
+                f"= {expr!r}: factory invocation failed: {exc}",
+                pipeline_name=pipeline_name, step_name=step_name,
+            ))
+            continue
+
+        # Tier 4a: output type + emptiness.
+        if not isinstance(output, str):
+            result.errors.append(AutoGenerateExpressionError(
+                f"{prompt_cls.__qualname__}.auto_vars[{placeholder!r}] "
+                f"= {expr!r}: factory must produce a string; got "
+                f"{type(output).__name__}.",
+                pipeline_name=pipeline_name, step_name=step_name,
+            ))
+            continue
+        if not output:
+            result.errors.append(AutoGenerateExpressionError(
+                f"{prompt_cls.__qualname__}.auto_vars[{placeholder!r}] "
+                f"= {expr!r}: factory produced an empty string. "
+                f"This usually means the registered enum has no "
+                f"members or the constant is empty.",
+                pipeline_name=pipeline_name, step_name=step_name,
+            ))
+            continue
+
+        # Tier 4b: format-safety.
+        if "{" in output or "}" in output:
+            result.errors.append(AutoGenerateExpressionError(
+                f"{prompt_cls.__qualname__}.auto_vars[{placeholder!r}] "
+                f"= {expr!r}: factory output contains literal '{{' or "
+                f"'}}' ({output!r}) — this would corrupt template "
+                f"rendering. The auto_generate value must be safe to "
+                f"substitute via str.format.",
+                pipeline_name=pipeline_name, step_name=step_name,
+            ))
 
 
 # ---------------------------------------------------------------------------
