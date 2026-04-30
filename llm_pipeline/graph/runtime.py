@@ -98,6 +98,7 @@ async def run_pipeline_in_memory(
         model=model,
         input_cls=input_cls,
         node_classes=dict(pipeline_cls._node_classes),
+        wiring=dict(pipeline_cls._wiring),
         instrumentation_settings=instrumentation_settings,
     )
 
@@ -167,6 +168,7 @@ async def run_pipeline(
         model=model,
         input_cls=input_cls,
         node_classes=dict(pipeline_cls._node_classes),
+        wiring=dict(pipeline_cls._wiring),
         instrumentation_settings=instrumentation_settings,
     )
 
@@ -174,7 +176,7 @@ async def run_pipeline(
         engine=engine,
         run_id=pipeline_run.run_id,
         pipeline_name=pipeline_cls.pipeline_name(),
-        nodes=list(pipeline_cls.nodes),
+        nodes=list(pipeline_cls._node_classes.values()),
     )
 
     start_node_cls = pipeline_cls.start_node
@@ -246,7 +248,7 @@ async def resume_pipeline(
         engine=engine,
         run_id=pipeline_run.run_id,
         pipeline_name=pipeline_cls.pipeline_name(),
-        nodes=list(pipeline_cls.nodes),
+        nodes=list(pipeline_cls._node_classes.values()),
     )
 
     session_for_deps = Session(engine)
@@ -258,6 +260,7 @@ async def resume_pipeline(
         model=model,
         input_cls=pipeline_cls.INPUT_DATA,
         node_classes=dict(pipeline_cls._node_classes),
+        wiring=dict(pipeline_cls._wiring),
         instrumentation_settings=instrumentation_settings,
         review_context=metadata_patch.copy() if metadata_patch else None,
     )

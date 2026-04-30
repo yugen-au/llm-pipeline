@@ -18,6 +18,8 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.evals.variants import apply_instruction_delta
+from pydantic import BaseModel, Field
+
 from llm_pipeline.graph import (
     FromInput,
     LLMResultMixin,
@@ -26,8 +28,10 @@ from llm_pipeline.graph import (
     PipelineDeps,
     PipelineInputData,
     PipelineState,
+    Step,
     StepInputs,
 )
+from llm_pipeline.prompts import PromptVariables
 
 
 # ---------------------------------------------------------------------------
@@ -49,10 +53,26 @@ class _OverrideInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"label": "neutral", "confidence_score": 0.9}
 
 
+class _OverridePrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="Input text")
+
+
 class _OverrideStep(LLMStepNode):
     INPUTS = _OverrideInputs
     INSTRUCTIONS = _OverrideInstructions
-    inputs_spec = _OverrideInputs.sources(text=FromInput("text"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _OverrideInputs) -> list[_OverridePrompt]:
+        return [
+            _OverridePrompt(
+                system=_OverridePrompt.system(),
+                user=_OverridePrompt.user(text=inputs.text),
+            ),
+        ]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -63,7 +83,12 @@ class _OverrideStep(LLMStepNode):
 
 class _OverridePipeline(Pipeline):
     INPUT_DATA = _OverrideInput
-    nodes = [_OverrideStep]
+    nodes = [
+        Step(
+            _OverrideStep,
+            inputs_spec=_OverrideInputs.sources(text=FromInput("text")),
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +148,7 @@ def _build_ctx(*, engine, prompt_overrides=None, instructions_overrides=None):
         model="test",
         input_cls=_OverrideInput,
         node_classes=dict(_OverridePipeline._node_classes),
+        wiring=dict(_OverridePipeline._wiring),
         prompt_overrides=prompt_overrides or {},
         instructions_overrides=instructions_overrides or {},
     )
@@ -197,7 +223,7 @@ class TestPromptOverride:
         assert len(ctx.deps.prompt_service.user_calls) == 1
         assert (
             ctx.deps.prompt_service.user_calls[0]["prompt_key"]
-            == _OverrideStep.resolved_prompt_name()
+            == _OverrideStep.step_name()
         )
 
 

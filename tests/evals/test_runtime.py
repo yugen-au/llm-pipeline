@@ -22,6 +22,8 @@ from sqlmodel import SQLModel, create_engine
 from llm_pipeline.db import init_pipeline_db
 from llm_pipeline.evals.runtime import build_pipeline_task, build_step_task
 from llm_pipeline.evals.variants import Variant
+from pydantic import BaseModel, Field
+
 from llm_pipeline.graph import (
     FromInput,
     FromOutput,
@@ -31,8 +33,10 @@ from llm_pipeline.graph import (
     PipelineDeps,
     PipelineInputData,
     PipelineState,
+    Step,
     StepInputs,
 )
+from llm_pipeline.prompts import PromptVariables
 
 
 # ---------------------------------------------------------------------------
@@ -54,10 +58,24 @@ class _ClassifyInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"label": "neutral", "confidence_score": 0.9}
 
 
+class _ClassifyPrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="text")
+
+
 class _ClassifyStep(LLMStepNode):
     INPUTS = _ClassifyInputs
     INSTRUCTIONS = _ClassifyInstructions
-    inputs_spec = _ClassifyInputs.sources(text=FromInput("text"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _ClassifyInputs) -> list[_ClassifyPrompt]:
+        return [_ClassifyPrompt(
+            system=_ClassifyPrompt.system(),
+            user=_ClassifyPrompt.user(text=inputs.text),
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -76,10 +94,24 @@ class _SummaryInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"summary": "ok", "confidence_score": 0.9}
 
 
+class _SummaryPrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        label: str = Field(description="label")
+
+
 class _SummaryStep(LLMStepNode):
     INPUTS = _SummaryInputs
     INSTRUCTIONS = _SummaryInstructions
-    inputs_spec = _SummaryInputs.sources(label=FromOutput(_ClassifyStep, field="label"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _SummaryInputs) -> list[_SummaryPrompt]:
+        return [_SummaryPrompt(
+            system=_SummaryPrompt.system(),
+            user=_SummaryPrompt.user(label=inputs.label),
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -90,7 +122,14 @@ class _SummaryStep(LLMStepNode):
 
 class _RuntimePipeline(Pipeline):
     INPUT_DATA = _RuntimeInput
-    nodes = [_ClassifyStep, _SummaryStep]
+    nodes = [
+        Step(_ClassifyStep, inputs_spec=_ClassifyInputs.sources(
+            text=FromInput("text"),
+        )),
+        Step(_SummaryStep, inputs_spec=_SummaryInputs.sources(
+            label=FromOutput(_ClassifyStep, field="label"),
+        )),
+    ]
 
 
 # ---------------------------------------------------------------------------

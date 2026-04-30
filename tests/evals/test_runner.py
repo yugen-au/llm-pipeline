@@ -26,6 +26,8 @@ from llm_pipeline.evals.runner import (
     run_dataset,
 )
 from llm_pipeline.evals.variants import Variant
+from pydantic import BaseModel, Field
+
 from llm_pipeline.graph import (
     FromInput,
     LLMResultMixin,
@@ -34,8 +36,10 @@ from llm_pipeline.graph import (
     PipelineDeps,
     PipelineInputData,
     PipelineState,
+    Step,
     StepInputs,
 )
+from llm_pipeline.prompts import PromptVariables
 
 
 # ---------------------------------------------------------------------------
@@ -57,10 +61,24 @@ class _RunnerInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"label": "neutral", "confidence_score": 0.9}
 
 
+class _RunnerPrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="text")
+
+
 class _RunnerStep(LLMStepNode):
     INPUTS = _RunnerInputs
     INSTRUCTIONS = _RunnerInstructions
-    inputs_spec = _RunnerInputs.sources(text=FromInput("text"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _RunnerInputs) -> list[_RunnerPrompt]:
+        return [_RunnerPrompt(
+            system=_RunnerPrompt.system(),
+            user=_RunnerPrompt.user(text=inputs.text),
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -71,7 +89,12 @@ class _RunnerStep(LLMStepNode):
 
 class _RunnerPipeline(Pipeline):
     INPUT_DATA = _RunnerInput
-    nodes = [_RunnerStep]
+    nodes = [
+        Step(
+            _RunnerStep,
+            inputs_spec=_RunnerInputs.sources(text=FromInput("text")),
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +186,7 @@ def _step_dataset_stub():
             "name": "step-eval",
             "metadata": {
                 "target_type": "step",
-                "target_name": "_RunnerStep",
+                "target_name": "_runner",
             },
         },
         examples=[
@@ -191,14 +214,14 @@ def _pipeline_dataset_stub():
             "name": "pipe-eval",
             "metadata": {
                 "target_type": "pipeline",
-                "target_name": "_RunnerPipeline",
+                "target_name": "_runner",
             },
         },
         examples=[
             {
                 "id": "ex-1",
                 "input": {"text": "hello"},
-                "output": {"_RunnerStep": [{"label": "neutral"}]},
+                "output": {"_runner": [{"label": "neutral"}]},
                 "metadata": {},
             },
         ],
@@ -294,7 +317,7 @@ class TestRunDatasetStep:
         meta = exp["metadata"]
         assert meta["variant"]["model"] == "test"
         assert meta["target_type"] == "step"
-        assert meta["target_name"] == "_RunnerStep"
+        assert meta["target_name"] == "_runner"
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +337,7 @@ class TestRunDatasetPipeline:
         report = asyncio.run(run_dataset(
             "ds-pipe-1",
             Variant(),
-            pipeline_registry={"_RunnerPipeline": _RunnerPipeline},
+            pipeline_registry={"_runner": _RunnerPipeline},
             model="test",
             engine=_engine,
             client=_pipeline_dataset_stub,
@@ -399,7 +422,7 @@ class TestPreCreatedExperiment:
             dataset_id="ds-step-1",
             variant=Variant(model="m"),
             target_type="step",
-            target_name="_RunnerStep",
+            target_name="_runner",
             run_name="explicit-name",
         )
         assert record["id"]
@@ -411,7 +434,7 @@ class TestPreCreatedExperiment:
             "instructions_delta": [],
         }
         assert meta["target_type"] == "step"
-        assert meta["target_name"] == "_RunnerStep"
+        assert meta["target_name"] == "_runner"
         # The single experiment we created is the only one on the stub.
         assert len(_step_dataset_stub.experiments) == 1
 
@@ -429,7 +452,7 @@ class TestPreCreatedExperiment:
             dataset_id="ds-step-1",
             variant=Variant(),
             target_type="step",
-            target_name="_RunnerStep",
+            target_name="_runner",
         )
         pre_id = pre["id"]
         assert len(_step_dataset_stub.experiments) == 1

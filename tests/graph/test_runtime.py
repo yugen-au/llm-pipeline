@@ -16,6 +16,8 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from llm_pipeline.db import init_pipeline_db
+from pydantic import BaseModel, Field
+
 from llm_pipeline.graph import (
     FromInput,
     LLMStepNode,
@@ -23,9 +25,11 @@ from llm_pipeline.graph import (
     PipelineDeps,
     PipelineInputData,
     PipelineState,
+    Step,
     StepInputs,
     run_pipeline,
 )
+from llm_pipeline.prompts import PromptVariables
 from llm_pipeline.state import PipelineNodeSnapshot, PipelineRun
 from llm_pipeline.graph import LLMResultMixin
 
@@ -49,10 +53,24 @@ class _DBClassifyInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"label": "neutral", "confidence_score": 0.9}
 
 
+class _DBClassifyPrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="text")
+
+
 class _DBClassifyStep(LLMStepNode):
     INPUTS = _DBClassifyInputs
     INSTRUCTIONS = _DBClassifyInstructions
-    inputs_spec = _DBClassifyInputs.sources(text=FromInput("text"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _DBClassifyInputs) -> list[_DBClassifyPrompt]:
+        return [_DBClassifyPrompt(
+            system=_DBClassifyPrompt.system(),
+            user=_DBClassifyPrompt.user(text=inputs.text),
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -63,7 +81,12 @@ class _DBClassifyStep(LLMStepNode):
 
 class _DBRuntimePipeline(Pipeline):
     INPUT_DATA = _DBRuntimeInput
-    nodes = [_DBClassifyStep]
+    nodes = [
+        Step(
+            _DBClassifyStep,
+            inputs_spec=_DBClassifyInputs.sources(text=FromInput("text")),
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------

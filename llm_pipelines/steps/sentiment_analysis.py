@@ -1,22 +1,20 @@
 """Sentiment analysis step (pydantic-graph-native node).
 
-The next-node return annotation is a forward-reference string so this
-module doesn't pull in ``topic_extraction`` (which itself reads
-``SentimentAnalysisInstructions`` via ``FromOutput``). pydantic-graph
-resolves the string against the namespace of the module that builds
-the ``Pipeline`` (``pipelines/text_analyzer.py``), where every node
-class is in scope.
+Pure contract: declares INPUTS, INSTRUCTIONS, DEFAULT_TOOLS, and a
+``prepare()`` method. Wiring (where the inputs come from) lives in
+the pipeline's ``Step(SentimentAnalysisStep, inputs_spec=...)`` binding.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from llm_pipeline.graph import FromInput, LLMStepNode
+from llm_pipeline.graph import LLMStepNode
 
 from llm_pipelines.schemas.text_analyzer import (
     SentimentAnalysisInputs,
     SentimentAnalysisInstructions,
 )
+from llm_pipelines.variables.sentiment_analysis import SentimentAnalysisPrompt
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext
@@ -31,9 +29,15 @@ class SentimentAnalysisStep(LLMStepNode):
 
     INPUTS = SentimentAnalysisInputs
     INSTRUCTIONS = SentimentAnalysisInstructions
-    inputs_spec = SentimentAnalysisInputs.sources(
-        text=FromInput("text"),
-    )
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: SentimentAnalysisInputs) -> list[SentimentAnalysisPrompt]:
+        return [
+            SentimentAnalysisPrompt(
+                system=SentimentAnalysisPrompt.system(),
+                user=SentimentAnalysisPrompt.user(text=inputs.text),
+            ),
+        ]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

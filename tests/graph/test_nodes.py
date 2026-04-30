@@ -9,24 +9,27 @@ import asyncio
 from typing import ClassVar
 
 import pytest
+from pydantic import BaseModel, Field
 from pydantic_graph import End, GraphRunContext
-from sqlmodel import Field, SQLModel, create_engine
+from sqlmodel import Field as SQLField, SQLModel, create_engine
 
 from llm_pipeline.graph import (
+    Extraction,
     ExtractionNode,
     FromInput,
     FromOutput,
     FromPipeline,
+    LLMResultMixin,
     LLMStepNode,
     Pipeline,
     PipelineDeps,
     PipelineInputData,
     PipelineState,
-    ReviewNode,
+    Step,
     StepInputs,
     run_pipeline_in_memory,
 )
-from llm_pipeline.graph import LLMResultMixin
+from llm_pipeline.prompts import PromptVariables
 
 
 # ---------------------------------------------------------------------------
@@ -41,7 +44,7 @@ class _NodeTestInput(PipelineInputData):
 class _NodeTestRow(SQLModel, table=True):
     __tablename__ = "test_node_rows"
     __table_args__ = {"extend_existing": True}
-    id: int | None = Field(default=None, primary_key=True)
+    id: int | None = SQLField(default=None, primary_key=True)
     label: str
     run_id: str
 
@@ -56,10 +59,26 @@ class _ClassifyInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"label": "neutral", "confidence_score": 0.9}
 
 
+class _ClassifyPrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="Input text")
+
+
 class _ClassifyStep(LLMStepNode):
     INPUTS = _ClassifyInputs
     INSTRUCTIONS = _ClassifyInstructions
-    inputs_spec = _ClassifyInputs.sources(text=FromInput("text"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _ClassifyInputs) -> list[_ClassifyPrompt]:
+        return [
+            _ClassifyPrompt(
+                system=_ClassifyPrompt.system(),
+                user=_ClassifyPrompt.user(text=inputs.text),
+            ),
+        ]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -76,11 +95,6 @@ class _FromClassifyInputs(StepInputs):
 class _ClassifyExtraction(ExtractionNode):
     MODEL = _NodeTestRow
     INPUTS = _FromClassifyInputs
-    source_step = _ClassifyStep
-    inputs_spec = _FromClassifyInputs.sources(
-        label=FromOutput(_ClassifyStep, field="label"),
-        run_id=FromPipeline("run_id"),
-    )
 
     def extract(self, inputs: _FromClassifyInputs) -> list[_NodeTestRow]:
         return [_NodeTestRow(label=inputs.label, run_id=inputs.run_id)]
@@ -94,7 +108,19 @@ class _ClassifyExtraction(ExtractionNode):
 
 class _NodeTestPipeline(Pipeline):
     INPUT_DATA = _NodeTestInput
-    nodes = [_ClassifyStep, _ClassifyExtraction]
+    nodes = [
+        Step(
+            _ClassifyStep,
+            inputs_spec=_ClassifyInputs.sources(text=FromInput("text")),
+        ),
+        Extraction(
+            _ClassifyExtraction,
+            inputs_spec=_FromClassifyInputs.sources(
+                label=FromOutput(_ClassifyStep, field="label"),
+                run_id=FromPipeline("run_id"),
+            ),
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +188,9 @@ class TestEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# State helpers
+# State helpers — exercised against bare classes (don't go through
+# LLMStepNode.__init_subclass__ validation; we just need a class with
+# an ``INSTRUCTIONS`` attribute and a ``__name__`` to key state by).
 # ---------------------------------------------------------------------------
 
 
@@ -170,47 +198,31 @@ class TestPipelineState:
     """Round-trip outputs/extractions through ``PipelineState``."""
 
     def test_record_output_dumps_pydantic_model(self):
-        from pydantic import BaseModel
-
         class _Foo(BaseModel):
             x: int
 
-        class _FooStep(LLMStepNode):
-            INPUTS = StepInputs
+        class _FooNodeStub:
+            __name__ = "_FooNodeStub"
             INSTRUCTIONS = _Foo
-            inputs_spec = None
-
-            async def run(
-                self, ctx: GraphRunContext[PipelineState, PipelineDeps],
-            ) -> End[None]:
-                return End(None)
 
         state = PipelineState()
-        state.record_output(_FooStep, [_Foo(x=42)])
-        assert state.outputs["_FooStep"] == [{"x": 42}]
+        state.record_output(_FooNodeStub, [_Foo(x=42)])
+        assert state.outputs["_FooNodeStub"] == [{"x": 42}]
 
     def test_to_adapter_ctx_rehydrates_outputs(self):
-        from pydantic import BaseModel
-
         class _Bar(BaseModel):
             n: int = 0
 
-        class _BarStep(LLMStepNode):
-            INPUTS = StepInputs
+        class _BarNodeStub:
+            __name__ = "_BarNodeStub"
             INSTRUCTIONS = _Bar
-            inputs_spec = None
 
-            async def run(
-                self, ctx: GraphRunContext[PipelineState, PipelineDeps],
-            ) -> End[None]:
-                return End(None)
-
-        state = PipelineState(outputs={"_BarStep": [{"n": 7}]})
+        state = PipelineState(outputs={"_BarNodeStub": [{"n": 7}]})
         adapter_ctx = state.to_adapter_ctx(
             input_cls=None,
-            node_classes={"_BarStep": _BarStep},
+            node_classes={"_BarNodeStub": _BarNodeStub},
             pipeline=None,
         )
-        rehydrated = adapter_ctx.outputs[_BarStep]
+        rehydrated = adapter_ctx.outputs[_BarNodeStub]
         assert isinstance(rehydrated[0], _Bar)
         assert rehydrated[0].n == 7

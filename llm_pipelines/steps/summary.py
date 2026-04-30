@@ -5,14 +5,13 @@ from typing import TYPE_CHECKING
 
 from pydantic_graph import End
 
-from llm_pipeline.graph import FromInput, FromOutput, LLMStepNode
+from llm_pipeline.graph import LLMStepNode
 
 from llm_pipelines.schemas.text_analyzer import (
     SummaryInputs,
     SummaryInstructions,
 )
-from llm_pipelines.steps.sentiment_analysis import SentimentAnalysisStep
-from llm_pipelines.steps.topic_extraction import TopicExtractionStep
+from llm_pipelines.variables.summary import SummaryPrompt
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext
@@ -25,11 +24,19 @@ class SummaryStep(LLMStepNode):
 
     INPUTS = SummaryInputs
     INSTRUCTIONS = SummaryInstructions
-    inputs_spec = SummaryInputs.sources(
-        text=FromInput("text"),
-        sentiment=FromOutput(SentimentAnalysisStep, field="sentiment"),
-        primary_topic=FromOutput(TopicExtractionStep, field="primary_topic"),
-    )
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: SummaryInputs) -> list[SummaryPrompt]:
+        return [
+            SummaryPrompt(
+                system=SummaryPrompt.system(),
+                user=SummaryPrompt.user(
+                    text=inputs.text,
+                    sentiment=inputs.sentiment,
+                    primary_topic=inputs.primary_topic,
+                ),
+            ),
+        ]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],

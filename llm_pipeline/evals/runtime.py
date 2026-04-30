@@ -112,14 +112,14 @@ def build_step_task(
                 ) from exc
         else:
             user_prompt = prompt_service.get_user_prompt(
-                prompt_key=step_cls.resolved_prompt_name(),
+                prompt_key=step_cls.step_name(),
                 variables=case_input,
             )
 
         agent = build_step_agent(
             step_name=step_name,
             output_type=output_type,
-            prompt_name=step_cls.resolved_prompt_name(),
+            prompt_name=step_cls.step_name(),
             tools=None,
         )
 
@@ -205,6 +205,7 @@ def build_pipeline_task(
             model=variant.model or model,
             input_cls=input_cls,
             node_classes=dict(pipeline_cls._node_classes),
+            wiring=dict(pipeline_cls._wiring),
             prompt_overrides=dict(variant.prompt_overrides or {}),
             instructions_overrides=dict(pre_built_overrides),
         )
@@ -254,7 +255,8 @@ def _prebuild_instructions_overrides(
         return {}
 
     overrides: dict[type, type] = {}
-    for node_cls in pipeline_cls.nodes:
+    for binding in pipeline_cls.nodes:
+        node_cls = binding.cls
         if not isinstance(node_cls, type) or not issubclass(node_cls, LLMStepNode):
             continue
         instructions_cls = node_cls.INSTRUCTIONS

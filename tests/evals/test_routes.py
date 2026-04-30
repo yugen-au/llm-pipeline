@@ -23,6 +23,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from llm_pipeline.db import init_pipeline_db
+from pydantic import BaseModel, Field
+
 from llm_pipeline.graph import (
     FromInput,
     LLMResultMixin,
@@ -31,8 +33,10 @@ from llm_pipeline.graph import (
     PipelineDeps,
     PipelineInputData,
     PipelineState,
+    Step,
     StepInputs,
 )
+from llm_pipeline.prompts import PromptVariables
 from llm_pipeline.ui.routes.evals import router as evals_router
 
 
@@ -55,10 +59,24 @@ class _RouteInstructions(LLMResultMixin):
     example: ClassVar[dict] = {"label": "neutral", "confidence_score": 0.9}
 
 
+class _RoutePrompt(PromptVariables):
+    class system(BaseModel):
+        pass
+
+    class user(BaseModel):
+        text: str = Field(description="text")
+
+
 class _RouteStep(LLMStepNode):
     INPUTS = _RouteInputs
     INSTRUCTIONS = _RouteInstructions
-    inputs_spec = _RouteInputs.sources(text=FromInput("text"))
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _RouteInputs) -> list[_RoutePrompt]:
+        return [_RoutePrompt(
+            system=_RoutePrompt.system(),
+            user=_RoutePrompt.user(text=inputs.text),
+        )]
 
     async def run(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
@@ -68,7 +86,12 @@ class _RouteStep(LLMStepNode):
 
 class _RoutePipeline(Pipeline):
     INPUT_DATA = _RouteInput
-    nodes = [_RouteStep]
+    nodes = [
+        Step(
+            _RouteStep,
+            inputs_spec=_RouteInputs.sources(text=FromInput("text")),
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -201,7 +224,7 @@ class TestTriggerRun:
     def test_returns_experiment_id_and_pre_creates_record(self):
         stub = _DatasetStub(dataset={
             "id": "ds-1",
-            "metadata": {"target_type": "step", "target_name": "_RouteStep"},
+            "metadata": {"target_type": "step", "target_name": "_route"},
         })
         app, ds_stub = _build_app(dataset_stub=stub)
         with TestClient(app) as client:
@@ -221,7 +244,7 @@ class TestTriggerRun:
         assert exp["name"] == "smoke"
         assert exp["metadata"]["variant"]["model"] == "test"
         assert exp["metadata"]["target_type"] == "step"
-        assert exp["metadata"]["target_name"] == "_RouteStep"
+        assert exp["metadata"]["target_name"] == "_route"
 
     def test_dataset_missing_target_returns_422(self):
         stub = _DatasetStub(dataset={"id": "ds-x", "metadata": {}})
@@ -237,7 +260,7 @@ class TestTriggerRun:
     def test_no_default_model_and_no_variant_model_returns_422(self):
         stub = _DatasetStub(dataset={
             "id": "ds-1",
-            "metadata": {"target_type": "step", "target_name": "_RouteStep"},
+            "metadata": {"target_type": "step", "target_name": "_route"},
         })
         app, _ = _build_app(dataset_stub=stub, default_model=None)
         with TestClient(app) as client:
@@ -249,7 +272,7 @@ class TestTriggerRun:
     def test_variant_model_alone_satisfies_model_requirement(self):
         stub = _DatasetStub(dataset={
             "id": "ds-1",
-            "metadata": {"target_type": "step", "target_name": "_RouteStep"},
+            "metadata": {"target_type": "step", "target_name": "_route"},
         })
         app, _ = _build_app(dataset_stub=stub, default_model=None)
         with TestClient(app) as client:
@@ -280,7 +303,7 @@ def _chat_version(*, version_id: str, system: str, user: str) -> dict:
 
 class TestProdPrompts:
     def test_step_target_happy_path_returns_system_user(self):
-        prompt_name = _RouteStep.resolved_prompt_name()
+        prompt_name = _RouteStep.step_name()
         prompt_stub = _PromptClientStub(
             by_tag={(prompt_name, "production"): _chat_version(
                 version_id="v-prod", system="System.", user="Text: {text}",
@@ -294,7 +317,7 @@ class TestProdPrompts:
         )
         stub = _DatasetStub(dataset={
             "id": "ds-1",
-            "metadata": {"target_type": "step", "target_name": "_RouteStep"},
+            "metadata": {"target_type": "step", "target_name": "_route"},
         })
         app, _ = _build_app(dataset_stub=stub, prompt_stub=prompt_stub)
         with TestClient(app) as client:
@@ -308,7 +331,7 @@ class TestProdPrompts:
         assert body["variable_definitions"] == [{"name": "text"}]
 
     def test_falls_back_to_latest_when_no_production_tag(self):
-        prompt_name = _RouteStep.resolved_prompt_name()
+        prompt_name = _RouteStep.step_name()
         prompt_stub = _PromptClientStub(
             latest={prompt_name: _chat_version(
                 version_id="v-latest", system="L.", user="L: {text}",
@@ -316,7 +339,7 @@ class TestProdPrompts:
         )
         stub = _DatasetStub(dataset={
             "id": "ds-1",
-            "metadata": {"target_type": "step", "target_name": "_RouteStep"},
+            "metadata": {"target_type": "step", "target_name": "_route"},
         })
         app, _ = _build_app(dataset_stub=stub, prompt_stub=prompt_stub)
         with TestClient(app) as client:
@@ -330,7 +353,7 @@ class TestProdPrompts:
         prompt_stub = _PromptClientStub()  # nothing registered
         stub = _DatasetStub(dataset={
             "id": "ds-1",
-            "metadata": {"target_type": "step", "target_name": "_RouteStep"},
+            "metadata": {"target_type": "step", "target_name": "_route"},
         })
         app, _ = _build_app(dataset_stub=stub, prompt_stub=prompt_stub)
         with TestClient(app) as client:
@@ -346,7 +369,7 @@ class TestProdPrompts:
             "id": "ds-pipe",
             "metadata": {
                 "target_type": "pipeline",
-                "target_name": _RoutePipeline.__name__,
+                "target_name": _RoutePipeline.pipeline_name(),
             },
         })
         app, _ = _build_app(dataset_stub=stub, prompt_stub=prompt_stub)

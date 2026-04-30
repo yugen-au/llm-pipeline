@@ -230,7 +230,8 @@ def _resolve_pipeline_and_step(
 
     matches: list[tuple[type["Pipeline"], type]] = []
     for pipeline_cls in pipeline_registry.values():
-        for node_cls in pipeline_cls.nodes:
+        for binding in pipeline_cls.nodes:
+            node_cls = binding.cls
             if node_cls.step_name() == target_name:
                 matches.append((pipeline_cls, node_cls))
     if not matches:
@@ -324,7 +325,7 @@ def _accept_prompt_overrides(
                 f"prompt override step {step_name!r} not found on "
                 f"pipeline {pipeline_cls.__name__}",
             )
-        prompt_name = step_cls.resolved_prompt_name()
+        prompt_name = step_cls.step_name()
         result = _swap_prompt_version(
             client=client,
             prompt_name=prompt_name,
@@ -448,8 +449,8 @@ def _llm_step_classes(pipeline_cls: type["Pipeline"]) -> list[type]:
     from llm_pipeline.graph.nodes import LLMStepNode
 
     return [
-        n for n in pipeline_cls.nodes
-        if isinstance(n, type) and issubclass(n, LLMStepNode)
+        binding.cls for binding in pipeline_cls.nodes
+        if isinstance(binding.cls, type) and issubclass(binding.cls, LLMStepNode)
     ]
 
 

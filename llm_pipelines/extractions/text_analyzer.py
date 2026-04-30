@@ -1,25 +1,19 @@
 """TopicExtraction: bridges TopicExtractionStep output to Topic DB rows.
 
-Sibling node in the pipeline graph (no longer nested under a step's
-``Bind``). Reads ``topics`` from ``TopicExtractionStep`` output and
-``run_id`` from ambient ``PipelineDeps``; persists ``Topic`` rows.
+Pure contract — declares INPUTS and MODEL only. Wiring (which step's
+output feeds the topics, where run_id comes from) lives on the
+pipeline's ``Extraction(TopicExtraction, inputs_spec=...)`` binding.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from llm_pipeline.graph import (
-    ExtractionNode,
-    FromOutput,
-    FromPipeline,
-    StepInputs,
-)
+from llm_pipeline.graph import ExtractionNode, StepInputs
 
 from llm_pipelines.schemas.text_analyzer import (
     Topic,
     TopicItem,
 )
-from llm_pipelines.steps.topic_extraction import TopicExtractionStep
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext
@@ -41,11 +35,6 @@ class TopicExtraction(ExtractionNode):
 
     MODEL = Topic
     INPUTS = FromTopicExtractionInputs
-    source_step = TopicExtractionStep
-    inputs_spec = FromTopicExtractionInputs.sources(
-        topics=FromOutput(TopicExtractionStep, field="topics"),
-        run_id=FromPipeline("run_id"),
-    )
 
     def extract(self, inputs: FromTopicExtractionInputs) -> list[Topic]:
         return [

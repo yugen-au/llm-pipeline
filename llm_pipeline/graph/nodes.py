@@ -2,37 +2,38 @@
 
 Three node kinds are siblings in the graph:
 
-- ``LLMStepNode`` — declares ``INPUTS`` (a ``StepInputs`` subclass),
-  ``INSTRUCTIONS`` (a Pydantic model that the LLM call validates against),
-  ``inputs_spec`` (a ``SourcesSpec`` declaring how each input field is
-  sourced), and an optional per-step ``prompt_name`` overriding the
-  default snake-cased class name. ``run()`` is left abstract so each
-  step controls the next-node return type — pydantic-graph reads the
-  return annotation to build the edge graph.
+- ``LLMStepNode`` — declares its *contract* (``INPUTS``, ``INSTRUCTIONS``,
+  ``DEFAULT_TOOLS``) and a ``prepare(self, inputs) -> list[XxxPrompt]``
+  method whose return-type annotation pins down which
+  ``PromptVariables`` subclass it produces. The pipeline's
+  ``Step(StepCls, inputs_spec=...)`` binding supplies the wiring
+  (where each INPUTS field comes from). Wiring is read from
+  ``ctx.deps.wiring[type(self)]`` at runtime; not on the class.
 
-- ``ExtractionNode`` — declares ``MODEL`` (the SQLModel target),
-  ``INPUTS`` (the pathway inputs class), ``source_step`` (the
-  ``LLMStepNode`` whose output it reads), and ``inputs_spec``. Each
-  subclass implements ``extract(self, inputs) -> list[MODEL]`` to
-  shape the rows. ``run()`` resolves the inputs spec, calls
-  ``extract``, persists the rows on the session, and writes them
-  into ``state.extractions``.
+- ``ExtractionNode`` — declares ``INPUTS`` and ``MODEL`` (the SQLModel
+  target). ``extract(self, inputs) -> list[MODEL]`` produces rows.
+  Wiring lives in the pipeline's ``Extraction(ExtractionCls,
+  inputs_spec=...)`` binding. Rows are persisted *and* recorded in
+  ``state.outputs[ExtractionCls.__name__]`` so downstream
+  ``FromOutput(MyExtraction, field=...)`` works.
 
-- ``ReviewNode`` — declares ``target_step`` and an optional
-  ``condition``. Phase 1 records the review request in
-  ``state.metadata`` and falls through to the next node; Phase 2
-  wires the actual pause via the persistence backend so the graph
-  resumes from the snapshot when the reviewer responds.
+- ``ReviewNode`` — declares ``INPUTS`` (what the reviewer sees) and
+  ``OUTPUT`` (the structured response shape). Wiring in
+  ``Review(ReviewCls, inputs_spec=...)``. Conditional review is
+  expressed via graph branching (a prior step's ``run()`` chooses
+  whether to return a ReviewNode or skip past it) — no ``condition``
+  ClassVar.
 
-Each node's ``inputs_spec`` is a ``SourcesSpec`` produced by
-``INPUTS.sources(...)``. The compile-time validator (``validator.py``)
-walks every node's spec at class-definition time.
+All three kinds self-validate at ``__init_subclass__`` (purely
+structural — no Phoenix calls). Phoenix-aware checks (prompt
+existence, template-vs-PromptVariables drift) run at discovery time.
 """
 from __future__ import annotations
 
 import logging
+import typing
 from abc import abstractmethod
-from typing import Any, Callable, ClassVar, TYPE_CHECKING
+from typing import Any, ClassVar, TYPE_CHECKING
 
 from pydantic import BaseModel
 from pydantic_graph import BaseNode, End, GraphRunContext
@@ -46,7 +47,7 @@ if TYPE_CHECKING:
     from sqlmodel import SQLModel
 
     from llm_pipeline.inputs import StepInputs
-    from llm_pipeline.wiring import SourcesSpec
+    from llm_pipeline.prompts.variables import PromptVariables
 
 
 __all__ = [
@@ -55,6 +56,9 @@ __all__ = [
     "PipelineDeps",
     "ReviewNode",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -72,14 +76,7 @@ def _build_node_def(cls: type, local_ns: dict[str, Any] | None) -> NodeDef:
     User node modules legitimately keep those imports under
     ``TYPE_CHECKING`` for clarity. This shim resolves only the return
     annotation, so user code stays free of forced runtime imports.
-
-    The localns we pass spans pydantic-graph's parent-frame namespace
-    plus the framework types (``GraphRunContext``, ``End``, the state
-    + deps types) — that combined namespace is enough to evaluate any
-    typical return annotation.
     """
-    import typing
-
     return_annotation = cls.run.__annotations__.get("return")
     if return_annotation is None:
         raise GraphSetupError(
@@ -94,17 +91,13 @@ def _build_node_def(cls: type, local_ns: dict[str, Any] | None) -> NodeDef:
             "PipelineState": PipelineState,
             "PipelineDeps": PipelineDeps,
         }
-        # Sibling node namespace populated by Pipeline.__init_subclass__
-        # so forward references like ``-> "TopicExtractionStep"`` resolve
-        # even when the referenced class lives in a different module
-        # imported only via ``TYPE_CHECKING``.
         sibling_ns = getattr(cls, "_pipeline_namespace", None)
         if sibling_ns:
             eval_locals.update(sibling_ns)
         if local_ns:
             eval_locals.update(local_ns)
         try:
-            return_annotation = eval(  # noqa: S307 — controlled expression
+            return_annotation = eval(  # noqa: S307
                 return_annotation, eval_globals, eval_locals,
             )
         except NameError as exc:
@@ -147,6 +140,92 @@ def _build_node_def(cls: type, local_ns: dict[str, Any] | None) -> NodeDef:
 
 
 # ---------------------------------------------------------------------------
+# prepare() return-type resolution
+# ---------------------------------------------------------------------------
+
+
+def _resolve_prompt_variables_cls(cls: type) -> type:
+    """Inspect ``cls.prepare`` and resolve its ``list[XxxPrompt]`` return.
+
+    Returns the concrete ``PromptVariables`` subclass declared as the
+    list-element type. Raises ``TypeError`` on any deviation:
+
+    - ``cls`` did not override ``prepare`` (still uses the base impl).
+    - ``prepare`` has no return-type annotation.
+    - Annotation isn't a ``list[...]``.
+    - Element type isn't a concrete ``PromptVariables`` subclass.
+    """
+    from llm_pipeline.prompts.variables import PromptVariables
+
+    if cls.prepare is LLMStepNode.prepare:  # type: ignore[attr-defined]
+        raise TypeError(
+            f"{cls.__name__} must override `prepare(self, inputs)` and "
+            f"declare its return type as list[XxxPrompt] where XxxPrompt "
+            f"is a concrete PromptVariables subclass."
+        )
+
+    # Resolve the FULL prepare signature. We enforce two things:
+    #   1. The ``inputs`` parameter annotation matches ``cls.INPUTS``.
+    #   2. The return annotation is ``list[XxxPrompt]`` for some
+    #      concrete ``PromptVariables`` subclass.
+    # Forward refs are evaluated against the method's defining module;
+    # this means inputs/instructions/prompt classes must live at module
+    # top-level (not inside a test-method scope), which is consistent
+    # with how real step files are authored.
+    try:
+        hints = typing.get_type_hints(cls.prepare)
+    except Exception as exc:
+        raise TypeError(
+            f"{cls.__name__}.prepare's annotations could not be "
+            f"resolved: {exc}. The inputs parameter type and the "
+            f"return type must reference classes defined at the "
+            f"module top level (not inside a function/method scope)."
+        ) from exc
+
+    return_type = hints.get("return")
+    if return_type is None:
+        raise TypeError(
+            f"{cls.__name__}.prepare must declare a return-type "
+            f"annotation of the form list[XxxPrompt]."
+        )
+
+    declared_inputs = hints.get("inputs")
+    if declared_inputs is not None and declared_inputs is not cls.INPUTS:
+        raise TypeError(
+            f"{cls.__name__}.prepare's inputs parameter annotation is "
+            f"{declared_inputs!r}, but {cls.__name__}.INPUTS is "
+            f"{cls.INPUTS!r}. The annotation must match the declared "
+            f"INPUTS class exactly."
+        )
+
+    origin = typing.get_origin(return_type)
+    if origin is not list:
+        raise TypeError(
+            f"{cls.__name__}.prepare return type must be list[XxxPrompt], "
+            f"got {return_type!r}."
+        )
+    args = typing.get_args(return_type)
+    if len(args) != 1:
+        raise TypeError(
+            f"{cls.__name__}.prepare return type must be list[XxxPrompt] "
+            f"with exactly one type argument; got {return_type!r}."
+        )
+
+    prompt_cls = args[0]
+    if not (isinstance(prompt_cls, type) and issubclass(prompt_cls, PromptVariables)):
+        raise TypeError(
+            f"{cls.__name__}.prepare element type must be a "
+            f"PromptVariables subclass; got {prompt_cls!r}."
+        )
+    if prompt_cls is PromptVariables:
+        raise TypeError(
+            f"{cls.__name__}.prepare must use a concrete PromptVariables "
+            f"subclass, not the base PromptVariables class itself."
+        )
+    return prompt_cls
+
+
+# ---------------------------------------------------------------------------
 # LLMStepNode
 # ---------------------------------------------------------------------------
 
@@ -156,40 +235,53 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
 
     Subclasses declare:
 
-    - ``INPUTS``: a ``StepInputs`` subclass.
+    - ``INPUTS``: a ``StepInputs`` subclass — what the step *needs*.
     - ``INSTRUCTIONS``: a Pydantic ``BaseModel`` subclass — the
       LLM-call output schema. Conventionally inherits ``LLMResultMixin``.
-    - ``inputs_spec``: ``INPUTS.sources(...)`` — the per-field source
-      adapter declaration.
-    - Optional ``prompt_name``: Phoenix prompt name override. Defaults
-      to ``to_snake_case(cls.__name__, strip_suffix='Step')``.
-    - Optional ``DEFAULT_TOOLS``: list of ``PipelineTool`` subclasses
+    - ``DEFAULT_TOOLS``: list of ``PipelineTool`` subclasses
       auto-bound to the agent at run time.
-    - Optional ``user_prompt_variables(inputs)`` classmethod: returns
-      the dict passed to ``prompt_service.get_user_prompt(...)``.
-      Default: ``inputs.model_dump()``.
+    - ``prepare(self, inputs) -> list[XxxPrompt]``: builds one or more
+      ``PromptVariables`` instances (one per LLM call) from the
+      resolved ``inputs``. Length 1 for the default single-call case;
+      multi-call shapes consensus_strategy.
 
     Subclasses must implement ``run(ctx) -> NextNode | End[...]`` — the
     return annotation drives the edge graph. The body should call
     ``await self._run_llm(ctx)`` then return the next node instance.
+
+    *No* wiring (``inputs_spec``, ``prompt_name``) on the class. Wiring
+    lives on the ``Step(StepCls, inputs_spec=...)`` binding in the
+    pipeline. Phoenix prompt name is always ``cls.step_name()``.
+
+    *No* ``MODEL`` ClassVar. Model lives on the Phoenix prompt; read
+    at runtime.
     """
 
-    # Class-level config — overridden by each concrete subclass
+    # Class-level *contract* — overridden by each concrete subclass.
     INPUTS: ClassVar[type] = None  # type: ignore[assignment]
     INSTRUCTIONS: ClassVar[type[BaseModel]] = None  # type: ignore[assignment]
-    inputs_spec: ClassVar[Any] = None  # SourcesSpec
-    prompt_name: ClassVar[str | None] = None
     DEFAULT_TOOLS: ClassVar[list[type]] = []
+
+    # Resolved at __init_subclass__ from prepare's return-type annotation.
+    # Public for introspection / tooling (NodeSpec / Pipeline.inspect()).
+    prompt_variables_cls: ClassVar[type | None] = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        # Skip the abstract base; only validate concrete subclasses.
         if cls.__name__ == "LLMStepNode":
             return
-        # Naming convention is enforced at Pipeline class level (so a
-        # node defined outside a Pipeline still works in tests). The
-        # ``Pipeline`` validator walks ``cls.nodes`` and applies all
-        # rules in one place.
+        if cls.INPUTS is None:
+            raise TypeError(
+                f"{cls.__name__}.INPUTS must be set to a StepInputs subclass."
+            )
+        if cls.INSTRUCTIONS is None:
+            raise TypeError(
+                f"{cls.__name__}.INSTRUCTIONS must be set to a Pydantic BaseModel "
+                f"subclass declaring the LLM output schema."
+            )
+        # Resolve and cache the PromptVariables subclass declared by
+        # this step's prepare() return annotation.
+        cls.prompt_variables_cls = _resolve_prompt_variables_cls(cls)
 
     @classmethod
     def get_node_def(cls, local_ns: dict[str, Any] | None) -> NodeDef:
@@ -201,44 +293,40 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         """``CamelCase`` -> ``snake_case``, dropping the ``Step`` suffix."""
         return to_snake_case(cls.__name__, strip_suffix="Step")
 
-    @classmethod
-    def resolved_prompt_name(cls) -> str:
-        """Per-class Phoenix prompt name; falls back to ``step_name()``."""
-        return cls.prompt_name or cls.step_name()
+    def prepare(self, inputs: Any) -> list["PromptVariables"]:
+        """Build per-call ``PromptVariables`` instances from the resolved inputs.
 
-    @classmethod
-    def user_prompt_variables(cls, inputs: Any) -> dict[str, Any]:
-        """Build the variables dict passed to the prompt template.
+        Subclasses MUST override this and declare a return-type
+        annotation of ``list[XxxPrompt]`` where ``XxxPrompt`` is a
+        concrete ``PromptVariables`` subclass. Length 1 = single LLM
+        call; length N = consensus / multi-call.
 
-        Default: ``inputs.model_dump()``. Override on a subclass to
-        coerce, rename, or add derived fields before rendering.
+        The validator (``__init_subclass__``) reads the annotation to
+        cache ``prompt_variables_cls`` and verify the contract.
         """
-        if hasattr(inputs, "model_dump"):
-            return inputs.model_dump()
-        return dict(inputs)
+        raise NotImplementedError(
+            f"{type(self).__name__} must override prepare(self, inputs) "
+            f"with a concrete return-type annotation."
+        )
 
     async def _run_llm(self, ctx: GraphRunContext[PipelineState, PipelineDeps]) -> Any:
-        """Resolve inputs, call the LLM, persist output to state.
+        """Resolve inputs from wiring, render prompts via ``prepare()``, run LLM.
 
-        Returns the validated instructions instance produced by the
-        Pydantic-AI agent. Subclasses can use the returned value for
-        branch logic before returning the next node.
+        Reads the pipeline-level wiring (``inputs_spec``) from
+        ``ctx.deps.wiring[type(self)]``. The class itself carries no
+        wiring; only the contract.
         """
-        import logging
-
         from llm_pipeline.agent_builders import StepDeps, build_step_agent
         from llm_pipeline.resources import resolve_resources
         from llm_pipeline.runtime import PipelineContext
 
         cls = type(self)
-        if cls.inputs_spec is None:
-            raise TypeError(
-                f"{cls.__name__}.inputs_spec must be set "
-                f"(call {cls.INPUTS.__name__}.sources(...) and assign)."
-            )
-        if cls.INSTRUCTIONS is None:
-            raise TypeError(
-                f"{cls.__name__}.INSTRUCTIONS must be set."
+        binding = (ctx.deps.wiring or {}).get(cls)
+        if binding is None:
+            raise RuntimeError(
+                f"No pipeline-level binding found for {cls.__name__} "
+                f"in deps.wiring. Did the pipeline declare "
+                f"`Step({cls.__name__}, inputs_spec=...)`?"
             )
 
         adapter_ctx = ctx.state.to_adapter_ctx(
@@ -246,7 +334,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
             node_classes=ctx.deps.node_classes,
             pipeline=ctx.deps,
         )
-        inputs_instance = cls.inputs_spec.resolve(adapter_ctx)
+        inputs_instance = binding.inputs_spec.resolve(adapter_ctx)
 
         # Resolve any resource-typed fields on the inputs (no-op when
         # the inputs class has no resource fields, which is the common
@@ -259,15 +347,33 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         )
         resolve_resources(inputs_instance, runtime_ctx)
 
-        # Build the prompt variables. When the eval runner has
-        # threaded a per-step prompt override through PipelineDeps,
-        # render that template directly (F_STRING semantics — same
-        # as Phoenix's template_format) and skip the Phoenix fetch.
-        variables = cls.user_prompt_variables(inputs_instance)
+        # prepare() returns one or more PromptVariables instances.
+        prompt_calls = self.prepare(inputs_instance)
+        if not isinstance(prompt_calls, list) or not prompt_calls:
+            raise TypeError(
+                f"{cls.__name__}.prepare must return a non-empty list "
+                f"of {cls.prompt_variables_cls.__name__ if cls.prompt_variables_cls else 'PromptVariables'} "
+                f"instances; got {prompt_calls!r}."
+            )
+
+        # Phase: single-call path. Multi-call (consensus) is a follow-up;
+        # we run prompt_calls[0] for now and stash a TODO when len > 1.
+        if len(prompt_calls) > 1:
+            logger.warning(
+                "%s.prepare returned %d calls; multi-call dispatch is "
+                "not yet implemented. Running the first call only.",
+                cls.__name__, len(prompt_calls),
+            )
+        call = prompt_calls[0]
+
+        # Eval-runner per-run override path: render the override
+        # template directly with the user-message variables. Skips the
+        # Phoenix fetch.
+        user_vars = call.user.model_dump()
         prompt_override = (ctx.deps.prompt_overrides or {}).get(cls.step_name())
         if prompt_override is not None:
             try:
-                user_prompt = prompt_override.format(**variables)
+                user_prompt = prompt_override.format(**user_vars)
             except (KeyError, IndexError) as exc:
                 raise ValueError(
                     f"prompt override for step {cls.step_name()!r} references "
@@ -275,22 +381,24 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                 ) from exc
         else:
             user_prompt = ctx.deps.prompt_service.get_user_prompt(
-                prompt_key=cls.resolved_prompt_name(),
-                variables=variables,
+                prompt_key=cls.step_name(),
+                variables=user_vars,
             )
 
-        # Optional review-feedback injection. Cleared after each step.
+        # System-message variables are validated against the prompt
+        # template at discovery time but not threaded into agent
+        # construction yet — the prompts service / agent_builders
+        # don't accept system-side variables in the current shape.
+        # TODO: thread call.system.model_dump() through agent's
+        # @agent.instructions hook in step 7 (Phoenix sync extension).
+
         review_ctx = ctx.deps.review_context
         if review_ctx:
             user_prompt = _append_review_to_prompt(user_prompt, review_ctx)
             ctx.deps.review_context = None
 
         # The eval runner can swap the INSTRUCTIONS schema by mapping
-        # the production class -> a delta-derived subclass (built via
-        # ``apply_instruction_delta``). The override is keyed by the
-        # production class itself so multiple variants can coexist
-        # across concurrent runs without leaking into class-level
-        # state.
+        # the production class -> a delta-derived subclass.
         output_type = (
             (ctx.deps.instructions_overrides or {}).get(cls.INSTRUCTIONS)
             or cls.INSTRUCTIONS
@@ -299,9 +407,9 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         agent = build_step_agent(
             step_name=cls.step_name(),
             output_type=output_type,
-            prompt_name=cls.resolved_prompt_name(),
+            prompt_name=cls.step_name(),
             instrument=ctx.deps.instrumentation_settings,
-            tools=None,  # Phase 1: tools deferred to a follow-up
+            tools=None,
         )
 
         step_deps = StepDeps(
@@ -337,38 +445,42 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
 class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
     """Base for extraction nodes.
 
-    Reads its source step's output (via ``inputs_spec``), shapes
-    SQLModel rows, persists them on the session, and writes them
-    to ``state.extractions``.
-
     Subclasses declare:
 
+    - ``INPUTS``: a ``StepInputs`` subclass.
     - ``MODEL``: the SQLModel class this extraction produces.
-    - ``INPUTS``: the pathway inputs class (a ``StepInputs`` subclass,
-      conventionally named ``From{ExtractionName}Inputs``).
-    - ``source_step``: the ``LLMStepNode`` whose output this
-      extraction reads. The validator asserts ``source_step`` appears
-      upstream in the pipeline graph.
-    - ``inputs_spec``: ``INPUTS.sources(...)``.
 
-    Subclasses implement ``extract(self, inputs) -> list[MODEL]`` and
-    ``run(ctx) -> NextNode | End[...]`` (calls ``_run_extraction(ctx)``
-    then returns the next node).
+    Subclasses implement ``extract(self, inputs) -> list[MODEL]`` to
+    shape rows, and ``run(ctx) -> NextNode | End[...]`` to drive the
+    graph. The ``_run_extraction`` body resolves inputs from the
+    pipeline binding, runs ``extract``, persists rows to the session,
+    AND records them in ``state.outputs[ExtractionCls.__name__]`` so
+    downstream ``FromOutput(MyExtraction, ...)`` works.
+
+    *No* ``source_step`` ClassVar. The pipeline's ``Extraction(cls,
+    inputs_spec=...)`` binding declares the wiring, including which
+    upstream step's output the extraction reads (via FromOutput).
     """
 
-    MODEL: ClassVar[type] = None  # type: ignore[assignment]
     INPUTS: ClassVar[type] = None  # type: ignore[assignment]
-    source_step: ClassVar[type[LLMStepNode]] = None  # type: ignore[assignment]
-    inputs_spec: ClassVar[Any] = None
+    MODEL: ClassVar[type] = None  # type: ignore[assignment]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "ExtractionNode":
             return
+        if cls.INPUTS is None:
+            raise TypeError(
+                f"{cls.__name__}.INPUTS must be set to a StepInputs subclass."
+            )
+        if cls.MODEL is None:
+            raise TypeError(
+                f"{cls.__name__}.MODEL must be set to the SQLModel class "
+                f"this extraction produces."
+            )
 
     @classmethod
     def get_node_def(cls, local_ns: dict[str, Any] | None) -> NodeDef:
-        """Override pydantic-graph's edge resolution to honour TYPE_CHECKING."""
         return _build_node_def(cls, local_ns)
 
     @abstractmethod
@@ -379,15 +491,14 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
     async def _run_extraction(
         self, ctx: GraphRunContext[PipelineState, PipelineDeps],
     ) -> list[Any]:
-        """Resolve inputs, run ``extract``, persist rows, update state."""
+        """Resolve inputs from wiring, run ``extract``, persist + record rows."""
         cls = type(self)
-        if cls.inputs_spec is None:
-            raise TypeError(
-                f"{cls.__name__}.inputs_spec must be set."
-            )
-        if cls.MODEL is None:
-            raise TypeError(
-                f"{cls.__name__}.MODEL must be set."
+        binding = (ctx.deps.wiring or {}).get(cls)
+        if binding is None:
+            raise RuntimeError(
+                f"No pipeline-level binding found for {cls.__name__} "
+                f"in deps.wiring. Did the pipeline declare "
+                f"`Extraction({cls.__name__}, inputs_spec=...)`?"
             )
 
         adapter_ctx = ctx.state.to_adapter_ctx(
@@ -395,7 +506,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
             node_classes=ctx.deps.node_classes,
             pipeline=ctx.deps,
         )
-        pathway_inputs = cls.inputs_spec.resolve(adapter_ctx)
+        pathway_inputs = binding.inputs_spec.resolve(adapter_ctx)
 
         rows = self.extract(pathway_inputs)
 
@@ -403,7 +514,11 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ctx.deps.session.add(row)
         ctx.deps.session.flush()
 
+        # Record rows in BOTH state.extractions (existing DB tracking
+        # surface) and state.outputs (so FromOutput(ExtractionCls, ...)
+        # works uniformly with the rest of the graph).
         ctx.state.record_extraction(cls.MODEL, rows)
+        ctx.state.record_output(cls, rows)
         return rows
 
     @abstractmethod
@@ -420,33 +535,44 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
 class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
     """Pause-point for human review.
 
-    Phase 1 stamps a review request into ``state.metadata`` (no actual
-    pause — the graph continues). Phase 2 wires the snapshot-and-
-    pause flow via the persistence backend so the run resumes when the
-    reviewer responds.
-
     Subclasses declare:
 
-    - ``target_step``: the ``LLMStepNode`` whose output is being reviewed.
-    - Optional ``condition(state) -> bool``: when ``False``, skip
-      review entirely. Default: always review.
-    - Optional ``webhook_url``: webhook to POST when review is requested.
+    - ``INPUTS``: a ``StepInputs`` subclass — the data the reviewer sees.
+    - ``OUTPUT``: a Pydantic ``BaseModel`` subclass — the reviewer's
+      structured response shape.
+    - Optional ``webhook_url``: target to POST when review is requested.
 
-    Subclasses implement ``run(ctx) -> NextNode | End[...]``.
+    Subclasses implement ``run(ctx) -> NextNode | End[...]``. Conditional
+    review is expressed via graph branching from a prior step: the
+    step's ``run()`` chooses whether to return a ``ReviewNode`` instance
+    or skip past it. No ``condition`` ClassVar.
+
+    On resume, the reviewer's response is validated against ``OUTPUT``
+    and recorded at ``state.outputs[ReviewCls.__name__]`` (handled by
+    the runtime's resume path; not in this body).
     """
 
-    target_step: ClassVar[type[LLMStepNode]] = None  # type: ignore[assignment]
-    condition: ClassVar[Callable[[PipelineState], bool] | None] = None
+    INPUTS: ClassVar[type] = None  # type: ignore[assignment]
+    OUTPUT: ClassVar[type[BaseModel]] = None  # type: ignore[assignment]
     webhook_url: ClassVar[str | None] = None
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "ReviewNode":
             return
+        if cls.INPUTS is None:
+            raise TypeError(
+                f"{cls.__name__}.INPUTS must be set (the data the "
+                f"reviewer sees)."
+            )
+        if cls.OUTPUT is None:
+            raise TypeError(
+                f"{cls.__name__}.OUTPUT must be set (the reviewer's "
+                f"structured response shape)."
+            )
 
     @classmethod
     def get_node_def(cls, local_ns: dict[str, Any] | None) -> NodeDef:
-        """Override pydantic-graph's edge resolution to honour TYPE_CHECKING."""
         return _build_node_def(cls, local_ns)
 
     async def _begin_review(
@@ -454,11 +580,10 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
     ) -> None:
         """Open a pending ``PipelineReview`` and signal pause to the runtime.
 
-        Sets ``state.metadata["awaiting_review"] = True`` so the
-        runtime loop in ``run_pipeline`` breaks out without driving
-        the next node. The next-node snapshot is still written by
-        pydantic-graph (in ``'created'`` status) — ``resume_pipeline``
-        picks it up via ``Graph.iter_from_persistence``.
+        Resolves INPUTS via the pipeline binding and stores the dump as
+        the review payload. Sets ``state.metadata["awaiting_review"] = True``
+        so the runtime loop in ``run_pipeline`` breaks out without
+        driving the next node.
         """
         import os
         import uuid as _uuid
@@ -468,31 +593,33 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
         from llm_pipeline.state import PipelineReview, PipelineRun
 
         cls = type(self)
-        if cls.condition is not None:
-            try:
-                allow = cls.condition(ctx.state)  # type: ignore[arg-type]
-            except Exception:
-                allow = True
-            if not allow:
-                return  # condition says skip — no pause
+        binding = (ctx.deps.wiring or {}).get(cls)
+        if binding is None:
+            raise RuntimeError(
+                f"No pipeline-level binding found for {cls.__name__} "
+                f"in deps.wiring. Did the pipeline declare "
+                f"`Review({cls.__name__}, inputs_spec=...)`?"
+            )
+
+        adapter_ctx = ctx.state.to_adapter_ctx(
+            input_cls=ctx.deps.input_cls,
+            node_classes=ctx.deps.node_classes,
+            pipeline=ctx.deps,
+        )
+        review_inputs = binding.inputs_spec.resolve(adapter_ctx)
+        review_data: dict[str, Any] = {
+            "raw_data": review_inputs.model_dump()
+            if hasattr(review_inputs, "model_dump") else dict(review_inputs)
+        }
 
         token = str(_uuid.uuid4())
-        target_name = (
-            cls.target_step.__name__ if cls.target_step is not None else cls.__name__
-        )
-        review_data: dict[str, Any] = {}
-        if cls.target_step is not None:
-            target_outputs = ctx.state.outputs.get(cls.target_step.__name__) or []
-            if target_outputs:
-                review_data = {"raw_data": target_outputs[0]}
-
         engine = ctx.deps.session.get_bind()
         with Session(engine) as session:
             session.add(PipelineReview(
                 token=token,
                 run_id=ctx.deps.run_id,
                 pipeline_name=ctx.deps.pipeline_name,
-                step_name=_step_name_for_target(cls.target_step) or cls.__name__,
+                step_name=cls.__name__,
                 step_number=len(ctx.state.outputs),
                 status="pending",
                 review_data=review_data,
@@ -511,7 +638,6 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
         ctx.state.metadata["awaiting_review"] = True
         ctx.state.metadata["review_token"] = token
 
-        # Optional webhook fan-out — fire-and-forget; logged + swallowed on failure.
         webhook_url = (
             cls.webhook_url
             or os.environ.get("LLM_PIPELINE_REVIEW_WEBHOOK")
@@ -520,7 +646,8 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
             try:
                 _post_review_webhook(
                     webhook_url, token=token, run_id=ctx.deps.run_id,
-                    pipeline_name=ctx.deps.pipeline_name, target=target_name,
+                    pipeline_name=ctx.deps.pipeline_name,
+                    target=cls.__name__,
                     review_data=review_data,
                 )
             except Exception:
@@ -539,16 +666,6 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
 # ---------------------------------------------------------------------------
 
 
-logger = logging.getLogger(__name__)
-
-
-def _step_name_for_target(target: type | None) -> str | None:
-    """Snake-cased step_name for a ``target_step`` class (or ``None``)."""
-    if target is None:
-        return None
-    return to_snake_case(target.__name__, strip_suffix="Step")
-
-
 def _post_review_webhook(
     url: str,
     *,
@@ -558,12 +675,7 @@ def _post_review_webhook(
     target: str,
     review_data: dict[str, Any],
 ) -> None:
-    """Fire-and-forget POST to the review webhook.
-
-    Mirrors the legacy ``_send_review_webhook`` shape so existing
-    integrations don't need to change. Errors raise — caller logs +
-    swallows.
-    """
+    """Fire-and-forget POST to the review webhook."""
     import os as _os
 
     import httpx
@@ -587,11 +699,7 @@ def _post_review_webhook(
 
 
 def _append_review_to_prompt(user_prompt: str, review_ctx: dict[str, Any]) -> str:
-    """Append human review feedback to the rendered user prompt.
-
-    Mirrors the legacy ``_append_review_to_prompt`` from ``pipeline.py``
-    so the resumed-after-review behaviour stays bit-identical.
-    """
+    """Append human review feedback to the rendered user prompt."""
     decision = review_ctx.get("decision", "")
     notes = review_ctx.get("notes", "")
     original = review_ctx.get("original_output", "")

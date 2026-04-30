@@ -257,7 +257,10 @@ class TestStepNodes:
         assert issubclass(SentimentAnalysisStep, LLMStepNode)
         assert SentimentAnalysisStep.INPUTS is SentimentAnalysisInputs
         assert SentimentAnalysisStep.INSTRUCTIONS is SentimentAnalysisInstructions
-        assert SentimentAnalysisStep.inputs_spec is not None
+        # Wiring is now pipeline-level — there's no inputs_spec on the
+        # class. The step's prepare() return-type annotation tells the
+        # framework which PromptVariables subclass it produces.
+        assert SentimentAnalysisStep.prompt_variables_cls is not None
 
     def test_topic_step_subclasses_llmstepnode(self):
         from llm_pipelines.steps.topic_extraction import TopicExtractionStep
@@ -292,10 +295,20 @@ class TestTopicExtractionNode:
         from llm_pipelines.schemas.text_analyzer import Topic
         assert TopicExtraction.MODEL is Topic
 
-    def test_source_step_is_topic_extraction_step(self):
+    def test_extraction_reads_topic_extraction_step_via_pipeline_wiring(self):
         from llm_pipelines.extractions.text_analyzer import TopicExtraction
+        from llm_pipelines.pipelines.text_analyzer import TextAnalyzerPipeline
         from llm_pipelines.steps.topic_extraction import TopicExtractionStep
-        assert TopicExtraction.source_step is TopicExtractionStep
+        from llm_pipeline.wiring import FromOutput
+
+        # No more class-level source_step. The pipeline's binding for
+        # TopicExtraction wires `topics` from TopicExtractionStep's
+        # output via FromOutput; verify that wiring shape.
+        binding = TextAnalyzerPipeline._wiring[TopicExtraction]
+        topics_source = binding.inputs_spec.field_sources["topics"]
+        assert isinstance(topics_source, FromOutput)
+        assert topics_source.step_cls is TopicExtractionStep
+        assert topics_source.field == "topics"
 
     def test_extract_converts_topic_items_to_topics(self):
         from llm_pipelines.extractions.text_analyzer import (
@@ -388,7 +401,10 @@ class TestTextAnalyzerPipelineConfig:
         from llm_pipelines.steps.summary import SummaryStep
         from llm_pipelines.steps.topic_extraction import TopicExtractionStep
 
-        assert TextAnalyzerPipeline.nodes == [
+        # nodes is a list of Step/Extraction wrappers; check the
+        # underlying classes in declaration order.
+        bound_classes = [b.cls for b in TextAnalyzerPipeline.nodes]
+        assert bound_classes == [
             SentimentAnalysisStep,
             TopicExtractionStep,
             TopicExtraction,

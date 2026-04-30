@@ -518,7 +518,7 @@ def get_dataset_prod_prompts(
         request.app.state, "pipeline_registry", {},
     )
     node_cls = _resolve_step_node(pipeline_registry, dataset.metadata.target_name)
-    prompt_name = node_cls.resolved_prompt_name()
+    prompt_name = node_cls.step_name()
     step_name = node_cls.step_name()
 
     cached = getattr(request.app.state, "_phoenix_prompt_client", None)
@@ -592,7 +592,8 @@ def _step_schema(target_name: str, registry: dict) -> SchemaResponse:
         pipeline_cls = record.get("pipeline_class") if isinstance(
             record, dict,
         ) else record
-        for node_cls in getattr(pipeline_cls, "nodes", []):
+        for binding in getattr(pipeline_cls, "nodes", []):
+            node_cls = binding.cls
             if node_cls.step_name() == target_name:
                 inputs_cls = getattr(node_cls, "INPUTS", None)
                 if inputs_cls is None:
@@ -609,7 +610,8 @@ def _resolve_step_node(registry: dict, step_name: str) -> Any:
         pipeline_cls = record.get("pipeline_class") if isinstance(
             record, dict,
         ) else record
-        for node_cls in getattr(pipeline_cls, "nodes", []):
+        for binding in getattr(pipeline_cls, "nodes", []):
+            node_cls = binding.cls
             if node_cls.step_name() == step_name:
                 return node_cls
     raise HTTPException(
@@ -661,7 +663,8 @@ def _resolve_step_target(
         pipeline_cls = record.get("pipeline_class") if isinstance(
             record, dict,
         ) else record
-        for node_cls in getattr(pipeline_cls, "nodes", []):
+        for binding in getattr(pipeline_cls, "nodes", []):
+            node_cls = binding.cls
             if node_cls.step_name() == step_name:
                 return pipeline_cls.pipeline_name(), node_cls.step_name()
     raise HTTPException(

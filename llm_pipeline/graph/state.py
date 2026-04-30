@@ -162,6 +162,11 @@ class PipelineDeps:
     model: str
     input_cls: type | None = None
     node_classes: dict[str, type] = field(default_factory=dict)
+    # Pipeline-level wiring keyed by node base class. Each entry is a
+    # ``Step | Extraction | Review`` binding carrying ``inputs_spec``.
+    # The runtime threads ``pipeline_cls._wiring`` into this field so
+    # node bodies can read their wiring without touching the class.
+    wiring: dict[type, Any] = field(default_factory=dict)
     instrumentation_settings: Any | None = None
     review_context: dict[str, Any] | None = field(default=None)
     # Per-run overrides applied by the eval runner (and any other
