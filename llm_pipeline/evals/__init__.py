@@ -3,9 +3,11 @@
 Phase 3 of the pydantic-evals migration: Phoenix is the source of
 truth for datasets/examples/experiments/runs/case results, the
 framework keeps only the ``EvaluationAcceptance`` audit table,
-and ``accept_experiment`` walks variant deltas across the three
-production surfaces (``StepModelConfig`` / Phoenix prompt /
-INSTRUCTIONS source files).
+and ``accept_experiment`` walks variant deltas across two
+production surfaces (Phoenix prompt versions / INSTRUCTIONS source
+files). Model variants are no longer accepted in-process — the
+per-step model lives on the Phoenix prompt now, edited via YAML +
+``llm-pipeline build`` or directly in Phoenix Playground.
 """
 from llm_pipeline.evals.acceptance import AcceptanceError, accept_experiment
 from llm_pipeline.evals.evaluators import (

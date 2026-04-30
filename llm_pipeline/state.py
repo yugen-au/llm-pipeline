@@ -368,10 +368,11 @@ class EvaluationAcceptance(SQLModel, table=True):
     accept_paths: dict = Field(
         sa_column=Column(JSON),
         description=(
-            "Per-surface result of the accept walk: ``{model: {...}, "
-            "prompts: [...], instructions: {...}}``. Each entry records "
-            "what changed (StepModelConfig row, Phoenix prompt version, "
-            "source file path)."
+            "Per-surface result of the accept walk: ``{prompts: [...], "
+            "instructions: {...}}``. Each entry records what changed "
+            "(Phoenix prompt version, source file path). The ``model`` "
+            "key is retired — model variants now propagate through "
+            "Phoenix prompt edits, not StepModelConfig rows."
         ),
     )
 

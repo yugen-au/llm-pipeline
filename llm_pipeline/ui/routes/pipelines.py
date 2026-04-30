@@ -9,7 +9,6 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
-from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.introspection import PipelineIntrospector, enrich_with_prompt_readiness
 from llm_pipeline.prompts.models import PromptMessage
@@ -67,11 +66,6 @@ class PipelineMetadata(BaseModel):
     strategies: List[StrategyMetadata] = []
     execution_order: List[str] = []
     pipeline_input_schema: Optional[Any] = None
-
-
-class StepModelRequest(BaseModel):
-    model: str
-    request_limit: Optional[int] = None
 
 
 class StepPromptItem(BaseModel):
@@ -314,156 +308,44 @@ def put_pipeline_status(
 
 
 # ---------------------------------------------------------------------------
-# Step model config endpoints
+# Step model endpoints — RETIRED
 # ---------------------------------------------------------------------------
+#
+# The per-step model used to live in the ``step_model_configs`` table,
+# resolved via a three-tier resolver. After the Phoenix-owned-model
+# refactor, the model is a property of the Phoenix prompt — declared in
+# YAML (``llm-pipeline-prompts/{step_name}.yaml``) and pushed at
+# ``uv run llm-pipeline build``. There is no DB row to GET/PUT/DELETE.
+#
+# These endpoints stay registered (returning HTTP 410 Gone) so the
+# frontend gets a clear, intentional retirement signal instead of 404.
+# Removing them entirely is a follow-up once the frontend stops calling.
 
 
-def _find_step_def_in_pipeline(
-    pipeline_cls: Any, step_name: str
-) -> Optional[Any]:
-    """Return the StepDefinition for ``step_name`` on ``pipeline_cls`` or None.
-
-    Walks the pipeline's registered strategies in declaration order and
-    returns the first matching step definition.
-    """
-    strategies_cls = getattr(pipeline_cls, "STRATEGIES", None)
-    if strategies_cls is None:
-        return None
-    strategy_classes = getattr(strategies_cls, "STRATEGIES", []) or []
-    for s_cls in strategy_classes:
-        try:
-            strategy = s_cls()
-            for sd in strategy.get_steps():
-                if sd.step_name == step_name:
-                    return sd
-        except Exception:
-            logger.debug(
-                "Failed to introspect strategy %s for step '%s'",
-                s_cls.__name__, step_name, exc_info=True,
-            )
-            continue
-    return None
+_STEP_MODEL_RETIRED_DETAIL = (
+    "Per-step model overrides moved to Phoenix. Edit the prompt's "
+    "`model:` field in llm-pipeline-prompts/{step_name}.yaml and run "
+    "`uv run llm-pipeline build` to push, or edit directly in Phoenix "
+    "Playground."
+)
 
 
 @router.get("/{name}/steps/{step_name}/model")
-def get_step_model(
-    name: str,
-    step_name: str,
-    request: Request,
-    db: DBSession,
-):
-    """Get the effective model for a pipeline step.
-
-    Delegates model resolution to ``llm_pipeline.model.resolver`` for
-    tiers 1/2/3. ``request_limit`` stays a direct ``StepModelConfig`` read
-    since it's a separate per-step concern not covered by the model
-    resolver.
-
-    Source mapping: the canonical resolver's ``"none"`` (no model at any
-    tier) is surfaced as ``"pipeline_default"`` with ``model=None`` to
-    preserve the existing endpoint contract consumed by the frontend.
-    """
-    from llm_pipeline.model.resolver import resolve_model_with_fallbacks
-
-    registry: dict = getattr(request.app.state, "introspection_registry", {})
-    if name not in registry:
-        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
-
-    pipeline_cls = registry[name]
-
-    # request_limit stays a direct DB read — not covered by the model resolver.
-    cfg_row = db.exec(
-        select(StepModelConfig).where(
-            StepModelConfig.pipeline_name == name,
-            StepModelConfig.step_name == step_name,
-        )
-    ).first()
-    request_limit = cfg_row.request_limit if cfg_row is not None else None
-
-    step_def = _find_step_def_in_pipeline(pipeline_cls, step_name)
-    if step_def is None:
-        # No step found in registered strategies — fall back to resolver
-        # using a minimal shim so tier-2 DB lookup and tier-3 default still
-        # apply. This preserves prior behavior when introspection couldn't
-        # find the step.
-        class _MissingStepShim:
-            def __init__(self, n: str) -> None:
-                self.step_name = n
-                self.model = None
-
-        step_def_shim = _MissingStepShim(step_name)
-        pipeline_default = getattr(pipeline_cls, "_default_model", None)
-        model, source = resolve_model_with_fallbacks(
-            step_def_shim, db, name, pipeline_default
-        )
-    else:
-        pipeline_default = getattr(pipeline_cls, "_default_model", None)
-        model, source = resolve_model_with_fallbacks(
-            step_def, db, name, pipeline_default
-        )
-
-    # Back-compat: legacy endpoint returns "pipeline_default" when nothing
-    # is configured (model=None). The resolver returns "none" in that case.
-    if source == "none":
-        source = "pipeline_default"
-
-    return {"model": model, "request_limit": request_limit, "source": source}
+def get_step_model(name: str, step_name: str, request: Request):
+    """Retired endpoint. The model lives on the Phoenix prompt now."""
+    del name, step_name, request
+    raise HTTPException(status_code=410, detail=_STEP_MODEL_RETIRED_DETAIL)
 
 
 @router.put("/{name}/steps/{step_name}/model")
-def put_step_model(
-    name: str,
-    step_name: str,
-    body: StepModelRequest,
-    request: Request,
-    db: WritableDBSession,
-):
-    """Set or update the model override for a pipeline step."""
-    registry: dict = getattr(request.app.state, "introspection_registry", {})
-    if name not in registry:
-        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
-
-    stmt = select(StepModelConfig).where(
-        StepModelConfig.pipeline_name == name,
-        StepModelConfig.step_name == step_name,
-    )
-    row = db.exec(stmt).first()
-    if row is not None:
-        row.model = body.model
-        row.request_limit = body.request_limit
-    else:
-        row = StepModelConfig(
-            pipeline_name=name,
-            step_name=step_name,
-            model=body.model,
-            request_limit=body.request_limit,
-        )
-        db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": row.id, "pipeline_name": row.pipeline_name, "step_name": row.step_name, "model": row.model, "request_limit": row.request_limit}
+def put_step_model(name: str, step_name: str, request: Request):
+    """Retired endpoint. The model lives on the Phoenix prompt now."""
+    del name, step_name, request
+    raise HTTPException(status_code=410, detail=_STEP_MODEL_RETIRED_DETAIL)
 
 
 @router.delete("/{name}/steps/{step_name}/model")
-def delete_step_model(
-    name: str,
-    step_name: str,
-    request: Request,
-    db: WritableDBSession,
-):
-    """Remove a model override for a pipeline step."""
-    registry: dict = getattr(request.app.state, "introspection_registry", {})
-    if name not in registry:
-        raise HTTPException(status_code=404, detail=f"Pipeline '{name}' not found")
-
-    stmt = select(StepModelConfig).where(
-        StepModelConfig.pipeline_name == name,
-        StepModelConfig.step_name == step_name,
-    )
-    row = db.exec(stmt).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Model override not found")
-
-    db.delete(row)
-    db.commit()
-    return {"detail": "Model override removed"}
+def delete_step_model(name: str, step_name: str, request: Request):
+    """Retired endpoint. The model lives on the Phoenix prompt now."""
+    del name, step_name, request
+    raise HTTPException(status_code=410, detail=_STEP_MODEL_RETIRED_DETAIL)

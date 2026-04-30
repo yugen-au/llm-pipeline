@@ -172,8 +172,8 @@ class PipelineDeps:
     # Per-run overrides applied by the eval runner (and any other
     # caller threading variant-style mutations through). All three
     # short-circuit production resolution when present:
-    #   - ``model`` field above already overrides ``StepModelConfig``
-    #     resolution at the runtime layer.
+    #   - ``model`` field above overrides the Phoenix-prompt model at
+    #     runtime (eval-only path; production reads from Phoenix).
     #   - ``prompt_overrides[step_name]`` -> raw user-prompt template
     #     bypassing Phoenix prompt fetch in ``_run_llm``.
     #   - ``instructions_overrides[INSTRUCTIONS_cls]`` -> use the

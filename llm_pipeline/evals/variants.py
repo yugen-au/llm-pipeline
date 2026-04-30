@@ -3,8 +3,10 @@
 A ``Variant`` is a delta over production: any null/empty field means
 "use production". The runner applies the delta to the live pipeline
 at run time via ``PipelineDeps`` overrides; the acceptance helper
-walks the same delta to upsert ``StepModelConfig`` rows, post Phoenix
-prompt versions, and AST-rewrite instructions classes.
+walks the same delta to post Phoenix prompt versions and AST-rewrite
+instructions classes. ``variant.model`` is eval-only (runtime
+override); accepting a model variant is a Phoenix prompt edit, not
+an in-process mutation.
 
 This module also owns the ``apply_instruction_delta`` machinery
 previously in ``evals/delta.py``. The two are co-located so the type
@@ -61,8 +63,8 @@ class Variant(BaseModel):
     is ``Variant()``.
 
     Fields:
-        model: Override the runtime model. ``None`` -> production
-            ``StepModelConfig`` resolution applies.
+        model: Override the runtime model. ``None`` -> read the model
+            from the Phoenix prompt at runtime (production path).
         prompt_overrides: Map of step_name -> raw user-prompt template
             string. When set, ``LLMStepNode._run_llm`` skips the
             Phoenix prompt fetch and renders this template directly.

@@ -1,31 +1,34 @@
 """Accept a Phoenix experiment's variant into production.
 
-The variant delta has up to three surfaces. Each is independent;
+The variant delta has up to two surfaces (the third — ``variant.model``
+— retired with the ``StepModelConfig`` table; the model is now a
+Phoenix prompt property declared in YAML, not a DB row).
 ``accept_experiment`` walks them in order and records what changed
 under a single ``EvaluationAcceptance`` row:
 
-1. ``variant.model`` -> upsert :class:`StepModelConfig` keyed by
-   ``(pipeline_name, step_name)``.
-
-2. ``variant.prompt_overrides[step_name]`` -> POST a new Phoenix
+1. ``variant.prompt_overrides[step_name]`` -> POST a new Phoenix
    prompt version preserving the existing system message + swapping
    the user message; tag the new version ``production`` and demote
    the prior ``production`` tag.
 
-3. ``variant.instructions_delta`` -> AST-rewrite the step's
+2. ``variant.instructions_delta`` -> AST-rewrite the step's
    ``INSTRUCTIONS`` source file (resolved via
    ``inspect.getsourcefile``) using
    :func:`llm_pipeline.creator.ast_modifier.apply_instructions_delta_to_file`.
    Writes a ``.bak`` next to the source.
 
-After all three accept paths succeed, an ``EvaluationAcceptance`` row
-is inserted as the audit record.
+If ``variant.model`` is set, ``accept_experiment`` raises
+``AcceptanceError`` — accepting a model variant is a Phoenix prompt
+edit (or a YAML edit + ``llm-pipeline build``), not an in-process
+mutation.
+
+After the accept paths succeed, an ``EvaluationAcceptance`` row is
+inserted as the audit record.
 """
 from __future__ import annotations
 
 import inspect
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -108,11 +111,14 @@ def accept_experiment(
     accept_paths: dict[str, Any] = {}
 
     if variant.model:
-        accept_paths["model"] = _accept_model(
-            engine=engine,
-            pipeline_name=pipeline_name,
-            step_name=step_name,
-            model=variant.model,
+        raise AcceptanceError(
+            "variant.model accept path is retired. The per-step model "
+            "is a Phoenix prompt property now, not a DB row. To make "
+            "the variant's model the production default, edit the "
+            "matching prompt's `model:` field in "
+            "llm-pipeline-prompts/{step_name}.yaml and run "
+            "`uv run llm-pipeline build`, or edit it directly in "
+            "Phoenix Playground."
         )
 
     if variant.prompt_overrides:
@@ -249,53 +255,6 @@ def _resolve_pipeline_and_step(
 # ---------------------------------------------------------------------------
 # Accept paths
 # ---------------------------------------------------------------------------
-
-
-def _accept_model(
-    *,
-    engine: "Engine",
-    pipeline_name: str,
-    step_name: str | None,
-    model: str,
-) -> dict[str, Any]:
-    """Upsert ``StepModelConfig`` for the target step."""
-    if step_name is None:
-        raise AcceptanceError(
-            "model accept path requires a step target; pipeline-level "
-            "model overrides are not supported",
-        )
-
-    from sqlmodel import Session, select
-
-    from llm_pipeline.db.step_config import StepModelConfig
-
-    with Session(engine) as session:
-        existing = session.exec(
-            select(StepModelConfig).where(
-                StepModelConfig.pipeline_name == pipeline_name,
-                StepModelConfig.step_name == step_name,
-            ),
-        ).first()
-        if existing is None:
-            existing = StepModelConfig(
-                pipeline_name=pipeline_name,
-                step_name=step_name,
-                model=model,
-            )
-            session.add(existing)
-        else:
-            existing.model = model
-            existing.updated_at = datetime.now(timezone.utc)
-            session.add(existing)
-        session.commit()
-        session.refresh(existing)
-
-    return {
-        "pipeline_name": pipeline_name,
-        "step_name": step_name,
-        "model": model,
-        "step_model_config_id": existing.id,
-    }
 
 
 def _accept_prompt_overrides(

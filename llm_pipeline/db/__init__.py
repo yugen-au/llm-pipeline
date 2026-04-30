@@ -16,7 +16,6 @@ from sqlalchemy import Engine, event, text
 from sqlalchemy.exc import OperationalError
 from sqlmodel import SQLModel, Session, create_engine
 
-from llm_pipeline.db.step_config import StepModelConfig
 from llm_pipeline.db.pipeline_visibility import PipelineVisibility
 from llm_pipeline.state import (
     DraftPipeline,
@@ -46,7 +45,6 @@ def _migrate_add_columns(engine: Engine) -> None:
     # (table_name, column_name, column_type)
     _MIGRATIONS = [
         ("pipeline_events", "step_name", "VARCHAR(100)"),
-        ("step_model_configs", "request_limit", "INTEGER"),
         ("pipeline_runs", "error_message", "TEXT"),
         ("pipeline_runs", "trace_id", "VARCHAR(32)"),
         ("pipeline_runs", "span_id", "VARCHAR(16)"),
@@ -208,6 +206,26 @@ def _drop_legacy_step_states_table(engine: Engine) -> None:
         conn.commit()
 
 
+def _drop_legacy_step_model_configs_table(engine: Engine) -> None:
+    """Phoenix-owned-model migration: drop ``step_model_configs``.
+
+    Per-step model overrides are now a Phoenix concern: the model
+    lives on the Phoenix prompt's ``model_provider`` + ``model_name``
+    fields (declared in YAML, pushed at ``llm-pipeline build``). The
+    legacy ``StepModelConfig`` DB table is inert. Idempotent.
+    """
+    drops = [
+        "DROP TABLE IF EXISTS step_model_configs",
+    ]
+    with engine.connect() as conn:
+        for stmt in drops:
+            try:
+                conn.execute(text(stmt))
+            except OperationalError:
+                pass
+        conn.commit()
+
+
 def _drop_legacy_evals_tables(engine: Engine) -> None:
     """Phase-3 evals migration: drop the 5 retired local eval tables.
 
@@ -350,7 +368,6 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
             PipelineRun.__table__,
             DraftStep.__table__,
             DraftPipeline.__table__,
-            StepModelConfig.__table__,
             PipelineVisibility.__table__,
             PipelineReview.__table__,
             EvaluationAcceptance.__table__,
@@ -375,6 +392,10 @@ def init_pipeline_db(engine: Optional[Engine] = None) -> Engine:
     # cases, runs, case_results, variants). Phoenix is now the source
     # of truth; only ``EvaluationAcceptance`` survives locally.
     _drop_legacy_evals_tables(engine)
+
+    # Phoenix-owned-model migration: drop step_model_configs. The
+    # per-step model lives on the Phoenix prompt now.
+    _drop_legacy_step_model_configs_table(engine)
 
     # Add performance indexes that create_all skips on existing tables
     add_missing_indexes(engine)

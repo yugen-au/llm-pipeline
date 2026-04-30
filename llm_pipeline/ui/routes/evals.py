@@ -457,41 +457,27 @@ def post_accept_experiment(
 
 @router.get("/datasets/{dataset_id}/prod-model")
 def get_dataset_prod_model(
-    dataset_id: str, request: Request, db: DBSession,
+    dataset_id: str, request: Request,
 ) -> dict:
-    """Return the ``StepModelConfig`` row for the dataset's step target."""
-    client = _client(request)
-    record = _phoenix_call(client.get_dataset, dataset_id)
-    dataset = phoenix_to_dataset(record)
-    if dataset.metadata.target_type != "step" or not dataset.metadata.target_name:
-        raise HTTPException(
-            status_code=422,
-            detail="prod-model endpoint supports step-targets only.",
-        )
+    """Retired endpoint. The model lives on the Phoenix prompt now.
 
-    pipeline_registry: dict = getattr(
-        request.app.state, "pipeline_registry", {},
-    )
-    pipeline_name, step_name = _resolve_step_target(
-        pipeline_registry, dataset.metadata.target_name,
-    )
-
-    from llm_pipeline.db.step_config import StepModelConfig
-
-    cfg = db.exec(
-        select(StepModelConfig).where(
-            StepModelConfig.pipeline_name == pipeline_name,
-            StepModelConfig.step_name == step_name,
+    Per-step model overrides moved off the ``StepModelConfig`` DB
+    table when models became Phoenix-owned. Callers needing the
+    production model should hit
+    ``GET /api/pipelines/{name}/steps/{step_name}/prompts`` and read
+    the model from the Phoenix prompt (or use Pipeline.inspect()'s
+    PromptSpec, which surfaces it directly).
+    """
+    del dataset_id, request
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Per-step model overrides retired. The production model "
+            "lives on the Phoenix prompt — read it via "
+            "GET /api/pipelines/{name}/steps/{step_name}/prompts or "
+            "from Pipeline.inspect()."
         ),
-    ).first()
-    if cfg is None:
-        return {"pipeline_name": pipeline_name, "step_name": step_name, "model": None}
-    return {
-        "pipeline_name": pipeline_name,
-        "step_name": step_name,
-        "model": cfg.model,
-        "request_limit": cfg.request_limit,
-    }
+    )
 
 
 @router.get("/datasets/{dataset_id}/prod-prompts")
