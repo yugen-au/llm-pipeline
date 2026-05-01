@@ -358,6 +358,29 @@ class TestAutoRouting:
         inputs_codes = {i.code for i in spec.inputs.issues}
         assert "step_inputs_name_mismatch" in inputs_codes
 
+    def test_prompt_data_routes_prompt_variables_captures(self):
+        from llm_pipeline.specs import (
+            JsonSchemaWithRefs,
+            PromptData,
+        )
+
+        # Plain Pydantic field (no Field(description=...)) → captures
+        # ``missing_field_description`` on the PromptVariables class.
+        class _BadPrompt(PromptVariables):
+            text: str = ""  # missing description
+
+        prompt = PromptData(
+            source_cls=_BadPrompt,
+            variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
+            yaml_path="/tmp/x.yaml",
+        )
+
+        codes = {i.code for i in prompt.issues}
+        # ``location.field="text"`` doesn't match any PromptData field
+        # → falls back to ``prompt.issues``. Same for ``auto_vars``-
+        # related captures (``auto_vars`` is a dict, not an ArtifactField).
+        assert "missing_field_description" in codes
+
     def test_top_level_issue_lands_on_spec_issues(self):
         from llm_pipeline.specs import (
             JsonSchemaWithRefs,
