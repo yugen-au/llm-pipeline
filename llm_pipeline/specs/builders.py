@@ -371,6 +371,12 @@ def build_step_spec(
             tool_names.append(tool_name)
 
     return StepSpec(
+        # ``source_cls`` triggers ``ArtifactSpec.__init__`` to route
+        # ``cls._init_subclass_errors`` onto the matching ArtifactField
+        # sub-component (``inputs.issues`` / ``instructions.issues`` /
+        # ``prepare.issues`` / ``run.issues``) by ``location.field``,
+        # with anything top-level falling back to ``self.issues``.
+        source_cls=cls,
         kind=KIND_STEP,
         name=name,
         cls=_qualified(cls),
@@ -418,6 +424,13 @@ def build_extraction_spec(
         table_name = to_snake_case(model_cls.__name__)
 
     return ExtractionSpec(
+        # See ``build_step_spec`` for the routing rationale.
+        # ``location.field="table_name"`` (set on missing/wrong-type
+        # MODEL captures) doesn't match an ArtifactField sub-component
+        # (``table_name`` is a primitive ``str | None``) — those
+        # captures fall back to ``self.issues``. ``inputs`` /
+        # ``extract`` / ``run`` captures route normally.
+        source_cls=cls,
         kind=KIND_EXTRACTION,
         name=name,
         cls=_qualified(cls),
@@ -455,6 +468,8 @@ def build_review_spec(
         webhook_url = None
 
     return ReviewSpec(
+        # See ``build_step_spec`` for the routing rationale.
+        source_cls=cls,
         kind=KIND_REVIEW,
         name=name,
         cls=_qualified(cls),
