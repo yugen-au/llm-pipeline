@@ -60,7 +60,7 @@ async def run_pipeline_in_memory(
     pipeline_cls: type["Pipeline"],
     input_data: dict[str, Any] | None = None,
     *,
-    model: str,
+    model: str | None = None,
     session: "Session | None" = None,
     engine: "Engine | None" = None,
     run_id: str | None = None,
@@ -70,6 +70,12 @@ async def run_pipeline_in_memory(
 
     Returns ``(final_state, end_payload)``. Does not write to the
     pipeline DB tables; useful for unit tests and the smoke script.
+
+    ``model`` is optional. When None (production), each step reads
+    its own model from its Phoenix prompt — the codebase-tracked
+    source of truth (set via the YAML ``model:`` field). Pass an
+    explicit value only to override Phoenix at run time (eval-style
+    "test pipeline X with model Y").
     """
     from sqlmodel import Session
 
@@ -133,7 +139,7 @@ async def run_pipeline(
     pipeline_cls: type["Pipeline"],
     input_data: dict[str, Any] | None = None,
     *,
-    model: str,
+    model: str | None = None,
     engine: "Engine",
     run_id: str | None = None,
     instrumentation_settings: Any | None = None,
@@ -144,6 +150,9 @@ async def run_pipeline(
     the ``PipelineRun`` row's status. On a pause-for-review the next
     node's snapshot is left in ``'created'`` status so
     ``resume_pipeline`` can pick up via ``Graph.iter_from_persistence``.
+
+    ``model`` is optional; see :func:`run_pipeline_in_memory` for the
+    semantics (None → Phoenix wins; set → eval-time override).
     """
     from llm_pipeline.graph.persistence import SqlmodelStatePersistence
     from llm_pipeline.prompts.service import PromptService
@@ -222,7 +231,7 @@ async def resume_pipeline(
     pipeline_cls: type["Pipeline"],
     *,
     run_id: str,
-    model: str,
+    model: str | None = None,
     engine: "Engine",
     metadata_patch: dict[str, Any] | None = None,
     instrumentation_settings: Any | None = None,

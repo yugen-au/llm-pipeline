@@ -116,10 +116,18 @@ def build_step_task(
                 variables=case_input,
             )
 
+        # System prompt is rendered statically and embedded on the agent
+        # — no @agent.instructions hook (matches the runtime path in
+        # ``LLMStepNode._run_llm`` post-B.5).
+        system_prompt = prompt_service.get_system_prompt(
+            prompt_key=step_cls.step_name(),
+            variables=case_input,
+        )
+
         agent = build_step_agent(
             step_name=step_name,
             output_type=output_type,
-            prompt_name=step_cls.step_name(),
+            instructions=system_prompt,
             tools=None,
         )
 

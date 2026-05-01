@@ -370,7 +370,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         # from the same flat dict (Phoenix's variable_definitions is
         # message-agnostic). prepare()-supplied vars come from the
         # PromptVariables instance; auto_generate-supplied vars are
-        # resolved at render time in step B.5 (currently empty for
+        # resolved at render time (B.5 follow-up; currently empty for
         # the demo so the merge is a no-op).
         prompt_vars = call.model_dump()
         prompt_override = (ctx.deps.prompt_overrides or {}).get(cls.step_name())
@@ -388,10 +388,15 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                 variables=prompt_vars,
             )
 
-        # System-message rendering with auto_vars-resolved values lands
-        # in step B.5 (Restore _run_llm system+user rendering). Today
-        # the @agent.instructions hook fetches the raw system template
-        # from Phoenix without substitution.
+        # System prompt is rendered statically here and passed to the
+        # agent at construction. The previous @agent.instructions hook
+        # (which fetched + rendered at every agent.run) is gone — the
+        # static path matches pydantic-ai's canonical case and lets us
+        # compose auto_vars + prepare-supplied vars in one place.
+        system_prompt = ctx.deps.prompt_service.get_system_prompt(
+            prompt_key=cls.step_name(),
+            variables=prompt_vars,
+        )
 
         review_ctx = ctx.deps.review_context
         if review_ctx:
@@ -405,10 +410,27 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
             or cls.INSTRUCTIONS
         )
 
+        # Model resolution (B.6): eval-time override on PipelineDeps
+        # wins. When unset (production), fall back to the Phoenix
+        # prompt's stored model — Phoenix is the runtime source of
+        # truth for which LLM each step calls.
+        if ctx.deps.model is not None:
+            model = ctx.deps.model
+        else:
+            model = ctx.deps.prompt_service.get_model(cls.step_name())
+            if model is None:
+                raise RuntimeError(
+                    f"No model resolved for step {cls.step_name()!r}: "
+                    f"PipelineDeps.model is unset and the Phoenix prompt "
+                    f"has no model field. Set the model: line in "
+                    f"llm-pipeline-prompts/{cls.step_name()}.yaml or pass "
+                    f"a default via PipelineDeps."
+                )
+
         agent = build_step_agent(
             step_name=cls.step_name(),
             output_type=output_type,
-            prompt_name=cls.step_name(),
+            instructions=system_prompt,
             instrument=ctx.deps.instrumentation_settings,
             tools=None,
         )
@@ -425,7 +447,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         run_result = await agent.run(
             user_prompt,
             deps=step_deps,
-            model=ctx.deps.model,
+            model=model,
         )
         instruction = run_result.output
 

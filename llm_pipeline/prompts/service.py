@@ -281,6 +281,37 @@ class PromptService:
         )
         return _safe_format(template, variables, variable_instance, prompt_key, "User")
 
+    def get_model(
+        self,
+        prompt_key: str,
+        fallback: Optional[str] = None,
+    ) -> Optional[str]:
+        """Return the pydantic-ai model string for ``prompt_key``.
+
+        Phoenix stores model as a ``(model_provider, model_name)`` pair;
+        we combine them via :func:`phoenix_model_to_pai` to produce the
+        ``provider:name`` format pydantic-ai expects (e.g.
+        ``openai:gpt-4o-mini``). Returns ``None`` when either field is
+        unset on the resolved version (and ``fallback`` is also None).
+
+        Used by ``LLMStepNode._run_llm`` after the eval-time override
+        check: production reads the model from Phoenix; eval runs may
+        substitute via ``PipelineDeps.model``.
+        """
+        from llm_pipeline.prompts.models import phoenix_model_to_pai
+
+        name, _ = _split_key(prompt_key, "system")
+        try:
+            version = self._fetch_version(name)
+        except PromptNotFoundError:
+            return fallback
+
+        pai_model = phoenix_model_to_pai(
+            version.get("model_provider"),
+            version.get("model_name"),
+        )
+        return pai_model if pai_model is not None else fallback
+
 
 def _safe_format(
     template: str,

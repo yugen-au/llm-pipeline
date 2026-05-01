@@ -101,16 +101,25 @@ class _SpyPromptService:
     def __init__(self) -> None:
         self.user_calls: list[dict] = []
         self.system_calls: list[dict] = []
+        self.model_calls: list[str] = []
 
     def get_user_prompt(self, *, prompt_key: str, variables: dict) -> str:
         self.user_calls.append({"prompt_key": prompt_key, "variables": variables})
         return f"PROD-USER:{prompt_key}:{variables}"
 
-    def get_prompt(self, *, prompt_key: str, prompt_type: str) -> str:
+    def get_system_prompt(self, *, prompt_key: str, variables: dict) -> str:
         self.system_calls.append(
-            {"prompt_key": prompt_key, "prompt_type": prompt_type},
+            {"prompt_key": prompt_key, "variables": variables},
         )
-        return f"PROD-{prompt_type}:{prompt_key}"
+        return f"PROD-SYSTEM:{prompt_key}"
+
+    def get_model(self, prompt_key: str, fallback: str | None = None) -> str:
+        # Tests inject ``PipelineDeps(model="test")`` so the model
+        # override path always fires before this is consulted; return
+        # a stub so the fallback path also produces a usable string
+        # if anyone disables the override later.
+        self.model_calls.append(prompt_key)
+        return fallback or "openai:gpt-4o-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -169,10 +178,10 @@ class TestPromptOverride:
             session.close()
 
         assert ctx.deps.prompt_service.user_calls == []
-        # System prompt fetch still happens (the agent's
-        # ``@agent.instructions`` hook calls it independently).
+        # System prompt fetch still happens — the prompt-override flag
+        # bypasses only the user-message fetch.
         assert any(
-            c["prompt_type"] == "system"
+            c["prompt_key"] == _OverrideStep.step_name()
             for c in ctx.deps.prompt_service.system_calls
         )
 

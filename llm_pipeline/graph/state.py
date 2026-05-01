@@ -159,7 +159,13 @@ class PipelineDeps:
     prompt_service: Any  # PromptService
     run_id: str
     pipeline_name: str
-    model: str
+    # ``model`` is an optional eval-time override. None in production —
+    # ``_run_llm`` then reads each step's model from its Phoenix prompt
+    # (the codebase-tracked source of truth, set via the YAML
+    # ``model:`` field). When set (eval runner / variant), every step
+    # uses this model regardless of its Phoenix prompt — the
+    # "test pipeline X with model Y" knob.
+    model: str | None = None
     input_cls: type | None = None
     node_classes: dict[str, type] = field(default_factory=dict)
     # Pipeline-level wiring keyed by node base class. Each entry is a

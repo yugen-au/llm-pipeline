@@ -8,11 +8,11 @@ resolution via PromptService.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pydantic_ai import Agent, InstrumentationSettings, RunContext
+    from pydantic_ai import Agent
     from llm_pipeline.prompts.service import PromptService
     from sqlmodel import Session
 
@@ -21,8 +21,9 @@ if TYPE_CHECKING:
 class StepDeps:
     """Dependencies injected into pydantic-ai agents for pipeline steps.
 
-    Compatible with RunContext[StepDeps] for use in @agent.instructions,
-    @agent.tool, and @agent.output_validator decorators.
+    Compatible with RunContext[StepDeps] for use in @agent.tool and
+    @agent.output_validator decorators. (Instructions are passed
+    statically at agent construction; they don't need RunContext.)
 
     Uses Any for runtime types to avoid circular imports; real types
     are declared under TYPE_CHECKING for IDE support.
@@ -51,8 +52,8 @@ class StepDeps:
 def build_step_agent(
     step_name: str,
     output_type: type,
+    instructions: str,
     model: str | None = None,
-    prompt_name: str | None = None,
     retries: int = 3,
     model_settings: Any | None = None,
     validators: list[Any] | None = None,
@@ -61,18 +62,25 @@ def build_step_agent(
 ) -> Agent[StepDeps, Any]:
     """Build a pydantic-ai Agent configured for a pipeline step.
 
-    Constructs an Agent with dynamic system prompt injection via
-    @agent.instructions. The system prompt is resolved at runtime
-    through deps.prompt_service against ``prompt_name`` (a Phoenix
-    CHAT prompt holding both system and user messages). The system
-    message is the one extracted here.
+    The system prompt is passed statically at construction time —
+    callers are expected to have fetched the Phoenix prompt and
+    rendered its ``system`` message with the call's variables before
+    invoking this factory. The previous dynamic
+    ``@agent.instructions`` indirection (which fetched + rendered at
+    every ``agent.run`` call) has been removed; the static path is
+    simpler, lets us pre-resolve auto_vars, and matches what
+    pydantic-ai treats as the canonical case.
 
     Args:
         step_name: Unique step identifier (e.g. 'constraint_extraction').
         output_type: Pydantic model for validated output.
-        model: Model string. None defers selection via defer_model_check.
-        prompt_name: Phoenix prompt name to fetch the system message
-            from. Defaults to ``step_name`` when omitted.
+        instructions: Fully-rendered system prompt to embed on the
+            agent. The caller resolves placeholders via
+            ``PromptService.get_system_prompt`` (or equivalent)
+            BEFORE calling this factory.
+        model: Model string. None defers selection via defer_model_check —
+            the runtime path then decides per-call (Phoenix prompt
+            model or eval-time override).
         retries: Max retries for output validation failures.
         model_settings: ModelSettings for temperature, max_tokens, etc.
         validators: Output validators registered via
@@ -82,10 +90,10 @@ def build_step_agent(
             agent. None or empty = no tools registered.
 
     Returns:
-        Configured Agent[StepDeps, Any] with dynamic instructions and
+        Configured Agent[StepDeps, Any] with static instructions and
         output validators registered.
     """
-    from pydantic_ai import Agent, RunContext
+    from pydantic_ai import Agent
 
     agent_kwargs: dict[str, Any] = dict(
         model=model,
@@ -96,6 +104,7 @@ def build_step_agent(
         model_settings=model_settings,
         defer_model_check=True,
         validation_context=lambda ctx: ctx.deps.validation_context,
+        instructions=instructions,
     )
     if instrument is not None:
         agent_kwargs["instrument"] = instrument
@@ -106,16 +115,6 @@ def build_step_agent(
         agent_kwargs["toolsets"] = [FunctionToolset(tools=list(tools))]
 
     agent: Agent[StepDeps, Any] = Agent(**agent_kwargs)
-
-    resolved_prompt_name = prompt_name or step_name
-
-    @agent.instructions
-    def _inject_system_prompt(ctx: RunContext[StepDeps]) -> str:
-        """Resolve the system message from the Phoenix CHAT prompt."""
-        return ctx.deps.prompt_service.get_prompt(
-            prompt_key=resolved_prompt_name,
-            prompt_type='system',
-        )
 
     # Register output validators (from validator factories)
     for v in (validators or []):
