@@ -62,6 +62,12 @@ class SourceSpec(BaseModel):
     - ``from_output``: ``step_cls``, ``index``, ``field``
     - ``from_pipeline``: ``attr``
     - ``computed``: ``fn`` (function repr) + ``sources`` (recursive)
+
+    ``issues`` carries any validation problems specific to this
+    source adapter (e.g. ``from_input_unknown_path`` when the
+    referenced INPUT_DATA path doesn't exist). The frontend reads
+    ``node.wiring.field_sources[name].issues`` to render an inline
+    error on that exact input.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -74,6 +80,7 @@ class SourceSpec(BaseModel):
     attr: str | None = None
     fn: str | None = None
     sources: list["SourceSpec"] | None = None
+    issues: list["ValidationIssue"] = Field(default_factory=list)
 
 
 class WiringSpec(BaseModel):
@@ -109,14 +116,26 @@ class ValidationLocation(BaseModel):
 class ValidationIssue(BaseModel):
     """A single thing wrong (or worth flagging) about a pipeline.
 
-    Issues are NOT stored on the spec. They are derived by walking
-    the spec's state via :func:`derive_issues`. Severity gates
-    runnability: any ``error`` blocks the pipeline from running;
-    ``warning`` is informational.
+    Issues are localised onto the spec component they describe:
+    pipeline-wide issues sit on ``PipelineSpec.issues``; node-level
+    on ``NodeSpec.issues``; per-wiring-field on
+    ``SourceSpec.issues``; prompt-class on ``PromptSpec.issues``.
+    The frontend walks the spec and renders error styling on the
+    component carrying the issue — no string-matching by location.
+
+    :func:`derive_issues` returns a flat list across every level
+    when callers need the full set (e.g. :func:`is_runnable`,
+    ``ValidationSummary.issue_count``).
+
+    Severity gates runnability: any ``error`` blocks the pipeline
+    from running; ``warning`` is informational.
 
     The ``code`` is a stable machine-readable identifier (e.g.
-    ``missing_inputs``, ``dangling_from_output``). Frontends can
-    branch UX on it; humans read ``message`` and ``suggestion``.
+    ``missing_inputs``, ``from_output_not_upstream``). Frontends
+    can branch UX on it; humans read ``message`` and
+    ``suggestion``. ``location`` retains pipeline / node / field
+    pointers for human-readable context (logs, error messages),
+    not for routing.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -167,6 +186,10 @@ class PromptSpec(BaseModel):
     (``system_template``, ``user_template``, ``model``, ``in_sync``,
     ``drift``) are filled by the discovery-time Phoenix validator;
     ``None`` until that runs.
+
+    ``issues`` carries any prompt-class problems
+    (``missing_field_description``, ``auto_vars_*``). The frontend
+    renders these on the prompt section of the node card.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -188,6 +211,8 @@ class PromptSpec(BaseModel):
     in_sync: bool | None = None
     drift: dict[str, str] | None = None
 
+    issues: list["ValidationIssue"] = Field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Node + Edge
@@ -199,11 +224,16 @@ class NodeSpec(BaseModel):
 
     ``inputs_schema`` / ``output_schema`` are ``None`` when the
     corresponding class attribute (INPUTS / INSTRUCTIONS / MODEL /
-    OUTPUT) has not been set on the node class. The spec describes
-    reality including incomplete reality; ``derive_issues`` reads
-    the None-ness and emits a missing-X validation issue. This is
-    what lets ``Pipeline.__init_subclass__`` produce a spec for a
-    half-broken node without raising.
+    OUTPUT) has not been set on the node class — the spec describes
+    reality including incomplete reality.
+
+    ``issues`` carries node-level validation problems (missing
+    INPUTS / INSTRUCTIONS / MODEL / OUTPUT, naming mismatches,
+    prepare-signature issues, binding-kind mismatches). Per-wiring-
+    field issues live further down on each ``SourceSpec``;
+    prompt-class issues live on ``self.prompt.issues``. The
+    frontend renders ``node.issues`` as the node-card error
+    indicator.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -215,6 +245,7 @@ class NodeSpec(BaseModel):
     output_schema: dict[str, Any] | None  # INSTRUCTIONS / MODEL / OUTPUT
     wiring: WiringSpec
     prompt: PromptSpec | None = None  # only for steps
+    issues: list["ValidationIssue"] = Field(default_factory=list)
 
 
 class EdgeSpec(BaseModel):
@@ -243,7 +274,26 @@ class EdgeSpec(BaseModel):
 
 
 class PipelineSpec(BaseModel):
-    """Complete typed introspection surface for a pipeline."""
+    """Complete typed introspection surface for a pipeline.
+
+    Issues are localised to the spec component they describe:
+
+    - **Pipeline-level** (cycles, naming, ``input_data_wrong_type``,
+      ``invalid_binding_type``, ``duplicate_node_class``, graph /
+      spec build failures): ``self.issues``.
+    - **Node-level** (missing INPUTS / INSTRUCTIONS / MODEL /
+      OUTPUT, naming mismatches, prepare-signature issues, binding-
+      kind mismatches): ``self.nodes[i].issues``.
+    - **Per-wiring-field** (``from_input_unknown_path``,
+      ``from_output_not_upstream``, etc.):
+      ``self.nodes[i].wiring.field_sources[name].issues``.
+    - **Prompt-class** (``missing_field_description``,
+      ``auto_vars_*``): ``self.nodes[i].prompt.issues``.
+
+    :func:`derive_issues` is the canonical recursive flatten — use
+    it when you need the full list (e.g. for
+    :func:`is_runnable` or ``ValidationSummary.issue_count``).
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -252,7 +302,8 @@ class PipelineSpec(BaseModel):
     input_data_schema: dict[str, Any] | None
     nodes: list[NodeSpec]
     edges: list[EdgeSpec]
-    start_node: str  # name of the start node
+    start_node: str | None  # name of the start node; None when no valid bindings
+    issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -429,10 +480,19 @@ def _build_node_spec(binding: Any) -> NodeSpec:
 
 
 def _build_edges(pipeline_cls: type["Pipeline"]) -> list[EdgeSpec]:
-    """Walk each node's ``run()`` return annotation to enumerate edges."""
-    from llm_pipeline.graph.validator import _next_node_classes
+    """Walk each node's ``run()`` return annotation to enumerate edges.
 
-    raw_nodes = [b.cls for b in pipeline_cls.nodes]
+    Skips bindings whose ``cls`` isn't a real class — those entries
+    surface as ``invalid_binding_type`` issues elsewhere.
+    """
+    from llm_pipeline.graph.validator import _next_node_classes
+    from llm_pipeline.wiring import Extraction, Review, Step
+
+    raw_nodes = [
+        b.cls for b in pipeline_cls.nodes
+        if isinstance(b, (Step, Extraction, Review))
+        and isinstance(b.cls, type)
+    ]
     name_by_cls = {c: c.__name__ for c in raw_nodes}
     # Reuse the validator's edge-resolution; it already handles
     # forward refs + Union returns + the End sentinel.
@@ -459,25 +519,44 @@ def _build_edges(pipeline_cls: type["Pipeline"]) -> list[EdgeSpec]:
 
 
 def build_pipeline_spec(pipeline_cls: type["Pipeline"]) -> PipelineSpec:
-    """Build the full ``PipelineSpec`` for ``pipeline_cls``.
+    """Build the empty-issues skeleton ``PipelineSpec`` for ``pipeline_cls``.
 
-    Called at ``Pipeline.__init_subclass__`` time after structural
-    validation has succeeded. The returned spec is cached at
-    ``cls._spec`` and surfaced via ``Pipeline.inspect()``.
+    Called at ``Pipeline.__init_subclass__`` time. The returned spec
+    has every ``issues`` list empty — the caller is expected to
+    stamp captured errors onto the right components and then run
+    the structural validator that populates per-component issues
+    in place. The result is cached at ``cls._spec`` and surfaced
+    via ``Pipeline.inspect()``.
+
+    Tolerates partial state — only bindings whose ``cls`` is a real
+    class contribute a ``NodeSpec``; invalid binding entries
+    surface via captured pipeline-level issues stamped by the
+    caller.
     """
+    from llm_pipeline.wiring import Extraction, Review, Step
+
     input_schema = (
         pipeline_cls.INPUT_DATA.model_json_schema()
         if pipeline_cls.INPUT_DATA is not None else None
     )
-    nodes = [_build_node_spec(b) for b in pipeline_cls.nodes]
+    valid_bindings = [
+        b for b in pipeline_cls.nodes
+        if isinstance(b, (Step, Extraction, Review))
+        and isinstance(b.cls, type)
+    ]
+    nodes = [_build_node_spec(b) for b in valid_bindings]
     edges = _build_edges(pipeline_cls)
+    start_node_name = (
+        pipeline_cls.start_node.__name__
+        if isinstance(pipeline_cls.start_node, type) else None
+    )
     return PipelineSpec(
         name=pipeline_cls.pipeline_name(),
         cls=_qualname(pipeline_cls),
         input_data_schema=input_schema,
         nodes=nodes,
         edges=edges,
-        start_node=pipeline_cls.start_node.__name__,
+        start_node=start_node_name,
     )
 
 
@@ -486,34 +565,47 @@ def build_pipeline_spec(pipeline_cls: type["Pipeline"]) -> PipelineSpec:
 # ---------------------------------------------------------------------------
 
 
+def _collect_source_issues(source: SourceSpec) -> list[ValidationIssue]:
+    """Recursively gather issues from a SourceSpec and any inner sources."""
+    issues = list(source.issues)
+    for inner in source.sources or []:
+        issues.extend(_collect_source_issues(inner))
+    return issues
+
+
 def derive_issues(spec: PipelineSpec) -> list[ValidationIssue]:
-    """Walk a pipeline spec and report everything wrong with it.
+    """Walk a pipeline spec and return every localised issue, flattened.
 
-    The spec describes reality (including incomplete reality —
-    ``inputs_schema=None`` means the node didn't declare INPUTS, etc.).
-    This function is one possible reading of that reality: it returns
-    a flat list of human-readable issues, ordered by location. Empty
-    list means the pipeline is structurally clean.
+    The spec stores issues at the level they describe:
 
-    Composes from three sources:
+    - ``spec.issues`` — pipeline-level (cycles, naming,
+      ``invalid_binding_type``, build failures, etc.).
+    - ``spec.nodes[i].issues`` — node-level (contract violations,
+      naming, prepare-signature issues).
+    - ``spec.nodes[i].wiring.field_sources[name].issues`` — per-
+      input drift (FromInput unknown path, FromOutput not
+      upstream, etc.). Inner ``Computed`` sources are walked
+      recursively.
+    - ``spec.nodes[i].prompt.issues`` — prompt-class-level
+      (auto_vars, missing field descriptions).
 
-    - **Captured ``__init_subclass__`` errors** — recorded on each
-      class as ``_init_subclass_errors`` when the framework's
-      contract validators fired against partial state.
-    - **Coherence checks** — wiring ``field_sources`` reference real
-      upstream nodes; required schemas present per node kind; etc.
-    - **Pipeline-level validators** — cycle detection, start-node
-      sanity, naming conventions.
+    This function is the canonical flatten — use it for runnability
+    gating (:func:`is_runnable`), counting
+    (``ValidationSummary.issue_count``), or any consumer that wants
+    "give me everything wrong with this pipeline."
 
-    Stub: returns empty for now. Implementation lands in step 6 of
-    the plan, after the framework's ``__init_subclass__`` validators
-    have been refactored to capture rather than raise (steps 3-5).
-    Callers can already wire this into ``PipelineEntry`` and the API
-    surface — they'll see no issues yet because the captures don't
-    exist yet, which matches today's "raises during discovery"
-    behaviour from the consumer's point of view.
+    Order is stable: pipeline → per-node (in spec order) → per-node
+    sub-components (wiring → prompt). Empty list means the pipeline
+    is structurally clean.
     """
-    return []
+    issues = list(spec.issues)
+    for node in spec.nodes:
+        issues.extend(node.issues)
+        for source in node.wiring.field_sources.values():
+            issues.extend(_collect_source_issues(source))
+        if node.prompt is not None:
+            issues.extend(node.prompt.issues)
+    return issues
 
 
 def is_runnable(spec: PipelineSpec) -> bool:

@@ -1,11 +1,12 @@
 """Compile-time validator for pydantic-graph-native pipelines.
 
-Runs at ``Pipeline.__init_subclass__``. Enforces the
-"if it compiles, it works" contract — but *captures* every violation
-as a :class:`ValidationIssue` rather than raising. The class object
-always constructs; ``Pipeline.__init_subclass__`` aggregates the
-captures into ``cls._init_subclass_errors`` and ``derive_issues`` reads
-them off the spec.
+Runs at ``Pipeline.__init_subclass__`` against an already-built
+``PipelineSpec`` skeleton. Each helper *mutates the spec component
+it describes* — appending issues to ``PipelineSpec.issues``,
+``NodeSpec.issues``, ``SourceSpec.issues``, or ``PromptSpec.issues``
+as appropriate. No exceptions are raised; the pipeline class always
+constructs and ``derive_issues(spec)`` returns the flat list when a
+flattened view is needed.
 
 Checks performed:
 
@@ -14,26 +15,26 @@ Checks performed:
 2. ``INPUT_DATA`` is a ``PipelineInputData`` subclass.
 3. Every node binding's ``inputs_spec`` is a valid ``SourcesSpec``:
    - ``FromInput(path)`` resolves against ``INPUT_DATA``'s nested
-     ``BaseModel`` fields.
+     ``BaseModel`` fields → issue on the source.
    - ``FromOutput(NodeCls)`` references a node that appears
-     **upstream** in the graph (topologically reachable from
-     ``start_node`` and visited before this node).
+     **upstream** in the graph → issue on the source.
    - ``FromOutput(NodeCls, field=X)`` resolves against the upstream
-     node's output schema.
+     node's output schema → issue on the source.
 4. Per-kind contract: ``LLMStepNode`` declares INPUTS/INSTRUCTIONS
    with the matching ``{Name}Inputs`` / ``{Name}Instructions`` names
    and INSTRUCTIONS subclasses ``LLMResultMixin``;
    ``ExtractionNode`` declares ``MODEL`` (a SQLModel subclass);
    ``ReviewNode`` declares ``OUTPUT`` (a Pydantic ``BaseModel``).
-5. The graph is acyclic.
+   All → node-level issues.
+5. The graph is acyclic → pipeline-level issues.
 
-The cross-check ``inputs_spec.inputs_cls`` vs ``cls.INPUTS`` is owned
-by the wrapper's own ``__post_init__`` (captured into
-``binding._init_post_errors``). Not duplicated here.
+The cross-check ``inputs_spec.inputs_cls`` vs ``cls.INPUTS`` is
+owned by the wrapper's own ``__post_init__`` (captured into
+``binding._init_post_errors`` and stamped onto ``NodeSpec.issues``
+by the caller).
 
-This module performs only structural checks. Phoenix-aware validation
-(prompt existence, template-vs-PromptVariables drift) lives in a
-separate routine that runs at discovery time.
+Phoenix-aware validation lives in a separate routine that runs at
+discovery time.
 """
 from __future__ import annotations
 
@@ -55,29 +56,33 @@ from llm_pipeline.wiring import (
 )
 
 if TYPE_CHECKING:
-    from llm_pipeline.graph.spec import ValidationIssue
+    from llm_pipeline.graph.spec import (
+        NodeSpec,
+        PipelineSpec,
+        SourceSpec,
+        ValidationIssue,
+    )
 
-__all__ = ["validate_pipeline"]
+__all__ = ["validate_pipeline_into_spec"]
 
 
 # Type alias: any per-node binding wrapper.
 NodeBinding = Step | Extraction | Review
 
 
-def validate_pipeline(
+def validate_pipeline_into_spec(
     pipeline_cls: type,
     *,
-    nodes: list[NodeBinding],
-    start_node: type | None,
+    spec: "PipelineSpec",
+    bindings: list[NodeBinding],
     input_cls: type[PipelineInputData] | None,
-) -> list["ValidationIssue"]:
-    """Run every structural compile-time check; return captured issues.
+) -> None:
+    """Run every structural compile-time check; mutate ``spec`` in place.
 
-    ``nodes`` is the list of valid (already-typechecked) ``Step |
-    Extraction | Review`` wrappers declared on the pipeline.
-    ``start_node`` may be ``None`` for the very-broken case where no
-    node binding survived earlier filtering. Returns the list of
-    captured issues — empty when the pipeline is structurally clean.
+    ``bindings`` is the list of valid+deduped bindings (same list
+    used to build ``spec.nodes`` — element order is 1:1 with
+    ``spec.nodes``). Issues are appended onto the spec component
+    they describe; nothing is returned.
     """
     from llm_pipeline.graph.nodes import (
         ExtractionNode,
@@ -85,54 +90,57 @@ def validate_pipeline(
         ReviewNode,
     )
 
-    errors: list[ValidationIssue] = []
-    raw_nodes = [b.cls for b in nodes if isinstance(b.cls, type)]
+    raw_nodes = [b.cls for b in bindings if isinstance(b.cls, type)]
 
-    _validate_pipeline_naming(pipeline_cls, errors)
-    _validate_input_data(pipeline_cls, input_cls, errors)
+    _validate_pipeline_naming(pipeline_cls, spec)
+    _validate_input_data(pipeline_cls, input_cls, spec)
     _validate_node_naming(
-        raw_nodes, LLMStepNode, ExtractionNode, ReviewNode, errors,
+        bindings, spec.nodes,
+        LLMStepNode, ExtractionNode, ReviewNode,
     )
 
+    # Resolve start_node from spec.start_node (the name) back to the
+    # actual class so we can run topological + acyclic checks.
+    start_node = next(
+        (n for n in raw_nodes if n.__name__ == spec.start_node), None,
+    ) if spec.start_node else None
     if start_node is not None and raw_nodes:
-        _validate_start_node(pipeline_cls, raw_nodes, start_node, errors)
+        _validate_start_node(pipeline_cls, raw_nodes, start_node, spec)
         upstream_per_node = _topological_upstream(raw_nodes, start_node)
-        _assert_acyclic(pipeline_cls, raw_nodes, errors)
+        _assert_acyclic(pipeline_cls, raw_nodes, spec)
     else:
         upstream_per_node = {n: set() for n in raw_nodes}
 
-    for binding in nodes:
+    for binding, node_spec in zip(bindings, spec.nodes):
         if not isinstance(binding.cls, type):
-            continue  # binding wrapper already captured the issue
-        upstream = upstream_per_node.get(binding.cls, set())
-        _validate_binding(
+            continue
+        _validate_binding_into_spec(
             binding,
-            upstream=upstream,
+            node_spec=node_spec,
+            upstream=upstream_per_node.get(binding.cls, set()),
             input_cls=input_cls,
             llm_step_base=LLMStepNode,
             extraction_base=ExtractionNode,
             review_base=ReviewNode,
-            errors=errors,
         )
-    return errors
 
 
 # ---------------------------------------------------------------------------
-# Pipeline-level checks
+# Pipeline-level checks → PipelineSpec.issues
 # ---------------------------------------------------------------------------
 
 
 def _validate_pipeline_naming(
-    pipeline_cls: type, errors: list["ValidationIssue"],
+    pipeline_cls: type, spec: "PipelineSpec",
 ) -> None:
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 
     if not pipeline_cls.__name__.endswith("Pipeline"):
-        errors.append(ValidationIssue(
+        spec.issues.append(ValidationIssue(
             severity="error", code="pipeline_name_suffix",
             message=(
-                f"Pipeline class '{pipeline_cls.__name__}' must end with "
-                f"'Pipeline' suffix."
+                f"Pipeline class '{pipeline_cls.__name__}' must end "
+                f"with 'Pipeline' suffix."
             ),
             location=ValidationLocation(pipeline=pipeline_cls.__name__),
             suggestion=(
@@ -145,14 +153,14 @@ def _validate_pipeline_naming(
 def _validate_input_data(
     pipeline_cls: type,
     input_cls: type[PipelineInputData] | None,
-    errors: list["ValidationIssue"],
+    spec: "PipelineSpec",
 ) -> None:
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 
     if input_cls is None:
         return
     if not (isinstance(input_cls, type) and issubclass(input_cls, PipelineInputData)):
-        errors.append(ValidationIssue(
+        spec.issues.append(ValidationIssue(
             severity="error", code="input_data_wrong_type",
             message=(
                 f"{pipeline_cls.__name__}.INPUT_DATA must be a "
@@ -168,75 +176,11 @@ def _validate_input_data(
         ))
 
 
-def _validate_node_naming(
-    raw_nodes: list[type],
-    llm_step_base: type,
-    extraction_base: type,
-    review_base: type,
-    errors: list["ValidationIssue"],
-) -> None:
-    from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
-
-    for node in raw_nodes:
-        if issubclass(node, llm_step_base):
-            if not node.__name__.endswith("Step"):
-                errors.append(ValidationIssue(
-                    severity="error", code="step_name_suffix",
-                    message=(
-                        f"LLMStepNode subclass '{node.__name__}' must end "
-                        f"with 'Step' suffix."
-                    ),
-                    location=ValidationLocation(node=node.__name__),
-                    suggestion=(
-                        f"Rename to '{node.__name__}Step' or similar."
-                    ),
-                ))
-        elif issubclass(node, extraction_base):
-            if not node.__name__.endswith("Extraction"):
-                errors.append(ValidationIssue(
-                    severity="error", code="extraction_name_suffix",
-                    message=(
-                        f"ExtractionNode subclass '{node.__name__}' must "
-                        f"end with 'Extraction' suffix."
-                    ),
-                    location=ValidationLocation(node=node.__name__),
-                    suggestion=(
-                        f"Rename to '{node.__name__}Extraction' or similar."
-                    ),
-                ))
-        elif issubclass(node, review_base):
-            if not node.__name__.endswith("Review"):
-                errors.append(ValidationIssue(
-                    severity="error", code="review_name_suffix",
-                    message=(
-                        f"ReviewNode subclass '{node.__name__}' must end "
-                        f"with 'Review' suffix."
-                    ),
-                    location=ValidationLocation(node=node.__name__),
-                    suggestion=(
-                        f"Rename to '{node.__name__}Review' or similar."
-                    ),
-                ))
-        else:
-            errors.append(ValidationIssue(
-                severity="error", code="node_unknown_base",
-                message=(
-                    f"Node '{node.__name__}' is not a subclass of "
-                    f"LLMStepNode, ExtractionNode, or ReviewNode."
-                ),
-                location=ValidationLocation(node=node.__name__),
-                suggestion=(
-                    "Subclass one of LLMStepNode / ExtractionNode / "
-                    "ReviewNode."
-                ),
-            ))
-
-
 def _validate_start_node(
     pipeline_cls: type,
     raw_nodes: list[type],
     start_node: type,
-    errors: list["ValidationIssue"],
+    spec: "PipelineSpec",
 ) -> None:
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 
@@ -245,7 +189,7 @@ def _validate_start_node(
             start_node.__name__
             if isinstance(start_node, type) else repr(start_node)
         )
-        errors.append(ValidationIssue(
+        spec.issues.append(ValidationIssue(
             severity="error", code="start_node_not_in_nodes",
             message=(
                 f"start_node {start_repr} is not present in nodes."
@@ -262,7 +206,79 @@ def _validate_start_node(
 
 
 # ---------------------------------------------------------------------------
-# Edge graph (topological upstream sets)
+# Per-node naming → NodeSpec.issues
+# ---------------------------------------------------------------------------
+
+
+def _validate_node_naming(
+    bindings: list[NodeBinding],
+    node_specs: list["NodeSpec"],
+    llm_step_base: type,
+    extraction_base: type,
+    review_base: type,
+) -> None:
+    from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
+
+    for binding, node_spec in zip(bindings, node_specs):
+        node = binding.cls
+        if not isinstance(node, type):
+            continue
+        if issubclass(node, llm_step_base):
+            if not node.__name__.endswith("Step"):
+                node_spec.issues.append(ValidationIssue(
+                    severity="error", code="step_name_suffix",
+                    message=(
+                        f"LLMStepNode subclass '{node.__name__}' must "
+                        f"end with 'Step' suffix."
+                    ),
+                    location=ValidationLocation(node=node.__name__),
+                    suggestion=(
+                        f"Rename to '{node.__name__}Step' or similar."
+                    ),
+                ))
+        elif issubclass(node, extraction_base):
+            if not node.__name__.endswith("Extraction"):
+                node_spec.issues.append(ValidationIssue(
+                    severity="error", code="extraction_name_suffix",
+                    message=(
+                        f"ExtractionNode subclass '{node.__name__}' "
+                        f"must end with 'Extraction' suffix."
+                    ),
+                    location=ValidationLocation(node=node.__name__),
+                    suggestion=(
+                        f"Rename to '{node.__name__}Extraction' or similar."
+                    ),
+                ))
+        elif issubclass(node, review_base):
+            if not node.__name__.endswith("Review"):
+                node_spec.issues.append(ValidationIssue(
+                    severity="error", code="review_name_suffix",
+                    message=(
+                        f"ReviewNode subclass '{node.__name__}' must "
+                        f"end with 'Review' suffix."
+                    ),
+                    location=ValidationLocation(node=node.__name__),
+                    suggestion=(
+                        f"Rename to '{node.__name__}Review' or similar."
+                    ),
+                ))
+        else:
+            node_spec.issues.append(ValidationIssue(
+                severity="error", code="node_unknown_base",
+                message=(
+                    f"Node '{node.__name__}' is not a subclass of "
+                    f"LLMStepNode, ExtractionNode, or ReviewNode."
+                ),
+                location=ValidationLocation(node=node.__name__),
+                suggestion=(
+                    "Subclass one of LLMStepNode / ExtractionNode / "
+                    "ReviewNode."
+                ),
+            ))
+
+
+# ---------------------------------------------------------------------------
+# Edge graph (topological upstream sets) — used for FromOutput checks
 # ---------------------------------------------------------------------------
 
 
@@ -355,9 +371,9 @@ def _topological_upstream(
 def _assert_acyclic(
     pipeline_cls: type,
     raw_nodes: list[type],
-    errors: list["ValidationIssue"],
+    spec: "PipelineSpec",
 ) -> None:
-    """Capture a ``pipeline_cycle`` issue for every cycle in the node graph."""
+    """Append a ``pipeline_cycle`` issue for every cycle in the node graph."""
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 
     WHITE, GRAY, BLACK = 0, 1, 2
@@ -375,7 +391,7 @@ def _assert_acyclic(
                 cycle_repr = " -> ".join(c.__name__ for c in cycle)
                 if cycle_repr not in seen_cycles:
                     seen_cycles.add(cycle_repr)
-                    errors.append(ValidationIssue(
+                    spec.issues.append(ValidationIssue(
                         severity="error", code="pipeline_cycle",
                         message=(
                             f"Pipeline graph cycle: {cycle_repr}. "
@@ -397,42 +413,53 @@ def _assert_acyclic(
 
 
 # ---------------------------------------------------------------------------
-# Per-binding checks
+# Per-binding checks → NodeSpec.issues + per-source SourceSpec.issues
 # ---------------------------------------------------------------------------
 
 
-def _validate_binding(
+def _validate_binding_into_spec(
     binding: NodeBinding,
     *,
+    node_spec: "NodeSpec",
     upstream: set[type],
     input_cls: type[PipelineInputData] | None,
     llm_step_base: type,
     extraction_base: type,
     review_base: type,
-    errors: list["ValidationIssue"],
 ) -> None:
-    """Validate a single ``Step | Extraction | Review`` binding."""
+    """Validate a binding against its spec component, mutating in place."""
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 
     node_cls = binding.cls
     here = ValidationLocation(node=node_cls.__name__)
 
     # inputs_spec.inputs_cls vs cls.INPUTS is enforced by the wrapper's
-    # __post_init__ (captured into binding._init_post_errors). Not
-    # re-checked here to avoid double-reporting.
+    # __post_init__ (captured into binding._init_post_errors and stamped
+    # onto NodeSpec.issues by the caller). Not re-checked here.
 
-    _validate_inputs_spec(
-        node_cls, binding.inputs_spec,
-        upstream=upstream, input_cls=input_cls, errors=errors,
-    )
+    # Walk the wiring sources, mutating each SourceSpec.issues.
+    if isinstance(binding.inputs_spec, SourcesSpec):
+        for field_name, source in binding.inputs_spec.field_sources.items():
+            source_spec = node_spec.wiring.field_sources.get(field_name)
+            if source_spec is None:
+                continue  # defensive — should always exist
+            _validate_source_into_spec(
+                source,
+                source_spec=source_spec,
+                node_cls=node_cls,
+                field_name=field_name,
+                input_cls=input_cls,
+                upstream=upstream,
+            )
 
+    # Kind cross-check + per-kind contract → node_spec.issues.
     if isinstance(binding, Step):
         if not issubclass(node_cls, llm_step_base):
-            errors.append(ValidationIssue(
+            node_spec.issues.append(ValidationIssue(
                 severity="error", code="step_binding_wrong_kind",
                 message=(
-                    f"Step({node_cls.__name__}, ...): {node_cls.__name__} "
-                    f"is not an LLMStepNode subclass."
+                    f"Step({node_cls.__name__}, ...): "
+                    f"{node_cls.__name__} is not an LLMStepNode subclass."
                 ),
                 location=here,
                 suggestion=(
@@ -441,10 +468,10 @@ def _validate_binding(
                 ),
             ))
             return
-        _validate_llm_step(node_cls, errors)
+        _validate_llm_step(node_cls, node_spec)
     elif isinstance(binding, Extraction):
         if not issubclass(node_cls, extraction_base):
-            errors.append(ValidationIssue(
+            node_spec.issues.append(ValidationIssue(
                 severity="error", code="extraction_binding_wrong_kind",
                 message=(
                     f"Extraction({node_cls.__name__}, ...): "
@@ -457,10 +484,10 @@ def _validate_binding(
                 ),
             ))
             return
-        _validate_extraction(node_cls, errors)
+        _validate_extraction(node_cls, node_spec)
     elif isinstance(binding, Review):
         if not issubclass(node_cls, review_base):
-            errors.append(ValidationIssue(
+            node_spec.issues.append(ValidationIssue(
                 severity="error", code="review_binding_wrong_kind",
                 message=(
                     f"Review({node_cls.__name__}, ...): "
@@ -473,18 +500,16 @@ def _validate_binding(
                 ),
             ))
             return
-        _validate_review(node_cls, errors)
+        _validate_review(node_cls, node_spec)
 
 
-def _validate_llm_step(
-    node_cls: type, errors: list["ValidationIssue"],
-) -> None:
+def _validate_llm_step(node_cls: type, node_spec: "NodeSpec") -> None:
     """Capture Step contract violations beyond what ``__init_subclass__`` caught.
 
-    Bare ``INPUTS is None`` / ``INSTRUCTIONS is None`` are already on
-    ``node_cls._init_subclass_errors`` (captured at
-    ``LLMStepNode.__init_subclass__``). This function adds the
-    cross-class checks: INSTRUCTIONS subclassing, naming conventions.
+    Bare ``INPUTS is None`` / ``INSTRUCTIONS is None`` already live on
+    ``node_spec.issues`` (stamped from ``cls._init_subclass_errors`` by
+    the caller). This adds the cross-class checks: INSTRUCTIONS
+    subclassing, naming conventions.
     """
     from llm_pipeline.graph.instructions import LLMResultMixin
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
@@ -499,7 +524,7 @@ def _validate_llm_step(
             and issubclass(instructions_cls, LLMResultMixin)
         )
     ):
-        errors.append(ValidationIssue(
+        node_spec.issues.append(ValidationIssue(
             severity="error", code="step_instructions_not_llm_result_mixin",
             message=(
                 f"{node_cls.__name__}.INSTRUCTIONS must subclass "
@@ -516,15 +541,13 @@ def _validate_llm_step(
             ),
         ))
 
-    # Naming: {Name}Inputs / {Name}Instructions. Only meaningful when the
-    # node name ends with 'Step' (otherwise step_name_suffix already fired).
     if not node_cls.__name__.endswith("Step"):
         return
     prefix = node_cls.__name__[: -len("Step")]
     if inputs_cls is not None:
         expected_inputs = f"{prefix}Inputs"
         if inputs_cls.__name__ != expected_inputs:
-            errors.append(ValidationIssue(
+            node_spec.issues.append(ValidationIssue(
                 severity="error", code="step_inputs_name_mismatch",
                 message=(
                     f"{node_cls.__name__}.INPUTS must be named "
@@ -540,7 +563,7 @@ def _validate_llm_step(
     if instructions_cls is not None:
         expected_instructions = f"{prefix}Instructions"
         if instructions_cls.__name__ != expected_instructions:
-            errors.append(ValidationIssue(
+            node_spec.issues.append(ValidationIssue(
                 severity="error", code="step_instructions_name_mismatch",
                 message=(
                     f"{node_cls.__name__}.INSTRUCTIONS must be named "
@@ -557,13 +580,11 @@ def _validate_llm_step(
             ))
 
 
-def _validate_extraction(
-    node_cls: type, errors: list["ValidationIssue"],
-) -> None:
+def _validate_extraction(node_cls: type, node_spec: "NodeSpec") -> None:
     """Capture Extraction-only contract violations beyond ``__init_subclass__``.
 
-    ``MODEL is None`` is on ``node_cls._init_subclass_errors`` already.
-    Here we only verify MODEL's type when present.
+    ``MODEL is None`` is already on ``node_spec.issues``. This only
+    verifies MODEL's type when present.
     """
     from sqlmodel import SQLModel
 
@@ -576,7 +597,7 @@ def _validate_extraction(
             isinstance(model_cls, type) and issubclass(model_cls, SQLModel)
         )
     ):
-        errors.append(ValidationIssue(
+        node_spec.issues.append(ValidationIssue(
             severity="error", code="extraction_model_not_sqlmodel",
             message=(
                 f"{node_cls.__name__}.MODEL must be a SQLModel subclass, "
@@ -591,14 +612,8 @@ def _validate_extraction(
         ))
 
 
-def _validate_review(
-    node_cls: type, errors: list["ValidationIssue"],
-) -> None:
-    """Capture Review-only contract violations beyond ``__init_subclass__``.
-
-    ``OUTPUT is None`` is on ``node_cls._init_subclass_errors`` already.
-    Here we only verify OUTPUT's type when present.
-    """
+def _validate_review(node_cls: type, node_spec: "NodeSpec") -> None:
+    """Capture Review-only contract violations beyond ``__init_subclass__``."""
     from pydantic import BaseModel
 
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
@@ -610,7 +625,7 @@ def _validate_review(
             isinstance(output_cls, type) and issubclass(output_cls, BaseModel)
         )
     ):
-        errors.append(ValidationIssue(
+        node_spec.issues.append(ValidationIssue(
             severity="error", code="review_output_not_basemodel",
             message=(
                 f"{node_cls.__name__}.OUTPUT must be a Pydantic BaseModel "
@@ -627,44 +642,25 @@ def _validate_review(
 
 
 # ---------------------------------------------------------------------------
-# Source-spec walkers
+# Per-source walker → SourceSpec.issues
 # ---------------------------------------------------------------------------
 
 
-def _validate_inputs_spec(
-    node_cls: type,
-    spec: SourcesSpec,
-    *,
-    upstream: set[type],
-    input_cls: type[PipelineInputData] | None,
-    errors: list["ValidationIssue"],
-) -> None:
-    from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
-
-    if not isinstance(spec, SourcesSpec):
-        # Already captured by binding wrapper's __post_init__ as
-        # binding_inputs_spec_wrong_type — skip to avoid double-reporting.
-        return
-    for field_name, source in spec.field_sources.items():
-        _validate_source(
-            source,
-            node_cls=node_cls,
-            field_name=field_name,
-            input_cls=input_cls,
-            upstream=upstream,
-            errors=errors,
-        )
-
-
-def _validate_source(
+def _validate_source_into_spec(
     source: Source,
     *,
+    source_spec: "SourceSpec",
     node_cls: type,
     field_name: str,
     input_cls: type[PipelineInputData] | None,
     upstream: set[type],
-    errors: list["ValidationIssue"],
 ) -> None:
+    """Validate a single source, appending to ``source_spec.issues``.
+
+    Recurses into ``Computed`` sources, descending into
+    ``source_spec.sources[i]`` for each inner source so issues stay
+    localised to the precise input that's broken.
+    """
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 
     here = ValidationLocation(node=node_cls.__name__, field=field_name)
@@ -672,7 +668,7 @@ def _validate_source(
 
     if isinstance(source, FromInput):
         if input_cls is None:
-            errors.append(ValidationIssue(
+            source_spec.issues.append(ValidationIssue(
                 severity="error", code="from_input_no_input_data",
                 message=(
                     f"{location_str}: FromInput(...) used but pipeline "
@@ -688,7 +684,7 @@ def _validate_source(
         try:
             _validate_dotted_path(input_cls, source.path, location=location_str)
         except ValueError as exc:
-            errors.append(ValidationIssue(
+            source_spec.issues.append(ValidationIssue(
                 severity="error", code="from_input_unknown_path",
                 message=str(exc),
                 location=here,
@@ -705,7 +701,7 @@ def _validate_source(
                 if isinstance(source.step_cls, type)
                 else repr(source.step_cls)
             )
-            errors.append(ValidationIssue(
+            source_spec.issues.append(ValidationIssue(
                 severity="error", code="from_output_not_upstream",
                 message=(
                     f"{location_str}: FromOutput references node "
@@ -726,7 +722,7 @@ def _validate_source(
                     source.step_cls, source.field, location=location_str,
                 )
             except ValueError as exc:
-                errors.append(ValidationIssue(
+                source_spec.issues.append(ValidationIssue(
                     severity="error", code="from_output_unknown_field",
                     message=str(exc),
                     location=here,
@@ -740,17 +736,19 @@ def _validate_source(
         # PipelineDeps attrs are dynamic; skip static check.
         return
     elif isinstance(source, Computed):
-        for inner in source.sources:
-            _validate_source(
-                inner,
+        # Recurse into each inner source against its inner SourceSpec.
+        inner_specs = source_spec.sources or []
+        for inner_source, inner_spec in zip(source.sources, inner_specs):
+            _validate_source_into_spec(
+                inner_source,
+                source_spec=inner_spec,
                 node_cls=node_cls,
                 field_name=field_name,
                 input_cls=input_cls,
                 upstream=upstream,
-                errors=errors,
             )
     else:
-        errors.append(ValidationIssue(
+        source_spec.issues.append(ValidationIssue(
             severity="error", code="unknown_source_type",
             message=(
                 f"{location_str}: unknown Source subclass "

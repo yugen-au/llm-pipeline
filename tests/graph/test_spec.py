@@ -23,6 +23,7 @@ from llm_pipeline.graph import (
     Step,
     StepInputs,
 )
+from llm_pipeline.graph.spec import derive_issues, is_runnable
 from llm_pipeline.prompts import PromptVariables
 
 
@@ -274,3 +275,156 @@ class TestSpecCachedAtInitSubclass:
         re_spec = PipelineSpec.model_validate(payload)
         assert re_spec.name == spec.name
         assert len(re_spec.nodes) == len(spec.nodes)
+
+
+# ---------------------------------------------------------------------------
+# Issue localisation: each broken thing surfaces on its own component.
+# ---------------------------------------------------------------------------
+
+
+class _LocInput(PipelineInputData):
+    text: str
+
+
+class _LocAInputs(StepInputs):
+    text: str
+
+
+class _LocAInstructions(LLMResultMixin):
+    label: str = ""
+
+
+class _LocAPrompt(PromptVariables):
+    text: str = Field(description="text")
+
+
+class _LocAStep(LLMStepNode):
+    INPUTS = _LocAInputs
+    INSTRUCTIONS = _LocAInstructions
+    DEFAULT_TOOLS: list[type] = []
+
+    def prepare(self, inputs: _LocAInputs) -> list[_LocAPrompt]:
+        return [_LocAPrompt(text=inputs.text)]
+
+    async def run(
+        self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+    ) -> End[None]:
+        return End(None)
+
+
+class TestCleanSpecHasNoIssues:
+    def test_pipeline_issues_empty(self):
+        assert _SpecPipeline._spec.issues == []
+
+    def test_node_issues_empty(self):
+        for node in _SpecPipeline._spec.nodes:
+            assert node.issues == []
+
+    def test_source_issues_empty(self):
+        for node in _SpecPipeline._spec.nodes:
+            for source in node.wiring.field_sources.values():
+                assert source.issues == []
+
+    def test_prompt_issues_empty(self):
+        for node in _SpecPipeline._spec.nodes:
+            if node.prompt is not None:
+                assert node.prompt.issues == []
+
+    def test_derive_issues_empty(self):
+        assert derive_issues(_SpecPipeline._spec) == []
+
+    def test_is_runnable_true(self):
+        assert is_runnable(_SpecPipeline._spec) is True
+
+
+class TestPipelineLevelIssue:
+    """Pipeline-level issues land on ``spec.issues``."""
+
+    def test_naming_violation_on_pipeline_issues(self):
+        class _LocBadNamePipelineSuffix(Pipeline):  # missing 'Pipeline' suffix
+            INPUT_DATA = _LocInput
+            nodes = [Step(_LocAStep, inputs_spec=_LocAInputs.sources(
+                text=FromInput("text"),
+            ))]
+
+        # Stripped to its own type's spec attribute via class scope.
+        spec = _LocBadNamePipelineSuffix._spec
+        codes = [i.code for i in spec.issues]
+        assert "pipeline_name_suffix" in codes
+        # Not on any node-level / source-level component.
+        assert all(i.code != "pipeline_name_suffix" for i in spec.nodes[0].issues)
+
+
+class TestSourceLevelIssue:
+    """Per-wiring-field issues land on ``SourceSpec.issues``."""
+
+    def test_from_input_unknown_path_on_source(self):
+        class _LocBadPathPipeline(Pipeline):
+            INPUT_DATA = _LocInput
+            nodes = [Step(_LocAStep, inputs_spec=_LocAInputs.sources(
+                text=FromInput("not_a_field"),
+            ))]
+
+        spec = _LocBadPathPipeline._spec
+        text_source = spec.nodes[0].wiring.field_sources["text"]
+        codes = [i.code for i in text_source.issues]
+        assert "from_input_unknown_path" in codes
+        # Not bubbled up to the node or pipeline level.
+        assert all(i.code != "from_input_unknown_path" for i in spec.nodes[0].issues)
+        assert all(i.code != "from_input_unknown_path" for i in spec.issues)
+        # But derive_issues does flatten it.
+        flat_codes = [i.code for i in derive_issues(spec)]
+        assert "from_input_unknown_path" in flat_codes
+
+
+class TestNodeLevelIssue:
+    """Node-level issues land on ``NodeSpec.issues``."""
+
+    def test_missing_inputs_on_node_only(self):
+        # Build a step with no INPUTS — captured as missing_inputs on
+        # the step class's _init_subclass_errors, then stamped onto
+        # the spec's NodeSpec.issues.
+        class _LocOrphanStep(LLMStepNode):
+            # INPUTS deliberately not set
+            INSTRUCTIONS = _LocAInstructions
+            DEFAULT_TOOLS: list[type] = []
+
+            def prepare(self, inputs):  # type: ignore[no-untyped-def]
+                return []
+
+            async def run(
+                self, ctx: GraphRunContext[PipelineState, PipelineDeps],
+            ) -> End[None]:
+                return End(None)
+
+        class _LocOrphanPipeline(Pipeline):
+            INPUT_DATA = _LocInput
+            nodes = [Step(_LocOrphanStep, inputs_spec=_LocAInputs.sources(
+                text=FromInput("text"),
+            ))]
+
+        spec = _LocOrphanPipeline._spec
+        node_codes = [i.code for i in spec.nodes[0].issues]
+        assert "missing_inputs" in node_codes
+        # Not on the source level.
+        text_source = spec.nodes[0].wiring.field_sources["text"]
+        assert all(i.code != "missing_inputs" for i in text_source.issues)
+
+
+class TestSpecIssuesSerialiseRoundTrip:
+    def test_issues_round_trip(self):
+        class _LocBadAgainPipeline(Pipeline):
+            INPUT_DATA = _LocInput
+            nodes = [Step(_LocAStep, inputs_spec=_LocAInputs.sources(
+                text=FromInput("nope"),
+            ))]
+
+        spec = _LocBadAgainPipeline._spec
+        payload = spec.model_dump(mode="json")
+        assert isinstance(payload["issues"], list)
+        assert "issues" in payload["nodes"][0]
+        assert "issues" in payload["nodes"][0]["wiring"]["field_sources"]["text"]
+
+        re_spec = PipelineSpec.model_validate(payload)
+        text_source = re_spec.nodes[0].wiring.field_sources["text"]
+        assert any(i.code == "from_input_unknown_path" for i in text_source.issues)
