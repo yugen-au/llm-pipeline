@@ -570,66 +570,90 @@ class TestPipelineHappyPath:
 
 class TestNamingConventions:
     def test_pipeline_class_must_end_with_pipeline(self):
-        with pytest.raises(ValueError, match="must end with 'Pipeline' suffix"):
-            class NotAPipelineSuffix(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [_alpha_step_binding()]
+        class NotAPipelineSuffix(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [_alpha_step_binding()]
+
+        assert any(
+            e.code == "pipeline_name_suffix"
+            for e in NotAPipelineSuffix._init_subclass_errors
+        )
 
     def test_step_must_end_with_step(self):
-        with pytest.raises(ValueError, match="must end with 'Step' suffix"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [Step(
-                    BetaButNotS,
-                    inputs_spec=NoSuffixInputs.sources(text=FromInput("text")),
-                )]
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [Step(
+                BetaButNotS,
+                inputs_spec=NoSuffixInputs.sources(text=FromInput("text")),
+            )]
+
+        assert any(
+            e.code == "step_name_suffix"
+            for e in BadPipeline._init_subclass_errors
+        )
 
     def test_inputs_class_name_must_match_step(self):
-        with pytest.raises(ValueError, match="must be named 'GammaInputs'"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [Step(
-                    GammaStep,
-                    inputs_spec=WrongName.sources(text=FromInput("text")),
-                )]
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [Step(
+                GammaStep,
+                inputs_spec=WrongName.sources(text=FromInput("text")),
+            )]
+
+        assert any(
+            e.code == "step_inputs_name_mismatch"
+            for e in BadPipeline._init_subclass_errors
+        )
 
 
 class TestSourceSpecValidation:
     def test_from_input_unknown_path_raises(self):
-        with pytest.raises(ValueError, match="not a field on SmokeInput"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [Step(
-                    DeltaStep,
-                    inputs_spec=DeltaInputs.sources(text=FromInput("nope")),
-                )]
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [Step(
+                DeltaStep,
+                inputs_spec=DeltaInputs.sources(text=FromInput("nope")),
+            )]
+
+        assert any(
+            e.code == "from_input_unknown_path"
+            for e in BadPipeline._init_subclass_errors
+        )
 
     def test_from_output_unknown_field_raises(self):
-        with pytest.raises(ValueError, match="'not_a_field' is not a field"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [
-                    Step(FirstStep, inputs_spec=FirstInputs.sources(
-                        text=FromInput("text"),
-                    )),
-                    Step(SecondStep, inputs_spec=SecondInputs.sources(
-                        label=FromOutput(FirstStep, field="not_a_field"),
-                    )),
-                ]
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [
+                Step(FirstStep, inputs_spec=FirstInputs.sources(
+                    text=FromInput("text"),
+                )),
+                Step(SecondStep, inputs_spec=SecondInputs.sources(
+                    label=FromOutput(FirstStep, field="not_a_field"),
+                )),
+            ]
+
+        assert any(
+            e.code == "from_output_unknown_field"
+            for e in BadPipeline._init_subclass_errors
+        )
 
     def test_from_output_to_downstream_step_raises(self):
-        with pytest.raises(ValueError, match="not upstream"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [
-                    Step(ReverseStep, inputs_spec=ReverseInputs.sources(
-                        value=FromOutput(ZetaStep, field="y"),
-                    )),
-                    Step(ZetaStep, inputs_spec=ZetaInputs.sources(
-                        label=FromInput("text"),
-                    )),
-                ]
-                start_node = ReverseStep
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [
+                Step(ReverseStep, inputs_spec=ReverseInputs.sources(
+                    value=FromOutput(ZetaStep, field="y"),
+                )),
+                Step(ZetaStep, inputs_spec=ZetaInputs.sources(
+                    label=FromInput("text"),
+                )),
+            ]
+            start_node = ReverseStep
+
+        assert any(
+            e.code == "from_output_not_upstream"
+            for e in BadPipeline._init_subclass_errors
+        )
 
 
 class TestExtractionValidation:
@@ -648,31 +672,39 @@ class TestExtractionValidation:
         assert "HappyExtraction" in HappyExtractionPipeline._graph.node_defs
 
     def test_extraction_must_end_with_extraction(self):
-        with pytest.raises(ValueError, match="must end with 'Extraction' suffix"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [
-                    Step(XStep, inputs_spec=XInputs.sources(
-                        text=FromInput("text"),
-                    )),
-                    Extraction(NotExtNode, inputs_spec=FromXInputs.sources(
-                        label=FromOutput(XStep, field="label"),
-                    )),
-                ]
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [
+                Step(XStep, inputs_spec=XInputs.sources(
+                    text=FromInput("text"),
+                )),
+                Extraction(NotExtNode, inputs_spec=FromXInputs.sources(
+                    label=FromOutput(XStep, field="label"),
+                )),
+            ]
+
+        assert any(
+            e.code == "extraction_name_suffix"
+            for e in BadPipeline._init_subclass_errors
+        )
 
     def test_extraction_reading_downstream_step_raises(self):
-        with pytest.raises(ValueError, match="not upstream"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [
-                    Extraction(BadExtraction, inputs_spec=BadFromInputs.sources(
-                        label=FromOutput(DownstreamStep, field="label"),
-                    )),
-                    Step(DownstreamStep, inputs_spec=DownstreamInputs.sources(
-                        text=FromInput("text"),
-                    )),
-                ]
-                start_node = BadExtraction
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [
+                Extraction(BadExtraction, inputs_spec=BadFromInputs.sources(
+                    label=FromOutput(DownstreamStep, field="label"),
+                )),
+                Step(DownstreamStep, inputs_spec=DownstreamInputs.sources(
+                    text=FromInput("text"),
+                )),
+            ]
+            start_node = BadExtraction
+
+        assert any(
+            e.code == "from_output_not_upstream"
+            for e in BadPipeline._init_subclass_errors
+        )
 
 
 class TestReviewValidation:
@@ -691,15 +723,19 @@ class TestReviewValidation:
         assert "FlowReview" in HappyReviewPipeline._graph.node_defs
 
     def test_review_reading_downstream_step_raises(self):
-        with pytest.raises(ValueError, match="not upstream"):
-            class BadPipeline(Pipeline):
-                INPUT_DATA = SmokeInput
-                nodes = [
-                    Review(DangleReview, inputs_spec=DangleReviewInputs.sources(
-                        x=FromOutput(DangleStep, field="x"),
-                    )),
-                    Step(DangleStep, inputs_spec=DangleInputs.sources(
-                        text=FromInput("text"),
-                    )),
-                ]
-                start_node = DangleReview
+        class BadPipeline(Pipeline):
+            INPUT_DATA = SmokeInput
+            nodes = [
+                Review(DangleReview, inputs_spec=DangleReviewInputs.sources(
+                    x=FromOutput(DangleStep, field="x"),
+                )),
+                Step(DangleStep, inputs_spec=DangleInputs.sources(
+                    text=FromInput("text"),
+                )),
+            ]
+            start_node = DangleReview
+
+        assert any(
+            e.code == "from_output_not_upstream"
+            for e in BadPipeline._init_subclass_errors
+        )
