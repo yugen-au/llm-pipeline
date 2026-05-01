@@ -118,12 +118,28 @@ def load_convention_module(filepath: Path, synthetic_name: str) -> ModuleType:
 
 
 def _load_subfolder(
-    base: Path, subfolder: str, namespace: str, pkg_name: str | None,
+    base: Path,
+    subfolder: str,
+    namespace: str,
+    pkg_name: str | None,
+    *,
+    strict: bool = False,
 ) -> list[ModuleType]:
     """Import all .py files in base/subfolder/, return loaded modules.
 
-    If pkg_name is set (e.g. 'llm_pipelines'), use normal importlib to
-    avoid duplicate module registration. Falls back to spec_from_file_location.
+    If ``pkg_name`` is set (e.g. ``"llm_pipelines"``), use normal
+    ``importlib`` to avoid duplicate module registration. Falls back
+    to ``spec_from_file_location`` for loose convention dirs.
+
+    Lenient mode (``strict=False``, default): per-module failures are
+    logged as warnings and the bad module is dropped. Suitable for UI
+    boot — one broken pipeline shouldn't take the whole UI down.
+
+    Strict mode (``strict=True``): per-module failures re-raise with
+    file-path context attached, so the caller surfaces them. Used by
+    ``llm-pipeline build`` where any structural validation failure
+    (e.g. an ``__init_subclass__`` validator rejecting a node) must
+    fail the build, not silently drop the pipeline.
     """
     folder = base / subfolder
     if not folder.is_dir():
@@ -134,22 +150,35 @@ def _load_subfolder(
         if py_file.name == "__init__.py":
             continue
         stem = py_file.stem
-        # Try normal import first if this is a proper package
+        # Try normal import first if this is a proper package.
+        # NB: we only catch ImportError here, since a successful import
+        # may legitimately raise (e.g. __init_subclass__ validators).
+        # Those bubble up to the strict/lenient branch below.
         if pkg_name:
             dotted = f"{pkg_name}.{subfolder}.{stem}"
             try:
-                import importlib
                 mod = importlib.import_module(dotted)
                 modules.append(mod)
                 continue
             except ImportError:
+                # Fall through to the spec_from_file_location path.
                 pass
-        # Fallback: file-based import with synthetic name
+            except Exception:
+                if strict:
+                    raise
+                logger.warning(
+                    "Failed to load %s, skipping",
+                    py_file, exc_info=True,
+                )
+                continue
+        # Fallback: file-based import with synthetic name.
         syn_name = f"{namespace}.{subfolder}.{stem}"
         try:
             mod = load_convention_module(py_file, syn_name)
             modules.append(mod)
         except Exception:
+            if strict:
+                raise
             logger.warning(
                 "Failed to load %s, skipping", py_file, exc_info=True,
             )
@@ -205,8 +234,19 @@ def discover_from_convention(
     engine: Any,
     default_model: Optional[str],
     include_package: bool = True,
+    *,
+    strict: bool = False,
 ) -> Tuple[Dict[str, Callable], Dict[str, Type]]:
-    """Find all convention dirs, load modules in order, return merged registries."""
+    """Find all convention dirs, load modules in order, return merged registries.
+
+    ``strict=False`` (default): per-module import failures are logged
+    and the bad module is dropped — UI-boot-friendly.
+
+    ``strict=True``: per-module import failures (including any error
+    from ``__init_subclass__`` validators) re-raise with file context.
+    Used by ``llm-pipeline build`` so structural validation failures
+    are surfaced rather than swallowed.
+    """
     dirs = find_convention_dirs(include_package=include_package)
     if not dirs:
         return {}, {}
@@ -222,7 +262,9 @@ def discover_from_convention(
 
         # Load in dependency order
         for subfolder in _LOAD_ORDER:
-            modules = _load_subfolder(base, subfolder, namespace, pkg_name)
+            modules = _load_subfolder(
+                base, subfolder, namespace, pkg_name, strict=strict,
+            )
 
             if subfolder in ("enums", "constants"):
                 _register_enums_constants(modules)
@@ -248,15 +290,22 @@ def discover_from_convention(
     return all_pipeline_reg, all_introspection_reg
 
 
-def discover_from_entry_points() -> Tuple[
-    Dict[str, Type], Dict[str, Type]
-]:
+def discover_from_entry_points(
+    *, strict: bool = False,
+) -> Tuple[Dict[str, Type], Dict[str, Type]]:
     """Load pipelines registered under ``llm_pipeline.pipelines`` entry points.
 
     Used for demo pipelines bundled with the package (e.g.
     ``text_analyzer``). Each entry point must reference a concrete
-    ``Pipeline`` subclass. Failures are logged and skipped — one bad
-    entry point doesn't poison the registry.
+    ``Pipeline`` subclass.
+
+    ``strict=False`` (default): per-entry-point failures are logged
+    and skipped — one bad entry point doesn't poison the registry.
+    Suitable for UI boot.
+
+    ``strict=True``: per-entry-point failures re-raise. Entry points
+    that don't reference a ``Pipeline`` subclass also raise. Used by
+    ``llm-pipeline build``.
 
     Returns ``(pipeline_registry, introspection_registry)``; both
     dicts map ``ep.name`` to the ``Pipeline`` subclass.
@@ -270,22 +319,32 @@ def discover_from_entry_points() -> Tuple[
     for ep in eps:
         try:
             cls = ep.load()
-            if not (inspect.isclass(cls) and issubclass(cls, Pipeline)):
-                logger.warning(
-                    "Entry point '%s' does not reference a Pipeline "
-                    "(graph) subclass, skipping",
-                    ep.name,
-                )
-                continue
-            pipeline_reg[ep.name] = cls
-            introspection_reg[ep.name] = cls
-        except Exception:
+        except Exception as exc:
+            if strict:
+                raise RuntimeError(
+                    f"Failed to load entry point {ep.name!r}: {exc}"
+                ) from exc
             logger.warning(
                 "Failed to load entry point '%s', skipping",
                 ep.name,
                 exc_info=True,
             )
             continue
+
+        if not (inspect.isclass(cls) and issubclass(cls, Pipeline)):
+            if strict:
+                raise TypeError(
+                    f"Entry point {ep.name!r} does not reference a "
+                    f"Pipeline (graph) subclass; got {cls!r}."
+                )
+            logger.warning(
+                "Entry point '%s' does not reference a Pipeline "
+                "(graph) subclass, skipping",
+                ep.name,
+            )
+            continue
+        pipeline_reg[ep.name] = cls
+        introspection_reg[ep.name] = cls
 
     if pipeline_reg:
         logger.info(
