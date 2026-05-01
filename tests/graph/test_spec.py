@@ -428,3 +428,39 @@ class TestSpecIssuesSerialiseRoundTrip:
         re_spec = PipelineSpec.model_validate(payload)
         text_source = re_spec.nodes[0].wiring.field_sources["text"]
         assert any(i.code == "from_input_unknown_path" for i in text_source.issues)
+
+
+class TestSpecBuildShellFallback:
+    """``build_pipeline_spec`` never raises — returns a minimal shell on failure."""
+
+    def test_returns_shell_with_spec_build_failed(self, monkeypatch):
+        from llm_pipeline.graph import spec as spec_module
+
+        class _ShellInput(PipelineInputData):
+            text: str
+
+        # Induce an internal failure by making the per-node builder
+        # raise. The outer try/except in build_pipeline_spec must
+        # catch it and return a usable shell instead of propagating.
+        def _explode(_):
+            raise RuntimeError("simulated pydantic schema crash")
+
+        monkeypatch.setattr(spec_module, "_build_node_spec", _explode)
+
+        # Have to construct *after* monkeypatch so __init_subclass__
+        # uses the patched builder.
+        class _ShellPipeline(Pipeline):
+            INPUT_DATA = _ShellInput
+            nodes = [Step(_LocAStep, inputs_spec=_LocAInputs.sources(
+                text=FromInput("text"),
+            ))]
+
+        spec = _ShellPipeline._spec
+        assert spec is not None  # never None when class loads
+        assert spec.nodes == []  # shell has no node specs
+        assert spec.edges == []
+        assert spec.start_node is None
+        codes = [i.code for i in spec.issues]
+        assert "spec_build_failed" in codes
+        # is_runnable picks this up via derive_issues.
+        assert is_runnable(spec) is False

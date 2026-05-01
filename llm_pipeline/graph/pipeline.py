@@ -18,8 +18,10 @@ At ``__init_subclass__`` time the class:
 3. Builds the pydantic-graph ``Graph`` (best-effort; failures
    capture ``graph_build_failed``).
 4. Builds a ``PipelineSpec`` skeleton with empty ``issues`` lists
-   on every component (best-effort; failures capture
-   ``spec_build_failed``).
+   on every component. ``build_pipeline_spec`` never raises — on
+   internal failure it returns a minimal shell spec carrying a
+   ``spec_build_failed`` issue, so ``cls._spec`` is always a
+   usable shape.
 5. Stamps every captured framework-rule violation onto its natural
    home in the spec:
 
@@ -262,33 +264,19 @@ class Pipeline:
             cls._graph = None
             cls._node_classes = {}
 
-        # 5. Best-effort spec skeleton build (empty issues lists).
-        try:
-            cls._spec = build_pipeline_spec(cls)
-        except Exception as exc:
-            pre_spec_issues.append(ValidationIssue(
-                severity="error", code="spec_build_failed",
-                message=(
-                    f"Could not build PipelineSpec for "
-                    f"{cls.__name__}: {exc!s}"
-                ),
-                location=ValidationLocation(pipeline=cls.__name__),
-            ))
-            cls._spec = None
+        # 5. Spec skeleton build (always returns a usable spec).
+        cls._spec = build_pipeline_spec(cls)
 
         # 6. Stamp captures + run validator → mutates spec in place.
-        if cls._spec is not None:
-            cls._spec.issues.extend(pre_spec_issues)
-            _stamp_class_captures(cls._spec, deduped_bindings)
-            validate_pipeline_into_spec(
-                cls,
-                spec=cls._spec,
-                bindings=deduped_bindings,
-                input_cls=cls.INPUT_DATA,
-            )
-            cls._init_subclass_errors = derive_issues(cls._spec)
-        else:
-            cls._init_subclass_errors = list(pre_spec_issues)
+        cls._spec.issues.extend(pre_spec_issues)
+        _stamp_class_captures(cls._spec, deduped_bindings)
+        validate_pipeline_into_spec(
+            cls,
+            spec=cls._spec,
+            bindings=deduped_bindings,
+            input_cls=cls.INPUT_DATA,
+        )
+        cls._init_subclass_errors = derive_issues(cls._spec)
 
     @classmethod
     def graph(cls) -> Graph[PipelineState, PipelineDeps, Any]:

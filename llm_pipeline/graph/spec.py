@@ -532,32 +532,71 @@ def build_pipeline_spec(pipeline_cls: type["Pipeline"]) -> PipelineSpec:
     class contribute a ``NodeSpec``; invalid binding entries
     surface via captured pipeline-level issues stamped by the
     caller.
+
+    **Never raises.** On internal failure (rare framework-edge
+    cases like Pydantic schema generation crashing on an unusual
+    user model), returns a minimal shell spec with empty
+    ``nodes`` / ``edges`` and a ``spec_build_failed`` issue on
+    ``spec.issues``. The invariant is "if the class loaded, a spec
+    exists" — consumers can always trust ``Pipeline.inspect()`` /
+    ``cls._spec`` to be a usable shape.
     """
     from llm_pipeline.wiring import Extraction, Review, Step
 
-    input_schema = (
-        pipeline_cls.INPUT_DATA.model_json_schema()
-        if pipeline_cls.INPUT_DATA is not None else None
-    )
-    valid_bindings = [
-        b for b in pipeline_cls.nodes
-        if isinstance(b, (Step, Extraction, Review))
-        and isinstance(b.cls, type)
-    ]
-    nodes = [_build_node_spec(b) for b in valid_bindings]
-    edges = _build_edges(pipeline_cls)
-    start_node_name = (
-        pipeline_cls.start_node.__name__
-        if isinstance(pipeline_cls.start_node, type) else None
-    )
-    return PipelineSpec(
-        name=pipeline_cls.pipeline_name(),
-        cls=_qualname(pipeline_cls),
-        input_data_schema=input_schema,
-        nodes=nodes,
-        edges=edges,
-        start_node=start_node_name,
-    )
+    try:
+        input_schema = (
+            pipeline_cls.INPUT_DATA.model_json_schema()
+            if pipeline_cls.INPUT_DATA is not None else None
+        )
+        valid_bindings = [
+            b for b in pipeline_cls.nodes
+            if isinstance(b, (Step, Extraction, Review))
+            and isinstance(b.cls, type)
+        ]
+        nodes = [_build_node_spec(b) for b in valid_bindings]
+        edges = _build_edges(pipeline_cls)
+        start_node_name = (
+            pipeline_cls.start_node.__name__
+            if isinstance(pipeline_cls.start_node, type) else None
+        )
+        return PipelineSpec(
+            name=pipeline_cls.pipeline_name(),
+            cls=_qualname(pipeline_cls),
+            input_data_schema=input_schema,
+            nodes=nodes,
+            edges=edges,
+            start_node=start_node_name,
+        )
+    except Exception as exc:
+        # Framework-edge fallback: return a minimal shell spec so
+        # downstream consumers (UI, API, sandbox) never have to
+        # branch on "spec might be None".
+        try:
+            name = pipeline_cls.pipeline_name()
+        except Exception:
+            name = pipeline_cls.__name__
+        return PipelineSpec(
+            name=name,
+            cls=_qualname(pipeline_cls),
+            input_data_schema=None,
+            nodes=[],
+            edges=[],
+            start_node=None,
+            issues=[ValidationIssue(
+                severity="error", code="spec_build_failed",
+                message=(
+                    f"Could not build PipelineSpec for "
+                    f"{pipeline_cls.__name__}: {exc!s}"
+                ),
+                location=ValidationLocation(pipeline=pipeline_cls.__name__),
+                suggestion=(
+                    "Check the pipeline's INPUT_DATA / node INPUTS / "
+                    "INSTRUCTIONS / OUTPUT / MODEL classes for "
+                    "schema-generation issues (custom validators, "
+                    "self-references, malformed annotations)."
+                ),
+            )],
+        )
 
 
 # ---------------------------------------------------------------------------
