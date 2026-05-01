@@ -12,7 +12,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-_PID_FILE = Path(".llm_pipeline") / "ui.pid"
+from llm_pipeline.cli.stop import _PID_FILE, _kill_process_tree
 
 
 def main() -> None:
@@ -68,8 +68,6 @@ def main() -> None:
         help="Enable demo mode (load built-in demo pipelines and prompts)",
     )
 
-    sub.add_parser("stop", help="Stop a running UI server")
-
     eval_parser = sub.add_parser("eval", help="Run an evaluation dataset")
     eval_parser.add_argument(
         "dataset_name", help="Name of the evaluation dataset to run"
@@ -92,8 +90,6 @@ def main() -> None:
 
     if args.command == "ui":
         _run_ui(args)
-    elif args.command == "stop":
-        _stop_ui()
     elif args.command == "eval":
         _run_eval(args)
     else:
@@ -119,67 +115,6 @@ def _remove_pid_file() -> None:
         _PID_FILE.unlink(missing_ok=True)
     except OSError:
         pass
-
-
-def _kill_process_tree(pid: int) -> None:
-    """Kill a process and all its children using psutil (cross-platform)."""
-    import psutil
-    try:
-        proc = psutil.Process(pid)
-    except psutil.NoSuchProcess:
-        return
-    children = proc.children(recursive=True)
-    for child in children:
-        try:
-            child.terminate()
-        except psutil.NoSuchProcess:
-            pass
-    try:
-        proc.terminate()
-    except psutil.NoSuchProcess:
-        pass
-    _, alive = psutil.wait_procs(children + [proc], timeout=3)
-    for p in alive:
-        try:
-            p.kill()
-        except psutil.NoSuchProcess:
-            pass
-
-
-def _stop_ui() -> None:
-    """Stop a running UI server by reading the PID file."""
-    if not _PID_FILE.exists():
-        print("No running UI server found (no PID file)", file=sys.stderr)
-        sys.exit(1)
-
-    pids = {}
-    for line in _PID_FILE.read_text().strip().splitlines():
-        key, _, val = line.partition("=")
-        if val:
-            pids[key] = int(val)
-
-    main_pid = pids.get("main")
-    if not main_pid:
-        print("Invalid PID file", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"Stopping UI server (PID {main_pid})...")
-
-    # Kill main process tree (uvicorn reloader + worker)
-    _kill_process_tree(main_pid)
-
-    # Kill vite process tree
-    vite_pid = pids.get("vite")
-    if vite_pid:
-        _kill_process_tree(vite_pid)
-
-    # Clean up PID file
-    try:
-        _PID_FILE.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-    print("Stopped.")
 
 
 def _preflight_check(args: argparse.Namespace) -> None:

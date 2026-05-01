@@ -24,7 +24,7 @@ from __future__ import annotations
 import sys
 
 
-_LEGACY_COMMANDS = {"ui", "eval", "stop"}
+_LEGACY_COMMANDS = {"ui", "eval"}
 
 
 def main() -> None:
@@ -50,6 +50,11 @@ def main() -> None:
         from llm_pipeline.cli import push
 
         sys.exit(push.cli_main(argv[1:]))
+
+    if argv and argv[0] == "stop":
+        from llm_pipeline.cli import stop
+
+        sys.exit(stop.cli_main(argv[1:]))
 
     if not argv or argv[0] in ("-h", "--help"):
         # No subcommand or top-level help → show full subcommand list,
