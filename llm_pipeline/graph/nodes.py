@@ -749,10 +749,11 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ))
 
         # Required attrs. ``ExtractionFields.INPUTS`` routes to
-        # ``ExtractionSpec.inputs`` (a JsonSchemaWithRefs sub-component);
-        # ``ExtractionFields.TABLE_NAME`` targets the primitive
-        # ``ExtractionSpec.table_name: str | None`` — those captures
-        # fall back to top-level ``ExtractionSpec.issues``.
+        # ``ExtractionSpec.inputs`` (a JsonSchemaWithRefs sub-component).
+        # MODEL-related captures use ``field=None`` because
+        # ``ExtractionSpec.table_name`` is a primitive ``str | None``
+        # and can't carry sub-component issues — they live on
+        # top-level ``ExtractionSpec.issues``.
         if cls.INPUTS is None:
             errors.append(ValidationIssue(
                 severity="error", code="missing_inputs",
@@ -775,9 +776,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"{cls.__name__}.MODEL must be set to the SQLModel "
                     f"class this extraction produces."
                 ),
-                location=ValidationLocation(
-                    node=cls.__name__, field=ExtractionFields.TABLE_NAME,
-                ),
+                location=ValidationLocation(node=cls.__name__),
                 suggestion=(
                     f"Set MODEL = <YourSqlModelClass> on {cls.__name__}."
                 ),
@@ -797,9 +796,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"{cls.__name__}.MODEL must be a SQLModel "
                     f"subclass, got {model_cls!r}."
                 ),
-                location=ValidationLocation(
-                    node=cls.__name__, field=ExtractionFields.TABLE_NAME,
-                ),
+                location=ValidationLocation(node=cls.__name__),
                 suggestion=(
                     "Subclass sqlmodel.SQLModel and set MODEL "
                     "accordingly."

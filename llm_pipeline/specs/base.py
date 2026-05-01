@@ -34,7 +34,8 @@ trigger routing.
 """
 from __future__ import annotations
 
-from typing import Self
+import types
+from typing import Any, Self, Union, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,6 +47,29 @@ from llm_pipeline.graph.spec import ValidationIssue
 
 
 __all__ = ["ArtifactField", "ArtifactSpec"]
+
+
+def _is_artifact_field_type(annotation: Any) -> bool:
+    """True if ``annotation`` declares an :class:`ArtifactField` slot.
+
+    Walks ``Union``/``Optional`` arms — ``ArtifactField | None``,
+    ``Optional[CodeBodySpec]`` etc. all qualify. Anything that
+    doesn't have ``ArtifactField`` somewhere in its type tree
+    (``str``, ``list[str]``, ``int | None``, etc.) returns False —
+    that's the "primitive field, can't carry issues" case.
+
+    Used by :meth:`ArtifactField.attach_class_captures` to enforce
+    the routing contract: ``ValidationLocation.field`` must name a
+    spec field whose annotation references ``ArtifactField``, or
+    be ``None`` for top-level issues. Anything else is a broken
+    constant and raises.
+    """
+    if isinstance(annotation, type) and issubclass(annotation, ArtifactField):
+        return True
+    origin = get_origin(annotation)
+    if origin is Union or origin is types.UnionType:
+        return any(_is_artifact_field_type(arg) for arg in get_args(annotation))
+    return False
 
 
 class ArtifactField(BaseModel):
@@ -83,20 +107,28 @@ class ArtifactField(BaseModel):
     def attach_class_captures(self, source_cls: type) -> Self:
         """Distribute ``source_cls._init_subclass_errors`` onto matching components.
 
-        Each issue's ``location.field`` is looked up against this
-        spec's Pydantic fields. When the matching field's value is
-        an :class:`ArtifactField` instance, the issue lands on its
-        ``issues`` list (localised to the sub-component). Otherwise
-        — no field set, no matching field, value isn't an
-        :class:`ArtifactField` (e.g. ``None``, a primitive, a list)
-        — the issue lands on ``self.issues``.
+        Each issue's ``ValidationLocation.field`` is interpreted as a
+        routing key:
 
-        Generic — uses Pydantic's ``model_fields`` introspection; no
-        per-kind routing tables. Capture sites set
-        ``ValidationLocation.field`` to a constant from the per-kind
-        fields class (``StepFields.INPUTS`` etc.); the router
-        validates by lookup, not by string equality, so any typo
-        falls back to top-level instead of silently dropping.
+        - ``None`` → ``self.issues`` (intentional top-level issue;
+          e.g. naming-convention violations on the artifact itself).
+        - A spec field name whose annotation declares an
+          :class:`ArtifactField` slot → ``getattr(self, field).issues``
+          when the runtime value is populated, falling back to
+          ``self.issues`` when the value is ``None`` (graceful: the
+          slot is typed for routing but the artifact's source class
+          hasn't populated it — common for "missing INPUTS" style
+          captures).
+        - Anything else (unknown field, or field annotated with a
+          non-``ArtifactField`` type like ``str`` / ``list[str]``)
+          → :class:`RuntimeError`. Capture sites must use a
+          constant from the per-kind fields class
+          (``StepFields.INPUTS`` etc.) or ``None``; mismatches are
+          a broken contract and surface immediately rather than
+          silently routing to top-level.
+
+        Generic — uses Pydantic's ``model_fields`` introspection,
+        no per-kind routing tables.
 
         Returns ``self`` for builder chaining::
 
@@ -105,12 +137,39 @@ class ArtifactField(BaseModel):
         spec_fields = type(self).model_fields
         for issue in getattr(source_cls, "_init_subclass_errors", []):
             field = issue.location.field
-            if field and field in spec_fields:
-                target = getattr(self, field, None)
-                if isinstance(target, ArtifactField):
-                    target.issues.append(issue)
-                    continue
-            self.issues.append(issue)
+            if field is None:
+                self.issues.append(issue)
+                continue
+            if field not in spec_fields:
+                raise RuntimeError(
+                    f"{type(self).__name__}: ValidationIssue "
+                    f"{issue.code!r} sets location.field={field!r}, "
+                    f"but {type(self).__name__} has no such field. "
+                    f"Use a constant from the per-kind fields class "
+                    f"(e.g. StepFields.INPUTS) or set field=None for "
+                    f"top-level issues."
+                )
+            if not _is_artifact_field_type(spec_fields[field].annotation):
+                raise RuntimeError(
+                    f"{type(self).__name__}: ValidationIssue "
+                    f"{issue.code!r} sets location.field={field!r}, "
+                    f"but {type(self).__name__}.{field} is not an "
+                    f"ArtifactField sub-component (annotation: "
+                    f"{spec_fields[field].annotation!r}). Routing "
+                    f"keys must point at ArtifactField sub-components; "
+                    f"use field=None for issues about primitive fields."
+                )
+            target = getattr(self, field, None)
+            if target is None:
+                # Field is typed for routing but the runtime value
+                # isn't populated (e.g. ``StepSpec.inputs=None`` when
+                # the source class's ``INPUTS`` is missing). The
+                # issue is ABOUT the missing slot, so top-level is
+                # the right home — there's literally no sub-component
+                # to attach to.
+                self.issues.append(issue)
+            else:
+                target.issues.append(issue)
         return self
 
 

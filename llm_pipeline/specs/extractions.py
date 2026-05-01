@@ -32,16 +32,16 @@ class ExtractionFields:
     """Routing-key constants for :class:`ExtractionSpec` issue captures.
 
     See :class:`llm_pipeline.specs.steps.StepFields` for the rationale.
-    Each value must equal a field name on :class:`ExtractionSpec`.
+    Each value must equal an :class:`ArtifactField`-typed field name
+    on :class:`ExtractionSpec`.
 
-    ``TABLE_NAME`` targets a primitive ``str | None`` — captures with
-    that location.field land on top-level ``ExtractionSpec.issues``
-    via the :meth:`ArtifactField.attach_class_captures` fallback
-    (the value isn't an :class:`ArtifactField` instance).
+    Note ``table_name`` is intentionally NOT here — it's a primitive
+    ``str | None`` and can't carry sub-component issues. Captures
+    about MODEL/table use ``location.field=None`` and live on
+    top-level ``ExtractionSpec.issues``.
     """
 
     INPUTS = "inputs"
-    TABLE_NAME = "table_name"
 
 
 class ExtractionSpec(ArtifactSpec):

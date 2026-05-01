@@ -169,7 +169,9 @@ class TestLLMStepNodeCaptures:
 
 
 class TestExtractionNodeCaptures:
-    def test_missing_model_lands_on_table_name(self):
+    def test_missing_model_top_level(self):
+        # MODEL captures use ``field=None`` because ExtractionSpec.table_name
+        # is a primitive — not routable. They live on top-level ExtractionSpec.issues.
         class _ExtInputs(StepInputs):
             x: int
 
@@ -184,7 +186,7 @@ class TestExtractionNodeCaptures:
 
         for issue in _NoModelExtraction._init_subclass_errors:
             if issue.code == "missing_model":
-                assert issue.location.field == "table_name"
+                assert issue.location.field is None
                 break
         else:
             raise AssertionError("expected missing_model")
@@ -217,7 +219,7 @@ class TestExtractionNodeCaptures:
         else:
             raise AssertionError("expected extraction_name_suffix")
 
-    def test_model_not_sqlmodel_lands_on_table_name(self):
+    def test_model_not_sqlmodel_top_level(self):
         class _ExtInputs(StepInputs):
             x: int
 
@@ -236,7 +238,7 @@ class TestExtractionNodeCaptures:
 
         for issue in _Extraction._init_subclass_errors:
             if issue.code == "extraction_model_not_sqlmodel":
-                assert issue.location.field == "table_name"
+                assert issue.location.field is None
                 break
         else:
             raise AssertionError("expected extraction_model_not_sqlmodel")
@@ -358,27 +360,16 @@ class TestAttachClassCaptures:
         inputs_codes = {i.code for i in spec.inputs.issues}
         assert "step_inputs_name_mismatch" in inputs_codes
 
-    def test_prompt_data_routes_prompt_variables_captures(self):
-        from llm_pipeline.specs import (
-            JsonSchemaWithRefs,
-            PromptData,
-        )
-
-        # Plain Pydantic field (no Field(description=...)) → captures
-        # ``missing_field_description`` on the PromptVariables class.
-        class _BadPrompt(PromptVariables):
-            text: str = ""  # missing description
-
-        prompt = PromptData(
-            variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
-            yaml_path="/tmp/x.yaml",
-        ).attach_class_captures(_BadPrompt)
-
-        codes = {i.code for i in prompt.issues}
-        # ``location.field="text"`` doesn't match any PromptData field
-        # → falls back to ``prompt.issues``. Same for ``auto_vars``-
-        # related captures (``auto_vars`` is a dict, not an ArtifactField).
-        assert "missing_field_description" in codes
+    # Note: cross-class auto-routing (PromptVariables captures →
+    # PromptData fields) is intentionally not tested via
+    # ``attach_class_captures``. PromptVariables's location.field
+    # values reference its OWN field names (e.g. "text") which
+    # don't match PromptData fields. The strict contract correctly
+    # rejects that as a routing-key mismatch. Cross-class
+    # translation is the prompt walker's responsibility (when it
+    # lands) — it'll iterate ``prompt_variables_cls._init_subclass_errors``
+    # and stamp directly onto the right PromptData component with
+    # explicit per-code translation logic.
 
     def test_top_level_issue_lands_on_spec_issues(self):
         from llm_pipeline.specs import (
