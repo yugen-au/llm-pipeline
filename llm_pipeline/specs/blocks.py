@@ -8,21 +8,26 @@ JsonViewer / JsonEditor, etc.).
 
 The set is deliberately small:
 
+- ``ArtifactField`` — common base for any spec sub-component that
+  carries localised validation issues. Subclassed by the three
+  issue-bearing building blocks below. Lets per-kind specs attach
+  issues at the exact field they describe without per-type
+  boilerplate (every subclass inherits the ``issues`` slot).
 - ``SymbolRef`` — a typed reference to another artifact. Carries
   ``(kind, name)`` for dispatch + position metadata for in-source
-  highlighting. Used inside code bodies (line/col) and inside JSON-
-  shaped specs (the addressing scheme is the spec field's enclosing
-  dict key — typically a JSON Pointer).
+  highlighting. Leaf type — no issues field.
 - ``CodeBodySpec`` — a Monaco-edited Python code body (prepare /
   run / extract / tool callable / eval scorer). Carries the source
-  text plus the static-analysis-derived list of refs.
+  text plus the static-analysis-derived list of refs. Issue-bearing.
 - ``JsonSchemaWithRefs`` — a JSON Schema plus per-location refs
   that produced its values. Used for any Pydantic-shaped data
   (INPUTS, INSTRUCTIONS, OUTPUT, prompt variable definitions, etc.).
+  Issue-bearing.
 - ``PromptData`` — sub-data of a step (variables + auto_vars +
   YAML-resolved templates). *Not* a first-class artifact. Embedded
   inside ``StepSpec.prompt`` and rendered via the existing
   ``PromptEditor`` component as a child of ``StepEditor``.
+  Issue-bearing.
 
 See ``.claude/plans/per-artifact-architecture.md`` (sections 4.2
 and 5) for the full rationale, especially why ``PromptData`` is
@@ -43,11 +48,39 @@ from llm_pipeline.graph.spec import ValidationIssue
 
 
 __all__ = [
+    "ArtifactField",
     "CodeBodySpec",
     "JsonSchemaWithRefs",
     "PromptData",
     "SymbolRef",
 ]
+
+
+class ArtifactField(BaseModel):
+    """Common base for any issue-bearing spec sub-component.
+
+    Every per-kind spec field whose value needs its own localised
+    validation issues uses a subclass of this type — `CodeBodySpec`
+    for editable code bodies, `JsonSchemaWithRefs` for Pydantic-
+    shaped data, `PromptData` for embedded prompt info, and any
+    future component types added under the same convention.
+
+    The frontend uses inheritance as the dispatch signal: any value
+    that's an `ArtifactField` instance has an `issues` slot to read
+    for error styling at that field's UI surface, without each
+    subclass having to redeclare the field.
+
+    Not instantiated directly. The base provides only the shared
+    `issues` slot + the strict `extra="forbid"` config.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Localised issues for this sub-component. Builders that produce
+    # the subclass populate this directly (libcst code-body analyser,
+    # JSON schema generator, prompt resolver, etc.) — issues stay
+    # attached to the spec component they describe.
+    issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 class SymbolRef(BaseModel):
@@ -87,7 +120,7 @@ class SymbolRef(BaseModel):
     col_end: int = 0
 
 
-class CodeBodySpec(BaseModel):
+class CodeBodySpec(ArtifactField):
     """A Monaco-edited Python code body.
 
     Used for any function body the UI surfaces as a code editor:
@@ -101,9 +134,11 @@ class CodeBodySpec(BaseModel):
     uses these to render hover previews, cmd-click navigation, and
     "find usages" behaviour without reparsing the source on the
     client.
-    """
 
-    model_config = ConfigDict(extra="forbid")
+    Inherits ``issues`` from :class:`ArtifactField` — body-specific
+    issues (e.g. unresolved imports, syntax problems detected by
+    the analyser) are populated by the libcst code-body analyser.
+    """
 
     # Raw source text the Monaco editor renders.
     source: str
@@ -119,12 +154,8 @@ class CodeBodySpec(BaseModel):
     # to ``source``.
     refs: list[SymbolRef] = Field(default_factory=list)
 
-    # Body-specific issues (e.g. unresolved imports, syntax
-    # problems detected by the analyser).
-    issues: list[ValidationIssue] = Field(default_factory=list)
 
-
-class JsonSchemaWithRefs(BaseModel):
+class JsonSchemaWithRefs(ArtifactField):
     """A JSON Schema plus per-location ``SymbolRef`` annotations.
 
     Used wherever a spec needs to carry Pydantic-shaped data — step
@@ -143,9 +174,12 @@ class JsonSchemaWithRefs(BaseModel):
 
     Note: the field is named ``json_schema`` (not just ``schema``)
     because ``schema`` shadows a Pydantic ``BaseModel`` attribute.
-    """
 
-    model_config = ConfigDict(extra="forbid")
+    Inherits ``issues`` from :class:`ArtifactField` — schema-level
+    issues (e.g. fields that couldn't be resolved to a valid JSON
+    Schema, dependency cycles in $ref resolution) are populated by
+    the schema generator.
+    """
 
     # Standard JSON Schema (pydantic ``model_json_schema()``-style).
     # Typed as ``dict[str, Any]`` so we don't lock the shape to a
@@ -158,13 +192,8 @@ class JsonSchemaWithRefs(BaseModel):
     #         [SymbolRef(symbol="MAX_RETRIES", ...)]}``
     refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
 
-    # Schema-level issues (e.g. fields that couldn't be resolved
-    # to a valid JSON Schema, dependency cycles in $ref
-    # resolution).
-    issues: list[ValidationIssue] = Field(default_factory=list)
 
-
-class PromptData(BaseModel):
+class PromptData(ArtifactField):
     """Sub-data of a step: variables + auto_vars + YAML-resolved templates.
 
     *Not* a first-class artifact. There is no ``KIND_PROMPT`` and
@@ -178,9 +207,12 @@ class PromptData(BaseModel):
     ``StepEditor`` updates both the YAML prompt file *and*
     regenerates the paired ``_variables/_<step>.py`` (existing
     ``llm-pipeline generate`` flow).
-    """
 
-    model_config = ConfigDict(extra="forbid")
+    Inherits ``issues`` from :class:`ArtifactField` — prompt-class-
+    level issues (auto_vars shape errors, missing field descriptions
+    on the PromptVariables class, etc.) are populated by the prompt
+    discovery / Phoenix sync layer.
+    """
 
     # The PromptVariables Pydantic class shape — fields, types,
     # descriptions. Renders via JsonEditor / JsonViewer.
@@ -208,7 +240,3 @@ class PromptData(BaseModel):
     system_template: str | None = None
     user_template: str | None = None
     model: str | None = None
-
-    # Prompt-class-level issues (auto_vars shape errors, missing
-    # field descriptions on the PromptVariables class, etc.).
-    issues: list["ValidationIssue"] = Field(default_factory=list)

@@ -23,6 +23,7 @@ design.
 """
 from llm_pipeline.specs.base import ArtifactSpec
 from llm_pipeline.specs.blocks import (
+    ArtifactField,
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
@@ -75,6 +76,7 @@ __all__ = [
     "KIND_TOOL",
     "LEVEL_BY_KIND",
     # Base + building blocks
+    "ArtifactField",
     "ArtifactSpec",
     "CodeBodySpec",
     "JsonSchemaWithRefs",
