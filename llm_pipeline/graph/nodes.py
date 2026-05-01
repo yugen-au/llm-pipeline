@@ -616,19 +616,63 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
     INPUTS: ClassVar[type] = None  # type: ignore[assignment]
     MODEL: ClassVar[type] = None  # type: ignore[assignment]
 
+    # See LLMStepNode._init_subclass_errors for the model. Captures
+    # contract violations into class state instead of raising — class
+    # always constructs.
+    _init_subclass_errors: ClassVar[list["ValidationIssue"]] = []
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "ExtractionNode":
             return
+        from llm_pipeline.graph.spec import (
+            ValidationIssue,
+            ValidationLocation,
+        )
+
+        errors: list[ValidationIssue] = []
         if cls.INPUTS is None:
-            raise TypeError(
-                f"{cls.__name__}.INPUTS must be set to a StepInputs subclass."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="missing_inputs",
+                message=(
+                    f"{cls.__name__}.INPUTS must be set to a "
+                    f"StepInputs subclass."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="INPUTS",
+                ),
+                suggestion=(
+                    f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
+                    f"(must subclass StepInputs)."
+                ),
+            ))
         if cls.MODEL is None:
-            raise TypeError(
-                f"{cls.__name__}.MODEL must be set to the SQLModel class "
-                f"this extraction produces."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="missing_model",
+                message=(
+                    f"{cls.__name__}.MODEL must be set to the SQLModel "
+                    f"class this extraction produces."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="MODEL",
+                ),
+                suggestion=(
+                    f"Set MODEL = <YourSqlModelClass> on {cls.__name__}."
+                ),
+            ))
+        cls._init_subclass_errors = errors
+
+    @classmethod
+    def build_spec(cls, binding: Any) -> Any:
+        """Build a ``NodeSpec`` for this extraction's binding.
+
+        Returns a partial spec when class state is incomplete
+        (missing INPUTS or MODEL). Delegates to the spec builder; the
+        per-class entry point keeps adding new node types localised.
+        """
+        from llm_pipeline.graph.spec import _build_node_spec
+
+        return _build_node_spec(binding)
 
     @classmethod
     def get_node_def(cls, local_ns: dict[str, Any] | None) -> NodeDef:
@@ -707,20 +751,61 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
     OUTPUT: ClassVar[type[BaseModel]] = None  # type: ignore[assignment]
     webhook_url: ClassVar[str | None] = None
 
+    # See LLMStepNode._init_subclass_errors for the model.
+    _init_subclass_errors: ClassVar[list["ValidationIssue"]] = []
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "ReviewNode":
             return
+        from llm_pipeline.graph.spec import (
+            ValidationIssue,
+            ValidationLocation,
+        )
+
+        errors: list[ValidationIssue] = []
         if cls.INPUTS is None:
-            raise TypeError(
-                f"{cls.__name__}.INPUTS must be set (the data the "
-                f"reviewer sees)."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="missing_inputs",
+                message=(
+                    f"{cls.__name__}.INPUTS must be set (the data the "
+                    f"reviewer sees)."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="INPUTS",
+                ),
+                suggestion=(
+                    f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
+                    f"(must subclass StepInputs)."
+                ),
+            ))
         if cls.OUTPUT is None:
-            raise TypeError(
-                f"{cls.__name__}.OUTPUT must be set (the reviewer's "
-                f"structured response shape)."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="missing_output",
+                message=(
+                    f"{cls.__name__}.OUTPUT must be set (the "
+                    f"reviewer's structured response shape)."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="OUTPUT",
+                ),
+                suggestion=(
+                    f"Set OUTPUT = <YourOutputClass> on {cls.__name__} "
+                    f"(a Pydantic BaseModel)."
+                ),
+            ))
+        cls._init_subclass_errors = errors
+
+    @classmethod
+    def build_spec(cls, binding: Any) -> Any:
+        """Build a ``NodeSpec`` for this review node's binding.
+
+        Returns a partial spec when class state is incomplete
+        (missing INPUTS or OUTPUT). Delegates to the spec builder.
+        """
+        from llm_pipeline.graph.spec import _build_node_spec
+
+        return _build_node_spec(binding)
 
     @classmethod
     def get_node_def(cls, local_ns: dict[str, Any] | None) -> NodeDef:

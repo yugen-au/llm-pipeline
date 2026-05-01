@@ -42,18 +42,26 @@ class TestPromptVariablesBase:
         # Empty subclass instantiates with no args
         NoVarsPrompt()
 
-    def test_field_without_description_raises(self):
-        with pytest.raises(ValueError, match="must use Field"):
+    def test_field_without_description_captures(self):
+        class NoDescPrompt(PromptVariables):
+            text: str = Field()  # no description
 
-            class NoDescPrompt(PromptVariables):
-                text: str = Field()  # no description
+        # Class constructs successfully; the contract violation is
+        # captured for later surfacing via derive_issues.
+        assert any(
+            e.code == "missing_field_description"
+            for e in NoDescPrompt._init_subclass_errors
+        )
 
-    def test_plain_default_without_field_raises(self):
+    def test_plain_default_without_field_captures(self):
         # text: str = "hi" — no Field(), no description
-        with pytest.raises(ValueError, match="must use Field"):
+        class PlainDefaultPrompt(PromptVariables):
+            text: str = "default"  # type: ignore[assignment]
 
-            class PlainDefaultPrompt(PromptVariables):
-                text: str = "default"  # type: ignore[assignment]
+        assert any(
+            e.code == "missing_field_description"
+            for e in PlainDefaultPrompt._init_subclass_errors
+        )
 
     def test_instance_validates_like_normal_pydantic(self):
         class ValidPrompt(PromptVariables):
@@ -105,35 +113,47 @@ class TestAutoVars:
         assert AutoPrompt.auto_vars == {"x": "constant(y)"}
         assert instance.text == "hi"
 
-    def test_auto_vars_overlap_with_field_raises(self):
-        with pytest.raises(ValueError, match="appear in BOTH"):
+    def test_auto_vars_overlap_with_field_captures(self):
+        class OverlapPrompt(PromptVariables):
+            sentiment: str = Field(description="The sentiment")
+            auto_vars: ClassVar[dict[str, str]] = {
+                "sentiment": "enum_names(Sentiment)",  # collides with field
+            }
 
-            class OverlapPrompt(PromptVariables):
-                sentiment: str = Field(description="The sentiment")
-                auto_vars: ClassVar[dict[str, str]] = {
-                    "sentiment": "enum_names(Sentiment)",  # collides with field
-                }
+        assert any(
+            e.code == "auto_vars_field_overlap"
+            for e in OverlapPrompt._init_subclass_errors
+        )
 
-    def test_auto_vars_non_dict_raises(self):
-        with pytest.raises(TypeError, match="must be a dict"):
+    def test_auto_vars_non_dict_captures(self):
+        class BadAutoPrompt(PromptVariables):
+            text: str = Field(description="Text")
+            auto_vars: ClassVar = ["enum_names(Sentiment)"]  # type: ignore[assignment]
 
-            class BadAutoPrompt(PromptVariables):
-                text: str = Field(description="Text")
-                auto_vars: ClassVar = ["enum_names(Sentiment)"]  # type: ignore[assignment]
+        assert any(
+            e.code == "auto_vars_not_dict"
+            for e in BadAutoPrompt._init_subclass_errors
+        )
 
-    def test_auto_vars_empty_value_raises(self):
-        with pytest.raises(TypeError, match="non-empty auto_generate"):
+    def test_auto_vars_empty_value_captures(self):
+        class EmptyValuePrompt(PromptVariables):
+            text: str = Field(description="Text")
+            auto_vars: ClassVar[dict[str, str]] = {"labels": ""}
 
-            class EmptyValuePrompt(PromptVariables):
-                text: str = Field(description="Text")
-                auto_vars: ClassVar[dict[str, str]] = {"labels": ""}
+        assert any(
+            e.code == "auto_vars_bad_expression"
+            for e in EmptyValuePrompt._init_subclass_errors
+        )
 
-    def test_auto_vars_empty_key_raises(self):
-        with pytest.raises(TypeError, match="non-empty strings"):
+    def test_auto_vars_empty_key_captures(self):
+        class EmptyKeyPrompt(PromptVariables):
+            text: str = Field(description="Text")
+            auto_vars: ClassVar[dict[str, str]] = {"": "constant(x)"}
 
-            class EmptyKeyPrompt(PromptVariables):
-                text: str = Field(description="Text")
-                auto_vars: ClassVar[dict[str, str]] = {"": "constant(x)"}
+        assert any(
+            e.code == "auto_vars_bad_placeholder"
+            for e in EmptyKeyPrompt._init_subclass_errors
+        )
 
 
 class TestRegistry:

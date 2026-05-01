@@ -74,6 +74,13 @@ class PromptVariables(BaseModel):
 
     auto_vars: ClassVar[dict[str, str]] = {}
 
+    # Validation issues captured at __pydantic_init_subclass__ time.
+    # Empty when the class's contract is satisfied; populated otherwise.
+    # The class object always constructs successfully — runtime
+    # consumers (and ``derive_issues`` over the spec) consult this list
+    # to decide whether the class is usable.
+    _init_subclass_errors: ClassVar[list[Any]] = []
+
     @classmethod
     def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
         # Pydantic's hook (instead of __init_subclass__) — guaranteed
@@ -81,45 +88,92 @@ class PromptVariables(BaseModel):
         # field-iteration below sees the complete picture.
         super().__pydantic_init_subclass__(**kwargs)
 
+        from llm_pipeline.graph.spec import (
+            ValidationIssue,
+            ValidationLocation,
+        )
+
+        errors: list[ValidationIssue] = []
+
         # 1. Every field must use Field(description=...).
         for field_name, field_info in cls.model_fields.items():
             if not field_info.description:
-                raise ValueError(
-                    f"{cls.__name__}.{field_name} must use "
-                    f"Field(description='...')."
-                )
+                errors.append(ValidationIssue(
+                    severity="error", code="missing_field_description",
+                    message=(
+                        f"{cls.__name__}.{field_name} must use "
+                        f"Field(description='...')."
+                    ),
+                    location=ValidationLocation(
+                        node=cls.__name__, field=field_name,
+                    ),
+                    suggestion=(
+                        f"Replace the field definition with "
+                        f"`{field_name}: <type> = Field(description='...')`."
+                    ),
+                ))
 
         # 2. auto_vars shape: dict[str, str] with non-empty keys/values.
         auto_vars = cls.__dict__.get("auto_vars", {})
         if auto_vars and not isinstance(auto_vars, dict):
-            raise TypeError(
-                f"{cls.__name__}.auto_vars must be a dict[str, str] "
-                f"of placeholder -> auto_generate expression; got "
-                f"{type(auto_vars).__name__}."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="auto_vars_not_dict",
+                message=(
+                    f"{cls.__name__}.auto_vars must be a dict[str, str] "
+                    f"of placeholder -> auto_generate expression; got "
+                    f"{type(auto_vars).__name__}."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="auto_vars",
+                ),
+            ))
+            auto_vars = {}  # treat as empty for the remaining checks
         for placeholder, expr in auto_vars.items():
             if not isinstance(placeholder, str) or not placeholder:
-                raise TypeError(
-                    f"{cls.__name__}.auto_vars: placeholder names "
-                    f"must be non-empty strings; got {placeholder!r}."
-                )
+                errors.append(ValidationIssue(
+                    severity="error", code="auto_vars_bad_placeholder",
+                    message=(
+                        f"{cls.__name__}.auto_vars: placeholder names "
+                        f"must be non-empty strings; got {placeholder!r}."
+                    ),
+                    location=ValidationLocation(
+                        node=cls.__name__, field="auto_vars",
+                    ),
+                ))
             if not isinstance(expr, str) or not expr:
-                raise TypeError(
-                    f"{cls.__name__}.auto_vars[{placeholder!r}] "
-                    f"must be a non-empty auto_generate expression "
-                    f"string; got {expr!r}."
-                )
+                errors.append(ValidationIssue(
+                    severity="error", code="auto_vars_bad_expression",
+                    message=(
+                        f"{cls.__name__}.auto_vars[{placeholder!r}] "
+                        f"must be a non-empty auto_generate expression "
+                        f"string; got {expr!r}."
+                    ),
+                    location=ValidationLocation(
+                        node=cls.__name__, field="auto_vars",
+                    ),
+                ))
 
         # 3. Mutual exclusion: no name in both fields and auto_vars.
         overlap = set(cls.model_fields.keys()) & set(auto_vars.keys())
         if overlap:
-            raise ValueError(
-                f"{cls.__name__}: placeholder name(s) "
-                f"{sorted(overlap)!r} appear in BOTH model_fields "
-                f"and auto_vars. A placeholder is either "
-                f"prepare-supplied (a Pydantic field) or framework-"
-                f"supplied (an auto_vars entry), never both."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="auto_vars_field_overlap",
+                message=(
+                    f"{cls.__name__}: placeholder name(s) "
+                    f"{sorted(overlap)!r} appear in BOTH model_fields "
+                    f"and auto_vars. A placeholder is either "
+                    f"prepare-supplied (a Pydantic field) or framework-"
+                    f"supplied (an auto_vars entry), never both."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="auto_vars",
+                ),
+                suggestion=(
+                    f"Remove the overlapping name(s) from one side."
+                ),
+            ))
+
+        cls._init_subclass_errors = errors
 
 
 # Module-global registry. Keyed by snake_case class name with ``Prompt``
