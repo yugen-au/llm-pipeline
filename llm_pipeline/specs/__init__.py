@@ -44,6 +44,7 @@ from llm_pipeline.specs.kinds import (
     KIND_TOOL,
     LEVEL_BY_KIND,
 )
+from llm_pipeline.specs.issues import flatten_artifact_issues
 from llm_pipeline.specs.registration import ArtifactRegistration
 from llm_pipeline.specs.reviews import ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
@@ -92,4 +93,6 @@ __all__ = [
     "ToolSpec",
     # Registration wrapper
     "ArtifactRegistration",
+    # Issue-collection helper
+    "flatten_artifact_issues",
 ]

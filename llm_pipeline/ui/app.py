@@ -353,6 +353,7 @@ def create_app(
     from llm_pipeline.ui.routes.auto_generate import router as auto_generate_router
     from llm_pipeline.ui.routes.reviews import router as reviews_router
     from llm_pipeline.ui.routes.evals import router as evals_router
+    from llm_pipeline.ui.routes.artifacts import router as artifacts_router
 
     app.include_router(runs_router, prefix="/api")
     app.include_router(steps_router, prefix="/api")
@@ -365,6 +366,8 @@ def create_app(
     app.include_router(auto_generate_router, prefix="/api")
     app.include_router(reviews_router, prefix="/api")
     app.include_router(evals_router, prefix="/api")
+    # Generic per-kind read endpoints — Phase D.1.
+    app.include_router(artifacts_router, prefix="/api")
     app.include_router(ws_router)  # no /api prefix for websocket
 
     return app
