@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-llm-pipeline = "llm_pipeline.ui.cli:main"
+llm-pipeline = "llm_pipeline.cli:main"
 
 [project.entry-points."llm_pipeline.pipelines"]
 text_analyzer = "llm_pipelines.pipelines.text_analyzer:TextAnalyzerPipeline"
