@@ -26,6 +26,8 @@ from llm_pipeline.specs.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
+    PromptDataFields,
+    PromptVariableDefs,
     SymbolRef,
 )
 from llm_pipeline.specs.constants import ConstantSpec
@@ -80,6 +82,8 @@ __all__ = [
     "CodeBodySpec",
     "JsonSchemaWithRefs",
     "PromptData",
+    "PromptDataFields",
+    "PromptVariableDefs",
     "SymbolRef",
     # Per-kind subclasses
     "ConstantSpec",

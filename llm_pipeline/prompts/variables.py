@@ -92,8 +92,19 @@ class PromptVariables(BaseModel):
             ValidationIssue,
             ValidationLocation,
         )
+        from llm_pipeline.specs import PromptDataFields
 
         errors: list[ValidationIssue] = []
+
+        # All captures route to ``PromptData.variables`` — the unified
+        # PromptVariableDefs sub-component covers BOTH the Pydantic-
+        # fields half (``missing_field_description``) AND the
+        # auto_vars half (shape errors, overlap). Inner field /
+        # placeholder names live in the message text; routing key
+        # stays at the ``variables`` boundary.
+        here = ValidationLocation(
+            node=cls.__name__, field=PromptDataFields.VARIABLES,
+        )
 
         # 1. Every field must use Field(description=...).
         for field_name, field_info in cls.model_fields.items():
@@ -104,9 +115,7 @@ class PromptVariables(BaseModel):
                         f"{cls.__name__}.{field_name} must use "
                         f"Field(description='...')."
                     ),
-                    location=ValidationLocation(
-                        node=cls.__name__, field=field_name,
-                    ),
+                    location=here,
                     suggestion=(
                         f"Replace the field definition with "
                         f"`{field_name}: <type> = Field(description='...')`."
@@ -123,9 +132,7 @@ class PromptVariables(BaseModel):
                     f"of placeholder -> auto_generate expression; got "
                     f"{type(auto_vars).__name__}."
                 ),
-                location=ValidationLocation(
-                    node=cls.__name__, field="auto_vars",
-                ),
+                location=here,
             ))
             auto_vars = {}  # treat as empty for the remaining checks
         for placeholder, expr in auto_vars.items():
@@ -136,9 +143,7 @@ class PromptVariables(BaseModel):
                         f"{cls.__name__}.auto_vars: placeholder names "
                         f"must be non-empty strings; got {placeholder!r}."
                     ),
-                    location=ValidationLocation(
-                        node=cls.__name__, field="auto_vars",
-                    ),
+                    location=here,
                 ))
             if not isinstance(expr, str) or not expr:
                 errors.append(ValidationIssue(
@@ -148,9 +153,7 @@ class PromptVariables(BaseModel):
                         f"must be a non-empty auto_generate expression "
                         f"string; got {expr!r}."
                     ),
-                    location=ValidationLocation(
-                        node=cls.__name__, field="auto_vars",
-                    ),
+                    location=here,
                 ))
 
         # 3. Mutual exclusion: no name in both fields and auto_vars.
@@ -165,9 +168,7 @@ class PromptVariables(BaseModel):
                     f"prepare-supplied (a Pydantic field) or framework-"
                     f"supplied (an auto_vars entry), never both."
                 ),
-                location=ValidationLocation(
-                    node=cls.__name__, field="auto_vars",
-                ),
+                location=here,
                 suggestion=(
                     f"Remove the overlapping name(s) from one side."
                 ),

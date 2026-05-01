@@ -360,16 +360,29 @@ class TestAttachClassCaptures:
         inputs_codes = {i.code for i in spec.inputs.issues}
         assert "step_inputs_name_mismatch" in inputs_codes
 
-    # Note: cross-class auto-routing (PromptVariables captures →
-    # PromptData fields) is intentionally not tested via
-    # ``attach_class_captures``. PromptVariables's location.field
-    # values reference its OWN field names (e.g. "text") which
-    # don't match PromptData fields. The strict contract correctly
-    # rejects that as a routing-key mismatch. Cross-class
-    # translation is the prompt walker's responsibility (when it
-    # lands) — it'll iterate ``prompt_variables_cls._init_subclass_errors``
-    # and stamp directly onto the right PromptData component with
-    # explicit per-code translation logic.
+    def test_prompt_variables_captures_route_to_prompt_data_variables(self):
+        """PromptVariables captures use field=PromptDataFields.VARIABLES
+        and route onto PromptData.variables.issues (the unified
+        PromptVariableDefs sub-component). Single home for both
+        Pydantic-fields and auto_vars problems."""
+        from llm_pipeline.specs import (
+            PromptData,
+            PromptVariableDefs,
+        )
+
+        class _BadPrompt(PromptVariables):
+            text: str = ""  # missing Field(description=...)
+
+        prompt = PromptData(
+            variables=PromptVariableDefs(json_schema={"type": "object"}),
+            yaml_path="/tmp/x.yaml",
+        ).attach_class_captures(_BadPrompt)
+
+        # Issue routes structurally onto the variables sub-component,
+        # not top-level — single canonical home.
+        assert prompt.issues == []
+        var_codes = {i.code for i in prompt.variables.issues}
+        assert "missing_field_description" in var_codes
 
     def test_top_level_issue_lands_on_spec_issues(self):
         from llm_pipeline.specs import (

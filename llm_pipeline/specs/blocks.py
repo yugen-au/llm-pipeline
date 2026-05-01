@@ -46,6 +46,8 @@ __all__ = [
     "CodeBodySpec",
     "JsonSchemaWithRefs",
     "PromptData",
+    "PromptDataFields",
+    "PromptVariableDefs",
     "SymbolRef",
 ]
 
@@ -160,8 +162,60 @@ class JsonSchemaWithRefs(ArtifactField):
     refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
 
 
+class PromptVariableDefs(JsonSchemaWithRefs):
+    """Unified view of a PromptVariables class's variable definitions.
+
+    Phoenix treats a prompt's variables as one flat dict — every
+    placeholder has a ``description``, an optional ``type``, and an
+    optional ``auto_generate`` expression. The Python implementation
+    splits them across two constructs (Pydantic fields for prepare-
+    supplied values; a ``ClassVar[dict[str, str]]`` for
+    auto_generate-supplied placeholders). This component is the
+    Phoenix-shaped view: both kinds in one place.
+
+    Extends :class:`JsonSchemaWithRefs` (Pydantic-fields portion +
+    refs from defaults / type-hints) with the auto_vars portion
+    (placeholder → expression + the refs each expression yields).
+    PromptVariables-class captures (``missing_field_description``,
+    ``auto_vars_*``) all live on the inherited ``issues`` slot —
+    a single home for everything about the prompt's variable
+    declarations.
+    """
+
+    # auto_generate expressions, keyed by placeholder name. Values
+    # are source-level expressions like ``enum_names(Sentiment)``
+    # which are parsed at render time to materialise concrete values.
+    auto_vars: dict[str, str] = Field(default_factory=dict)
+
+    # Per-placeholder refs derived from the auto_vars expressions —
+    # e.g. the placeholder ``"sentiment_options"`` mapping to a
+    # ``SymbolRef(kind=KIND_ENUM, name="sentiment", ...)``. Lets
+    # the UI surface "this auto-generated placeholder depends on
+    # the Sentiment enum" inline.
+    auto_vars_refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
+
+
+class PromptDataFields:
+    """Routing-key constants for :class:`PromptData` issue captures.
+
+    Captures from :class:`llm_pipeline.prompts.PromptVariables`
+    (``missing_field_description``, ``auto_vars_*``,
+    ``auto_vars_field_overlap``) describe problems with the prompt's
+    variable declarations — they all route to ``PromptData.variables``
+    (a :class:`PromptVariableDefs`, which is an
+    :class:`ArtifactField`). The single constant here documents
+    that boundary.
+
+    Other PromptData fields are primitives (yaml_path, templates,
+    model) — captures about them, if any, use ``location.field=None``
+    and live on top-level ``PromptData.issues``.
+    """
+
+    VARIABLES = "variables"
+
+
 class PromptData(ArtifactField):
-    """Sub-data of a step: variables + auto_vars + YAML-resolved templates.
+    """Sub-data of a step: variables + YAML-resolved templates.
 
     *Not* a first-class artifact. There is no ``KIND_PROMPT`` and
     no entry in ``COMPONENT_BY_KIND``. ``PromptData`` is embedded
@@ -175,27 +229,18 @@ class PromptData(ArtifactField):
     regenerates the paired ``_variables/_<step>.py`` (existing
     ``llm-pipeline generate`` flow).
 
-    Inherits ``issues`` from :class:`ArtifactField` — prompt-class-
-    level issues (auto_vars shape errors, missing field descriptions
-    on the PromptVariables class, etc.) are populated by the prompt
-    discovery / Phoenix sync layer.
+    Inherits ``issues`` from :class:`ArtifactField`. Prompt-variable-
+    class issues (auto_vars shape, missing field descriptions, etc.)
+    live on ``self.variables.issues`` — :class:`PromptVariableDefs`
+    is the unified home for everything about the variable
+    declarations.
     """
 
-    # The PromptVariables Pydantic class shape — fields, types,
-    # descriptions. Renders via JsonEditor / JsonViewer.
-    variables: JsonSchemaWithRefs
-
-    # auto_generate expressions, keyed by placeholder name. The
-    # values are source-level expressions like ``enum_names(Sentiment)``
-    # which are parsed at render time to materialise concrete values.
-    auto_vars: dict[str, str] = Field(default_factory=dict)
-
-    # Per-placeholder refs derived from the auto_vars expressions —
-    # e.g. the placeholder ``"sentiment_options"`` mapping to a
-    # ``SymbolRef(kind=KIND_ENUM, name="sentiment", ...)``. Lets
-    # the UI surface "this auto-generated placeholder depends on
-    # the Sentiment enum" inline.
-    auto_vars_refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
+    # Unified variable definitions — Pydantic-fields shape AND
+    # auto_generate expressions in one ArtifactField. Captures from
+    # PromptVariables.__pydantic_init_subclass__ route here via
+    # ``PromptDataFields.VARIABLES``.
+    variables: PromptVariableDefs
 
     # Filesystem path of the paired YAML prompt file (e.g.
     # ``llm-pipeline-prompts/sentiment_analysis.yaml``).

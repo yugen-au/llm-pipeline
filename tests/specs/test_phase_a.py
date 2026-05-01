@@ -35,6 +35,7 @@ from llm_pipeline.specs import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
+    PromptVariableDefs,
     SymbolRef,
 )
 
@@ -207,12 +208,12 @@ class TestJsonSchemaWithRefs:
 class TestPromptData:
     def test_minimum_construction(self):
         pd = PromptData(
-            variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
+            variables=PromptVariableDefs(json_schema={"type": "object"}),
             yaml_path="prompts/foo.yaml",
         )
         assert pd.yaml_path == "prompts/foo.yaml"
-        assert pd.auto_vars == {}
-        assert pd.auto_vars_refs == {}
+        assert pd.variables.auto_vars == {}
+        assert pd.variables.auto_vars_refs == {}
         assert pd.system_template is None
         assert pd.user_template is None
         assert pd.model is None
@@ -220,17 +221,19 @@ class TestPromptData:
     def test_with_auto_vars_and_refs(self):
         ref = SymbolRef(symbol="Sentiment", kind=KIND_ENUM, name="sentiment")
         pd = PromptData(
-            variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
-            auto_vars={"sentiment_options": "enum_names(Sentiment)"},
-            auto_vars_refs={"sentiment_options": [ref]},
+            variables=PromptVariableDefs(
+                json_schema={"type": "object"},
+                auto_vars={"sentiment_options": "enum_names(Sentiment)"},
+                auto_vars_refs={"sentiment_options": [ref]},
+            ),
             yaml_path="prompts/foo.yaml",
         )
-        assert pd.auto_vars["sentiment_options"] == "enum_names(Sentiment)"
-        assert pd.auto_vars_refs["sentiment_options"][0].name == "sentiment"
+        assert pd.variables.auto_vars["sentiment_options"] == "enum_names(Sentiment)"
+        assert pd.variables.auto_vars_refs["sentiment_options"][0].name == "sentiment"
 
     def test_round_trip_with_phoenix_resolved_fields(self):
         pd = PromptData(
-            variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
+            variables=PromptVariableDefs(json_schema={"type": "object"}),
             yaml_path="prompts/x.yaml",
             system_template="You are a helpful assistant.",
             user_template="Process: {input}",

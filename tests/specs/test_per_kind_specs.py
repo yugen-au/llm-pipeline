@@ -23,6 +23,7 @@ from llm_pipeline.specs import (
     KIND_STEP,
     KIND_TOOL,
     PromptData,
+    PromptVariableDefs,
     ReviewSpec,
     SchemaSpec,
     StepSpec,
@@ -213,7 +214,7 @@ class TestStepSpec:
             prepare=CodeBodySpec(source="return []"),
             run=CodeBodySpec(source="return None"),
             prompt=PromptData(
-                variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
+                variables=PromptVariableDefs(json_schema={"type": "object"}),
                 yaml_path="prompts/x.yaml",
             ),
             tool_names=["a", "b"],

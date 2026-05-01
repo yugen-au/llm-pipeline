@@ -16,6 +16,7 @@ from llm_pipeline.specs import (
     KIND_CONSTANT,
     KIND_STEP,
     PromptData,
+    PromptVariableDefs,
     StepSpec,
     flatten_artifact_issues,
 )
@@ -69,7 +70,7 @@ class TestNestedSubComponents:
                 issues=[_issue("run_issue")],
             ),
             prompt=PromptData(
-                variables=JsonSchemaWithRefs(
+                variables=PromptVariableDefs(
                     json_schema={"type": "object"},
                     issues=[_issue("prompt_variables_issue")],
                 ),
