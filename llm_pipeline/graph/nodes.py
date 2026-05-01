@@ -345,12 +345,35 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "LLMStepNode":
             return
+        from llm_pipeline.graph.instructions import LLMResultMixin
         from llm_pipeline.graph.spec import (
             ValidationIssue,
             ValidationLocation,
         )
 
         errors: list[ValidationIssue] = []
+
+        # Naming convention. Top-level (no field) — there's no
+        # sub-component for the class name itself.
+        if not cls.__name__.endswith("Step"):
+            errors.append(ValidationIssue(
+                severity="error", code="step_name_suffix",
+                message=(
+                    f"LLMStepNode subclass {cls.__name__!r} must end "
+                    f"with 'Step' suffix."
+                ),
+                location=ValidationLocation(node=cls.__name__),
+                suggestion=(
+                    f"Rename to '{cls.__name__}Step' or similar."
+                ),
+            ))
+
+        # Required attrs. ``field`` is the StepSpec field name
+        # (snake_case) so the auto-router can localise the issue
+        # onto ``StepSpec.inputs.issues`` / ``StepSpec.instructions.issues``
+        # when the matching JsonSchemaWithRefs sub-component exists
+        # (it won't here since the attr is None — falls back to
+        # top-level ``StepSpec.issues``).
         if cls.INPUTS is None:
             errors.append(ValidationIssue(
                 severity="error", code="missing_inputs",
@@ -359,7 +382,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"StepInputs subclass."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field="INPUTS",
+                    node=cls.__name__, field="inputs",
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on "
@@ -375,13 +398,87 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"output schema."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field="INSTRUCTIONS",
+                    node=cls.__name__, field="instructions",
                 ),
                 suggestion=(
                     f"Set INSTRUCTIONS = <YourInstructionsClass> on "
                     f"{cls.__name__} (a Pydantic BaseModel)."
                 ),
             ))
+
+        # INSTRUCTIONS subclass-of-LLMResultMixin (when set).
+        instructions_cls = cls.INSTRUCTIONS
+        if (
+            instructions_cls is not None
+            and not (
+                isinstance(instructions_cls, type)
+                and issubclass(instructions_cls, LLMResultMixin)
+            )
+        ):
+            errors.append(ValidationIssue(
+                severity="error", code="step_instructions_not_llm_result_mixin",
+                message=(
+                    f"{cls.__name__}.INSTRUCTIONS must subclass "
+                    f"LLMResultMixin so every output carries "
+                    f"confidence_score + notes and gets example-"
+                    f"validated at class-load time. Got "
+                    f"{instructions_cls!r}."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="instructions",
+                ),
+                suggestion=(
+                    f"Make {getattr(instructions_cls, '__name__', 'INSTRUCTIONS')} "
+                    f"subclass LLMResultMixin."
+                ),
+            ))
+
+        # Naming-mismatch checks — only meaningful once the Step
+        # suffix is present (otherwise the prefix derivation is
+        # nonsense). Gated to avoid noisy compound errors.
+        if cls.__name__.endswith("Step"):
+            prefix = cls.__name__[: -len("Step")]
+            inputs_cls = cls.INPUTS
+            if inputs_cls is not None and isinstance(inputs_cls, type):
+                expected_inputs = f"{prefix}Inputs"
+                if inputs_cls.__name__ != expected_inputs:
+                    errors.append(ValidationIssue(
+                        severity="error", code="step_inputs_name_mismatch",
+                        message=(
+                            f"{cls.__name__}.INPUTS must be named "
+                            f"'{expected_inputs}', got "
+                            f"'{inputs_cls.__name__}'."
+                        ),
+                        location=ValidationLocation(
+                            node=cls.__name__, field="inputs",
+                        ),
+                        suggestion=(
+                            f"Rename {inputs_cls.__name__} to "
+                            f"{expected_inputs}."
+                        ),
+                    ))
+            if (
+                instructions_cls is not None
+                and isinstance(instructions_cls, type)
+            ):
+                expected_instructions = f"{prefix}Instructions"
+                if instructions_cls.__name__ != expected_instructions:
+                    errors.append(ValidationIssue(
+                        severity="error", code="step_instructions_name_mismatch",
+                        message=(
+                            f"{cls.__name__}.INSTRUCTIONS must be "
+                            f"named '{expected_instructions}', got "
+                            f"'{instructions_cls.__name__}'."
+                        ),
+                        location=ValidationLocation(
+                            node=cls.__name__, field="instructions",
+                        ),
+                        suggestion=(
+                            f"Rename {instructions_cls.__name__} to "
+                            f"{expected_instructions}."
+                        ),
+                    ))
+
         # Resolve the PromptVariables subclass declared by prepare's
         # return annotation. On failure, the resolver appends to
         # ``errors`` and returns None; we still set the cached attr
@@ -625,12 +722,34 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "ExtractionNode":
             return
+        from sqlmodel import SQLModel as _SQLModel
+
         from llm_pipeline.graph.spec import (
             ValidationIssue,
             ValidationLocation,
         )
 
         errors: list[ValidationIssue] = []
+
+        # Naming convention.
+        if not cls.__name__.endswith("Extraction"):
+            errors.append(ValidationIssue(
+                severity="error", code="extraction_name_suffix",
+                message=(
+                    f"ExtractionNode subclass {cls.__name__!r} must "
+                    f"end with 'Extraction' suffix."
+                ),
+                location=ValidationLocation(node=cls.__name__),
+                suggestion=(
+                    f"Rename to '{cls.__name__}Extraction' or similar."
+                ),
+            ))
+
+        # Required attrs. ``field="inputs"`` matches
+        # ``ExtractionSpec.inputs`` (JsonSchemaWithRefs sub-component);
+        # ``field="table_name"`` matches the spec's primitive
+        # ``table_name: str | None`` — falls back to top-level
+        # ``ExtractionSpec.issues`` (no ArtifactField at that path).
         if cls.INPUTS is None:
             errors.append(ValidationIssue(
                 severity="error", code="missing_inputs",
@@ -639,7 +758,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"StepInputs subclass."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field="INPUTS",
+                    node=cls.__name__, field="inputs",
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
@@ -654,12 +773,36 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"class this extraction produces."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field="MODEL",
+                    node=cls.__name__, field="table_name",
                 ),
                 suggestion=(
                     f"Set MODEL = <YourSqlModelClass> on {cls.__name__}."
                 ),
             ))
+
+        # MODEL is a SQLModel subclass (when set).
+        model_cls = cls.MODEL
+        if (
+            model_cls is not None
+            and not (
+                isinstance(model_cls, type) and issubclass(model_cls, _SQLModel)
+            )
+        ):
+            errors.append(ValidationIssue(
+                severity="error", code="extraction_model_not_sqlmodel",
+                message=(
+                    f"{cls.__name__}.MODEL must be a SQLModel "
+                    f"subclass, got {model_cls!r}."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="table_name",
+                ),
+                suggestion=(
+                    "Subclass sqlmodel.SQLModel and set MODEL "
+                    "accordingly."
+                ),
+            ))
+
         cls._init_subclass_errors = errors
 
     @classmethod
@@ -764,6 +907,24 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
         )
 
         errors: list[ValidationIssue] = []
+
+        # Naming convention.
+        if not cls.__name__.endswith("Review"):
+            errors.append(ValidationIssue(
+                severity="error", code="review_name_suffix",
+                message=(
+                    f"ReviewNode subclass {cls.__name__!r} must end "
+                    f"with 'Review' suffix."
+                ),
+                location=ValidationLocation(node=cls.__name__),
+                suggestion=(
+                    f"Rename to '{cls.__name__}Review' or similar."
+                ),
+            ))
+
+        # Required attrs. ``field="inputs"`` and ``field="output"``
+        # match ``ReviewSpec.inputs`` and ``ReviewSpec.output``
+        # (both JsonSchemaWithRefs sub-components).
         if cls.INPUTS is None:
             errors.append(ValidationIssue(
                 severity="error", code="missing_inputs",
@@ -772,7 +933,7 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"reviewer sees)."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field="INPUTS",
+                    node=cls.__name__, field="inputs",
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
@@ -787,13 +948,38 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"reviewer's structured response shape)."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field="OUTPUT",
+                    node=cls.__name__, field="output",
                 ),
                 suggestion=(
                     f"Set OUTPUT = <YourOutputClass> on {cls.__name__} "
                     f"(a Pydantic BaseModel)."
                 ),
             ))
+
+        # OUTPUT is a Pydantic BaseModel subclass (when set).
+        output_cls = cls.OUTPUT
+        if (
+            output_cls is not None
+            and not (
+                isinstance(output_cls, type) and issubclass(output_cls, BaseModel)
+            )
+        ):
+            errors.append(ValidationIssue(
+                severity="error", code="review_output_not_basemodel",
+                message=(
+                    f"{cls.__name__}.OUTPUT must be a Pydantic "
+                    f"BaseModel subclass declaring the reviewer's "
+                    f"response shape, got {output_cls!r}."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="output",
+                ),
+                suggestion=(
+                    "Subclass pydantic.BaseModel and set OUTPUT "
+                    "accordingly."
+                ),
+            ))
+
         cls._init_subclass_errors = errors
 
     @classmethod
