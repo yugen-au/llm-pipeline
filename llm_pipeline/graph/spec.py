@@ -195,15 +195,24 @@ class PromptSpec(BaseModel):
 
 
 class NodeSpec(BaseModel):
-    """Per-node spec: contracts + wiring + (for steps) prompt info."""
+    """Per-node spec: contracts + wiring + (for steps) prompt info.
+
+    ``inputs_schema`` / ``output_schema`` are ``None`` when the
+    corresponding class attribute (INPUTS / INSTRUCTIONS / MODEL /
+    OUTPUT) has not been set on the node class. The spec describes
+    reality including incomplete reality; ``derive_issues`` reads
+    the None-ness and emits a missing-X validation issue. This is
+    what lets ``Pipeline.__init_subclass__`` produce a spec for a
+    half-broken node without raising.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["step", "extraction", "review"]
     name: str  # snake_case (step_name() / extraction class snake)
     cls: str  # fully-qualified class name
-    inputs_schema: dict[str, Any]  # INPUTS.model_json_schema()
-    output_schema: dict[str, Any]  # INSTRUCTIONS / MODEL fields / OUTPUT
+    inputs_schema: dict[str, Any] | None  # INPUTS.model_json_schema()
+    output_schema: dict[str, Any] | None  # INSTRUCTIONS / MODEL / OUTPUT
     wiring: WiringSpec
     prompt: PromptSpec | None = None  # only for steps
 
@@ -308,14 +317,19 @@ def _build_tool_spec(tool_cls: type) -> ToolSpec:
     )
 
 
-def _build_prompt_spec(step_cls: type) -> PromptSpec:
+def _build_prompt_spec(step_cls: type) -> PromptSpec | None:
     """Build a ``PromptSpec`` for an ``LLMStepNode`` subclass.
 
+    Returns ``None`` when prerequisites are missing — the spec stays
+    coherent and ``derive_issues`` will surface the underlying
+    capture (missing INSTRUCTIONS, prepare-signature mismatch, etc.).
     Only code-side fields are populated; Phoenix-aware fields stay
     ``None`` and get filled in by the discovery-time Phoenix
     validator.
     """
     prompt_cls = step_cls.prompt_variables_cls  # cached at __init_subclass__
+    if prompt_cls is None or step_cls.INSTRUCTIONS is None:
+        return None
     return PromptSpec(
         name=step_cls.step_name(),
         prompt_variables_cls=_qualname(prompt_cls),
@@ -360,28 +374,54 @@ def _node_name(binding: Any) -> str:
     return to_snake_case(name, strip_suffix=suffix or None)
 
 
-def _build_output_schema(binding: Any) -> dict[str, Any]:
-    """Per-kind output schema for a node binding."""
+def _build_output_schema(binding: Any) -> dict[str, Any] | None:
+    """Per-kind output schema for a node binding.
+
+    Returns ``None`` when the class hasn't declared its output type
+    yet (INSTRUCTIONS / MODEL / OUTPUT unset). The spec describes
+    reality; ``derive_issues`` reads the None and surfaces the
+    missing-attribute issue.
+    """
     from llm_pipeline.wiring import Extraction, Review, Step
 
     cls = binding.cls
     if isinstance(binding, Step):
-        return cls.INSTRUCTIONS.model_json_schema()
+        return (
+            cls.INSTRUCTIONS.model_json_schema()
+            if cls.INSTRUCTIONS is not None else None
+        )
     if isinstance(binding, Extraction):
-        return cls.MODEL.model_json_schema()
+        return (
+            cls.MODEL.model_json_schema()
+            if cls.MODEL is not None else None
+        )
     if isinstance(binding, Review):
-        return cls.OUTPUT.model_json_schema()
+        return (
+            cls.OUTPUT.model_json_schema()
+            if cls.OUTPUT is not None else None
+        )
     raise TypeError(f"Unknown node binding type: {type(binding).__name__}")
 
 
 def _build_node_spec(binding: Any) -> NodeSpec:
+    """Compose a NodeSpec from a pipeline binding.
+
+    Tolerates partial class state: ``INPUTS`` unset → inputs_schema
+    stays None; ``INSTRUCTIONS``/``MODEL``/``OUTPUT`` unset → output
+    schema stays None; missing prompt prerequisites for a step →
+    prompt stays None. The spec describes reality;
+    :func:`derive_issues` walks it and surfaces what's missing.
+    """
     cls = binding.cls
     kind = _node_kind(binding)
+    inputs_schema = (
+        cls.INPUTS.model_json_schema() if cls.INPUTS is not None else None
+    )
     return NodeSpec(
         kind=kind,
         name=_node_name(binding),
         cls=_qualname(cls),
-        inputs_schema=cls.INPUTS.model_json_schema(),
+        inputs_schema=inputs_schema,
         output_schema=_build_output_schema(binding),
         wiring=_build_wiring_spec(binding),
         prompt=_build_prompt_spec(cls) if kind == "step" else None,

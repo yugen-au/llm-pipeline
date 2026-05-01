@@ -46,6 +46,7 @@ from llm_pipeline.naming import to_snake_case
 if TYPE_CHECKING:
     from sqlmodel import SQLModel
 
+    from llm_pipeline.graph.spec import ValidationIssue
     from llm_pipeline.inputs import StepInputs
     from llm_pipeline.prompts.variables import PromptVariables
 
@@ -144,84 +145,150 @@ def _build_node_def(cls: type, local_ns: dict[str, Any] | None) -> NodeDef:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_prompt_variables_cls(cls: type) -> type:
+def _resolve_prompt_variables_cls(
+    cls: type, errors: list["ValidationIssue"],
+) -> type | None:
     """Inspect ``cls.prepare`` and resolve its ``list[XxxPrompt]`` return.
 
     Returns the concrete ``PromptVariables`` subclass declared as the
-    list-element type. Raises ``TypeError`` on any deviation:
+    list-element type, or ``None`` when ``cls.prepare`` is malformed
+    in any way. Failures append a :class:`ValidationIssue` to
+    ``errors`` (instead of raising) so the framework can capture
+    contract violations into per-class state without preventing the
+    class object from being constructed.
+
+    Captured violations:
 
     - ``cls`` did not override ``prepare`` (still uses the base impl).
+    - ``prepare``'s annotations couldn't be resolved (forward-ref
+      pointing into a function-local scope, etc.).
     - ``prepare`` has no return-type annotation.
+    - ``prepare``'s ``inputs`` annotation doesn't match ``cls.INPUTS``.
     - Annotation isn't a ``list[...]``.
     - Element type isn't a concrete ``PromptVariables`` subclass.
     """
+    from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
     from llm_pipeline.prompts.variables import PromptVariables
 
-    if cls.prepare is LLMStepNode.prepare:  # type: ignore[attr-defined]
-        raise TypeError(
-            f"{cls.__name__} must override `prepare(self, inputs)` and "
-            f"declare its return type as list[XxxPrompt] where XxxPrompt "
-            f"is a concrete PromptVariables subclass."
-        )
+    here = ValidationLocation(node=cls.__name__, field="prepare")
 
-    # Resolve the FULL prepare signature. We enforce two things:
-    #   1. The ``inputs`` parameter annotation matches ``cls.INPUTS``.
-    #   2. The return annotation is ``list[XxxPrompt]`` for some
-    #      concrete ``PromptVariables`` subclass.
-    # Forward refs are evaluated against the method's defining module;
-    # this means inputs/instructions/prompt classes must live at module
-    # top-level (not inside a test-method scope), which is consistent
-    # with how real step files are authored.
+    if cls.prepare is LLMStepNode.prepare:  # type: ignore[attr-defined]
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_not_overridden",
+            message=(
+                f"{cls.__name__} must override `prepare(self, inputs)` "
+                f"and declare its return type as list[XxxPrompt] where "
+                f"XxxPrompt is a concrete PromptVariables subclass."
+            ),
+            location=here,
+            suggestion=(
+                f"def prepare(self, inputs) -> list[XxxPrompt]: ..."
+            ),
+        ))
+        return None
+
     try:
         hints = typing.get_type_hints(cls.prepare)
     except Exception as exc:
-        raise TypeError(
-            f"{cls.__name__}.prepare's annotations could not be "
-            f"resolved: {exc}. The inputs parameter type and the "
-            f"return type must reference classes defined at the "
-            f"module top level (not inside a function/method scope)."
-        ) from exc
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_annotations_unresolvable",
+            message=(
+                f"{cls.__name__}.prepare's annotations could not be "
+                f"resolved: {exc}."
+            ),
+            location=here,
+            suggestion=(
+                "Move INPUTS / INSTRUCTIONS / XxxPrompt classes to "
+                "module top level (not inside a function or method "
+                "scope) so forward refs resolve."
+            ),
+        ))
+        return None
 
     return_type = hints.get("return")
     if return_type is None:
-        raise TypeError(
-            f"{cls.__name__}.prepare must declare a return-type "
-            f"annotation of the form list[XxxPrompt]."
-        )
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_no_return_annotation",
+            message=(
+                f"{cls.__name__}.prepare must declare a return-type "
+                f"annotation of the form list[XxxPrompt]."
+            ),
+            location=here,
+            suggestion=(
+                "Add `-> list[XxxPrompt]` to the prepare signature."
+            ),
+        ))
+        return None
 
     declared_inputs = hints.get("inputs")
     if declared_inputs is not None and declared_inputs is not cls.INPUTS:
-        raise TypeError(
-            f"{cls.__name__}.prepare's inputs parameter annotation is "
-            f"{declared_inputs!r}, but {cls.__name__}.INPUTS is "
-            f"{cls.INPUTS!r}. The annotation must match the declared "
-            f"INPUTS class exactly."
-        )
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_inputs_mismatch",
+            message=(
+                f"{cls.__name__}.prepare's inputs parameter annotation "
+                f"is {declared_inputs!r}, but {cls.__name__}.INPUTS is "
+                f"{cls.INPUTS!r}. The annotation must match the "
+                f"declared INPUTS class exactly."
+            ),
+            location=here,
+            suggestion=(
+                f"Change the inputs annotation to {cls.INPUTS!r}, or "
+                f"update INPUTS to match the declared annotation."
+            ),
+        ))
+        return None
 
     origin = typing.get_origin(return_type)
     if origin is not list:
-        raise TypeError(
-            f"{cls.__name__}.prepare return type must be list[XxxPrompt], "
-            f"got {return_type!r}."
-        )
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_return_not_list",
+            message=(
+                f"{cls.__name__}.prepare return type must be "
+                f"list[XxxPrompt], got {return_type!r}."
+            ),
+            location=here,
+            suggestion="Use list[XxxPrompt] (a single PromptVariables subclass).",
+        ))
+        return None
     args = typing.get_args(return_type)
     if len(args) != 1:
-        raise TypeError(
-            f"{cls.__name__}.prepare return type must be list[XxxPrompt] "
-            f"with exactly one type argument; got {return_type!r}."
-        )
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_return_wrong_args",
+            message=(
+                f"{cls.__name__}.prepare return type must be "
+                f"list[XxxPrompt] with exactly one type argument; got "
+                f"{return_type!r}."
+            ),
+            location=here,
+        ))
+        return None
 
     prompt_cls = args[0]
     if not (isinstance(prompt_cls, type) and issubclass(prompt_cls, PromptVariables)):
-        raise TypeError(
-            f"{cls.__name__}.prepare element type must be a "
-            f"PromptVariables subclass; got {prompt_cls!r}."
-        )
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_element_not_promptvariables",
+            message=(
+                f"{cls.__name__}.prepare element type must be a "
+                f"PromptVariables subclass; got {prompt_cls!r}."
+            ),
+            location=here,
+            suggestion=(
+                "Replace the element type with a concrete "
+                "PromptVariables subclass (one per Phoenix prompt)."
+            ),
+        ))
+        return None
     if prompt_cls is PromptVariables:
-        raise TypeError(
-            f"{cls.__name__}.prepare must use a concrete PromptVariables "
-            f"subclass, not the base PromptVariables class itself."
-        )
+        errors.append(ValidationIssue(
+            severity="error", code="prepare_element_is_base",
+            message=(
+                f"{cls.__name__}.prepare must use a concrete "
+                f"PromptVariables subclass, not the base PromptVariables "
+                f"class itself."
+            ),
+            location=here,
+        ))
+        return None
     return prompt_cls
 
 
@@ -266,22 +333,63 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
     # Public for introspection / tooling (NodeSpec / Pipeline.inspect()).
     prompt_variables_cls: ClassVar[type | None] = None
 
+    # Validation issues captured at __init_subclass__ time. Empty when
+    # the class's contract is satisfied; populated otherwise. The
+    # class object always constructs successfully — runtime guards
+    # (and ``derive_issues`` over the spec) consult this list to
+    # decide whether the class is usable. Each subclass gets its own
+    # fresh list (re-assigned in ``__init_subclass__``).
+    _init_subclass_errors: ClassVar[list["ValidationIssue"]] = []
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if cls.__name__ == "LLMStepNode":
             return
+        from llm_pipeline.graph.spec import (
+            ValidationIssue,
+            ValidationLocation,
+        )
+
+        errors: list[ValidationIssue] = []
         if cls.INPUTS is None:
-            raise TypeError(
-                f"{cls.__name__}.INPUTS must be set to a StepInputs subclass."
-            )
+            errors.append(ValidationIssue(
+                severity="error", code="missing_inputs",
+                message=(
+                    f"{cls.__name__}.INPUTS must be set to a "
+                    f"StepInputs subclass."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="INPUTS",
+                ),
+                suggestion=(
+                    f"Set INPUTS = <YourInputsClass> on "
+                    f"{cls.__name__} (must subclass StepInputs)."
+                ),
+            ))
         if cls.INSTRUCTIONS is None:
-            raise TypeError(
-                f"{cls.__name__}.INSTRUCTIONS must be set to a Pydantic BaseModel "
-                f"subclass declaring the LLM output schema."
-            )
-        # Resolve and cache the PromptVariables subclass declared by
-        # this step's prepare() return annotation.
-        cls.prompt_variables_cls = _resolve_prompt_variables_cls(cls)
+            errors.append(ValidationIssue(
+                severity="error", code="missing_instructions",
+                message=(
+                    f"{cls.__name__}.INSTRUCTIONS must be set to a "
+                    f"Pydantic BaseModel subclass declaring the LLM "
+                    f"output schema."
+                ),
+                location=ValidationLocation(
+                    node=cls.__name__, field="INSTRUCTIONS",
+                ),
+                suggestion=(
+                    f"Set INSTRUCTIONS = <YourInstructionsClass> on "
+                    f"{cls.__name__} (a Pydantic BaseModel)."
+                ),
+            ))
+        # Resolve the PromptVariables subclass declared by prepare's
+        # return annotation. On failure, the resolver appends to
+        # ``errors`` and returns None; we still set the cached attr
+        # so downstream consumers can branch on its presence.
+        cls.prompt_variables_cls = _resolve_prompt_variables_cls(
+            cls, errors,
+        )
+        cls._init_subclass_errors = errors
 
     @classmethod
     def get_node_def(cls, local_ns: dict[str, Any] | None) -> NodeDef:
@@ -292,6 +400,26 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
     def step_name(cls) -> str:
         """``CamelCase`` -> ``snake_case``, dropping the ``Step`` suffix."""
         return to_snake_case(cls.__name__, strip_suffix="Step")
+
+    @classmethod
+    def build_spec(cls, binding: Any) -> Any:
+        """Build a ``NodeSpec`` describing this step's class state + binding wiring.
+
+        Per-class entry point for spec composition — keeps node-type-
+        specific spec logic local to the node base class so adding a
+        new node type later (e.g. ``CallableNode``) is a localised
+        change. Tolerates partial class state: missing INPUTS /
+        INSTRUCTIONS / prompt_variables_cls produce ``None``-valued
+        spec fields that ``derive_issues`` reads.
+
+        Returning type is ``NodeSpec`` (annotated as ``Any`` here to
+        avoid an import cycle between ``nodes.py`` and ``spec.py``;
+        callers in ``spec.py`` already operate on the structured
+        return).
+        """
+        from llm_pipeline.graph.spec import _build_node_spec
+
+        return _build_node_spec(binding)
 
     def prepare(self, inputs: Any) -> list["PromptVariables"]:
         """Build per-call ``PromptVariables`` instances from the resolved inputs.
