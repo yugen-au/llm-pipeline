@@ -10,10 +10,8 @@ from typing import TYPE_CHECKING
 
 from llm_pipeline.graph import ExtractionNode, StepInputs
 
-from llm_pipelines.schemas.text_analyzer import (
-    Topic,
-    TopicItem,
-)
+from llm_pipelines.schemas.text_analyzer import TopicItem
+from llm_pipelines.tables.text_analyzer import Topic
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext

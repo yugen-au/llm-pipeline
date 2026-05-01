@@ -48,6 +48,7 @@ from llm_pipeline.specs.registration import ArtifactRegistration
 from llm_pipeline.specs.reviews import ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
 from llm_pipeline.specs.steps import StepSpec
+from llm_pipeline.specs.tables import IndexSpec, TableSpec
 from llm_pipeline.specs.tools import ToolSpec
 
 # Note: builders live in ``llm_pipeline.specs.builders`` and are
@@ -83,9 +84,11 @@ __all__ = [
     "EnumMemberSpec",
     "EnumSpec",
     "ExtractionSpec",
+    "IndexSpec",
     "ReviewSpec",
     "SchemaSpec",
     "StepSpec",
+    "TableSpec",
     "ToolSpec",
     # Registration wrapper
     "ArtifactRegistration",

@@ -1,97 +1,27 @@
-"""TextAnalyzer data models: input, instructions, step inputs, DB models."""
-from typing import ClassVar, Optional
+"""TextAnalyzer shared data shapes.
 
+Schemas in this file are GENUINELY shared across multiple
+artifacts — anything 1:1-paired with a single owner (a step's
+INPUTS / INSTRUCTIONS, the pipeline's INPUT_DATA, an extraction's
+MODEL) lives alongside its owner instead.
+
+- ``TopicItem`` is consumed by ``TopicExtractionStep`` (in its
+  ``INSTRUCTIONS.topics: list[TopicItem]``) AND by
+  ``TopicExtraction`` (its ``FromTopicExtractionInputs.topics``
+  pathway field). Two distinct artifacts use it, so it's a
+  true shared shape.
+
+DB-backed tables live in ``llm_pipelines/tables/text_analyzer.py``
+(SQLModel with ``table=True``).
+"""
 from pydantic import BaseModel
-from sqlmodel import SQLModel, Field
 
-from llm_pipeline.inputs import PipelineInputData, StepInputs
-from llm_pipeline.graph import LLMResultMixin
-
-
-# ---------------------------------------------------------------------------
-# Pipeline input data
-# ---------------------------------------------------------------------------
-
-class TextAnalyzerInputData(PipelineInputData):
-    """Input data for the TextAnalyzer pipeline."""
-    text: str
-
-
-# ---------------------------------------------------------------------------
-# LLM output shapes / DB models
-# ---------------------------------------------------------------------------
 
 class TopicItem(BaseModel):
-    """LLM output shape for a single extracted topic. Not a DB table."""
+    """LLM output shape for a single extracted topic. Not a DB table.
+
+    Used by ``TopicExtractionStep.INSTRUCTIONS.topics`` and by
+    ``TopicExtraction.FromTopicExtractionInputs.topics``.
+    """
     name: str
     relevance: float
-
-
-class Topic(SQLModel, table=True):
-    """Persisted topic record extracted by the topic extraction step."""
-    __tablename__ = "demo_topics"
-    __table_args__ = {"extend_existing": True}
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    relevance: float
-    run_id: str
-
-
-# ---------------------------------------------------------------------------
-# Instructions (LLM output contracts)
-# ---------------------------------------------------------------------------
-
-class SentimentAnalysisInstructions(LLMResultMixin):
-    """Structured output for sentiment analysis."""
-    sentiment: str = ""
-    explanation: str = ""
-    example: ClassVar[dict] = {
-        "sentiment": "positive",
-        "explanation": "The text expresses optimism and satisfaction.",
-        "confidence_score": 0.92,
-    }
-
-
-class TopicExtractionInstructions(LLMResultMixin):
-    """Structured output for topic extraction."""
-    topics: list[TopicItem] = []
-    primary_topic: str = ""
-    example: ClassVar[dict] = {
-        "topics": [
-            {"name": "machine learning", "relevance": 0.95},
-            {"name": "data processing", "relevance": 0.7},
-        ],
-        "primary_topic": "machine learning",
-        "confidence_score": 0.9,
-    }
-
-
-class SummaryInstructions(LLMResultMixin):
-    """Structured output for text summarization."""
-    summary: str = ""
-    example: ClassVar[dict] = {
-        "summary": "The text discusses key themes and their implications.",
-        "confidence_score": 0.88,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Step inputs (declared contracts for each step)
-# ---------------------------------------------------------------------------
-
-class SentimentAnalysisInputs(StepInputs):
-    """Everything SentimentAnalysisStep needs to run."""
-    text: str
-
-
-class TopicExtractionInputs(StepInputs):
-    """Everything TopicExtractionStep needs to run."""
-    text: str
-    sentiment: str
-
-
-class SummaryInputs(StepInputs):
-    """Everything SummaryStep needs to run."""
-    text: str
-    sentiment: str
-    primary_topic: str

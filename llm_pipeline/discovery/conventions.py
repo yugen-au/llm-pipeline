@@ -21,9 +21,29 @@ from llm_pipeline.discovery.loading import (
     _load_subfolder,
     _resolve_package_name,
 )
+from llm_pipeline.discovery.resolver import make_resolver
+from llm_pipeline.discovery.walkers import WALKERS_BY_SUBFOLDER
+
+if False:  # type-only — no runtime import to avoid circular cost
+    from llm_pipeline.specs import ArtifactRegistration  # noqa: F401
 
 
 __all__ = ["discover_from_convention"]
+
+
+# Subfolders whose walkers are cst_analysis-aware and benefit
+# from the two-pass discovery pattern. Pass 1 populates the
+# registries with bare specs (no cross-artifact refs because the
+# resolver hook returns None for everything); pass 2 rebuilds
+# specs with a resolver that sees every kind populated, filling
+# in the refs.
+_TWO_PASS_SUBFOLDERS = ("schemas", "tables", "extractions", "reviews", "steps")
+
+
+def _null_resolver(module_path: str, imported_symbol: str) -> tuple[str, str] | None:
+    """Pass-1 resolver — returns None for every lookup."""
+    del module_path, imported_symbol
+    return None
 
 
 logger = logging.getLogger(__name__)
@@ -93,6 +113,7 @@ def discover_from_convention(
     include_package: bool = True,
     *,
     strict: bool = False,
+    registries: Optional[Dict[str, Dict[str, "ArtifactRegistration"]]] = None,
 ) -> Tuple[Dict[str, Callable], Dict[str, Type]]:
     """Find all convention dirs, load modules in order, return merged registries.
 
@@ -103,6 +124,20 @@ def discover_from_convention(
     from ``__init_subclass__`` validators) re-raise with file context.
     Used by ``llm-pipeline build`` so structural validation failures
     are surfaced rather than swallowed.
+
+    ``registries=None`` (default): only the legacy
+    ``pipeline_registry`` / ``introspection_registry`` plus the
+    ``_AUTO_GENERATE_REGISTRY`` get populated — backward-compatible
+    behaviour for existing CLI consumers.
+
+    ``registries=<dict>``: in addition, the per-kind walkers from
+    :mod:`.walkers` populate the supplied
+    ``app.state.registries`` shape via the two-pass discovery
+    pattern. Pass 1 registers each artifact with empty refs;
+    pass 2 rebuilds cst_analysis-aware specs (schemas, tables,
+    extractions, reviews, steps) with a fully-populated resolver
+    so cross-artifact references get captured as ``SymbolRef``s
+    on the right spec components.
     """
     # Module-attribute lookup (not local reference) so monkeypatches
     # against ``loading.find_convention_dirs`` are observed at call
@@ -114,6 +149,12 @@ def discover_from_convention(
     all_pipeline_reg: Dict[str, Callable] = {}
     all_introspection_reg: Dict[str, Type] = {}
 
+    # Modules-per-subfolder cache so pass 2 (when registries are
+    # supplied) doesn't have to re-load any files. Keyed by
+    # subfolder name; values accumulate across all convention
+    # dirs.
+    modules_by_subfolder: Dict[str, list] = {sf: [] for sf in _LOAD_ORDER}
+
     for base in dirs:
         namespace = f"_llm_pipelines_{base.name}"
         # Detect if this is an importable package (has __init__.py)
@@ -123,12 +164,16 @@ def discover_from_convention(
         )
         logger.debug("Scanning convention dir: %s (pkg=%s)", base, pkg_name)
 
-        # Load in dependency order
+        # Pass 1: load each subfolder + run legacy registration +
+        # invoke the per-kind walker (when registries supplied)
+        # with the null resolver — bare specs only.
         for subfolder in _LOAD_ORDER:
             modules = _load_subfolder(
                 base, subfolder, namespace, pkg_name, strict=strict,
             )
+            modules_by_subfolder[subfolder].extend(modules)
 
+            # Legacy registration paths (always run):
             if subfolder in ("enums", "constants"):
                 _register_enums_constants(modules)
             elif subfolder == "_variables":
@@ -142,6 +187,24 @@ def discover_from_convention(
                 )
                 all_pipeline_reg.update(p_reg)
                 all_introspection_reg.update(i_reg)
+
+            # Per-kind walker pass 1 (null resolver — bare specs):
+            if registries is not None:
+                for walker in WALKERS_BY_SUBFOLDER.get(subfolder, []):
+                    walker(modules, registries, _null_resolver)
+
+    # Pass 2: rebuild cst_analysis-aware specs with a resolver
+    # that sees every kind populated. Constants / enums / tools /
+    # pipelines walkers are unaffected by the resolver (they
+    # don't consult cst_analysis), so we skip them here.
+    if registries is not None:
+        full_resolver = make_resolver(registries)
+        for subfolder in _TWO_PASS_SUBFOLDERS:
+            modules = modules_by_subfolder.get(subfolder, [])
+            if not modules:
+                continue
+            for walker in WALKERS_BY_SUBFOLDER.get(subfolder, []):
+                walker(modules, registries, full_resolver)
 
     if all_pipeline_reg:
         logger.info(

@@ -56,6 +56,7 @@ _LOAD_ORDER = [
     "enums",
     "constants",
     "schemas",
+    "tables",
     "_variables",
     "extractions",
     "tools",

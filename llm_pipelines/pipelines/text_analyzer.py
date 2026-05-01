@@ -5,6 +5,10 @@ Graph: ``SentimentAnalysisStep -> TopicExtractionStep -> TopicExtraction
 the wiring (``inputs_spec``) for the contained node. The framework's
 compile-time validator asserts ``FromOutput(...)`` references resolve,
 naming conventions hold, and the graph is acyclic.
+
+INPUT_DATA lives alongside the pipeline class — it's pipeline-owned
+and isn't shared with any other artifact, so co-locating keeps
+ownership obvious.
 """
 from __future__ import annotations
 
@@ -16,20 +20,29 @@ from llm_pipeline.graph import (
     Pipeline,
     Step,
 )
+from llm_pipeline.inputs import PipelineInputData
 
 from llm_pipelines.extractions.text_analyzer import (
     FromTopicExtractionInputs,
     TopicExtraction,
 )
-from llm_pipelines.schemas.text_analyzer import (
+from llm_pipelines.steps.sentiment_analysis import (
     SentimentAnalysisInputs,
-    SummaryInputs,
-    TextAnalyzerInputData,
-    TopicExtractionInputs,
+    SentimentAnalysisStep,
 )
-from llm_pipelines.steps.sentiment_analysis import SentimentAnalysisStep
-from llm_pipelines.steps.summary import SummaryStep
-from llm_pipelines.steps.topic_extraction import TopicExtractionStep
+from llm_pipelines.steps.summary import (
+    SummaryInputs,
+    SummaryStep,
+)
+from llm_pipelines.steps.topic_extraction import (
+    TopicExtractionInputs,
+    TopicExtractionStep,
+)
+
+
+class TextAnalyzerInputData(PipelineInputData):
+    """Input data for the TextAnalyzer pipeline."""
+    text: str
 
 
 class TextAnalyzerPipeline(Pipeline):

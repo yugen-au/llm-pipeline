@@ -283,9 +283,17 @@ def create_app(
     # Demo mode: param > env > False
     resolved_demo = demo_mode or os.environ.get("LLM_PIPELINE_DEMO_MODE", "").lower() in ("1", "true")
 
+    # Per-kind ArtifactRegistration container. Phase C.2.b walkers
+    # populate this via the new ``registries`` kwarg below.
+    # Initialised here so ``discover_from_convention`` has a target
+    # to write into.
+    from llm_pipeline.discovery import init_empty_registries
+    app.state.registries = init_empty_registries()
+
     # Convention-based discovery (llm_pipelines/ directories)
     convention_pipeline, convention_introspection = discover_from_convention(
         app.state.engine, resolved_model, include_package=resolved_demo,
+        registries=app.state.registries,
     )
 
     # Entry-point discovery (demo pipelines registered here)
@@ -310,15 +318,6 @@ def create_app(
         **module_introspection,
         **(introspection_registry or {}),
     }
-
-    # Per-kind ArtifactRegistration container. Phase C.2.a wires the
-    # empty shape so consumers can be migrated incrementally; the
-    # per-kind walkers in Phase C.2.b populate it during discovery
-    # alongside the legacy ``pipeline_registry`` /
-    # ``_AUTO_GENERATE_REGISTRY`` paths above. See
-    # ``.claude/plans/per-artifact-architecture.md`` (sections 7-9).
-    from llm_pipeline.discovery import init_empty_registries
-    app.state.registries = init_empty_registries()
 
     # Sync pipeline visibility (draft/published) to DB
     _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))

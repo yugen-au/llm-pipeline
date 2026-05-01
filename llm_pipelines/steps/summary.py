@@ -1,22 +1,39 @@
-"""Summary step (pydantic-graph-native node)."""
+"""Summary step (pydantic-graph-native node).
+
+INPUTS and INSTRUCTIONS classes live alongside the step (same
+file) — they're 1:1-paired with this step.
+"""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import ClassVar, TYPE_CHECKING
 
 from pydantic_graph import End
 
-from llm_pipeline.graph import LLMStepNode
+from llm_pipeline.graph import LLMResultMixin, LLMStepNode
+from llm_pipeline.inputs import StepInputs
 
-from llm_pipelines.schemas.text_analyzer import (
-    SummaryInputs,
-    SummaryInstructions,
-)
 from llm_pipelines._variables._summary import SummaryPrompt
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext
 
     from llm_pipeline.graph import PipelineDeps, PipelineState
+
+
+class SummaryInputs(StepInputs):
+    """Everything SummaryStep needs to run."""
+    text: str
+    sentiment: str
+    primary_topic: str
+
+
+class SummaryInstructions(LLMResultMixin):
+    """Structured output for text summarization."""
+    summary: str = ""
+    example: ClassVar[dict] = {
+        "summary": "The text discusses key themes and their implications.",
+        "confidence_score": 0.88,
+    }
 
 
 class SummaryStep(LLMStepNode):

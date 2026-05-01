@@ -43,11 +43,13 @@ from llm_pipeline.specs.kinds import (
     KIND_REVIEW,
     KIND_SCHEMA,
     KIND_STEP,
+    KIND_TABLE,
     KIND_TOOL,
 )
 from llm_pipeline.specs.reviews import ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
 from llm_pipeline.specs.steps import StepSpec
+from llm_pipeline.specs.tables import IndexSpec, TableSpec
 from llm_pipeline.specs.tools import ToolSpec
 
 
@@ -59,6 +61,7 @@ __all__ = [
     "build_review_spec",
     "build_schema_spec",
     "build_step_spec",
+    "build_table_spec",
     "build_tool_spec",
     "json_schema_with_refs",
 ]
@@ -228,6 +231,61 @@ def build_schema_spec(
         cls=_qualified(cls),
         source_path=source_path,
         definition=definition,
+    )
+
+
+def build_table_spec(
+    *,
+    name: str,
+    cls: type,
+    source_path: str,
+    source_text: str,
+    resolver: ResolverHook,
+) -> TableSpec:
+    """Build a :class:`TableSpec` from a SQLModel-with-table=True class.
+
+    Caller is expected to have already classified ``cls`` as a
+    table (via the discovery walker's ``__table__``-presence
+    check). Reads ``__tablename__`` and ``__table__.indexes``
+    from the class — no DB engine required.
+
+    The JSON-schema-side analysis is shared with
+    :func:`build_schema_spec` (both go through
+    :func:`json_schema_with_refs`); only the table-specific
+    metadata is pulled separately here.
+    """
+    definition = json_schema_with_refs(
+        cls=cls,
+        source_text=source_text,
+        resolver=resolver,
+    )
+    if definition is None:
+        definition = JsonSchemaWithRefs(json_schema={})
+
+    table_name = getattr(cls, "__tablename__", "") or ""
+
+    indices: list[IndexSpec] = []
+    table = getattr(cls, "__table__", None)
+    if table is not None:
+        for idx in getattr(table, "indexes", []) or []:
+            try:
+                columns = [c.name for c in idx.columns]
+            except Exception:  # noqa: BLE001 — defensive against odd backends
+                columns = []
+            indices.append(IndexSpec(
+                name=getattr(idx, "name", "") or "",
+                columns=columns,
+                unique=bool(getattr(idx, "unique", False)),
+            ))
+
+    return TableSpec(
+        kind=KIND_TABLE,
+        name=name,
+        cls=_qualified(cls),
+        source_path=source_path,
+        definition=definition,
+        table_name=table_name,
+        indices=indices,
     )
 
 
