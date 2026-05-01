@@ -9,7 +9,7 @@ from llm_pipelines.schemas.text_analyzer import (
     TopicExtractionInputs,
     TopicExtractionInstructions,
 )
-from llm_pipelines.variables.topic_extraction import TopicExtractionPrompt
+from llm_pipelines._variables._topic_extraction import TopicExtractionPrompt
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext

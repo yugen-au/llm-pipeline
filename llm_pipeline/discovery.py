@@ -15,13 +15,17 @@ from typing import Any, Callable, Dict, Optional, Tuple, Type
 logger = logging.getLogger(__name__)
 
 # Subfolder load order (dependencies first).
-# ``variables`` loads before ``steps`` because step files import their
-# paired ``PromptVariables`` subclass at module-import time.
+# ``_variables`` loads before ``steps`` because step files import their
+# paired ``PromptVariables`` subclass at module-import time. The
+# leading underscore is deliberate — ``_variables/`` is a private
+# folder of generated files (``llm-pipeline generate`` writes
+# ``_<name>.py`` here from the matching YAML); the underscore signals
+# "do not hand-edit" to readers.
 _LOAD_ORDER = [
     "enums",
     "constants",
     "schemas",
-    "variables",
+    "_variables",
     "extractions",
     "tools",
     "steps",
@@ -206,7 +210,7 @@ def discover_from_convention(
 
             if subfolder in ("enums", "constants"):
                 _register_enums_constants(modules)
-            elif subfolder == "variables":
+            elif subfolder == "_variables":
                 from llm_pipeline.prompts.discovery import (
                     discover_prompt_variables,
                 )

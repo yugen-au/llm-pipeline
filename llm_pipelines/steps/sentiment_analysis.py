@@ -14,7 +14,7 @@ from llm_pipelines.schemas.text_analyzer import (
     SentimentAnalysisInputs,
     SentimentAnalysisInstructions,
 )
-from llm_pipelines.variables.sentiment_analysis import SentimentAnalysisPrompt
+from llm_pipelines._variables._sentiment_analysis import SentimentAnalysisPrompt
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext

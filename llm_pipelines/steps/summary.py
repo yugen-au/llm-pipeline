@@ -11,7 +11,7 @@ from llm_pipelines.schemas.text_analyzer import (
     SummaryInputs,
     SummaryInstructions,
 )
-from llm_pipelines.variables.summary import SummaryPrompt
+from llm_pipelines._variables._summary import SummaryPrompt
 
 if TYPE_CHECKING:
     from pydantic_graph import GraphRunContext
