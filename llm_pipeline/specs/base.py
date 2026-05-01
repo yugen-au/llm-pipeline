@@ -5,33 +5,36 @@ Two-tier base hierarchy:
 - :class:`ArtifactField` — anything that carries localised validation
   issues. Sub-component types (``CodeBodySpec``, ``JsonSchemaWithRefs``,
   ``PromptData``) subclass this directly. Provides the ``issues`` slot
-  and the auto-routing mechanism: pass ``source_cls=<class>`` at
-  construction and any ``cls._init_subclass_errors`` get distributed
-  onto the matching sub-component field by ``location.field``, with
-  anything unmatched landing on ``self.issues``.
+  and the :meth:`attach_class_captures` routing method.
 
 - :class:`ArtifactSpec` — top-level, dispatchable artifacts. Extends
   ``ArtifactField`` with the identity fields every kind needs
   (``kind``, ``name``, ``cls``, ``source_path``). Per-kind subclasses
   (``ConstantSpec``, ``StepSpec``, ``PipelineSpec``, etc.) subclass
-  this. They inherit the auto-routing from ``ArtifactField``, so
-  builders just pass ``source_cls=cls`` at construction and class-level
-  captures land on the right component without any per-kind table.
+  this.
 
-The auto-routing is generic — it uses Pydantic's ``model_fields``
-introspection to find the target sub-component by name. New issue-
-bearing component types just need to subclass ``ArtifactField`` and
-match ``location.field`` to a spec field on the parent; the routing
-follows automatically.
+Capture routing is opt-in and explicit — builders construct the spec,
+then call :meth:`attach_class_captures` on it. The router uses
+Pydantic's ``model_fields`` introspection to route each captured
+issue onto the matching ``ArtifactField`` sub-component (by
+``location.field``), with anything unmatched falling back to
+``self.issues``.
 
-JSON round-trip safety: ``source_cls`` is a construction-only kwarg,
-not a model field. ``model_dump`` doesn't emit it; ``model_validate``
-doesn't see it; routing is only triggered when builders explicitly
-pass it.
+The routing keys (the values that capture sites set as
+``ValidationLocation.field``) are declared as constants on per-kind
+"fields" classes — :class:`llm_pipeline.specs.steps.StepFields`,
+:class:`llm_pipeline.specs.extractions.ExtractionFields`, etc. —
+so capture sites import a typed constant (``StepFields.INPUTS``)
+instead of writing a bare string. Typos become ``AttributeError``
+at class-load time rather than silent fall-throughs at runtime.
+
+JSON round-trip safety: routing is a runtime call on a method, not
+hidden in ``__init__``. ``model_dump``/``model_validate`` don't
+trigger routing.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -56,15 +59,15 @@ class ArtifactField(BaseModel):
     top-level artifacts. Anything that needs an ``issues`` slot
     inherits from this base.
 
-    Auto-routes ``source_cls._init_subclass_errors`` at construction
-    time when ``source_cls=<class>`` is passed as a kwarg. Each
-    captured issue is dispatched onto the matching ``ArtifactField``
-    sub-component (by ``location.field``) when one is present;
-    otherwise lands on ``self.issues``.
+    Capture routing happens via :meth:`attach_class_captures` —
+    builders construct the spec, then invoke the method to
+    distribute ``cls._init_subclass_errors`` onto the right
+    sub-components. Routing is explicit (not in ``__init__``), so
+    JSON round-trip stays clean and the call site documents itself.
 
     Not instantiated directly. The base provides only the shared
     ``issues`` slot, the strict ``extra="forbid"`` config, and the
-    routing logic.
+    routing method.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -73,32 +76,31 @@ class ArtifactField(BaseModel):
     # subclass populate this directly (libcst code-body analyser,
     # JSON schema generator, prompt resolver, etc.). Class-level
     # captures from ``source_cls._init_subclass_errors`` land here
-    # too if their ``location.field`` doesn't match a sub-component
-    # field on this spec.
+    # too via :meth:`attach_class_captures` if their ``location.field``
+    # doesn't match a sub-component field on this spec.
     issues: list[ValidationIssue] = Field(default_factory=list)
 
-    def __init__(self, **data: Any) -> None:
-        # ``source_cls`` is a construction-only routing kwarg. Pop it
-        # before Pydantic validates so ``extra="forbid"`` doesn't
-        # reject it as an unknown field.
-        source_cls = data.pop("source_cls", None)
-        super().__init__(**data)
-        if source_cls is not None:
-            self._route_class_captures(source_cls)
-
-    def _route_class_captures(self, source_cls: type) -> None:
+    def attach_class_captures(self, source_cls: type) -> Self:
         """Distribute ``source_cls._init_subclass_errors`` onto matching components.
 
         Each issue's ``location.field`` is looked up against this
         spec's Pydantic fields. When the matching field's value is
-        an ``ArtifactField`` instance, the issue lands on its
+        an :class:`ArtifactField` instance, the issue lands on its
         ``issues`` list (localised to the sub-component). Otherwise
         — no field set, no matching field, value isn't an
-        ``ArtifactField`` (e.g. ``None``, a primitive, a list) —
-        the issue lands on ``self.issues``.
+        :class:`ArtifactField` (e.g. ``None``, a primitive, a list)
+        — the issue lands on ``self.issues``.
 
-        Generic — uses Pydantic's ``model_fields`` introspection;
-        no per-kind routing tables.
+        Generic — uses Pydantic's ``model_fields`` introspection; no
+        per-kind routing tables. Capture sites set
+        ``ValidationLocation.field`` to a constant from the per-kind
+        fields class (``StepFields.INPUTS`` etc.); the router
+        validates by lookup, not by string equality, so any typo
+        falls back to top-level instead of silently dropping.
+
+        Returns ``self`` for builder chaining::
+
+            return StepSpec(...).attach_class_captures(cls)
         """
         spec_fields = type(self).model_fields
         for issue in getattr(source_cls, "_init_subclass_errors", []):
@@ -109,6 +111,7 @@ class ArtifactField(BaseModel):
                     target.issues.append(issue)
                     continue
             self.issues.append(issue)
+        return self
 
 
 class ArtifactSpec(ArtifactField):
@@ -120,10 +123,9 @@ class ArtifactSpec(ArtifactField):
     generic resolver, list endpoints, and validation surfaces work
     uniformly.
 
-    Inherits ``issues`` and the ``source_cls`` auto-routing from
-    :class:`ArtifactField`. Builders pass ``source_cls=cls`` at
-    construction; class-level captures land on the right sub-
-    component automatically.
+    Inherits ``issues`` and the :meth:`ArtifactField.attach_class_captures`
+    routing method. Builders construct the spec then call the
+    method to attach class-level captures.
 
     JSON-serialisable end-to-end (Pydantic v2 ``model_dump(mode="json")``)
     so the spec can travel through the API without bespoke encoders.

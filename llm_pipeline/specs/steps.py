@@ -32,7 +32,29 @@ from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptDa
 from llm_pipeline.specs.kinds import KIND_STEP
 
 
-__all__ = ["StepSpec"]
+__all__ = ["StepFields", "StepSpec"]
+
+
+class StepFields:
+    """Routing-key constants for :class:`StepSpec` issue captures.
+
+    Capture sites in :class:`LLMStepNode.__init_subclass__` (and the
+    ``prepare()`` resolver in :mod:`llm_pipeline.graph.nodes`) set
+    ``ValidationLocation.field`` to one of these values so the
+    :meth:`ArtifactField.attach_class_captures` router can localise
+    the issue onto the matching :class:`StepSpec` field.
+
+    Constants list ONLY the fields a capture site references — no
+    orphan constants for spec fields nobody routes to. Adding a new
+    capture site that targets a different StepSpec field is the
+    trigger for adding a new constant here.
+
+    Each value must equal a field name on :class:`StepSpec` exactly.
+    """
+
+    INPUTS = "inputs"
+    INSTRUCTIONS = "instructions"
+    PREPARE = "prepare"
 
 
 class StepSpec(ArtifactSpec):

@@ -11,10 +11,11 @@ references it.
 This module asserts that contract: define a class, immediately
 inspect its captures. No ``Pipeline`` subclass anywhere.
 
-``location.field`` uses the per-kind SPEC field name (snake_case)
-so the auto-routing on ``ArtifactSpec.__init__`` can localise each
-issue onto the matching ``ArtifactField`` sub-component when
-builders pass ``source_cls=cls``.
+``location.field`` is set to a constant from the per-kind fields
+class (``StepFields.INPUTS`` etc.) so
+:meth:`ArtifactField.attach_class_captures` can localise each issue
+onto the matching ``ArtifactField`` sub-component when builders
+call ``.attach_class_captures(cls)``.
 """
 from __future__ import annotations
 
@@ -305,13 +306,13 @@ class TestReviewNodeCaptures:
 
 
 # ---------------------------------------------------------------------------
-# Auto-routing via ArtifactSpec.__init__(source_cls=...)
+# Routing via ArtifactField.attach_class_captures(source_cls)
 # ---------------------------------------------------------------------------
 
 
-class TestAutoRouting:
+class TestAttachClassCaptures:
     """Captures land on the matching ArtifactField sub-component
-    via the ArtifactSpec __init__ source_cls hook."""
+    when builders call ``.attach_class_captures(cls)``."""
 
     def test_inputs_capture_routes_to_step_spec_inputs(self):
         from llm_pipeline.specs import (
@@ -337,14 +338,13 @@ class TestAutoRouting:
                 return End(None)
 
         spec = StepSpec(
-            source_cls=_RoutingStep,
             kind=KIND_STEP,
             name="routing",
             cls="m._RoutingStep",
             source_path="/x.py",
             inputs=JsonSchemaWithRefs(json_schema={"type": "object"}),
             instructions=JsonSchemaWithRefs(json_schema={"type": "object"}),
-        )
+        ).attach_class_captures(_RoutingStep)
 
         instr_codes = {i.code for i in spec.instructions.issues}
         # The bareness routes to instructions; both not-LLMResultMixin
@@ -370,10 +370,9 @@ class TestAutoRouting:
             text: str = ""  # missing description
 
         prompt = PromptData(
-            source_cls=_BadPrompt,
             variables=JsonSchemaWithRefs(json_schema={"type": "object"}),
             yaml_path="/tmp/x.yaml",
-        )
+        ).attach_class_captures(_BadPrompt)
 
         codes = {i.code for i in prompt.issues}
         # ``location.field="text"`` doesn't match any PromptData field
@@ -409,14 +408,13 @@ class TestAutoRouting:
                 return End(None)
 
         spec = StepSpec(
-            source_cls=TopLevelIssueClass,
             kind=KIND_STEP,
             name="top_level_issue_class",
             cls="m.TopLevelIssueClass",
             source_path="/x.py",
             inputs=JsonSchemaWithRefs(json_schema={"type": "object"}),
             instructions=JsonSchemaWithRefs(json_schema={"type": "object"}),
-        )
+        ).attach_class_captures(TopLevelIssueClass)
 
         top_codes = {i.code for i in spec.issues}
         assert "step_name_suffix" in top_codes

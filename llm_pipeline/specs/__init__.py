@@ -30,7 +30,7 @@ from llm_pipeline.specs.blocks import (
 )
 from llm_pipeline.specs.constants import ConstantSpec
 from llm_pipeline.specs.enums import EnumMemberSpec, EnumSpec
-from llm_pipeline.specs.extractions import ExtractionSpec
+from llm_pipeline.specs.extractions import ExtractionFields, ExtractionSpec
 from llm_pipeline.specs.kinds import (
     ALL_KINDS,
     KIND_CONSTANT,
@@ -46,9 +46,9 @@ from llm_pipeline.specs.kinds import (
 )
 from llm_pipeline.specs.issues import flatten_artifact_issues
 from llm_pipeline.specs.registration import ArtifactRegistration
-from llm_pipeline.specs.reviews import ReviewSpec
+from llm_pipeline.specs.reviews import ReviewFields, ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
-from llm_pipeline.specs.steps import StepSpec
+from llm_pipeline.specs.steps import StepFields, StepSpec
 from llm_pipeline.specs.tables import IndexSpec, TableSpec
 from llm_pipeline.specs.tools import ToolSpec
 
@@ -85,10 +85,13 @@ __all__ = [
     "ConstantSpec",
     "EnumMemberSpec",
     "EnumSpec",
+    "ExtractionFields",
     "ExtractionSpec",
     "IndexSpec",
+    "ReviewFields",
     "ReviewSpec",
     "SchemaSpec",
+    "StepFields",
     "StepSpec",
     "TableSpec",
     "ToolSpec",

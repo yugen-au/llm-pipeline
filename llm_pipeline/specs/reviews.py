@@ -24,7 +24,18 @@ from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.specs.kinds import KIND_REVIEW
 
 
-__all__ = ["ReviewSpec"]
+__all__ = ["ReviewFields", "ReviewSpec"]
+
+
+class ReviewFields:
+    """Routing-key constants for :class:`ReviewSpec` issue captures.
+
+    See :class:`llm_pipeline.specs.steps.StepFields` for the rationale.
+    Each value must equal a field name on :class:`ReviewSpec`.
+    """
+
+    INPUTS = "inputs"
+    OUTPUT = "output"
 
 
 class ReviewSpec(ArtifactSpec):
