@@ -1,16 +1,32 @@
-"""Convention-based directory discovery for llm_pipelines/.
+"""Pipeline discovery — convention dirs, entry points, and explicit modules.
 
-Scans for llm_pipelines/ directories (package-internal + CWD),
-imports Python files in each subfolder in dependency order,
-and registers discovered graph ``Pipeline`` subclasses.
+Three sources, three functions:
+
+- :func:`discover_from_convention` — scans ``llm_pipelines/`` directories
+  (package-internal + CWD), imports Python files in dependency order, and
+  registers discovered graph ``Pipeline`` subclasses.
+- :func:`discover_from_entry_points` — loads pipelines registered under
+  the ``llm_pipeline.pipelines`` entry-point group (used for demo
+  pipelines bundled with the package).
+- :func:`discover_from_modules` — imports caller-supplied dotted module
+  paths and registers their ``Pipeline`` subclasses (the ``--pipelines``
+  CLI flag plumbs into here).
+
+All three return the same shape: ``(pipeline_registry, introspection_registry)``
+where both dicts map snake-cased pipeline name to the ``Pipeline``
+subclass. The two-dict shape is preserved for caller compat (legacy
+distinction between executable factory closures and introspection
+classes); in the graph world the dicts are identical.
 """
+import importlib
+import importlib.metadata
 import importlib.util
 import inspect
 import logging
 import os
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Callable, Dict, Optional, Tuple, Type
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type
 
 logger = logging.getLogger(__name__)
 
@@ -230,3 +246,115 @@ def discover_from_convention(
         )
 
     return all_pipeline_reg, all_introspection_reg
+
+
+def discover_from_entry_points() -> Tuple[
+    Dict[str, Type], Dict[str, Type]
+]:
+    """Load pipelines registered under ``llm_pipeline.pipelines`` entry points.
+
+    Used for demo pipelines bundled with the package (e.g.
+    ``text_analyzer``). Each entry point must reference a concrete
+    ``Pipeline`` subclass. Failures are logged and skipped — one bad
+    entry point doesn't poison the registry.
+
+    Returns ``(pipeline_registry, introspection_registry)``; both
+    dicts map ``ep.name`` to the ``Pipeline`` subclass.
+    """
+    from llm_pipeline.graph import Pipeline
+
+    pipeline_reg: Dict[str, Type] = {}
+    introspection_reg: Dict[str, Type] = {}
+
+    eps = importlib.metadata.entry_points(group="llm_pipeline.pipelines")
+    for ep in eps:
+        try:
+            cls = ep.load()
+            if not (inspect.isclass(cls) and issubclass(cls, Pipeline)):
+                logger.warning(
+                    "Entry point '%s' does not reference a Pipeline "
+                    "(graph) subclass, skipping",
+                    ep.name,
+                )
+                continue
+            pipeline_reg[ep.name] = cls
+            introspection_reg[ep.name] = cls
+        except Exception:
+            logger.warning(
+                "Failed to load entry point '%s', skipping",
+                ep.name,
+                exc_info=True,
+            )
+            continue
+
+    if pipeline_reg:
+        logger.info(
+            "Discovered %d pipeline(s) via entry points: %s",
+            len(pipeline_reg),
+            ", ".join(sorted(pipeline_reg)),
+        )
+
+    return pipeline_reg, introspection_reg
+
+
+def discover_from_modules(
+    module_paths: List[str],
+) -> Tuple[Dict[str, Type], Dict[str, Type]]:
+    """Import ``module_paths`` and register their ``Pipeline`` subclasses.
+
+    Each path is a dotted Python module path (e.g.
+    ``my_app.pipelines.x``). The module is imported eagerly; any
+    concrete ``Pipeline`` subclasses defined directly in the module
+    are registered under their snake-cased name (with the ``Pipeline``
+    suffix stripped).
+
+    Raises:
+        ``ValueError`` if a module can't be imported or has no
+        ``Pipeline`` subclasses (caller error — strict by design so
+        typos in the ``--pipelines`` flag fail loudly).
+
+    Returns ``(pipeline_registry, introspection_registry)``; both
+    dicts map snake-cased name to the ``Pipeline`` subclass.
+    """
+    from llm_pipeline.graph import Pipeline
+    from llm_pipeline.naming import to_snake_case
+
+    pipeline_reg: Dict[str, Type] = {}
+    introspection_reg: Dict[str, Type] = {}
+
+    for path in module_paths:
+        try:
+            mod = importlib.import_module(path)
+        except ImportError as exc:
+            raise ValueError(
+                f"Failed to import pipeline module '{path}': {exc}"
+            ) from exc
+
+        members = inspect.getmembers(mod, inspect.isclass)
+        found = [
+            cls
+            for _, cls in members
+            if issubclass(cls, Pipeline)
+            and cls is not Pipeline
+            and not inspect.isabstract(cls)
+            and cls.__module__ == mod.__name__
+        ]
+
+        if not found:
+            raise ValueError(
+                f"No Pipeline subclasses found in module '{path}'"
+            )
+
+        for cls in found:
+            key = to_snake_case(cls.__name__, strip_suffix="Pipeline")
+            pipeline_reg[key] = cls
+            introspection_reg[key] = cls
+
+    if pipeline_reg:
+        logger.info(
+            "Loaded %d pipeline(s) from modules: %s",
+            len(pipeline_reg),
+            ", ".join(sorted(pipeline_reg)),
+        )
+
+    return pipeline_reg, introspection_reg

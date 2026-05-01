@@ -1,12 +1,9 @@
 """FastAPI application factory for llm-pipeline UI."""
 from __future__ import annotations
 
-import importlib
-import importlib.metadata
-import inspect
 import logging
 import os
-from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Dict, List, Optional, Type
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +11,6 @@ from starlette.middleware.gzip import GZipMiddleware
 from sqlmodel import create_engine
 
 from llm_pipeline.db import init_pipeline_db
-from llm_pipeline.naming import to_snake_case
 
 if TYPE_CHECKING:
     from sqlalchemy import Engine
@@ -22,107 +18,6 @@ if TYPE_CHECKING:
     from llm_pipeline.graph import Pipeline
 
 logger = logging.getLogger(__name__)
-
-
-def _discover_pipelines(
-    engine: "Engine", default_model: Optional[str]
-) -> Tuple[Dict[str, Type["Pipeline"]], Dict[str, Type["Pipeline"]]]:
-    """Scan ``llm_pipeline.pipelines`` entry-point group for graph ``Pipeline`` classes.
-
-    Returns ``(pipeline_registry, introspection_registry)``. Both
-    map snake-cased pipeline name to the ``Pipeline`` subclass — the
-    framework no longer needs separate factory closures because
-    ``run_pipeline(pipeline_cls, ...)`` takes the class directly.
-    """
-    del engine  # _seed_prompts is gone; graph pipelines do their own seed (Phoenix)
-    from llm_pipeline.graph import Pipeline
-
-    pipeline_reg: Dict[str, Type[Pipeline]] = {}
-    introspection_reg: Dict[str, Type[Pipeline]] = {}
-
-    eps = importlib.metadata.entry_points(group="llm_pipeline.pipelines")
-    for ep in eps:
-        try:
-            cls = ep.load()
-            if not (inspect.isclass(cls) and issubclass(cls, Pipeline)):
-                logger.warning(
-                    "Entry point '%s' does not reference a Pipeline "
-                    "(graph) subclass, skipping",
-                    ep.name,
-                )
-                continue
-            pipeline_reg[ep.name] = cls
-            introspection_reg[ep.name] = cls
-        except Exception:
-            logger.warning(
-                "Failed to load entry point '%s', skipping",
-                ep.name,
-                exc_info=True,
-            )
-            continue
-
-    if pipeline_reg:
-        logger.info(
-            "Discovered %d pipeline(s): %s",
-            len(pipeline_reg),
-            ", ".join(sorted(pipeline_reg)),
-        )
-
-    return pipeline_reg, introspection_reg
-
-
-def _load_pipeline_modules(
-    module_paths: List[str],
-    default_model: Optional[str],
-    engine: "Engine",
-) -> Tuple[Dict[str, Type["Pipeline"]], Dict[str, Type["Pipeline"]]]:
-    """Import modules by dotted path, register concrete graph ``Pipeline`` subclasses.
-
-    Raises ``ValueError`` if a module can't be imported or has no
-    ``Pipeline`` subclasses.
-    """
-    del default_model, engine  # not needed for graph pipelines
-    from llm_pipeline.graph import Pipeline
-
-    pipeline_reg: Dict[str, Type[Pipeline]] = {}
-    introspection_reg: Dict[str, Type[Pipeline]] = {}
-
-    for path in module_paths:
-        try:
-            mod = importlib.import_module(path)
-        except ImportError as e:
-            raise ValueError(
-                f"Failed to import pipeline module '{path}': {e}"
-            ) from e
-
-        members = inspect.getmembers(mod, inspect.isclass)
-        found = [
-            cls
-            for _, cls in members
-            if issubclass(cls, Pipeline)
-            and cls is not Pipeline
-            and not inspect.isabstract(cls)
-            and cls.__module__ == mod.__name__
-        ]
-
-        if not found:
-            raise ValueError(
-                f"No Pipeline subclasses found in module '{path}'"
-            )
-
-        for cls in found:
-            key = to_snake_case(cls.__name__, strip_suffix="Pipeline")
-            pipeline_reg[key] = cls
-            introspection_reg[key] = cls
-
-    if pipeline_reg:
-        logger.info(
-            "Loaded %d pipeline(s) from modules: %s",
-            len(pipeline_reg),
-            ", ".join(sorted(pipeline_reg)),
-        )
-
-    return pipeline_reg, introspection_reg
 
 
 def _resolve_dir_arg(
@@ -367,9 +262,14 @@ def create_app(
     app.state.default_model = resolved_model
 
     # Module-loaded pipelines (--pipelines flag)
+    from llm_pipeline.discovery import (
+        discover_from_convention,
+        discover_from_entry_points,
+        discover_from_modules,
+    )
     if pipeline_modules:
-        module_pipeline, module_introspection = _load_pipeline_modules(
-            pipeline_modules, resolved_model, app.state.engine
+        module_pipeline, module_introspection = discover_from_modules(
+            pipeline_modules,
         )
     else:
         module_pipeline: Dict[str, Type["Pipeline"]] = {}
@@ -379,15 +279,14 @@ def create_app(
     resolved_demo = demo_mode or os.environ.get("LLM_PIPELINE_DEMO_MODE", "").lower() in ("1", "true")
 
     # Convention-based discovery (llm_pipelines/ directories)
-    from llm_pipeline.discovery import discover_from_convention
     convention_pipeline, convention_introspection = discover_from_convention(
         app.state.engine, resolved_model, include_package=resolved_demo,
     )
 
     # Entry-point discovery (demo pipelines registered here)
     if auto_discover and resolved_demo:
-        discovered_pipeline, discovered_introspection = _discover_pipelines(
-            app.state.engine, resolved_model
+        discovered_pipeline, discovered_introspection = (
+            discover_from_entry_points()
         )
     else:
         discovered_pipeline: Dict[str, Type["Pipeline"]] = {}

@@ -408,10 +408,8 @@ def _run_eval(args: argparse.Namespace) -> None:
 
     pipeline_registry: dict = {}
     if args.pipelines:
-        from llm_pipeline.ui.app import _load_pipeline_modules
-        pipeline_registry, _ = _load_pipeline_modules(
-            args.pipelines, args.model, engine,
-        )
+        from llm_pipeline.discovery import discover_from_modules
+        pipeline_registry, _ = discover_from_modules(args.pipelines)
 
     from llm_pipeline.discovery import discover_from_convention
     conv_pipeline, _ = discover_from_convention(
@@ -466,11 +464,14 @@ def _run_build(args: argparse.Namespace) -> None:
     # Discover pipelines using the same merge order as create_app:
     # entry points (when --demo) < convention < --pipelines modules.
     from llm_pipeline.discovery import discover_from_convention
-    from llm_pipeline.ui.app import _discover_pipelines, _load_pipeline_modules
+    from llm_pipeline.discovery import (
+        discover_from_entry_points,
+        discover_from_modules,
+    )
 
     introspection_registry: dict = {}
     if args.demo:
-        _, ep_intro = _discover_pipelines(engine, None)
+        _, ep_intro = discover_from_entry_points()
         introspection_registry.update(ep_intro)
 
     _, conv_intro = discover_from_convention(
@@ -479,7 +480,7 @@ def _run_build(args: argparse.Namespace) -> None:
     introspection_registry.update(conv_intro)
 
     if args.pipelines:
-        _, mod_intro = _load_pipeline_modules(args.pipelines, None, engine)
+        _, mod_intro = discover_from_modules(args.pipelines)
         introspection_registry.update(mod_intro)
 
     if not introspection_registry:
