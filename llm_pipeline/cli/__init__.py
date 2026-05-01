@@ -46,6 +46,11 @@ def main() -> None:
 
         sys.exit(pull.cli_main(argv[1:]))
 
+    if argv and argv[0] == "push":
+        from llm_pipeline.cli import push
+
+        sys.exit(push.cli_main(argv[1:]))
+
     if not argv or argv[0] in ("-h", "--help"):
         # No subcommand or top-level help → show full subcommand list,
         # including both new and legacy commands.
@@ -77,12 +82,13 @@ def _print_top_level_help() -> None:
         "validation\n"
         "  pull      Phoenix -> YAML for fields Phoenix owns "
         "(message text, model)\n"
+        "  push      YAML + code-derived fields -> Phoenix "
+        "(auto-creates new prompts)\n"
         "  ui        Start the UI server\n"
         "  eval      Run an evaluation dataset\n"
         "  stop      Stop a running UI server\n"
         "\n"
-        "Typical workflow: pull -> generate -> build -> push (push "
-        "lands in a follow-up).\n"
+        "Typical workflow: pull -> generate -> build -> push.\n"
         "\n"
         "Run 'llm-pipeline <subcommand> --help' for subcommand-"
         "specific options."
