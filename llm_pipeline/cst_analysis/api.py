@@ -31,7 +31,10 @@ from llm_pipeline.cst_analysis.visitors import (
     FieldDefaultVisitor,
     FunctionLocation,
 )
-from llm_pipeline.specs import CodeBodySpec, SymbolRef
+# Import directly from the submodule (not the package __init__) to
+# avoid a circular import: ``llm_pipeline.specs.builders`` imports
+# back into ``cst_analysis``.
+from llm_pipeline.specs.blocks import CodeBodySpec, SymbolRef
 
 
 __all__ = [

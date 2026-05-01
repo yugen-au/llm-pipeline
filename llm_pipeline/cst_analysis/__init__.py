@@ -24,6 +24,7 @@ it never writes). For parsing, the lower-level
 entry point — reused here.
 """
 from llm_pipeline.cst_analysis.api import (
+    AnalysisError,
     ResolverHook,
     analyze_class_fields,
     analyze_code_body,
@@ -31,6 +32,7 @@ from llm_pipeline.cst_analysis.api import (
 
 
 __all__ = [
+    "AnalysisError",
     "ResolverHook",
     "analyze_class_fields",
     "analyze_code_body",

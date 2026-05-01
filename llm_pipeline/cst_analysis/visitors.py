@@ -24,7 +24,10 @@ import libcst as cst
 from libcst.metadata import PositionProvider
 
 from llm_pipeline.cst_analysis.resolver import ImportMap, ResolverHook
-from llm_pipeline.specs import SymbolRef
+# Import directly from the submodule (not the package __init__) to
+# avoid a circular import: ``llm_pipeline.specs.builders`` imports
+# back into ``cst_analysis``.
+from llm_pipeline.specs.blocks import SymbolRef
 
 
 __all__ = [
