@@ -156,6 +156,85 @@ class SourcesSpec:
 # ---------------------------------------------------------------------------
 
 
+def _validate_binding_post_init(
+    binding: Any, kind: str,
+) -> list[Any]:
+    """Capture binding-level wiring errors as ``ValidationIssue`` records.
+
+    Used by ``Step`` / ``Extraction`` / ``Review`` ``__post_init__`` to
+    avoid raising on framework-rule violations. Class always
+    constructs; the issues are stored on the binding instance and
+    aggregated into the pipeline spec by
+    ``Pipeline.__init_subclass__``.
+
+    Returns the list of issues so the caller can stash it on
+    ``self._init_post_errors``. ``kind`` is the wrapper-class name
+    used in error messages (e.g. ``"Step"``).
+    """
+    from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
+
+    issues: list[ValidationIssue] = []
+    cls_repr = (
+        binding.cls.__name__
+        if isinstance(binding.cls, type) and hasattr(binding.cls, "__name__")
+        else repr(binding.cls)
+    )
+    here = ValidationLocation(node=cls_repr, field="inputs_spec")
+
+    if not isinstance(binding.cls, type):
+        issues.append(ValidationIssue(
+            severity="error", code="binding_cls_not_class",
+            message=(
+                f"{kind}.cls must be a class, got {binding.cls!r}"
+            ),
+            location=ValidationLocation(node=cls_repr),
+            suggestion=(
+                f"Pass the class itself, not an instance: "
+                f"`{kind}({cls_repr})`."
+            ),
+        ))
+    if not isinstance(binding.inputs_spec, SourcesSpec):
+        issues.append(ValidationIssue(
+            severity="error", code="binding_inputs_spec_wrong_type",
+            message=(
+                f"{kind}.inputs_spec must be a SourcesSpec, got "
+                f"{type(binding.inputs_spec).__name__}"
+            ),
+            location=here,
+            suggestion=(
+                f"Build inputs_spec with "
+                f"`{cls_repr}.INPUTS.sources(...)`."
+            ),
+        ))
+        return issues  # remaining check needs a real SourcesSpec
+    inputs_cls = getattr(binding.cls, "INPUTS", None)
+    if (
+        inputs_cls is not None
+        and binding.inputs_spec.inputs_cls is not inputs_cls
+    ):
+        wired_cls = binding.inputs_spec.inputs_cls
+        wired_name = (
+            wired_cls.__name__
+            if hasattr(wired_cls, "__name__") else repr(wired_cls)
+        )
+        issues.append(ValidationIssue(
+            severity="error", code="binding_inputs_cls_mismatch",
+            message=(
+                f"{kind}({cls_repr}, inputs_spec=...): "
+                f"inputs_spec.inputs_cls is {wired_name}, but "
+                f"{cls_repr}.INPUTS is {inputs_cls.__name__}. They "
+                f"must match."
+            ),
+            location=here,
+            suggestion=(
+                f"Rebuild inputs_spec from the matching class: "
+                f"`{inputs_cls.__name__}.sources(...)`, or update "
+                f"{cls_repr}.INPUTS to {wired_name}."
+            ),
+        ))
+    return issues
+
+
 @dataclass
 class Step:
     """Pipeline-level binding for an ``LLMStepNode`` subclass.
@@ -164,32 +243,17 @@ class Step:
     DEFAULT_TOOLS, ``prepare()``) with its *wiring* (the
     ``SourcesSpec`` saying where each INPUTS field comes from).
 
-    The ``inputs_spec``'s ``inputs_cls`` must match ``cls.INPUTS``;
-    enforced in ``__post_init__``.
+    The ``inputs_spec``'s ``inputs_cls`` must match ``cls.INPUTS``.
+    Mismatches are *captured* into ``self._init_post_errors`` rather
+    than raised — the binding still exists; the pipeline spec
+    surfaces the issue via ``derive_issues``.
     """
 
     cls: type
     inputs_spec: SourcesSpec
 
     def __post_init__(self) -> None:
-        if not isinstance(self.cls, type):
-            raise TypeError(
-                f"Step.cls must be a class, got {self.cls!r}"
-            )
-        if not isinstance(self.inputs_spec, SourcesSpec):
-            raise TypeError(
-                f"Step.inputs_spec must be a SourcesSpec, got "
-                f"{type(self.inputs_spec).__name__}"
-            )
-        inputs_cls = getattr(self.cls, "INPUTS", None)
-        if inputs_cls is not None and self.inputs_spec.inputs_cls is not inputs_cls:
-            raise ValueError(
-                f"Step({self.cls.__name__}, inputs_spec=...): "
-                f"inputs_spec.inputs_cls is "
-                f"{self.inputs_spec.inputs_cls.__name__}, but "
-                f"{self.cls.__name__}.INPUTS is "
-                f"{inputs_cls.__name__}. They must match."
-            )
+        self._init_post_errors = _validate_binding_post_init(self, "Step")
 
 
 @dataclass
@@ -207,24 +271,9 @@ class Extraction:
     inputs_spec: SourcesSpec
 
     def __post_init__(self) -> None:
-        if not isinstance(self.cls, type):
-            raise TypeError(
-                f"Extraction.cls must be a class, got {self.cls!r}"
-            )
-        if not isinstance(self.inputs_spec, SourcesSpec):
-            raise TypeError(
-                f"Extraction.inputs_spec must be a SourcesSpec, got "
-                f"{type(self.inputs_spec).__name__}"
-            )
-        inputs_cls = getattr(self.cls, "INPUTS", None)
-        if inputs_cls is not None and self.inputs_spec.inputs_cls is not inputs_cls:
-            raise ValueError(
-                f"Extraction({self.cls.__name__}, inputs_spec=...): "
-                f"inputs_spec.inputs_cls is "
-                f"{self.inputs_spec.inputs_cls.__name__}, but "
-                f"{self.cls.__name__}.INPUTS is "
-                f"{inputs_cls.__name__}. They must match."
-            )
+        self._init_post_errors = _validate_binding_post_init(
+            self, "Extraction",
+        )
 
 
 @dataclass
@@ -241,24 +290,7 @@ class Review:
     inputs_spec: SourcesSpec
 
     def __post_init__(self) -> None:
-        if not isinstance(self.cls, type):
-            raise TypeError(
-                f"Review.cls must be a class, got {self.cls!r}"
-            )
-        if not isinstance(self.inputs_spec, SourcesSpec):
-            raise TypeError(
-                f"Review.inputs_spec must be a SourcesSpec, got "
-                f"{type(self.inputs_spec).__name__}"
-            )
-        inputs_cls = getattr(self.cls, "INPUTS", None)
-        if inputs_cls is not None and self.inputs_spec.inputs_cls is not inputs_cls:
-            raise ValueError(
-                f"Review({self.cls.__name__}, inputs_spec=...): "
-                f"inputs_spec.inputs_cls is "
-                f"{self.inputs_spec.inputs_cls.__name__}, but "
-                f"{self.cls.__name__}.INPUTS is "
-                f"{inputs_cls.__name__}. They must match."
-            )
+        self._init_post_errors = _validate_binding_post_init(self, "Review")
 
 
 # ---------------------------------------------------------------------------

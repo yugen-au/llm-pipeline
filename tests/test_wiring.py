@@ -282,18 +282,27 @@ class TestStepBinding:
         assert binding.cls is _NodeWithInputs
         assert binding.inputs_spec.inputs_cls is _BindingInputs
 
-    def test_rejects_non_class_cls(self):
-        with pytest.raises(TypeError, match="must be a class"):
-            Step("not a class", inputs_spec=_binding_spec())  # type: ignore[arg-type]
+    def test_captures_non_class_cls(self):
+        binding = Step("not a class", inputs_spec=_binding_spec())  # type: ignore[arg-type]
+        assert any(
+            e.code == "binding_cls_not_class"
+            for e in binding._init_post_errors
+        )
 
-    def test_rejects_non_sources_spec(self):
-        with pytest.raises(TypeError, match="must be a SourcesSpec"):
-            Step(_NodeWithInputs, inputs_spec="oops")  # type: ignore[arg-type]
+    def test_captures_non_sources_spec(self):
+        binding = Step(_NodeWithInputs, inputs_spec="oops")  # type: ignore[arg-type]
+        assert any(
+            e.code == "binding_inputs_spec_wrong_type"
+            for e in binding._init_post_errors
+        )
 
-    def test_rejects_inputs_cls_mismatch(self):
+    def test_captures_inputs_cls_mismatch(self):
         spec = _binding_spec(inputs_cls=_OtherInputs)
-        with pytest.raises(ValueError, match="must match"):
-            Step(_NodeWithInputs, inputs_spec=spec)
+        binding = Step(_NodeWithInputs, inputs_spec=spec)
+        assert any(
+            e.code == "binding_inputs_cls_mismatch"
+            for e in binding._init_post_errors
+        )
 
     def test_no_inputs_classvar_skips_match_check(self):
         # If the node class has no INPUTS, the binding can't enforce the
@@ -308,10 +317,13 @@ class TestExtractionBinding:
         assert binding.cls is _NodeWithInputs
         assert binding.inputs_spec.inputs_cls is _BindingInputs
 
-    def test_rejects_inputs_cls_mismatch(self):
+    def test_captures_inputs_cls_mismatch(self):
         spec = _binding_spec(inputs_cls=_OtherInputs)
-        with pytest.raises(ValueError, match="must match"):
-            Extraction(_NodeWithInputs, inputs_spec=spec)
+        binding = Extraction(_NodeWithInputs, inputs_spec=spec)
+        assert any(
+            e.code == "binding_inputs_cls_mismatch"
+            for e in binding._init_post_errors
+        )
 
 
 class TestReviewBinding:
@@ -320,7 +332,10 @@ class TestReviewBinding:
         assert binding.cls is _NodeWithInputs
         assert binding.inputs_spec.inputs_cls is _BindingInputs
 
-    def test_rejects_inputs_cls_mismatch(self):
+    def test_captures_inputs_cls_mismatch(self):
         spec = _binding_spec(inputs_cls=_OtherInputs)
-        with pytest.raises(ValueError, match="must match"):
-            Review(_NodeWithInputs, inputs_spec=spec)
+        binding = Review(_NodeWithInputs, inputs_spec=spec)
+        assert any(
+            e.code == "binding_inputs_cls_mismatch"
+            for e in binding._init_post_errors
+        )
