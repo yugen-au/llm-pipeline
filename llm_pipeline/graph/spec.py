@@ -37,8 +37,13 @@ __all__ = [
     "PromptSpec",
     "SourceSpec",
     "ToolSpec",
+    "ValidationIssue",
+    "ValidationLocation",
+    "ValidationSummary",
     "WiringSpec",
     "build_pipeline_spec",
+    "derive_issues",
+    "is_runnable",
 ]
 
 
@@ -78,6 +83,65 @@ class WiringSpec(BaseModel):
 
     inputs_cls: str  # fully-qualified class name
     field_sources: dict[str, SourceSpec]
+
+
+# ---------------------------------------------------------------------------
+# Validation issues (derived from the spec at read time)
+# ---------------------------------------------------------------------------
+
+
+class ValidationLocation(BaseModel):
+    """Where in a pipeline a validation issue lives.
+
+    Free-form: any combination of pipeline / node / field may be set.
+    Empty values mean "scope not narrower than the parent". e.g.,
+    a wiring drift on a step's INPUTS field has all three set; a
+    pipeline-wide cycle issue has only ``pipeline``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    pipeline: str | None = None
+    node: str | None = None  # node class name (e.g. "TopicExtractionStep")
+    field: str | None = None  # attribute / member name within the node
+
+
+class ValidationIssue(BaseModel):
+    """A single thing wrong (or worth flagging) about a pipeline.
+
+    Issues are NOT stored on the spec. They are derived by walking
+    the spec's state via :func:`derive_issues`. Severity gates
+    runnability: any ``error`` blocks the pipeline from running;
+    ``warning`` is informational.
+
+    The ``code`` is a stable machine-readable identifier (e.g.
+    ``missing_inputs``, ``dangling_from_output``). Frontends can
+    branch UX on it; humans read ``message`` and ``suggestion``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    severity: Literal["error", "warning"]
+    code: str
+    message: str
+    location: ValidationLocation
+    suggestion: str | None = None
+
+
+class ValidationSummary(BaseModel):
+    """API-shaped digest of a pipeline's validation state.
+
+    Computed from a ``PipelineEntry`` for the ``GET /api/pipelines``
+    list response. The frontend renders ``severity`` as a badge; the
+    ``issues`` list backs the detail panel.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    runnable: bool
+    severity: Literal["clean", "warnings", "errors", "import_error"]
+    issue_count: int
+    issues: list[ValidationIssue]
 
 
 # ---------------------------------------------------------------------------
@@ -145,12 +209,23 @@ class NodeSpec(BaseModel):
 
 
 class EdgeSpec(BaseModel):
-    """A directed graph edge from one node to the next (or to End)."""
+    """A directed graph edge from one node to the next (or to End).
+
+    ``branch`` is the optional label identifying which decision-branch
+    this edge belongs to. Today's union-return-driven topology
+    populates ``None`` (no labelled branches). Future binding-driven
+    branching (where the pipeline binding declares a ``next: dict[str,
+    NodeCls]`` mapping) populates the branch label per edge. The
+    field is forward-compatible: a node with two return-type targets
+    today renders as two ``EdgeSpec`` records both with ``branch=None``,
+    same shape the runtime work will reuse with labels.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     from_node: str
     to_node: str  # node name or "End"
+    branch: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -363,4 +438,50 @@ def build_pipeline_spec(pipeline_cls: type["Pipeline"]) -> PipelineSpec:
         nodes=nodes,
         edges=edges,
         start_node=pipeline_cls.start_node.__name__,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Issue derivation (read-time; spec is the truth, issues are computed)
+# ---------------------------------------------------------------------------
+
+
+def derive_issues(spec: PipelineSpec) -> list[ValidationIssue]:
+    """Walk a pipeline spec and report everything wrong with it.
+
+    The spec describes reality (including incomplete reality —
+    ``inputs_schema=None`` means the node didn't declare INPUTS, etc.).
+    This function is one possible reading of that reality: it returns
+    a flat list of human-readable issues, ordered by location. Empty
+    list means the pipeline is structurally clean.
+
+    Composes from three sources:
+
+    - **Captured ``__init_subclass__`` errors** — recorded on each
+      class as ``_init_subclass_errors`` when the framework's
+      contract validators fired against partial state.
+    - **Coherence checks** — wiring ``field_sources`` reference real
+      upstream nodes; required schemas present per node kind; etc.
+    - **Pipeline-level validators** — cycle detection, start-node
+      sanity, naming conventions.
+
+    Stub: returns empty for now. Implementation lands in step 6 of
+    the plan, after the framework's ``__init_subclass__`` validators
+    have been refactored to capture rather than raise (steps 3-5).
+    Callers can already wire this into ``PipelineEntry`` and the API
+    surface — they'll see no issues yet because the captures don't
+    exist yet, which matches today's "raises during discovery"
+    behaviour from the consumer's point of view.
+    """
+    return []
+
+
+def is_runnable(spec: PipelineSpec) -> bool:
+    """Return True iff no error-severity issues exist on ``spec``.
+
+    Warning-severity issues do NOT block runnability — they're
+    surfaced in the UI as caution flags only.
+    """
+    return not any(
+        issue.severity == "error" for issue in derive_issues(spec)
     )
