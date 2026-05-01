@@ -182,8 +182,187 @@ def _stop_ui() -> None:
     print("Stopped.")
 
 
+def _preflight_check(args: argparse.Namespace) -> None:
+    """Dry-run the reconciliation chain; gate UI boot on the result.
+
+    Runs ``generate → build → pull → push`` in dry-run mode against
+    the same prompts / pipelines / demo flags that ``_run_ui`` will use.
+    Any drift the chain would resolve is reported as an issue.
+
+    Gating:
+
+    - ``args.dev=True`` → log warnings and continue. Dev iteration
+      should boot the UI even on a stale codebase; the user fixes
+      drift while the UI keeps running.
+    - ``args.dev=False`` (prod) → exit non-zero. UI refuses to start
+      against drift; the user must run the canonical chain and try
+      again.
+
+    The pre-flight is best-effort:
+    - If ``prompts_dir`` doesn't exist (e.g. brand-new project), the
+      pre-flight is a no-op — there's nothing to reconcile yet.
+    - Phoenix-unreachable surfaces as a discovery error from pull/push.
+      In prod that fails the boot; in dev the user gets a warning and
+      continues.
+    """
+    from pathlib import Path
+
+    prompts_dir_arg = (
+        args.prompts_dir
+        if args.prompts_dir is not None
+        else os.environ.get("LLM_PIPELINE_PROMPTS_DIR")
+    )
+    raw_prompts = (
+        prompts_dir_arg.strip()
+        if isinstance(prompts_dir_arg, str)
+        else "./llm-pipeline-prompts"
+    )
+    if not raw_prompts:
+        # Empty string disables the prompts dir; nothing to pre-flight.
+        return
+    prompts_dir = Path(raw_prompts).expanduser()
+    if not prompts_dir.is_dir():
+        return  # Brand-new project — no YAMLs to reconcile yet.
+
+    evals_dir_arg = (
+        args.evals_dir
+        if args.evals_dir is not None
+        else os.environ.get("LLM_PIPELINE_EVALS_DIR", "./llm-pipeline-evals")
+    )
+    evals_dir: Path | None = None
+    if isinstance(evals_dir_arg, str) and evals_dir_arg.strip():
+        evals_dir = Path(evals_dir_arg.strip()).expanduser()
+
+    from llm_pipeline._dry_run import dry_run_mode
+    from llm_pipeline.cli import build, generate, pull, push
+
+    issues: list[str] = []
+
+    with dry_run_mode():
+        # Generate — surfaces stale variables files.
+        gen_cfg = generate.GenerateConfig(
+            prompts_dir=prompts_dir,
+            output_dir=Path("./llm_pipelines/_variables"),
+            dry_run=True,
+        )
+        try:
+            gen_result = generate.run(gen_cfg)
+        except Exception as exc:  # noqa: BLE001
+            issues.append(f"generate failed: {exc}")
+        else:
+            if gen_result.files_written:
+                issues.append(
+                    f"generate: {len(gen_result.files_written)} variables file(s) "
+                    f"would be (re)written — run `llm-pipeline generate`."
+                )
+            for path, reason in gen_result.files_failed:
+                issues.append(f"generate: {path.name}: {reason}")
+
+        # Build — surfaces structural / alignment errors.
+        build_cfg = build.BuildConfig(
+            prompts_dir=prompts_dir,
+            pipeline_modules=args.pipelines,
+            demo=args.demo,
+        )
+        try:
+            build_result = build.run(build_cfg)
+        except Exception as exc:  # noqa: BLE001
+            issues.append(f"build failed: {exc}")
+        else:
+            for err in build_result.errors:
+                issues.append(f"build: {err}")
+
+        # Pull — surfaces Phoenix-side drift the codebase would absorb.
+        pull_cfg = pull.PullConfig(
+            prompts_dir=prompts_dir,
+            pipeline_modules=args.pipelines,
+            demo=args.demo,
+            dry_run=True,
+        )
+        try:
+            pull_result = pull.run(pull_cfg)
+        except Exception as exc:  # noqa: BLE001
+            issues.append(f"pull failed: {exc}")
+        else:
+            # Discovery errors here are typically Phoenix-unreachable.
+            for err in pull_result.discovery_errors:
+                issues.append(f"pull: {err}")
+            if pull_result.prompts_pulled:
+                issues.append(
+                    f"pull: {len(pull_result.prompts_pulled)} prompt(s) "
+                    f"would be pulled from Phoenix — run "
+                    f"`llm-pipeline pull`."
+                )
+
+        # Push — surfaces code/YAML changes the codebase would publish.
+        push_cfg = push.PushConfig(
+            prompts_dir=prompts_dir,
+            evals_dir=evals_dir,
+            pipeline_modules=args.pipelines,
+            demo=args.demo,
+            dry_run=True,
+        )
+        try:
+            push_result = push.run(push_cfg)
+        except Exception as exc:  # noqa: BLE001
+            issues.append(f"push failed: {exc}")
+        else:
+            # Skip discovery_errors here — pull already surfaced them,
+            # no need to duplicate.
+            if push_result.prompts_pushed:
+                issues.append(
+                    f"push: {len(push_result.prompts_pushed)} prompt(s) "
+                    f"would be pushed to Phoenix — run "
+                    f"`llm-pipeline push`."
+                )
+            if push_result.datasets_created or push_result.datasets_diffed:
+                issues.append(
+                    f"push: {len(push_result.datasets_created)} dataset(s) "
+                    f"would be created and "
+                    f"{len(push_result.datasets_diffed)} would be updated."
+                )
+
+    if not issues:
+        return
+
+    if args.dev:
+        print(
+            "WARNING: UI pre-flight found drift "
+            f"({len(issues)} issue(s)). Continuing because --dev is set:",
+            file=sys.stderr,
+        )
+        for issue in issues:
+            print(f"  - {issue}", file=sys.stderr)
+        print(
+            "Run the canonical chain to reconcile: "
+            "`llm-pipeline pull && llm-pipeline generate && "
+            "llm-pipeline build && llm-pipeline push`.",
+            file=sys.stderr,
+        )
+        return
+
+    print(
+        f"ERROR: UI pre-flight failed ({len(issues)} issue(s)).",
+        file=sys.stderr,
+    )
+    for issue in issues:
+        print(f"  - {issue}", file=sys.stderr)
+    print(
+        "\nFix by running: `llm-pipeline pull && llm-pipeline generate "
+        "&& llm-pipeline build && llm-pipeline push`. "
+        "Or pass --dev to boot anyway.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
 def _run_ui(args: argparse.Namespace) -> None:
     """Create the FastAPI app and dispatch to prod or dev mode."""
+    # Pre-flight: dry-run the full reconciliation chain before booting.
+    # Prod mode (no --dev) fails on any drift — the UI refuses to start
+    # against a stale codebase. Dev mode warns and continues.
+    _preflight_check(args)
+
     try:
         if args.dev:
             _run_dev_mode(args)

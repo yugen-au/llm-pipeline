@@ -22,6 +22,26 @@ from llm_pipeline.ui.cli import _cleanup_vite, _create_dev_app
 
 
 # ---------------------------------------------------------------------------
+# Auto-mock the UI startup pre-flight for every test in this module.
+#
+# These tests target ``_run_ui`` and its sibling helpers in isolation; they
+# already mock ``create_app`` / ``uvicorn.run`` / ``StaticFiles`` etc. The
+# pre-flight chain (``generate → build → pull → push`` in dry-run mode)
+# would otherwise run for real, hit the repo's prompts dir, and try to
+# reach Phoenix — neither of which belongs in unit tests of CLI plumbing.
+#
+# ``tests/ui/test_preflight.py`` exercises ``_preflight_check`` itself
+# (without this fixture, since it imports the function directly).
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _mock_preflight():
+    with patch("llm_pipeline.ui.cli._preflight_check"):
+        yield
+
+
+# ---------------------------------------------------------------------------
 # Path.exists helpers - targeted, not global
 # ---------------------------------------------------------------------------
 
