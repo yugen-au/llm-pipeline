@@ -40,12 +40,14 @@ from llm_pipeline.specs.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
+    KIND_PIPELINE,
     KIND_REVIEW,
     KIND_SCHEMA,
     KIND_STEP,
     KIND_TABLE,
     KIND_TOOL,
 )
+from llm_pipeline.specs.pipelines import NodeBindingSpec, PipelineSpec
 from llm_pipeline.specs.reviews import ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
 from llm_pipeline.specs.steps import StepSpec
@@ -58,6 +60,7 @@ __all__ = [
     "build_constant_spec",
     "build_enum_spec",
     "build_extraction_spec",
+    "build_pipeline_spec",
     "build_review_spec",
     "build_schema_spec",
     "build_step_spec",
@@ -483,3 +486,104 @@ def build_review_spec(
             resolver=resolver,
         ),
     ).attach_class_captures(cls)
+
+
+# ---------------------------------------------------------------------------
+# Level 5: pipelines
+# ---------------------------------------------------------------------------
+
+
+def build_pipeline_spec(
+    *,
+    name: str,
+    cls: type,
+    source_path: str,
+    source_text: str,
+    resolver: ResolverHook,
+) -> PipelineSpec:
+    """Build a :class:`PipelineSpec` for a ``Pipeline`` subclass.
+
+    The legacy :class:`llm_pipeline.graph.spec.PipelineSpec` is
+    already built and validated at ``Pipeline.__init_subclass__``
+    time (cached on ``cls._spec``). This builder TRANSLATES that
+    legacy spec into the new per-artifact shape:
+
+    - Pipeline-level issues (cycles, naming, ``input_data_wrong_type``,
+      ``invalid_binding_type``, ``duplicate_node_class``, etc.) are
+      copied from ``cls._spec.issues`` to the new spec's
+      ``self.issues``. The legacy validator already placed them
+      correctly; we just preserve placement.
+    - Per-binding rows: one :class:`NodeBindingSpec` per deduped
+      binding, carrying ``binding_kind`` (wrapper type),
+      ``node_name`` (snake_case registry key), the wiring (reused
+      :class:`WiringSpec` from the legacy spec — already validator-
+      populated with per-source issues), and per-binding-wrapper
+      issues from ``binding._init_post_errors``.
+    - Class-contract issues (missing INPUTS, prepare-signature
+      mismatches, etc.) are NOT copied here — they live canonically
+      on the standalone per-kind spec
+      (``registries[KIND_STEP][node_name]`` etc.). The frontend
+      follows the ``node_name`` ref to find them.
+
+    ``input_data`` is built fresh via :func:`json_schema_with_refs`
+    over ``cls.INPUT_DATA``, so its refs reflect cross-artifact
+    references in the pipeline file. The legacy spec only carried
+    the schema; this version captures refs too.
+
+    Tolerates partial state: if ``cls._spec`` is missing (rare —
+    ``Pipeline.__init_subclass__`` always builds it, even on
+    framework-edge failures it returns a shell), returns a minimal
+    :class:`PipelineSpec` so consumers don't have to branch on None.
+    """
+    from llm_pipeline.wiring import Extraction, Review, Step
+
+    legacy = getattr(cls, "_spec", None)
+    if legacy is None:
+        return PipelineSpec(
+            kind=KIND_PIPELINE,
+            name=name,
+            cls=_qualified(cls),
+            source_path=source_path,
+        )
+
+    # Per-binding rows. ``cls._wiring`` is the deduped binding map
+    # in the same order as ``legacy.nodes`` (both built from the
+    # filtered+deduped binding list at __init_subclass__ time).
+    deduped_bindings = list(getattr(cls, "_wiring", {}).values())
+
+    node_bindings: list[NodeBindingSpec] = []
+    for binding, legacy_node in zip(deduped_bindings, legacy.nodes):
+        if isinstance(binding, Step):
+            binding_kind = "step"
+        elif isinstance(binding, Extraction):
+            binding_kind = "extraction"
+        elif isinstance(binding, Review):
+            binding_kind = "review"
+        else:
+            # Pipeline.__init_subclass__ filters non-Step/Extraction/Review
+            # bindings out before building _wiring; this shouldn't
+            # happen but stay defensive.
+            continue
+        node_bindings.append(NodeBindingSpec(
+            binding_kind=binding_kind,
+            node_name=legacy_node.name,
+            wiring=legacy_node.wiring,
+            issues=list(getattr(binding, "_init_post_errors", [])),
+        ))
+
+    input_data_cls = getattr(cls, "INPUT_DATA", None)
+    input_data = json_schema_with_refs(
+        cls=input_data_cls, source_text=source_text, resolver=resolver,
+    )
+
+    return PipelineSpec(
+        kind=KIND_PIPELINE,
+        name=name,
+        cls=_qualified(cls),
+        source_path=source_path,
+        input_data=input_data,
+        nodes=node_bindings,
+        edges=list(legacy.edges),
+        start_node=legacy.start_node,
+        issues=list(legacy.issues),
+    )

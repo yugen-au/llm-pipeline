@@ -29,6 +29,7 @@ from llm_pipeline.specs import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
+    KIND_PIPELINE,
     KIND_REVIEW,
     KIND_SCHEMA,
     KIND_STEP,
@@ -38,6 +39,7 @@ from llm_pipeline.specs.builders import (
     build_constant_spec,
     build_enum_spec,
     build_extraction_spec,
+    build_pipeline_spec,
     build_review_spec,
     build_schema_spec,
     build_step_spec,
@@ -434,18 +436,41 @@ def walk_pipelines(
     registries: dict[str, dict[str, ArtifactRegistration]],
     resolver: ResolverHook,
 ) -> None:
-    """Skeleton walker for ``pipelines/``.
+    """Register ``Pipeline`` subclasses from ``pipelines/``.
 
-    The existing :class:`llm_pipeline.graph.spec.PipelineSpec` is
-    NOT a subclass of :class:`ArtifactSpec`, so it can't be
-    wrapped in :class:`ArtifactRegistration` directly. Migrating
-    that spec to the unified :class:`ArtifactSpec` hierarchy
-    (``NodeBindingSpec`` substitution etc.) is its own planned
-    phase — until then pipelines stay in the legacy
-    ``app.state.pipeline_registry`` and ``registries[KIND_PIPELINE]``
-    is empty.
+    Each pipeline class has its legacy
+    :class:`llm_pipeline.graph.spec.PipelineSpec` already built
+    and validated at ``Pipeline.__init_subclass__`` time (cached
+    on ``cls._spec``). The new
+    :class:`llm_pipeline.specs.PipelineSpec` is a per-artifact
+    translation of that — populated by
+    :func:`llm_pipeline.specs.builders.build_pipeline_spec`.
+
+    Both registries coexist during the migration: the legacy
+    ``app.state.pipeline_registry`` powers
+    ``/api/pipelines/*``; the new ``registries[KIND_PIPELINE]``
+    feeds the kind-uniform ``/api/artifacts/{kind}`` surface.
     """
-    del modules, registries, resolver  # no-op
+    from llm_pipeline.graph.pipeline import Pipeline
+
+    for mod in modules:
+        source_text = _module_source(mod)
+        for attr_name, value in inspect.getmembers(mod):
+            if attr_name.startswith("_"):
+                continue
+            if not _is_locally_defined_class(value, mod, Pipeline):
+                continue
+            name = value.pipeline_name()
+            spec = build_pipeline_spec(
+                name=name,
+                cls=value,
+                source_path=_module_path(mod),
+                source_text=source_text,
+                resolver=resolver,
+            )
+            registries[KIND_PIPELINE][name] = ArtifactRegistration(
+                spec=spec, obj=value,
+            )
 
 
 # ---------------------------------------------------------------------------

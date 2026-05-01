@@ -47,6 +47,7 @@ from llm_pipeline.specs.kinds import (
     LEVEL_BY_KIND,
 )
 from llm_pipeline.specs.issues import flatten_artifact_issues
+from llm_pipeline.specs.pipelines import NodeBindingSpec, PipelineSpec
 from llm_pipeline.specs.registration import ArtifactRegistration
 from llm_pipeline.specs.reviews import ReviewFields, ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
@@ -92,6 +93,8 @@ __all__ = [
     "ExtractionFields",
     "ExtractionSpec",
     "IndexSpec",
+    "NodeBindingSpec",
+    "PipelineSpec",
     "ReviewFields",
     "ReviewSpec",
     "SchemaSpec",
