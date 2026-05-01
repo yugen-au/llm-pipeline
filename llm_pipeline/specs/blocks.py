@@ -39,48 +39,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# ValidationIssue must be imported at module level (not under
-# TYPE_CHECKING) because Pydantic needs the runtime class to
-# validate fields typed as ``list[ValidationIssue]``. Phase C
-# moves the validation types into ``llm_pipeline.specs`` so this
-# cross-package import goes away.
-from llm_pipeline.graph.spec import ValidationIssue
+from llm_pipeline.specs.base import ArtifactField
 
 
 __all__ = [
-    "ArtifactField",
     "CodeBodySpec",
     "JsonSchemaWithRefs",
     "PromptData",
     "SymbolRef",
 ]
-
-
-class ArtifactField(BaseModel):
-    """Common base for any issue-bearing spec sub-component.
-
-    Every per-kind spec field whose value needs its own localised
-    validation issues uses a subclass of this type — `CodeBodySpec`
-    for editable code bodies, `JsonSchemaWithRefs` for Pydantic-
-    shaped data, `PromptData` for embedded prompt info, and any
-    future component types added under the same convention.
-
-    The frontend uses inheritance as the dispatch signal: any value
-    that's an `ArtifactField` instance has an `issues` slot to read
-    for error styling at that field's UI surface, without each
-    subclass having to redeclare the field.
-
-    Not instantiated directly. The base provides only the shared
-    `issues` slot + the strict `extra="forbid"` config.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    # Localised issues for this sub-component. Builders that produce
-    # the subclass populate this directly (libcst code-body analyser,
-    # JSON schema generator, prompt resolver, etc.) — issues stay
-    # attached to the spec component they describe.
-    issues: list[ValidationIssue] = Field(default_factory=list)
 
 
 class SymbolRef(BaseModel):
