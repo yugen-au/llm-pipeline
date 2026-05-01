@@ -214,6 +214,54 @@ class TestEvalsDirHandling:
         assert captured.get("dataset_client") is None
 
 
+class TestDryRun:
+    """Dry-run wraps startup_sync in ``dry_run_mode`` so Phoenix mutations no-op."""
+
+    def test_dry_run_propagates_into_yaml_sync(
+        self, empty_prompts_dir: Path, monkeypatch,
+    ):
+        _stub_discovery_with_registry(monkeypatch)
+        _stub_phoenix_clients_ok(monkeypatch)
+
+        from llm_pipeline._dry_run import is_dry_run
+        from llm_pipeline.yaml_sync import SyncReport
+
+        observed = {}
+
+        def _fake_startup(**kwargs):
+            observed["was_dry_run"] = is_dry_run()
+            return SyncReport(prompts_pushed=["topic_extraction"])
+
+        monkeypatch.setattr(
+            "llm_pipeline.yaml_sync.startup_sync", _fake_startup,
+        )
+
+        run(PushConfig(prompts_dir=empty_prompts_dir, dry_run=True))
+        assert observed["was_dry_run"] is True
+
+    def test_cli_dry_run_returns_one_when_drift_present(
+        self, empty_prompts_dir: Path, monkeypatch, capsys,
+    ):
+        _stub_discovery_with_registry(monkeypatch)
+        _stub_phoenix_clients_ok(monkeypatch)
+
+        from llm_pipeline.yaml_sync import SyncReport
+
+        def _fake_startup(**kwargs):
+            return SyncReport(prompts_pushed=["topic_extraction"])
+
+        monkeypatch.setattr(
+            "llm_pipeline.yaml_sync.startup_sync", _fake_startup,
+        )
+
+        rc = cli_main(
+            ["--prompts-dir", str(empty_prompts_dir), "--dry-run"],
+        )
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "Would push" in captured.out
+
+
 # ---------------------------------------------------------------------------
 # cli_main exit codes
 # ---------------------------------------------------------------------------

@@ -53,11 +53,16 @@ class PullConfig:
     ``pipeline_modules`` is an optional ``--pipelines`` list of dotted
     module paths. ``demo`` enables entry-point + package-internal
     convention discovery for the bundled demo pipelines.
+
+    ``dry_run=True`` runs the discovery + Phoenix fetch + hash compare
+    without actually writing YAMLs. The result still surfaces "would-
+    pull" prompt names so the UI startup gate can detect drift.
     """
 
     prompts_dir: Path
     pipeline_modules: list[str] | None = None
     demo: bool = False
+    dry_run: bool = False
 
 
 @dataclass
@@ -162,13 +167,15 @@ def run(config: PullConfig) -> PullResult:
         )
         return result
 
+    from llm_pipeline._dry_run import dry_run_mode
     from llm_pipeline.yaml_sync import pull_phoenix_to_yaml
 
-    sync_report = pull_phoenix_to_yaml(
-        prompts_dir=prompts_dir,
-        prompt_client=prompt_client,
-        introspection_registry=introspection_registry,
-    )
+    with dry_run_mode(enabled=config.dry_run):
+        sync_report = pull_phoenix_to_yaml(
+            prompts_dir=prompts_dir,
+            prompt_client=prompt_client,
+            introspection_registry=introspection_registry,
+        )
 
     result.prompts_pulled = list(sync_report.prompts_pulled)
     result.prompts_unchanged = list(sync_report.prompts_pull_skipped)
@@ -238,6 +245,15 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help="Include built-in demo pipelines/prompts in the pull set.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Report what would be pulled without writing YAMLs. Exits "
+            "non-zero if Phoenix has drift the local YAMLs don't reflect."
+        ),
+    )
 
 
 def _main(args: argparse.Namespace) -> int:
@@ -246,6 +262,7 @@ def _main(args: argparse.Namespace) -> int:
         prompts_dir=prompts_dir,
         pipeline_modules=args.pipelines,
         demo=args.demo,
+        dry_run=args.dry_run,
     )
 
     try:
@@ -254,13 +271,16 @@ def _main(args: argparse.Namespace) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    _print_report(result)
-    return 0 if (
-        not result.discovery_errors and not result.prompts_failed
-    ) else 1
+    _print_report(result, dry_run=config.dry_run)
+    if result.discovery_errors or result.prompts_failed:
+        return 1
+    # In dry-run, "would-pull" drift is the signal we exit non-zero on.
+    if config.dry_run and result.prompts_pulled:
+        return 1
+    return 0
 
 
-def _print_report(result: PullResult) -> None:
+def _print_report(result: PullResult, *, dry_run: bool = False) -> None:
     if result.discovery_errors:
         print(
             f"Pull aborted ({len(result.discovery_errors)} pre-flight "
@@ -271,10 +291,12 @@ def _print_report(result: PullResult) -> None:
             print(f"  - {msg}", file=sys.stderr)
         return
 
+    write_verb = "WOULD" if dry_run else "WROTE"
     if result.prompts_pulled:
-        print(f"Pulled {len(result.prompts_pulled)} prompt(s) from Phoenix:")
+        prefix = "Would pull" if dry_run else "Pulled"
+        print(f"{prefix} {len(result.prompts_pulled)} prompt(s) from Phoenix:")
         for name in result.prompts_pulled:
-            print(f"  WROTE   {name}.yaml")
+            print(f"  {write_verb}   {name}.yaml")
     if result.prompts_unchanged:
         print(
             f"Unchanged: {len(result.prompts_unchanged)} prompt(s) "

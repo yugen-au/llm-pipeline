@@ -66,10 +66,16 @@ class GenerateConfig:
     written; the directory is created if missing, and a empty
     ``__init__.py`` is added if absent (so Python sees it as a
     package).
+
+    ``dry_run=True`` does the codegen + diff without writing — the
+    result still surfaces "would-write" file paths in
+    ``files_written`` so the UI startup gate can detect stale
+    variables files without mutating the working tree.
     """
 
     prompts_dir: Path
     output_dir: Path
+    dry_run: bool = False
 
 
 @dataclass
@@ -106,35 +112,41 @@ def run(config: GenerateConfig) -> GenerateResult:
             f"prompts directory not found: {prompts_dir}"
         )
 
+    from llm_pipeline._dry_run import dry_run_mode
+
     output_dir = config.output_dir.expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
 
-    init_file = output_dir / "__init__.py"
-    if not init_file.exists():
-        init_file.write_text("", encoding="utf-8")
+    # Bookkeeping side-effects (mkdir, seed __init__.py) are skipped
+    # in dry-run; the codegen leaf check handles file writes itself.
+    if not config.dry_run:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        init_file = output_dir / "__init__.py"
+        if not init_file.exists():
+            init_file.write_text("", encoding="utf-8")
 
-    for yaml_path in sorted(prompts_dir.glob("*.yaml")):
-        prompt_name, var_defs, parse_error = _parse_yaml(yaml_path)
-        if parse_error is not None:
-            result.files_failed.append((yaml_path, parse_error))
-            continue
+    with dry_run_mode(enabled=config.dry_run):
+        for yaml_path in sorted(prompts_dir.glob("*.yaml")):
+            prompt_name, var_defs, parse_error = _parse_yaml(yaml_path)
+            if parse_error is not None:
+                result.files_failed.append((yaml_path, parse_error))
+                continue
 
-        out = output_dir / f"_{prompt_name}.py"
-        try:
-            written = generate_prompt_variables(
-                prompt_name=prompt_name,
-                variable_definitions=var_defs,
-                output_path=out,
-                root=output_dir,
-            )
-        except CodegenError as exc:
-            result.files_failed.append((out, str(exc)))
-            continue
+            out = output_dir / f"_{prompt_name}.py"
+            try:
+                written = generate_prompt_variables(
+                    prompt_name=prompt_name,
+                    variable_definitions=var_defs,
+                    output_path=out,
+                    root=output_dir,
+                )
+            except CodegenError as exc:
+                result.files_failed.append((out, str(exc)))
+                continue
 
-        if written:
-            result.files_written.append(out)
-        else:
-            result.files_unchanged.append(out)
+            if written:
+                result.files_written.append(out)
+            else:
+                result.files_unchanged.append(out)
 
     return result
 
@@ -191,6 +203,15 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
             f"to {_DEFAULT_OUTPUT_DIR}."
         ),
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Report what would be written without writing. Exits "
+            "non-zero if any file would change."
+        ),
+    )
 
 
 def _main(args: argparse.Namespace) -> int:
@@ -201,6 +222,7 @@ def _main(args: argparse.Namespace) -> int:
     config = GenerateConfig(
         prompts_dir=prompts_dir,
         output_dir=output_dir,
+        dry_run=args.dry_run,
     )
 
     try:
@@ -212,8 +234,14 @@ def _main(args: argparse.Namespace) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    _print_report(result)
-    return 1 if result.files_failed else 0
+    _print_report(result, dry_run=config.dry_run)
+    if result.files_failed:
+        return 1
+    # In dry-run mode, "would-write" is a non-zero — caller wants to
+    # know if the working tree is stale.
+    if config.dry_run and result.files_written:
+        return 1
+    return 0
 
 
 def _parse_yaml(
@@ -258,11 +286,13 @@ def _parse_yaml(
     return prompt_name, var_defs, None
 
 
-def _print_report(result: GenerateResult) -> None:
+def _print_report(result: GenerateResult, *, dry_run: bool = False) -> None:
+    write_verb = "WOULD" if dry_run else "WROTE"
     if result.files_written:
-        print(f"Generated {len(result.files_written)} file(s):")
+        prefix = "Would generate" if dry_run else "Generated"
+        print(f"{prefix} {len(result.files_written)} file(s):")
         for p in result.files_written:
-            print(f"  WROTE   {p}")
+            print(f"  {write_verb}   {p}")
     if result.files_unchanged:
         print(
             f"Unchanged: {len(result.files_unchanged)} file(s) "

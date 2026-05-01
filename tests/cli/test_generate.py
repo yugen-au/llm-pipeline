@@ -213,6 +213,86 @@ class TestRunTopLevelErrors:
 # ---------------------------------------------------------------------------
 
 
+class TestDryRun:
+    """``dry_run`` short-circuits the disk write but still reports drift."""
+
+    def test_dry_run_does_not_write_when_file_missing(self, tmp_path):
+        prompts = tmp_path / "prompts"
+        prompts.mkdir()
+        out = tmp_path / "_variables"
+        _write_yaml(prompts / "x.yaml", _minimal_yaml("x"))
+
+        result = run(
+            GenerateConfig(
+                prompts_dir=prompts, output_dir=out, dry_run=True,
+            ),
+        )
+
+        # Reports "would-write" but the file was never created.
+        assert len(result.files_written) == 1
+        target = out / "_x.py"
+        assert not target.exists()
+
+    def test_dry_run_does_not_overwrite_existing(self, tmp_path):
+        prompts = tmp_path / "prompts"
+        prompts.mkdir()
+        out = tmp_path / "_variables"
+        out.mkdir()
+        sentinel = "# user-modified content (must survive dry-run)\n"
+        target = out / "_x.py"
+        target.write_text(sentinel, encoding="utf-8")
+        _write_yaml(prompts / "x.yaml", _minimal_yaml("x"))
+
+        result = run(
+            GenerateConfig(
+                prompts_dir=prompts, output_dir=out, dry_run=True,
+            ),
+        )
+
+        # Generator says "would-write" because content differs.
+        assert len(result.files_written) == 1
+        # But the file is unchanged on disk.
+        assert target.read_text(encoding="utf-8") == sentinel
+
+    def test_dry_run_no_op_when_already_clean(self, tmp_path):
+        prompts = tmp_path / "prompts"
+        prompts.mkdir()
+        out = tmp_path / "_variables"
+        _write_yaml(prompts / "x.yaml", _minimal_yaml("x"))
+
+        # Real run first to settle disk state.
+        run(GenerateConfig(prompts_dir=prompts, output_dir=out))
+
+        # Dry-run on the now-clean tree should report no changes.
+        result = run(
+            GenerateConfig(
+                prompts_dir=prompts, output_dir=out, dry_run=True,
+            ),
+        )
+        assert result.files_written == []
+        assert len(result.files_unchanged) == 1
+
+    def test_cli_dry_run_returns_one_when_drift_present(
+        self, tmp_path, capsys,
+    ):
+        prompts = tmp_path / "prompts"
+        prompts.mkdir()
+        out = tmp_path / "_variables"
+        _write_yaml(prompts / "x.yaml", _minimal_yaml("x"))
+
+        rc = cli_main(
+            [
+                "--prompts-dir", str(prompts),
+                "--output-dir", str(out),
+                "--dry-run",
+            ],
+        )
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "Would generate" in captured.out
+        assert "WOULD" in captured.out
+
+
 class TestCliMain:
     """Invokes the same code path the dispatcher uses for ``llm-pipeline generate``."""
 

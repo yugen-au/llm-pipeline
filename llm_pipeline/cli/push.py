@@ -52,12 +52,18 @@ class PushConfig:
     ``prompts_dir`` is required. ``evals_dir`` is optional; if the
     directory doesn't exist on disk, dataset push is silently skipped
     (lets users keep eval YAMLs out of the repo).
+
+    ``dry_run=True`` runs discovery + Phoenix fetch + hash compare
+    without applying any Phoenix mutation. The result still surfaces
+    "would-push" prompt / dataset names so the UI startup gate can
+    detect drift the codebase would push.
     """
 
     prompts_dir: Path
     evals_dir: Path | None = None
     pipeline_modules: list[str] | None = None
     demo: bool = False
+    dry_run: bool = False
 
 
 @dataclass
@@ -190,15 +196,17 @@ def run(config: PushConfig) -> PushResult:
             )
             # Fall through; prompts can still push even if datasets can't.
 
+    from llm_pipeline._dry_run import dry_run_mode
     from llm_pipeline.yaml_sync import startup_sync
 
-    sync_report = startup_sync(
-        prompts_dir=prompts_dir,
-        datasets_dir=evals_dir,
-        prompt_client=prompt_client,
-        dataset_client=dataset_client,
-        introspection_registry=introspection_registry,
-    )
+    with dry_run_mode(enabled=config.dry_run):
+        sync_report = startup_sync(
+            prompts_dir=prompts_dir,
+            datasets_dir=evals_dir,
+            prompt_client=prompt_client,
+            dataset_client=dataset_client,
+            introspection_registry=introspection_registry,
+        )
 
     result.prompts_pushed = list(sync_report.prompts_pushed)
     result.prompts_unchanged = list(sync_report.prompts_skipped)
@@ -281,6 +289,15 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
         default=False,
         help="Include built-in demo pipelines/prompts in the push set.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help=(
+            "Report what would be pushed without applying any Phoenix "
+            "mutation. Exits non-zero if anything would change."
+        ),
+    )
 
 
 def _main(args: argparse.Namespace) -> int:
@@ -291,6 +308,7 @@ def _main(args: argparse.Namespace) -> int:
         evals_dir=evals_dir,
         pipeline_modules=args.pipelines,
         demo=args.demo,
+        dry_run=args.dry_run,
     )
 
     try:
@@ -299,15 +317,23 @@ def _main(args: argparse.Namespace) -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    _print_report(result)
-    return 0 if (
-        not result.discovery_errors
-        and not result.prompts_failed
-        and not result.datasets_failed
-    ) else 1
+    _print_report(result, dry_run=config.dry_run)
+    if (
+        result.discovery_errors
+        or result.prompts_failed
+        or result.datasets_failed
+    ):
+        return 1
+    if config.dry_run and (
+        result.prompts_pushed
+        or result.datasets_created
+        or result.datasets_diffed
+    ):
+        return 1
+    return 0
 
 
-def _print_report(result: PushResult) -> None:
+def _print_report(result: PushResult, *, dry_run: bool = False) -> None:
     if result.discovery_errors:
         print(
             f"Push aborted ({len(result.discovery_errors)} pre-flight "
@@ -318,10 +344,12 @@ def _print_report(result: PushResult) -> None:
             print(f"  - {msg}", file=sys.stderr)
         return
 
+    write_verb = "WOULD" if dry_run else "WROTE"
     if result.prompts_pushed:
-        print(f"Pushed {len(result.prompts_pushed)} prompt(s) to Phoenix:")
+        prefix = "Would push" if dry_run else "Pushed"
+        print(f"{prefix} {len(result.prompts_pushed)} prompt(s) to Phoenix:")
         for name in result.prompts_pushed:
-            print(f"  WROTE   {name}")
+            print(f"  {write_verb}   {name}")
     if result.prompts_unchanged:
         print(
             f"Unchanged: {len(result.prompts_unchanged)} prompt(s) "

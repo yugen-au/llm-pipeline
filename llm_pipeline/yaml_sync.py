@@ -257,7 +257,13 @@ def write_prompt_yaml(prompt: Prompt, prompts_dir: Path) -> bool:
     code-derived fields. Two prompts that only differ on
     ``response_format`` / ``tools`` produce the same on-disk file, so
     we don't churn YAML on every code change.
+
+    **Dry-run leaf**: honors :func:`llm_pipeline._dry_run.is_dry_run`.
+    Inside a dry-run scope the hash compare runs but the disk write
+    is skipped; the return value still reflects "would-write".
     """
+    from llm_pipeline._dry_run import is_dry_run
+
     path = prompts_dir / f"{prompt.name}.yaml"
     new_payload = _model_yaml_payload(prompt)
     existing = _read_yaml(path)
@@ -269,6 +275,8 @@ def write_prompt_yaml(prompt: Prompt, prompts_dir: Path) -> bool:
         except Exception:
             # Malformed YAML; overwrite it.
             pass
+    if is_dry_run():
+        return True
     _write_yaml_atomic(path, new_payload)
     return True
 
@@ -307,7 +315,19 @@ def _push_new_version(client: PhoenixPromptClient, prompt: Prompt) -> None:
     gives us the new version naturally; the prompt-level metadata in
     ``prompt_data`` is ignored on subsequent posts (set-once via REST)
     so we deliberately rely on ``patch_prompt`` for metadata updates.
+
+    **Dry-run leaf**: honors :func:`llm_pipeline._dry_run.is_dry_run`
+    by short-circuiting before any Phoenix mutation. The diff that
+    decided we'd push (made by ``_sync_one_step``) is preserved in
+    the ``SyncReport`` regardless.
     """
+    from llm_pipeline._dry_run import is_dry_run
+
+    if is_dry_run():
+        logger.debug(
+            "dry-run: would push new version for %s", prompt.name,
+        )
+        return
     try:
         existing_version = client.get_latest(prompt.name)
     except PromptNotFoundError:
@@ -474,16 +494,27 @@ def _sync_one_step(
                 (prompt_name, "patch: missing prompt id"),
             )
             return
-        try:
-            client.patch_prompt(
-                prompt_id,
-                metadata=prompt.metadata.model_dump(exclude_none=True),
-                description=prompt.description,
+        # Dry-run leaf check: skip the Phoenix mutation but keep the
+        # diff that already landed on the report.
+        from llm_pipeline._dry_run import is_dry_run
+
+        if is_dry_run():
+            logger.debug(
+                "dry-run: would patch metadata on %s", prompt_name,
             )
-        except PhoenixError as exc:
-            logger.warning("yaml_sync: %s patch failed: %s", prompt_name, exc)
-            report.prompts_failed.append((prompt_name, f"patch: {exc}"))
-            return
+        else:
+            try:
+                client.patch_prompt(
+                    prompt_id,
+                    metadata=prompt.metadata.model_dump(exclude_none=True),
+                    description=prompt.description,
+                )
+            except PhoenixError as exc:
+                logger.warning(
+                    "yaml_sync: %s patch failed: %s", prompt_name, exc,
+                )
+                report.prompts_failed.append((prompt_name, f"patch: {exc}"))
+                return
 
     report.prompts_pushed.append(prompt_name)
 
@@ -520,7 +551,13 @@ def _describe_prompt_diff(yaml_prompt: Prompt, phoenix_prompt: Prompt) -> str:
 
 
 def write_dataset_yaml(dataset: Dataset, datasets_dir: Path) -> bool:
-    """Persist a dataset to ``{datasets_dir}/{name}.yaml`` (idempotent)."""
+    """Persist a dataset to ``{datasets_dir}/{name}.yaml`` (idempotent).
+
+    **Dry-run leaf**: honors :func:`llm_pipeline._dry_run.is_dry_run`.
+    Returns "would-write" without touching disk inside a dry-run scope.
+    """
+    from llm_pipeline._dry_run import is_dry_run
+
     path = datasets_dir / f"{dataset.name}.yaml"
     new_payload = _model_yaml_payload(dataset)
     existing = _read_yaml(path)
@@ -531,6 +568,8 @@ def write_dataset_yaml(dataset: Dataset, datasets_dir: Path) -> bool:
                 return False
         except Exception:
             pass
+    if is_dry_run():
+        return True
     _write_yaml_atomic(path, new_payload)
     return True
 
@@ -605,6 +644,8 @@ def _sync_datasets(
     client: PhoenixDatasetClient,
     report: SyncReport,
 ) -> None:
+    from llm_pipeline._dry_run import is_dry_run
+
     diffs = _iter_yaml_diffs(
         datasets_dir,
         Dataset.model_validate,
@@ -617,6 +658,12 @@ def _sync_datasets(
         # Case 1: Phoenix has nothing — REST upload + GraphQL patch
         # (the upload helper does both internally now).
         if phoenix_dataset is None:
+            if is_dry_run():
+                logger.debug(
+                    "dry-run: would upload dataset %s", yaml_dataset.name,
+                )
+                report.datasets_created.append(yaml_dataset.name)
+                continue
             try:
                 client.upload_dataset(
                     **dataset_to_phoenix_upload_kwargs(yaml_dataset),
@@ -652,36 +699,48 @@ def _sync_datasets(
         )
 
         if needs_examples:
-            try:
-                _push_dataset_diff(
-                    client, phoenix_dataset.id or "", to_add, to_delete,
+            if is_dry_run():
+                logger.debug(
+                    "dry-run: would push %d add(s)/%d delete(s) to dataset %s",
+                    len(to_add), len(to_delete), yaml_dataset.name,
                 )
-            except PhoenixDatasetError as exc:
-                logger.warning(
-                    "yaml_sync dataset %s example diff failed: %s",
-                    yaml_dataset.name, exc,
-                )
-                report.datasets_failed.append(
-                    (yaml_dataset.name, f"examples: {exc}"),
-                )
-                continue
+            else:
+                try:
+                    _push_dataset_diff(
+                        client, phoenix_dataset.id or "", to_add, to_delete,
+                    )
+                except PhoenixDatasetError as exc:
+                    logger.warning(
+                        "yaml_sync dataset %s example diff failed: %s",
+                        yaml_dataset.name, exc,
+                    )
+                    report.datasets_failed.append(
+                        (yaml_dataset.name, f"examples: {exc}"),
+                    )
+                    continue
 
         if needs_patch and phoenix_dataset.id:
-            try:
-                client.patch_dataset(
-                    phoenix_dataset.id,
-                    metadata=yaml_dataset.metadata.model_dump(exclude_none=True),
-                    description=yaml_dataset.description,
+            if is_dry_run():
+                logger.debug(
+                    "dry-run: would patch dataset metadata on %s",
+                    yaml_dataset.name,
                 )
-            except PhoenixDatasetError as exc:
-                logger.warning(
-                    "yaml_sync dataset %s patch failed: %s",
-                    yaml_dataset.name, exc,
-                )
-                report.datasets_failed.append(
-                    (yaml_dataset.name, f"patch: {exc}"),
-                )
-                continue
+            else:
+                try:
+                    client.patch_dataset(
+                        phoenix_dataset.id,
+                        metadata=yaml_dataset.metadata.model_dump(exclude_none=True),
+                        description=yaml_dataset.description,
+                    )
+                except PhoenixDatasetError as exc:
+                    logger.warning(
+                        "yaml_sync dataset %s patch failed: %s",
+                        yaml_dataset.name, exc,
+                    )
+                    report.datasets_failed.append(
+                        (yaml_dataset.name, f"patch: {exc}"),
+                    )
+                    continue
 
         report.datasets_diffed.append(yaml_dataset.name)
 

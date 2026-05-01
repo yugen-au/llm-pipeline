@@ -184,6 +184,54 @@ class TestPullSuccess:
         assert "phoenix: 500" in reason
 
 
+class TestDryRun:
+    """Dry-run wraps the pull call in ``dry_run_mode`` so leaves no-op."""
+
+    def test_dry_run_propagates_into_yaml_sync(
+        self, empty_prompts_dir: Path, monkeypatch,
+    ):
+        TestPullSuccess._stub_discovery_and_client(monkeypatch)
+
+        from llm_pipeline._dry_run import is_dry_run
+        from llm_pipeline.yaml_sync import SyncReport
+
+        observed = {}
+
+        def _fake_pull(*, prompts_dir, prompt_client, introspection_registry):
+            # The fake captures whether we're in a dry-run scope at the
+            # moment yaml_sync's entry point is invoked.
+            observed["was_dry_run"] = is_dry_run()
+            return SyncReport(prompts_pulled=["topic_extraction"])
+
+        monkeypatch.setattr(
+            "llm_pipeline.yaml_sync.pull_phoenix_to_yaml", _fake_pull,
+        )
+
+        run(PullConfig(prompts_dir=empty_prompts_dir, dry_run=True))
+        assert observed["was_dry_run"] is True
+
+    def test_cli_dry_run_returns_one_when_drift_present(
+        self, empty_prompts_dir: Path, monkeypatch, capsys,
+    ):
+        TestPullSuccess._stub_discovery_and_client(monkeypatch)
+
+        from llm_pipeline.yaml_sync import SyncReport
+
+        def _fake_pull(*, prompts_dir, prompt_client, introspection_registry):
+            return SyncReport(prompts_pulled=["topic_extraction"])
+
+        monkeypatch.setattr(
+            "llm_pipeline.yaml_sync.pull_phoenix_to_yaml", _fake_pull,
+        )
+
+        rc = cli_main(
+            ["--prompts-dir", str(empty_prompts_dir), "--dry-run"],
+        )
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "Would pull" in captured.out
+
+
 # ---------------------------------------------------------------------------
 # cli_main exit codes
 # ---------------------------------------------------------------------------

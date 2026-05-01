@@ -258,8 +258,14 @@ def generate_prompt_variables(
     matches the generated content (useful for ``llm-pipeline
     generate`` to skip clean files).
 
+    Honors :func:`llm_pipeline._dry_run.dry_run_mode` — inside a
+    dry-run scope the build + compare runs but the disk write is
+    skipped. The return value still reflects "would-write", so the
+    UI startup pre-flight can detect stale variables files without
+    mutating the working tree.
+
     Returns:
-        ``True`` if the file was written (created or changed),
+        ``True`` if the file was written / would be written,
         ``False`` if the existing content already matched.
 
     Raises:

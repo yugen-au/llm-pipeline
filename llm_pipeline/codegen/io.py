@@ -139,13 +139,23 @@ def write_module_if_changed(
 ) -> bool:
     """Idempotent write — skips if existing content already matches.
 
-    Returns ``True`` if the file was written (new content or didn't
-    exist), ``False`` if the existing content already matched and
-    no write was needed. Useful for build steps so unchanged files
-    keep their mtime / don't churn editor reload.
+    Returns ``True`` if the file was written (or *would* be written
+    when called inside a :func:`llm_pipeline._dry_run.dry_run_mode`
+    scope), ``False`` if the existing content already matched and no
+    write was needed. Useful for build steps so unchanged files keep
+    their mtime / don't churn editor reload.
+
+    **Dry-run leaf**: this function consults
+    :func:`llm_pipeline._dry_run.is_dry_run` before writing. When
+    inside a dry-run scope the disk write is skipped but the return
+    value still reflects "would-write", so callers (UI startup
+    pre-flight) can detect stale files without mutating the working
+    tree.
 
     Path-guarded same as :func:`write_module`.
     """
+    from llm_pipeline._dry_run import is_dry_run
+
     resolved = assert_under_root(path, root=root)
     new_code = module.code
 
@@ -156,6 +166,9 @@ def write_module_if_changed(
             existing = None
         if existing == new_code:
             return False
+
+    if is_dry_run():
+        return True
 
     write_module(resolved, module, root=root)
     return True
