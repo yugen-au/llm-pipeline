@@ -1,0 +1,23 @@
+---
+title: Per-artifact architecture — adding a new artifact kind end-to-end
+---
+flowchart LR
+  subgraph BACKEND["Backend (5 things)"]
+    direction TB
+    B1["1. KIND_FOO = 'foo'<br/>LEVEL_BY_KIND[KIND_FOO] = N<br/>(in discovery.py)"]
+    B2["2. class FooSpec(ArtifactSpec):<br/>kind-specific fields,<br/>composed from building blocks<br/>(CodeBodySpec, JsonSchemaWithRefs, …)"]
+    B3["3. Discovery walker for<br/>llm_pipelines/foos/<br/>(builds FooSpec per file<br/>via libcst static analysis<br/>+ class introspection)"]
+    B4["4. Register into<br/>registries[KIND_FOO]<br/>= dict[name → ArtifactRegistration]"]
+    B5["5. /api/foo and<br/>/api/foo/&lt;name&gt;<br/>auto-work via generic kind-routes"]
+    B1 --> B2 --> B3 --> B4 --> B5
+  end
+
+  subgraph FRONTEND["Frontend (3 things)"]
+    direction TB
+    F1["1. FooEditor component<br/>(consumes FooSpec)"]
+    F2["2. COMPONENT_BY_KIND[KIND_FOO]<br/>= FooEditor"]
+    F3["3. Foo list page route<br/>(or surface in nav)"]
+    F1 --> F2 --> F3
+  end
+
+  BACKEND -. "typed FooSpec via API" .-> FRONTEND

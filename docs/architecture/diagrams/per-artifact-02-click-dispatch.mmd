@@ -1,0 +1,19 @@
+---
+title: Per-artifact architecture — universal click dispatch
+---
+sequenceDiagram
+  autonumber
+  actor User
+  participant SrcComp as Source component<br/>(any: PrepareEditor,<br/>JsonViewer, ListPage,<br/>etc.)
+  participant Resolver as Generic Resolver
+  participant Registries as registries
+  participant TgtComp as Target component<br/>(picked by kind)
+
+  User->>SrcComp: clicks a reference<br/>(symbol in code body,<br/>value in tree, name in list)
+  Note over SrcComp: locate the matching ref<br/>SymbolRef by line/col<br/>(in CodeBodySpec) or<br/>by JSON Pointer<br/>(in JsonSchemaWithRefs),<br/>or a flat string field<br/>(prompt_name, tool_names)
+  SrcComp->>Resolver: (kind, name)
+  Resolver->>Registries: registries[kind][name]
+  Registries-->>Resolver: ArtifactRegistration.spec
+  Resolver->>Resolver: COMPONENT_BY_KIND[kind]
+  Resolver->>TgtComp: render(spec)
+  TgtComp-->>User: shown<br/>(modal, side panel,<br/>page nav, hover preview, …)

@@ -1,0 +1,33 @@
+---
+title: Per-artifact architecture — system overview (code ↔ spec ↔ registry ↔ API ↔ UI)
+---
+flowchart TB
+  subgraph CODE["CODE"]
+    F["llm_pipelines/&lt;kind&gt;/&lt;file&gt;.py"]
+  end
+
+  subgraph SPEC["SPEC LAYER (typed translation contract)"]
+    direction LR
+    AS["Per-kind ArtifactSpec subclasses<br/>(ConstantSpec, EnumSpec,<br/>SchemaSpec, TableSpec, ToolSpec,<br/>StepSpec, ExtractionSpec, ReviewSpec,<br/>PipelineSpec)"]
+    BB["Reusable building blocks<br/>CodeBodySpec • JsonSchemaWithRefs •<br/>PromptData • SymbolRef"]
+  end
+
+  subgraph BACKEND["BACKEND"]
+    REG["app.state.registries[kind][name]<br/>= ArtifactRegistration{spec, obj}"]
+    API["GET /api/&lt;kind&gt;<br/>GET /api/&lt;kind&gt;/&lt;name&gt;<br/>POST /api/&lt;kind&gt;/&lt;name&gt; (edit ops)<br/>POST /api/runs"]
+  end
+
+  subgraph UI["FRONTEND"]
+    direction LR
+    RES["Generic Resolver<br/>(kind, name) → component"]
+    COMP["Components keyed by kind (dispatch targets)<br/>ConstantModal, EnumEditor,<br/>SchemaEditor, TableEditor, ToolEditor,<br/>StepEditor, ExtractionEditor,<br/>ReviewEditor, PipelineEditor<br/><br/>Generic composition pieces (used inside above)<br/>PrepareEditor / RunEditor (Monaco wrappers),<br/>PromptEditor (used inside StepEditor),<br/>JsonViewer / JsonEditor"]
+  end
+
+  F  -- "parse: libcst static analysis<br/>+ class introspection" --> AS
+  AS -- composed of --> BB
+  AS --> REG
+  REG --> API
+  API -- "GET" --> RES
+  RES --> COMP
+  COMP -- "user edits → spec diff" --> API
+  API -- "libcst codegen" --> F
