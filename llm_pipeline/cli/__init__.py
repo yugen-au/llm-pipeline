@@ -41,6 +41,11 @@ def main() -> None:
 
         sys.exit(build.cli_main(argv[1:]))
 
+    if argv and argv[0] == "pull":
+        from llm_pipeline.cli import pull
+
+        sys.exit(pull.cli_main(argv[1:]))
+
     if not argv or argv[0] in ("-h", "--help"):
         # No subcommand or top-level help → show full subcommand list,
         # including both new and legacy commands.
@@ -66,13 +71,18 @@ def _print_top_level_help() -> None:
         "usage: llm-pipeline <subcommand> [options...]\n"
         "\n"
         "Subcommands:\n"
-        "  generate  Generate llm_pipelines/_variables/_*.py "
-        "PromptVariables files from YAML\n"
+        "  generate  YAML -> llm_pipelines/_variables/_*.py codegen "
+        "(idempotent)\n"
+        "  build     Discover pipelines + offline code/YAML alignment "
+        "validation\n"
+        "  pull      Phoenix -> YAML for fields Phoenix owns "
+        "(message text, model)\n"
         "  ui        Start the UI server\n"
-        "  build     Validate code/YAML/Phoenix alignment + push "
-        "code-derived fields to Phoenix\n"
         "  eval      Run an evaluation dataset\n"
         "  stop      Stop a running UI server\n"
+        "\n"
+        "Typical workflow: pull -> generate -> build -> push (push "
+        "lands in a follow-up).\n"
         "\n"
         "Run 'llm-pipeline <subcommand> --help' for subcommand-"
         "specific options."
