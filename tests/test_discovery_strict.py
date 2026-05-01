@@ -83,7 +83,7 @@ class TestDiscoverFromConventionStrict:
         # Force the discovery walker to find ONLY our tmp dir (not the
         # repo's own llm_pipelines/).
         monkeypatch.setattr(
-            "llm_pipeline.discovery.find_convention_dirs",
+            "llm_pipeline.discovery.loading.find_convention_dirs",
             lambda include_package=True: [base],
         )
 
@@ -118,7 +118,7 @@ class TestDiscoverFromEntryPointsStrict:
         )
 
         monkeypatch.setattr(
-            "llm_pipeline.discovery.importlib.metadata.entry_points",
+            "llm_pipeline.discovery.entry_points.importlib.metadata.entry_points",
             lambda group=None: [bad],
         )
         with pytest.raises(RuntimeError, match="broken"):
@@ -129,7 +129,7 @@ class TestDiscoverFromEntryPointsStrict:
         bad = _FakeEntryPoint("not_a_pipeline", payload=int)
 
         monkeypatch.setattr(
-            "llm_pipeline.discovery.importlib.metadata.entry_points",
+            "llm_pipeline.discovery.entry_points.importlib.metadata.entry_points",
             lambda group=None: [bad],
         )
         with pytest.raises(TypeError, match="not a Pipeline|not_a_pipeline"):
@@ -140,7 +140,7 @@ class TestDiscoverFromEntryPointsStrict:
             "broken", payload=ImportError("synthetic load failure"),
         )
         monkeypatch.setattr(
-            "llm_pipeline.discovery.importlib.metadata.entry_points",
+            "llm_pipeline.discovery.entry_points.importlib.metadata.entry_points",
             lambda group=None: [bad],
         )
         with caplog.at_level(logging.WARNING):

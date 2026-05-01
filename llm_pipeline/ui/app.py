@@ -311,6 +311,15 @@ def create_app(
         **(introspection_registry or {}),
     }
 
+    # Per-kind ArtifactRegistration container. Phase C.2.a wires the
+    # empty shape so consumers can be migrated incrementally; the
+    # per-kind walkers in Phase C.2.b populate it during discovery
+    # alongside the legacy ``pipeline_registry`` /
+    # ``_AUTO_GENERATE_REGISTRY`` paths above. See
+    # ``.claude/plans/per-artifact-architecture.md`` (sections 7-9).
+    from llm_pipeline.discovery import init_empty_registries
+    app.state.registries = init_empty_registries()
+
     # Sync pipeline visibility (draft/published) to DB
     _sync_pipeline_visibility(app.state.engine, list(app.state.pipeline_registry.keys()))
 
