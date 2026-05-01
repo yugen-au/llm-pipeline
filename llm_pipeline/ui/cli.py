@@ -580,8 +580,8 @@ def _run_build(args: argparse.Namespace) -> None:
             )
         sys.exit(1)
 
-    # Step 2: phoenix_validator in build mode. Throws on any
-    # code↔YAML↔Phoenix misalignment.
+    # Step 2: offline alignment validator. Throws on any code↔YAML
+    # misalignment.
     from llm_pipeline.prompts.phoenix_validator import (
         PhoenixValidationFailed,
         validate_phoenix_alignment,
@@ -591,8 +591,6 @@ def _run_build(args: argparse.Namespace) -> None:
         validate_phoenix_alignment(
             introspection_registry,
             prompts_dir,
-            prompt_client=prompt_client,
-            mode="build",
         )
     except PhoenixValidationFailed as exc:
         print(f"\n{exc}\n", file=sys.stderr)

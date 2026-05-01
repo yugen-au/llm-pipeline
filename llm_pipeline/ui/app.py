@@ -102,23 +102,28 @@ def _wire_phoenix(
                 exc,
             )
 
-    # Dry-run validator. Phoenix-side checks are skipped if the prompt
-    # client failed to construct above; code-side checks always run.
+    # Offline alignment validator. The validator is now strict (always
+    # raises on misalignment) — UI boot stays lenient by catching the
+    # raise and logging a warning. Step 7 of the CLI refactor replaces
+    # this with a proper dry-run chain (generate / build / pull / push)
+    # gated on ``args.dev``.
     if prompts_dir is not None and introspection_registry:
         from llm_pipeline.prompts.phoenix_validator import (
+            PhoenixValidationFailed,
             validate_phoenix_alignment,
         )
 
         try:
-            validate_phoenix_alignment(
-                introspection_registry,
-                prompts_dir,
-                prompt_client=prompt_client,
-                mode="dry-run",
+            validate_phoenix_alignment(introspection_registry, prompts_dir)
+        except PhoenixValidationFailed as exc:
+            logger.warning(
+                "UI boot found code↔YAML misalignment(s):\n%s\n"
+                "Run `uv run llm-pipeline build` to surface and fix.",
+                exc,
             )
         except Exception:
             logger.exception(
-                "Phoenix dry-run validation crashed; continuing UI boot",
+                "Alignment validator crashed; continuing UI boot",
             )
 
 

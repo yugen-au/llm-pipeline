@@ -1,55 +1,37 @@
-"""Phoenix-aware build-time validator.
+"""Offline alignment validator (code ↔ YAML ↔ pydantic-ai).
 
-Runs at ``uv run llm-pipeline build`` (write mode) and on ``ui`` boot
-(dry-run mode). Validates the alignment between code (LLMStepNode
-subclasses + PromptVariables registry), the YAML on disk
-(``llm-pipeline-prompts/{step_name}.yaml``), and Phoenix.
-
-There is **no opt-out**. The opt-out for tests / CI / dev iteration is
-simply not running the validator (don't call ``build``; the framework
-itself never invokes this module at import time). Production /
-pre-deploy is the only context that runs ``build``; if anything is
-misaligned the deploy fails.
+Runs at ``uv run llm-pipeline build``. Validates the alignment
+between code (LLMStepNode subclasses + PromptVariables registry) and
+the YAML on disk (``llm-pipeline-prompts/{step_name}.yaml``). All
+checks are offline — no Phoenix interaction. Phoenix-side state
+(prompt presence, etc.) is reconciled by ``llm-pipeline pull`` /
+``push`` independently; this validator's job is to catch
+misalignments in the user's source-of-truth files before they hit
+Phoenix.
 
 Strictness mirrors the node / pipeline validators we ship at
-``__init_subclass__`` time:
+``__init_subclass__`` time. Errors are accumulated across every step
+in every registered pipeline, then a single
+``PhoenixValidationFailed`` is raised at the end. Devs see the whole
+picture, not the first failure.
 
-- Code-side structural checks fire first (registry presence, YAML
-  presence, message-shape, placeholder bijection, model recognised
-  by pydantic-ai).
-- Phoenix-side checks fire after (Phoenix prompt presence).
-- Errors are accumulated across every step in every registered
-  pipeline, then a single ``PhoenixValidationFailed`` is raised at the
-  end. Devs see the whole picture, not the first failure.
-
-Modes
------
-
-``build`` — production push: throws ``PhoenixValidationFailed`` on any
-error. Used by the new ``llm-pipeline build`` subcommand. Phoenix
-unreachable is fatal.
-
-``dry-run`` — used by ``llm-pipeline ui`` boot: runs the same checks,
-but never raises. Errors are surfaced via ``logger.warning``. UI
-keeps booting either way. Phoenix unreachable is logged and skipped.
+The file is named ``phoenix_validator`` because the alignment it
+verifies is what Phoenix expects (placeholder ↔ variable_definitions,
+pydantic-ai-compatible model strings). It does not, however, talk to
+Phoenix.
 """
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from llm_pipeline.prompts.models import (
     ModelStringError,
     Prompt,
-)
-from llm_pipeline.prompts.phoenix_client import (
-    PhoenixError,
-    PhoenixPromptClient,
-    PromptNotFoundError,
 )
 from llm_pipeline.prompts.registration import iter_step_classes
 from llm_pipeline.prompts.utils import extract_variables_from_content
@@ -77,7 +59,6 @@ __all__ = [
     "ModelNotRecognisedError",
     "PromptMessagesShapeError",
     "PromptVariableDriftError",
-    "PhoenixPromptMissingError",
     "AutoGenerateExpressionError",
 ]
 
@@ -163,10 +144,6 @@ class PromptVariableDriftError(PhoenixValidationError):
     """
 
 
-class PhoenixPromptMissingError(PhoenixValidationError):
-    """Phoenix has no prompt with this step's name."""
-
-
 class AutoGenerateExpressionError(PhoenixValidationError):
     """An ``auto_vars`` expression failed build-time validation.
 
@@ -247,49 +224,29 @@ class PhoenixValidationReport:
 # ---------------------------------------------------------------------------
 
 
-Mode = Literal["build", "dry-run"]
-
-
 def validate_phoenix_alignment(
     introspection_registry: dict[str, type["Pipeline"]],
     prompts_dir: Path,
-    *,
-    prompt_client: PhoenixPromptClient | None,
-    mode: Mode = "build",
 ) -> PhoenixValidationReport:
-    """Validate every Step's code↔YAML↔Phoenix alignment.
+    """Validate every Step's code↔YAML alignment.
+
+    All checks are offline. ``PhoenixValidationFailed`` is raised at
+    the end if any per-step error was recorded. Callers (UI startup
+    in dev mode, etc.) that want non-fatal behavior should catch
+    that exception themselves.
 
     Args:
         introspection_registry: ``pipeline_name -> Pipeline subclass``
             map (the same registry the runtime uses).
         prompts_dir: Directory holding ``{step_name}.yaml`` files.
-        prompt_client: Phoenix client. If ``None`` and ``mode`` is
-            ``build``, Phoenix is unreachable and we raise. In
-            ``dry-run``, Phoenix-side checks are skipped (a single
-            warning is logged).
-        mode: ``build`` (raise on any error at the end) or
-            ``dry-run`` (log warnings only).
 
     Returns:
-        ``PhoenixValidationReport`` carrying per-step results.
+        ``PhoenixValidationReport`` carrying per-step results when
+        all checks pass.
 
     Raises:
-        ``PhoenixValidationFailed`` in ``build`` mode if any error
-        was recorded.
+        ``PhoenixValidationFailed`` if any error was recorded.
     """
-    if mode not in ("build", "dry-run"):
-        raise ValueError(
-            f"validate_phoenix_alignment: mode must be "
-            f"'build' or 'dry-run', got {mode!r}"
-        )
-
-    if prompt_client is None and mode == "build":
-        raise RuntimeError(
-            "Phoenix prompt client is required in build mode. "
-            "Set PHOENIX_BASE_URL and PHOENIX_API_KEY before "
-            "running `uv run llm-pipeline build`."
-        )
-
     report = PhoenixValidationReport()
     seen: set[type] = set()
 
@@ -302,25 +259,11 @@ def validate_phoenix_alignment(
                 pipeline_name=pipeline_name,
                 step_cls=step_cls,
                 prompts_dir=prompts_dir,
-                prompt_client=prompt_client,
-                skip_phoenix_checks=(prompt_client is None),
             )
             report.steps.append(result)
 
     if not report.ok:
-        if mode == "build":
-            raise PhoenixValidationFailed(errors=report.errors)
-        # dry-run: warn loudly but keep going.
-        for err in report.errors:
-            logger.warning(
-                "[%s/%s] %s: %s",
-                err.pipeline_name, err.step_name, type(err).__name__, err,
-            )
-        logger.warning(
-            "Phoenix validation found %d issue(s). Run "
-            "`uv run llm-pipeline build` to push and verify.",
-            len(report.errors),
-        )
+        raise PhoenixValidationFailed(errors=report.errors)
 
     return report
 
@@ -335,8 +278,6 @@ def _validate_one_step(
     pipeline_name: str,
     step_cls: type,
     prompts_dir: Path,
-    prompt_client: PhoenixPromptClient | None,
-    skip_phoenix_checks: bool,
 ) -> StepValidationResult:
     """Run every check for a single step. Errors collect; never raise."""
     name = step_cls.step_name()
@@ -352,7 +293,7 @@ def _validate_one_step(
             pipeline_name=pipeline_name, step_name=name,
         ))
         # Without a registered class we can't run the bijection / shape
-        # checks meaningfully. Move to YAML / Phoenix-only checks.
+        # checks meaningfully. Move to YAML-only checks.
         prompt_cls = None
     else:
         prompt_cls = registered
@@ -398,27 +339,6 @@ def _validate_one_step(
             step_name=name,
             result=result,
         )
-
-    # 11: Phoenix prompt presence.
-    if not skip_phoenix_checks and prompt_client is not None:
-        try:
-            prompt_client.get_latest(name)
-        except PromptNotFoundError:
-            result.errors.append(PhoenixPromptMissingError(
-                f"Phoenix has no prompt named {name!r}. Run "
-                f"`uv run llm-pipeline build` to push the YAML, or "
-                f"create the prompt manually in Phoenix Playground.",
-                pipeline_name=pipeline_name, step_name=name,
-            ))
-        except PhoenixError as exc:
-            # Phoenix transport failure — surface it like a missing
-            # prompt; treat as fatal in build mode (the validator
-            # entry point already raises if mode == build and the
-            # client is missing).
-            result.errors.append(PhoenixPromptMissingError(
-                f"Phoenix lookup failed for prompt {name!r}: {exc}",
-                pipeline_name=pipeline_name, step_name=name,
-            ))
 
     return result
 
