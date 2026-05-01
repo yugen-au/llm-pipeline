@@ -62,7 +62,9 @@ from llm_pipeline.codegen.transformers import (
 __all__ = [
     "CodegenError",
     "apply_instructions_delta",
+    "edit_code_body",
     "generate_prompt_variables",
+    "write_code_body",
 ]
 
 
@@ -590,3 +592,186 @@ def _build_prompt_variables_module(
             f"generated source for {prompt_name!r} failed to parse: "
             f"{exc}"
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# Code-body editing — Edit-tool / Write-tool style contracts
+# ---------------------------------------------------------------------------
+
+
+def edit_code_body(
+    *,
+    source_file: Path,
+    class_name: str,
+    method_name: str,
+    old_source: str,
+    new_source: str,
+    root: Path | None = None,
+    write_backup: bool = True,
+) -> dict[str, Any]:
+    """Replace ``{class_name}.{method_name}``'s body with ``new_source``,
+    iff the current body matches ``old_source`` exactly.
+
+    Mirrors the Edit-tool contract: caller passes its view of the
+    current body (typically ``CodeBodySpec.source`` from a previously-
+    loaded spec) plus the desired replacement. The current body is
+    read from disk via :func:`llm_pipeline.cst_analysis.analyze_code_body`
+    (which uses libcst position metadata to scope strictly to the
+    target method's body line range) and compared verbatim against
+    ``old_source``. A mismatch — caused by concurrent file edits,
+    a stale spec, or analyser drift — raises :class:`CodegenError`
+    rather than silently overwriting.
+
+    On match, the body's line range is replaced with ``new_source``.
+    The replacement is line-level; surrounding text (signature,
+    decorators, neighbouring methods, blank lines, comments) is
+    untouched.
+
+    Path-guarded: ``source_file`` must resolve under ``root`` (or
+    the configured ``LLM_PIPELINES_ROOT``). A ``.bak`` of the
+    original is written next to the source when ``write_backup=True``
+    (best-effort).
+
+    Returns a summary::
+
+        {
+            "file": "absolute/path/to/file.py",
+            "class": "ClassName",
+            "method": "method_name",
+            "old_lines": <int>,
+            "new_lines": <int>,
+        }
+
+    Raises:
+        :class:`CodegenError` on any failure — path outside root,
+        file missing, class/method not found, ``old_source`` mismatch,
+        unparseable input file, etc.
+    """
+    return _apply_code_body(
+        source_file=source_file,
+        class_name=class_name,
+        method_name=method_name,
+        new_source=new_source,
+        old_source=old_source,
+        root=root,
+        write_backup=write_backup,
+    )
+
+
+def write_code_body(
+    *,
+    source_file: Path,
+    class_name: str,
+    method_name: str,
+    new_source: str,
+    root: Path | None = None,
+    write_backup: bool = True,
+) -> dict[str, Any]:
+    """Replace ``{class_name}.{method_name}``'s body with ``new_source``
+    unconditionally — no verification of the current body.
+
+    Mirrors the Write-tool contract for cases where the caller
+    intentionally overwrites without knowing or caring about the
+    prior state — code generation, repair flows, initial seeding.
+    Same path-guard / backup / line-level splice plumbing as
+    :func:`edit_code_body`.
+
+    Returns the same summary shape as :func:`edit_code_body`
+    (``old_lines`` reports the count of lines actually replaced).
+    """
+    return _apply_code_body(
+        source_file=source_file,
+        class_name=class_name,
+        method_name=method_name,
+        new_source=new_source,
+        old_source=None,
+        root=root,
+        write_backup=write_backup,
+    )
+
+
+def _apply_code_body(
+    *,
+    source_file: Path,
+    class_name: str,
+    method_name: str,
+    new_source: str,
+    old_source: str | None,
+    root: Path | None,
+    write_backup: bool,
+) -> dict[str, Any]:
+    """Shared core for :func:`edit_code_body` / :func:`write_code_body`.
+
+    The only difference between the two is whether ``old_source`` is
+    verified before the swap. Locating the body's line range,
+    splicing, and writing are identical.
+    """
+    from llm_pipeline.cst_analysis import (
+        AnalysisError,
+        analyze_code_body,
+    )
+    from llm_pipeline.specs import CodeBodySpec
+
+    resolved = _guard_or_raise(source_file, root)
+    if not resolved.exists():
+        raise CodegenError(f"source file does not exist: {resolved}")
+
+    text = resolved.read_text(encoding="utf-8")
+
+    try:
+        spec: CodeBodySpec = analyze_code_body(
+            source=text,
+            function_qualname=f"{class_name}.{method_name}",
+            resolver=lambda _module, _symbol: None,
+        )
+    except AnalysisError as exc:
+        raise CodegenError(
+            f"could not locate {class_name}.{method_name} in "
+            f"{resolved}: {exc}"
+        ) from exc
+
+    if old_source is not None and spec.source != old_source:
+        raise CodegenError(
+            f"old_source does not match the current body of "
+            f"{class_name}.{method_name} in {resolved}. The file may "
+            f"have been modified since the spec was loaded; refetch "
+            f"the spec and retry."
+        )
+
+    new_text = _splice_body(text, spec, new_source)
+
+    # Backup before write — best-effort, non-blocking on failure.
+    if write_backup:
+        bak = resolved.with_suffix(resolved.suffix + ".bak")
+        try:
+            shutil.copy2(resolved, bak)
+        except OSError:
+            pass
+
+    resolved.write_text(new_text, encoding="utf-8")
+
+    return {
+        "file": str(resolved),
+        "class": class_name,
+        "method": method_name,
+        "old_lines": len(spec.source.splitlines(keepends=True)),
+        "new_lines": len(new_source.splitlines(keepends=True)),
+    }
+
+
+def _splice_body(text: str, spec: "CodeBodySpec", new_source: str) -> str:  # noqa: F821
+    """Replace the line range ``spec`` describes with ``new_source``.
+
+    The original body occupies ``len(spec.source.splitlines(keepends=True))``
+    lines starting at ``spec.line_offset_in_file`` (0-indexed).
+    Everything outside that range — signature, decorators,
+    neighbouring methods, surrounding text — passes through verbatim.
+
+    Caller is responsible for newline consistency at the boundary:
+    if the original body ended with a newline, ``new_source``
+    typically should too; mirroring the Edit-tool contract.
+    """
+    lines = text.splitlines(keepends=True)
+    start = spec.line_offset_in_file
+    end = start + len(spec.source.splitlines(keepends=True))
+    return "".join(lines[:start]) + new_source + "".join(lines[end:])

@@ -24,7 +24,9 @@ the API surface.
 from llm_pipeline.codegen.api import (
     CodegenError,
     apply_instructions_delta,
+    edit_code_body,
     generate_prompt_variables,
+    write_code_body,
 )
 from llm_pipeline.codegen.io import (
     CodegenPathError,
@@ -40,7 +42,9 @@ from llm_pipeline.codegen.io import (
 __all__ = [
     # Public API
     "apply_instructions_delta",
+    "edit_code_body",
     "generate_prompt_variables",
+    "write_code_body",
     # Errors
     "CodegenError",
     "CodegenPathError",
