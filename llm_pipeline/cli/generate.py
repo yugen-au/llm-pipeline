@@ -1,8 +1,9 @@
-"""``llm-pipeline generate`` — YAML → ``_variables/_*.py`` codegen.
+"""``llm-pipeline generate`` — YAML → step-file ``XPrompt`` upsert.
 
-Walks ``--prompts-dir`` for ``*.yaml`` files; for each, generates the
-matching ``_<name>.py`` PromptVariables file in ``--output-dir``.
-Idempotent: a file unchanged on disk is left alone (same mtime).
+Walks ``--prompts-dir`` for ``*.yaml`` files; for each, upserts the
+matching ``XPrompt(PromptVariables)`` class inside the paired
+``<steps-dir>/<prompt_name>.py`` file. Idempotent: a step file
+whose existing ``XPrompt`` class matches the YAML is left alone.
 
 Public surface:
 
@@ -54,7 +55,7 @@ __all__ = [
 
 
 _DEFAULT_PROMPTS_DIR = Path("./llm-pipeline-prompts")
-_DEFAULT_OUTPUT_DIR = Path("./llm_pipelines/_variables")
+_DEFAULT_STEPS_DIR = Path("./llm_pipelines/steps")
 
 
 @dataclass(frozen=True)
@@ -62,19 +63,20 @@ class GenerateConfig:
     """Inputs to a generate run.
 
     ``prompts_dir`` is the directory of ``*.yaml`` source files.
-    ``output_dir`` is where generated ``_<name>.py`` files are
-    written; the directory is created if missing, and a empty
-    ``__init__.py`` is added if absent (so Python sees it as a
-    package).
+    ``steps_dir`` is the directory holding the paired step files;
+    each YAML's ``name`` field maps 1:1 to ``<steps_dir>/<name>.py``.
+    The directory must already exist — generate doesn't scaffold
+    new step files, only upserts the ``XPrompt`` class inside
+    existing ones.
 
     ``dry_run=True`` does the codegen + diff without writing — the
     result still surfaces "would-write" file paths in
-    ``files_written`` so the UI startup gate can detect stale
-    variables files without mutating the working tree.
+    ``files_written`` so the UI startup gate can detect stale step
+    files without mutating the working tree.
     """
 
     prompts_dir: Path
-    output_dir: Path
+    steps_dir: Path
     dry_run: bool = False
 
 
@@ -93,16 +95,18 @@ class GenerateResult:
 
 
 def run(config: GenerateConfig) -> GenerateResult:
-    """Generate ``_<name>.py`` files from every YAML in ``prompts_dir``.
+    """Upsert ``XPrompt`` classes into step files for every YAML in ``prompts_dir``.
 
     Per-file errors are collected into the result, NOT raised — the
     caller can decide whether one bad YAML aborts the whole run.
-    Top-level errors (missing prompts_dir, unwritable output_dir)
-    raise :class:`FileNotFoundError` / :class:`OSError`.
+    Top-level errors (missing prompts_dir, missing steps_dir) raise
+    :class:`FileNotFoundError`.
 
-    The codegen path-guard is satisfied by passing ``output_dir`` as
-    the ``root`` to the codegen call — every generated file resolves
-    under it.
+    Each YAML's ``name`` field resolves to ``<steps_dir>/<name>.py``;
+    that file must already exist — a YAML without a paired step is
+    treated as stale and surfaced via ``files_failed``. The
+    codegen path-guard uses the parent of ``steps_dir`` as the root
+    so the upsert can read/write the step file itself.
     """
     result = GenerateResult()
 
@@ -112,17 +116,20 @@ def run(config: GenerateConfig) -> GenerateResult:
             f"prompts directory not found: {prompts_dir}"
         )
 
+    steps_dir = config.steps_dir.expanduser().resolve()
+    if not steps_dir.is_dir():
+        raise FileNotFoundError(
+            f"steps directory not found: {steps_dir}. "
+            f"Generate upserts into existing step files; create the "
+            f"directory and at least one step before running generate."
+        )
+
+    # Path-guard root for codegen: the parent of ``steps_dir`` (the
+    # convention dir, ``llm_pipelines/``). Lets each step file
+    # resolve under root.
+    codegen_root = steps_dir.parent
+
     from llm_pipeline._dry_run import dry_run_mode
-
-    output_dir = config.output_dir.expanduser().resolve()
-
-    # Bookkeeping side-effects (mkdir, seed __init__.py) are skipped
-    # in dry-run; the codegen leaf check handles file writes itself.
-    if not config.dry_run:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        init_file = output_dir / "__init__.py"
-        if not init_file.exists():
-            init_file.write_text("", encoding="utf-8")
 
     with dry_run_mode(enabled=config.dry_run):
         for yaml_path in sorted(prompts_dir.glob("*.yaml")):
@@ -131,22 +138,22 @@ def run(config: GenerateConfig) -> GenerateResult:
                 result.files_failed.append((yaml_path, parse_error))
                 continue
 
-            out = output_dir / f"_{prompt_name}.py"
+            step_file = steps_dir / f"{prompt_name}.py"
             try:
                 written = generate_prompt_variables(
                     prompt_name=prompt_name,
                     variable_definitions=var_defs,
-                    output_path=out,
-                    root=output_dir,
+                    step_file=step_file,
+                    root=codegen_root,
                 )
             except CodegenError as exc:
-                result.files_failed.append((out, str(exc)))
+                result.files_failed.append((step_file, str(exc)))
                 continue
 
             if written:
-                result.files_written.append(out)
+                result.files_written.append(step_file)
             else:
-                result.files_unchanged.append(out)
+                result.files_unchanged.append(step_file)
 
     return result
 
@@ -156,8 +163,8 @@ def add_subparser(subparsers: Any) -> None:
     p = subparsers.add_parser(
         "generate",
         help=(
-            "Generate llm_pipelines/_variables/_*.py PromptVariables "
-            "files from YAML prompts. Idempotent."
+            "Upsert XPrompt(PromptVariables) classes into step files "
+            "from YAML prompts. Idempotent."
         ),
     )
     _add_arguments(p)
@@ -169,9 +176,9 @@ def cli_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="llm-pipeline generate",
         description=(
-            "Generate llm_pipelines/_variables/_*.py PromptVariables "
-            "files from YAML prompts. Idempotent — re-runs are no-ops "
-            "when nothing has changed."
+            "Upsert XPrompt(PromptVariables) classes into step files "
+            "from YAML prompts. Idempotent — re-runs are no-ops when "
+            "the existing class already matches the YAML."
         ),
     )
     _add_arguments(parser)
@@ -195,12 +202,13 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     parser.add_argument(
-        "--output-dir",
+        "--steps-dir",
         type=Path,
         default=None,
         help=(
-            "Output directory for generated _*.py files. Defaults "
-            f"to {_DEFAULT_OUTPUT_DIR}."
+            "Directory holding paired step files. Each YAML's name "
+            "field maps to <steps-dir>/<name>.py. Defaults to "
+            f"{_DEFAULT_STEPS_DIR}."
         ),
     )
     parser.add_argument(
@@ -217,11 +225,11 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
 def _main(args: argparse.Namespace) -> int:
     """Build a GenerateConfig from argparse args, run, print, return code."""
     prompts_dir = args.prompts_dir or _DEFAULT_PROMPTS_DIR
-    output_dir = args.output_dir or _DEFAULT_OUTPUT_DIR
+    steps_dir = args.steps_dir or _DEFAULT_STEPS_DIR
 
     config = GenerateConfig(
         prompts_dir=prompts_dir,
-        output_dir=output_dir,
+        steps_dir=steps_dir,
         dry_run=args.dry_run,
     )
 

@@ -174,10 +174,11 @@ def _preflight_check(args: argparse.Namespace) -> None:
     issues: list[str] = []
 
     with dry_run_mode():
-        # Generate — surfaces stale variables files.
+        # Generate — surfaces step files whose XPrompt class is
+        # stale relative to YAML.
         gen_cfg = generate.GenerateConfig(
             prompts_dir=prompts_dir,
-            output_dir=Path("./llm_pipelines/_variables"),
+            steps_dir=Path("./llm_pipelines/steps"),
             dry_run=True,
         )
         try:

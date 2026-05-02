@@ -81,7 +81,7 @@ def _print_top_level_help() -> None:
         "usage: llm-pipeline <subcommand> [options...]\n"
         "\n"
         "Subcommands:\n"
-        "  generate  YAML -> llm_pipelines/_variables/_*.py codegen "
+        "  generate  YAML -> upsert XPrompt class in step files "
         "(idempotent)\n"
         "  build     Discover pipelines + offline code/YAML alignment "
         "validation\n"
