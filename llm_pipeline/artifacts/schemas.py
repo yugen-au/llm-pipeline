@@ -29,6 +29,7 @@ from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_SCHEMA
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -36,7 +37,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["SchemaBuilder", "SchemaSpec", "SchemasWalker"]
+__all__ = ["MANIFEST", "SchemaBuilder", "SchemaSpec", "SchemasWalker"]
 
 
 class SchemaSpec(ArtifactSpec):
@@ -82,3 +83,13 @@ class SchemasWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_SCHEMA,
+    subfolder="schemas",
+    level=3,
+    spec_cls=SchemaSpec,
+    fields_cls=None,
+    walker=SchemasWalker(),
+)

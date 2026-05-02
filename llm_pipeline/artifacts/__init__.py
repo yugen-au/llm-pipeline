@@ -1,25 +1,17 @@
-"""Per-artifact spec primitives.
+"""Per-artifact spec primitives + per-kind manifest aggregation.
 
-This package defines the typed contracts used by the code <-> UI
-translation layer. Per-kind ``ArtifactSpec`` subclasses carry
-everything the UI needs to render an artifact and everything the
-libcst hot-swap needs to translate UI edits back into code.
+Each ``llm_pipeline.artifacts.{kind}`` module owns its
+:class:`ArtifactSpec` subclass, optional ``Fields`` routing class,
+:class:`SpecBuilder` subclass, :class:`Walker` subclass, and a
+module-level ``MANIFEST: ArtifactManifest`` constant. This package's
+``__init__`` imports each kind's MANIFEST and assembles them into
+the framework-wide :data:`ARTIFACT_MANIFESTS` dict + derived views.
 
-- ``ArtifactSpec`` (base.py): common base for every per-kind subclass.
-- Building blocks (blocks.py): ``SymbolRef``, ``CodeBodySpec``,
-  ``JsonSchemaWithRefs``, ``PromptData``. Reusable across specs.
-- Per-kind subclasses: ``ConstantSpec``, ``EnumSpec``,
-  ``SchemaSpec``, ``ToolSpec``, ``StepSpec``, ``ExtractionSpec``,
-  ``ReviewSpec``. Each lives in its own module.
-- ``ArtifactRegistration`` (registration.py): pairs a spec with its
-  runtime object — registry value type.
-- Builders (builders.py): per-kind functions that introspect a
-  loaded class/value and produce a populated spec.
-- Kind constants (kinds.py): ``KIND_*`` strings and ``LEVEL_BY_KIND``
-  mapping.
+Adding a new kind = create the kind file (with spec / fields /
+builder / walker / MANIFEST) and add one import line below.
 
-See ``.claude/plans/per-artifact-architecture.md`` for the full
-design.
+The :class:`ArtifactSpec` ABC + foundation modules live in
+:mod:`llm_pipeline.artifacts.base`.
 """
 from llm_pipeline.artifacts.base import (
     ArtifactField,
@@ -36,9 +28,7 @@ from llm_pipeline.artifacts.base.blocks import (
     PromptDataFields,
     PromptVariableDefs,
 )
-from llm_pipeline.artifacts.constants import ConstantSpec
-from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
-from llm_pipeline.artifacts.extractions import ExtractionFields, ExtractionSpec
+from llm_pipeline.artifacts.base.issues import flatten_artifact_issues
 from llm_pipeline.artifacts.base.kinds import (
     ALL_KINDS,
     KIND_CONSTANT,
@@ -51,28 +41,117 @@ from llm_pipeline.artifacts.base.kinds import (
     KIND_TABLE,
     KIND_TOOL,
 )
-# ``LEVEL_BY_KIND`` is owned by :data:`llm_pipeline.discovery.manifest`.
-# It's NOT re-exported here — re-exporting it would create an import
-# cycle (manifest → walkers → specs.X submodules → specs/__init__,
-# all hitting partially-initialised modules). Callers that need the
-# level index import from the manifest module directly.
-from llm_pipeline.artifacts.base.issues import flatten_artifact_issues
-from llm_pipeline.artifacts.pipelines import NodeBindingSpec, PipelineSpec
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.registration import ArtifactRegistration
+from llm_pipeline.artifacts.base.walker import Walker
+
+# Per-kind imports — each module exports its spec + fields + builder
+# + walker + module-level ``MANIFEST`` constant. Listed in dependency-
+# tier order for readability; the actual load order is derived from
+# ``MANIFEST.level`` in :data:`LOAD_ORDER` below.
+from llm_pipeline.artifacts import (
+    constants as _constants,
+    enums as _enums,
+    extractions as _extractions,
+    pipelines as _pipelines,
+    reviews as _reviews,
+    schemas as _schemas,
+    steps as _steps,
+    tables as _tables,
+    tools as _tools,
+)
+from llm_pipeline.artifacts.constants import ConstantSpec
+from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
+from llm_pipeline.artifacts.extractions import ExtractionFields, ExtractionSpec
+from llm_pipeline.artifacts.pipelines import (
+    EdgeSpec,
+    NodeBindingSpec,
+    PipelineFields,
+    PipelineSpec,
+    SourceSpec,
+    WiringSpec,
+)
 from llm_pipeline.artifacts.reviews import ReviewFields, ReviewSpec
 from llm_pipeline.artifacts.schemas import SchemaSpec
 from llm_pipeline.artifacts.steps import StepFields, StepSpec
 from llm_pipeline.artifacts.tables import IndexSpec, TableSpec
-from llm_pipeline.artifacts.tools import ToolSpec
+from llm_pipeline.artifacts.tools import ToolFields, ToolSpec
 
-# Note: builders live in ``llm_pipeline.artifacts.builders`` and are
-# imported directly from there (e.g. ``from llm_pipeline.artifacts.builders
-# import build_step_spec``). They depend on
-# ``llm_pipeline.cst_analysis`` which itself depends on the
-# building-block types here — re-exporting builders from this
-# package's ``__init__`` would create a circular import. Phase C.2
-# walkers and any other consumers should import them from the
-# submodule directly.
+
+# ---------------------------------------------------------------------------
+# Manifest aggregation
+# ---------------------------------------------------------------------------
+
+
+_ALL_MANIFESTS = (
+    _constants.MANIFEST,
+    _enums.MANIFEST,
+    _schemas.MANIFEST,
+    _tables.MANIFEST,
+    _tools.MANIFEST,
+    _extractions.MANIFEST,
+    _reviews.MANIFEST,
+    _steps.MANIFEST,
+    _pipelines.MANIFEST,
+)
+
+
+# Single source of truth. Adding a new kind = one entry in the
+# tuple above (after creating the kind file with its MANIFEST).
+ARTIFACT_MANIFESTS: dict[str, ArtifactManifest] = {
+    m.kind: m for m in _ALL_MANIFESTS
+}
+
+
+# Derived views.
+
+LEVEL_BY_KIND: dict[str, int] = {
+    m.kind: m.level for m in ARTIFACT_MANIFESTS.values()
+}
+
+# Subfolder load order: by level, then by subfolder name within a
+# level (deterministic). Module-import dependencies (lower-level
+# files referenced at module-load time) are respected because levels
+# encode the dependency tier.
+LOAD_ORDER: list[str] = [
+    m.subfolder
+    for m in sorted(
+        ARTIFACT_MANIFESTS.values(), key=lambda m: (m.level, m.subfolder),
+    )
+]
+
+WALKERS_BY_SUBFOLDER: dict[str, list[Walker]] = {
+    m.subfolder: [m.walker] for m in ARTIFACT_MANIFESTS.values()
+}
+
+
+# Module-load-time sanity check: catch drift between the manifest
+# and the KIND_* / ALL_KINDS constants.
+def _check_manifest_consistency() -> None:
+    manifest_kinds = set(ARTIFACT_MANIFESTS)
+    declared_kinds = set(ALL_KINDS)
+    if manifest_kinds != declared_kinds:
+        missing_from_manifest = declared_kinds - manifest_kinds
+        missing_from_all = manifest_kinds - declared_kinds
+        details: list[str] = []
+        if missing_from_manifest:
+            details.append(
+                f"in ALL_KINDS but not ARTIFACT_MANIFESTS: "
+                f"{sorted(missing_from_manifest)}"
+            )
+        if missing_from_all:
+            details.append(
+                f"in ARTIFACT_MANIFESTS but not ALL_KINDS: "
+                f"{sorted(missing_from_all)}"
+            )
+        raise RuntimeError(
+            "ARTIFACT_MANIFESTS / ALL_KINDS drift detected — "
+            + "; ".join(details)
+        )
+
+
+_check_manifest_consistency()
+
 
 __all__ = [
     # Kind constants
@@ -98,24 +177,36 @@ __all__ = [
     "PromptDataFields",
     "PromptVariableDefs",
     "SymbolRef",
+    "Walker",
     # Per-kind subclasses
     "ConstantSpec",
+    "EdgeSpec",
     "EnumMemberSpec",
     "EnumSpec",
     "ExtractionFields",
     "ExtractionSpec",
     "IndexSpec",
     "NodeBindingSpec",
+    "PipelineFields",
     "PipelineSpec",
     "ReviewFields",
     "ReviewSpec",
     "SchemaSpec",
+    "SourceSpec",
     "StepFields",
     "StepSpec",
     "TableSpec",
+    "ToolFields",
     "ToolSpec",
+    "WiringSpec",
     # Registration wrapper
     "ArtifactRegistration",
     # Issue-collection helper
     "flatten_artifact_issues",
+    # Manifest aggregation + derived views
+    "ArtifactManifest",
+    "ARTIFACT_MANIFESTS",
+    "LEVEL_BY_KIND",
+    "LOAD_ORDER",
+    "WALKERS_BY_SUBFOLDER",
 ]

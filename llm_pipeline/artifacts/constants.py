@@ -18,6 +18,7 @@ from pydantic import Field
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_CONSTANT
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -25,7 +26,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["ConstantBuilder", "ConstantSpec", "ConstantsWalker"]
+__all__ = ["MANIFEST", "ConstantBuilder", "ConstantSpec", "ConstantsWalker"]
 
 
 class ConstantSpec(ArtifactSpec):
@@ -69,3 +70,13 @@ class ConstantsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_CONSTANT,
+    subfolder="constants",
+    level=1,
+    spec_cls=ConstantSpec,
+    fields_cls=None,
+    walker=ConstantsWalker(),
+)

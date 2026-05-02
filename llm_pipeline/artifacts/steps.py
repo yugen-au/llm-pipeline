@@ -32,10 +32,11 @@ from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs,
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_STEP
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
 
 
-__all__ = ["StepBuilder", "StepFields", "StepSpec", "StepsWalker"]
+__all__ = ["MANIFEST", "StepBuilder", "StepFields", "StepSpec", "StepsWalker"]
 
 
 class StepSpec(ArtifactSpec):
@@ -165,3 +166,13 @@ class StepsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return value.step_name()
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_STEP,
+    subfolder="steps",
+    level=4,
+    spec_cls=StepSpec,
+    fields_cls=StepFields,
+    walker=StepsWalker(),
+)

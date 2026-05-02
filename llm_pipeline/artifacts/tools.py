@@ -15,6 +15,7 @@ from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_TOOL
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -22,7 +23,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["ToolBuilder", "ToolFields", "ToolSpec", "ToolsWalker"]
+__all__ = ["MANIFEST", "ToolBuilder", "ToolFields", "ToolSpec", "ToolsWalker"]
 
 
 class ToolSpec(ArtifactSpec):
@@ -92,3 +93,13 @@ class ToolsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name, strip_suffix="Tool")
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_TOOL,
+    subfolder="tools",
+    level=3,
+    spec_cls=ToolSpec,
+    fields_cls=ToolFields,
+    walker=ToolsWalker(),
+)

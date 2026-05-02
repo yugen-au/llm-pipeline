@@ -2,7 +2,7 @@
 
 Walks every convention directory found by
 :func:`.loading.find_convention_dirs`, loads each subfolder in
-dependency order (:data:`llm_pipeline.discovery.manifest.LOAD_ORDER`),
+dependency order (:data:`llm_pipeline.artifacts.LOAD_ORDER`),
 and registers discovered ``Pipeline`` subclasses into per-pipeline
 dicts. The ``_register_enums_constants`` helper handles the *legacy*
 auto-generate registry — per-kind walkers populate the new per-kind
@@ -14,12 +14,12 @@ import inspect
 import logging
 from typing import Any, Callable, Dict, Optional, Tuple, Type
 
+from llm_pipeline.artifacts import LOAD_ORDER, WALKERS_BY_SUBFOLDER
 from llm_pipeline.discovery import loading
 from llm_pipeline.discovery.loading import (
     _load_subfolder,
     _resolve_package_name,
 )
-from llm_pipeline.discovery.manifest import LOAD_ORDER, WALKERS_BY_SUBFOLDER
 from llm_pipeline.discovery.resolver import make_resolver
 
 if False:  # type-only — no runtime import to avoid circular cost

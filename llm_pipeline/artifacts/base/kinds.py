@@ -6,11 +6,10 @@ one *kind*. Kinds are the dispatch unit on both backend (the
 
 This module declares ONLY the bare ``KIND_*`` string constants and
 the :data:`ALL_KINDS` list. Per-kind metadata — dependency level,
-subfolder name, walker, spec class, fields class — lives in
-:mod:`llm_pipeline.discovery.manifest`'s :data:`KIND_MANIFESTS`,
-the single source of truth. The ``LEVEL_BY_KIND`` derived view is
-re-exported from :mod:`llm_pipeline.artifacts` for callers that only
-need the level index.
+subfolder name, walker, spec class, fields class — lives in each
+kind's own :data:`MANIFEST` constant; :mod:`llm_pipeline.artifacts`
+aggregates them into :data:`ARTIFACT_MANIFESTS` and exports derived
+views (``LEVEL_BY_KIND``, ``LOAD_ORDER``, ``WALKERS_BY_SUBFOLDER``).
 
 ``utilities/`` is walked at discovery for side-effects (raw-file
 surfacing in the UI) but doesn't contribute a first-class kind —

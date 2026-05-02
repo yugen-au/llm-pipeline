@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_ENUM
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -21,7 +22,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["EnumBuilder", "EnumMemberSpec", "EnumSpec", "EnumsWalker"]
+__all__ = ["MANIFEST", "EnumBuilder", "EnumMemberSpec", "EnumSpec", "EnumsWalker"]
 
 
 class EnumMemberSpec(BaseModel):
@@ -92,3 +93,13 @@ class EnumsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_ENUM,
+    subfolder="enums",
+    level=2,
+    spec_cls=EnumSpec,
+    fields_cls=None,
+    walker=EnumsWalker(),
+)

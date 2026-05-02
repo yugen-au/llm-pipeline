@@ -57,10 +57,12 @@ from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_PIPELINE
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
 
 
 __all__ = [
+    "MANIFEST",
     "EdgeSpec",
     "NodeBindingSpec",
     "PipelineBuilder",
@@ -361,3 +363,13 @@ def _run_returns_end(node_cls: type, raw_nodes: list[type]) -> bool:
         return False
 
     return _has_end(return_annotation)
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_PIPELINE,
+    subfolder="pipelines",
+    level=5,
+    spec_cls=PipelineSpec,
+    fields_cls=None,
+    walker=PipelinesWalker(),
+)

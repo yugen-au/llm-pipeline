@@ -24,6 +24,7 @@ from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_REVIEW
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -31,7 +32,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["ReviewBuilder", "ReviewFields", "ReviewSpec", "ReviewsWalker"]
+__all__ = ["MANIFEST", "ReviewBuilder", "ReviewFields", "ReviewSpec", "ReviewsWalker"]
 
 
 class ReviewSpec(ArtifactSpec):
@@ -104,3 +105,13 @@ class ReviewsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name, strip_suffix="Review")
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_REVIEW,
+    subfolder="reviews",
+    level=4,
+    spec_cls=ReviewSpec,
+    fields_cls=ReviewFields,
+    walker=ReviewsWalker(),
+)

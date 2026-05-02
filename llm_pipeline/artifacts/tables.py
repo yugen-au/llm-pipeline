@@ -32,6 +32,7 @@ from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_TABLE
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -40,7 +41,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["IndexSpec", "TableBuilder", "TableSpec", "TablesWalker"]
+__all__ = ["MANIFEST", "IndexSpec", "TableBuilder", "TableSpec", "TablesWalker"]
 
 
 class IndexSpec(BaseModel):
@@ -147,3 +148,13 @@ class TablesWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_TABLE,
+    subfolder="tables",
+    level=3,
+    spec_cls=TableSpec,
+    fields_cls=None,
+    walker=TablesWalker(),
+)

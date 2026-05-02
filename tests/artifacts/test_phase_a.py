@@ -18,7 +18,6 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llm_pipeline.discovery.manifest import LEVEL_BY_KIND
 from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
 from llm_pipeline.artifacts import (
     ALL_KINDS,
@@ -31,6 +30,7 @@ from llm_pipeline.artifacts import (
     KIND_STEP,
     KIND_TABLE,
     KIND_TOOL,
+    LEVEL_BY_KIND,
     ArtifactSpec,
     CodeBodySpec,
     JsonSchemaWithRefs,

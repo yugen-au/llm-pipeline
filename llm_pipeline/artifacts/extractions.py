@@ -21,6 +21,7 @@ from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_EXTRACTION
+from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
@@ -29,6 +30,7 @@ from llm_pipeline.artifacts.base.walker import (
 
 
 __all__ = [
+    "MANIFEST",
     "ExtractionBuilder",
     "ExtractionFields",
     "ExtractionSpec",
@@ -106,3 +108,13 @@ class ExtractionsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name, strip_suffix="Extraction")
+
+
+MANIFEST = ArtifactManifest(
+    kind=KIND_EXTRACTION,
+    subfolder="extractions",
+    level=4,
+    spec_cls=ExtractionSpec,
+    fields_cls=ExtractionFields,
+    walker=ExtractionsWalker(),
+)

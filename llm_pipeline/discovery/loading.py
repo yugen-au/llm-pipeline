@@ -16,7 +16,7 @@ Strict / lenient modes apply at the per-file level:
   failures surface rather than silently drop a pipeline.
 
 The subfolder load order is owned by
-:data:`llm_pipeline.discovery.manifest.LOAD_ORDER` (derived from
+:data:`llm_pipeline.artifacts.LOAD_ORDER` (derived from
 the per-kind manifest). The ``_LOAD_ORDER`` re-export here is a
 back-compat alias for callers that already import from this
 module.
@@ -31,7 +31,7 @@ from pathlib import Path
 from types import ModuleType
 
 # Back-compat alias — the load order is owned by the manifest.
-from llm_pipeline.discovery.manifest import LOAD_ORDER as _LOAD_ORDER
+from llm_pipeline.artifacts import LOAD_ORDER as _LOAD_ORDER
 
 
 __all__ = [
