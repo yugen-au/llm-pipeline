@@ -176,7 +176,11 @@ def discover_from_convention(
             # Legacy registration paths (always run):
             if subfolder in ("enums", "constants"):
                 _register_enums_constants(modules)
-            elif subfolder == "_variables":
+            elif subfolder == "steps":
+                # PromptVariables subclasses live alongside their
+                # paired step (same file). Discovering them off step
+                # modules keeps the 1:1 pairing visible — no separate
+                # ``_variables/`` folder, no cross-file imports.
                 from llm_pipeline.prompts.discovery import (
                     discover_prompt_variables,
                 )

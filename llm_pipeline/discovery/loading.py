@@ -17,9 +17,8 @@ Strict / lenient modes apply at the per-file level:
 
 The subfolder load order (``_LOAD_ORDER``) is dependency-first:
 constants / enums first (referenced by everything), then schemas,
-then _variables (PromptVariables generated from YAML), then
-extractions, tools, steps, and finally pipelines (which compose
-all the above).
+then extractions, tools, steps, and finally pipelines (which
+compose all the above).
 """
 from __future__ import annotations
 
@@ -46,18 +45,11 @@ logger = logging.getLogger(__name__)
 
 
 # Subfolder load order (dependencies first).
-# ``_variables`` loads before ``steps`` because step files import their
-# paired ``PromptVariables`` subclass at module-import time. The
-# leading underscore is deliberate — ``_variables/`` is a private
-# folder of generated files (``llm-pipeline generate`` writes
-# ``_<name>.py`` here from the matching YAML); the underscore signals
-# "do not hand-edit" to readers.
 _LOAD_ORDER = [
     "enums",
     "constants",
     "schemas",
     "tables",
-    "_variables",
     "extractions",
     "tools",
     "steps",
