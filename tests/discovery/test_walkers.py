@@ -26,17 +26,15 @@ from sqlmodel import Field as SQLField, SQLModel
 from llm_pipeline.discovery import init_empty_registries
 from llm_pipeline.discovery.loading import load_convention_module
 from llm_pipeline.discovery.resolver import make_resolver
-from llm_pipeline.discovery.walkers import (
-    ConstantsWalker,
-    EnumsWalker,
-    ExtractionsWalker,
-    PipelinesWalker,
-    ReviewsWalker,
-    SchemasWalker,
-    StepsWalker,
-    TablesWalker,
-    ToolsWalker,
-)
+from llm_pipeline.artifacts.constants import ConstantsWalker
+from llm_pipeline.artifacts.enums import EnumsWalker
+from llm_pipeline.artifacts.extractions import ExtractionsWalker
+from llm_pipeline.artifacts.pipelines import PipelinesWalker
+from llm_pipeline.artifacts.reviews import ReviewsWalker
+from llm_pipeline.artifacts.schemas import SchemasWalker
+from llm_pipeline.artifacts.steps import StepsWalker
+from llm_pipeline.artifacts.tables import TablesWalker
+from llm_pipeline.artifacts.tools import ToolsWalker
 from llm_pipeline.graph import (
     ExtractionNode,
     LLMResultMixin,
