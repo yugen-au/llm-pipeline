@@ -22,11 +22,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from llm_pipeline.specs.blocks import (
-    CodeBodySpec,
-    JsonSchemaWithRefs,
-    PromptData,
-)
+from llm_pipeline.specs.base import ArtifactField
 
 if TYPE_CHECKING:
     from llm_pipeline.graph.spec import ValidationIssue
@@ -39,33 +35,37 @@ __all__ = ["flatten_artifact_issues"]
 def flatten_artifact_issues(spec: "ArtifactSpec") -> list["ValidationIssue"]:
     """Return every issue attached to ``spec`` and its sub-components.
 
-    Walks the known issue-bearing sub-component types
-    (:class:`CodeBodySpec`, :class:`JsonSchemaWithRefs`,
-    :class:`PromptData`) declared as fields on the per-kind
-    subclass. Returns a fresh list — callers may mutate.
+    Walks polymorphically: any value that's an :class:`ArtifactField`
+    contributes its ``issues`` plus issues nested in its own
+    sub-component fields, recursively. Lists are traversed
+    element-wise. Returns a fresh list — callers may mutate.
 
-    The walker recognises sub-components by *type*, not by field
-    name, so adding a new spec field that uses one of these
-    building blocks is automatically covered. Adding a new
-    issue-bearing building block requires updating this helper.
+    Generic — adding a new ``ArtifactField`` subclass or wrapping
+    primitive fields in one is automatically covered without
+    touching this helper.
     """
-    issues: list = list(spec.issues)
-    for field_name in type(spec).model_fields:
-        value = getattr(spec, field_name, None)
-        issues.extend(_collect_component_issues(value))
-    return issues
+    return _collect_issues(spec)
 
 
-def _collect_component_issues(value: object) -> list:
-    """Return issues from a sub-component value, or empty list."""
-    if isinstance(value, CodeBodySpec):
-        return list(value.issues)
-    if isinstance(value, JsonSchemaWithRefs):
-        return list(value.issues)
-    if isinstance(value, PromptData):
-        # PromptData carries its own issues plus a nested
-        # JsonSchemaWithRefs for variables — collect both.
+def _collect_issues(value: object) -> list:
+    """Recursively gather issues from an ``ArtifactField``-typed
+    tree, including ``list[ArtifactField]`` fields.
+
+    Skips the ``issues`` field when recursing into an
+    :class:`ArtifactField` to avoid double-counting (it's already
+    captured at the parent level).
+    """
+    if isinstance(value, ArtifactField):
         out = list(value.issues)
-        out.extend(value.variables.issues)
+        for sub_name in type(value).model_fields:
+            if sub_name == "issues":
+                continue
+            sub = getattr(value, sub_name, None)
+            out.extend(_collect_issues(sub))
+        return out
+    if isinstance(value, list):
+        out: list = []
+        for item in value:
+            out.extend(_collect_issues(item))
         return out
     return []

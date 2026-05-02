@@ -63,8 +63,11 @@ __all__ = [
     "CodegenError",
     "apply_instructions_delta",
     "edit_code_body",
+    "edit_imports",
     "generate_prompt_variables",
+    "render_import_block",
     "write_code_body",
+    "write_imports",
 ]
 
 
@@ -775,3 +778,244 @@ def _splice_body(text: str, spec: "CodeBodySpec", new_source: str) -> str:  # no
     start = spec.line_offset_in_file
     end = start + len(spec.source.splitlines(keepends=True))
     return "".join(lines[:start]) + new_source + "".join(lines[end:])
+
+
+# ---------------------------------------------------------------------------
+# Imports editing — structured, canonical-form rewrite
+# ---------------------------------------------------------------------------
+
+
+def render_import_block(block: "ImportBlock") -> str:  # noqa: F821
+    """Render an :class:`ImportBlock` to canonical Python source.
+
+    Always emits a single trailing newline. Multi-name ``import a, b``
+    statements (rare; bad style) are split into separate lines —
+    one ``import`` per artifact — as part of the canonicalisation.
+
+    Examples::
+
+        ImportBlock(module="x", artifacts=[a]) → "from x import a\\n"
+        ImportBlock(module="x", artifacts=[a, b]) → "from x import a, b\\n"
+        ImportBlock(module=None, artifacts=[a]) → "import a\\n"
+        ImportBlock(module=None, artifacts=[a, b]) → "import a\\nimport b\\n"
+        ImportArtifact(name="x", alias="y") → "x as y" (in either form)
+    """
+    if block.module is None:
+        # Bare imports: one line per artifact.
+        lines = []
+        for art in block.artifacts:
+            piece = f"import {art.name}"
+            if art.alias:
+                piece += f" as {art.alias}"
+            lines.append(piece)
+        return "\n".join(lines) + "\n"
+
+    # ``from X import a, b, c[ as ...]``
+    names: list[str] = []
+    for art in block.artifacts:
+        if art.alias:
+            names.append(f"{art.name} as {art.alias}")
+        else:
+            names.append(art.name)
+    return f"from {block.module} import {', '.join(names)}\n"
+
+
+def _imports_line_range(text: str) -> tuple[int, int] | None:
+    """Find the contiguous line range of top-level imports in ``text``.
+
+    Returns ``(start, end)`` 0-indexed-inclusive-start /
+    0-indexed-exclusive-end, or ``None`` if the file has no
+    top-level imports. The range covers from the first import's
+    first line to the last import's last line. Lines BETWEEN
+    imports — blank lines, comments, or non-import statements —
+    fall inside the range and are part of the section that
+    :func:`write_imports` replaces (intentional canonicalisation:
+    pipeline files end up with imports in one consistent block).
+    """
+    try:
+        module = cst.parse_module(text)
+    except Exception as exc:  # noqa: BLE001
+        raise CodegenError(f"failed to parse source: {exc}") from exc
+
+    wrapper = cst.MetadataWrapper(module, unsafe_skip_copy=True)
+    positions = wrapper.resolve(cst.metadata.PositionProvider)
+
+    first_line: int | None = None
+    last_line: int | None = None
+    for stmt in wrapper.module.body:
+        if not isinstance(stmt, cst.SimpleStatementLine):
+            continue
+        if not any(
+            isinstance(s, (cst.Import, cst.ImportFrom)) for s in stmt.body
+        ):
+            continue
+        pos = positions.get(stmt)
+        if pos is None:
+            continue
+        if first_line is None:
+            first_line = pos.start.line - 1  # 0-indexed
+        last_line = pos.end.line  # libcst end.line is 1-indexed-inclusive,
+                                  # so this is already exclusive in 0-index
+
+    if first_line is None or last_line is None:
+        return None
+    return (first_line, last_line)
+
+
+def edit_imports(
+    *,
+    source_file: Path,
+    old_imports: list,
+    new_imports: list,
+    root: Path | None = None,
+    write_backup: bool = True,
+) -> dict[str, Any]:
+    """Replace the file's imports section with ``new_imports``,
+    iff the file's current imports match ``old_imports`` structurally.
+
+    Edit-tool contract: ``old_imports`` is the caller's view of the
+    file's imports (typically ``spec.imports`` from a previously-
+    loaded artifact). The current imports are read from disk via
+    :func:`llm_pipeline.cst_analysis.analyze_imports` and compared
+    structurally — module + artifact names + aliases must match
+    exactly. Issue lists, refs (resolver-derived), and line offsets
+    are NOT part of the comparison; they're analyser-derived
+    metadata that varies independently of source content.
+
+    On match, the imports section's line range is replaced with
+    canonical-form rendering of ``new_imports`` (one statement per
+    line, no internal blank lines). Body of the file below the
+    imports is untouched.
+
+    Mismatch → :class:`CodegenError`, file unchanged. The UI flow
+    treats this as a 409 Conflict and prompts the user to refresh
+    the spec.
+    """
+    return _apply_imports(
+        source_file=source_file,
+        new_imports=new_imports,
+        old_imports=old_imports,
+        root=root,
+        write_backup=write_backup,
+    )
+
+
+def write_imports(
+    *,
+    source_file: Path,
+    new_imports: list,
+    root: Path | None = None,
+    write_backup: bool = True,
+) -> dict[str, Any]:
+    """Replace the file's imports section with ``new_imports``
+    unconditionally — Write-tool contract, no verification of
+    current state. Same canonicalisation + splice as
+    :func:`edit_imports`.
+    """
+    return _apply_imports(
+        source_file=source_file,
+        new_imports=new_imports,
+        old_imports=None,
+        root=root,
+        write_backup=write_backup,
+    )
+
+
+def _apply_imports(
+    *,
+    source_file: Path,
+    new_imports: list,
+    old_imports: list | None,
+    root: Path | None,
+    write_backup: bool,
+) -> dict[str, Any]:
+    """Shared core for :func:`edit_imports` / :func:`write_imports`."""
+    from llm_pipeline.cst_analysis import (
+        AnalysisError,
+        analyze_imports,
+    )
+
+    resolved = _guard_or_raise(source_file, root)
+    if not resolved.exists():
+        raise CodegenError(f"source file does not exist: {resolved}")
+
+    text = resolved.read_text(encoding="utf-8")
+
+    if old_imports is not None:
+        try:
+            current = analyze_imports(
+                source=text,
+                resolver=lambda _module, _symbol: None,
+            )
+        except AnalysisError as exc:
+            raise CodegenError(
+                f"could not analyse imports in {resolved}: {exc}"
+            ) from exc
+        if not _imports_match_structurally(current, old_imports):
+            raise CodegenError(
+                f"old_imports does not match current imports in "
+                f"{resolved}. The file may have been modified since "
+                f"the spec was loaded; refetch the spec and retry."
+            )
+
+    line_range = _imports_line_range(text)
+
+    new_section = "".join(render_import_block(b) for b in new_imports)
+
+    if line_range is None:
+        # No existing imports; for V1 we don't auto-insert at the top —
+        # caller should arrange the file to have at least one import or
+        # use a different op. (Adding header insertion is straightforward
+        # but a separate concern.)
+        if not new_imports:
+            new_text = text  # nothing to do
+        else:
+            raise CodegenError(
+                f"{resolved} has no top-level imports to replace. "
+                f"V1 of write_imports requires an existing imports "
+                f"section to splice into."
+            )
+    else:
+        start, end = line_range
+        lines = text.splitlines(keepends=True)
+        new_text = "".join(lines[:start]) + new_section + "".join(lines[end:])
+
+    if write_backup:
+        bak = resolved.with_suffix(resolved.suffix + ".bak")
+        try:
+            shutil.copy2(resolved, bak)
+        except OSError:
+            pass
+
+    resolved.write_text(new_text, encoding="utf-8")
+
+    return {
+        "file": str(resolved),
+        "old_blocks": (
+            len(old_imports) if old_imports is not None else None
+        ),
+        "new_blocks": len(new_imports),
+    }
+
+
+def _imports_match_structurally(
+    current: list,
+    expected: list,
+) -> bool:
+    """True iff ``current`` and ``expected`` describe the same imports.
+
+    Compares only the structural fields — ``module``, ``artifacts``
+    (each by ``name`` + ``alias``) — so analyser-derived metadata
+    (refs, issues, line offsets) doesn't cause spurious mismatches.
+    """
+    if len(current) != len(expected):
+        return False
+    for cur, exp in zip(current, expected):
+        if cur.module != exp.module:
+            return False
+        if len(cur.artifacts) != len(exp.artifacts):
+            return False
+        for ca, ea in zip(cur.artifacts, exp.artifacts):
+            if ca.name != ea.name or ca.alias != ea.alias:
+                return False
+    return True

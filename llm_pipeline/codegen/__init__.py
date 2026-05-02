@@ -25,8 +25,11 @@ from llm_pipeline.codegen.api import (
     CodegenError,
     apply_instructions_delta,
     edit_code_body,
+    edit_imports,
     generate_prompt_variables,
+    render_import_block,
     write_code_body,
+    write_imports,
 )
 from llm_pipeline.codegen.io import (
     CodegenPathError,
@@ -43,8 +46,11 @@ __all__ = [
     # Public API
     "apply_instructions_delta",
     "edit_code_body",
+    "edit_imports",
     "generate_prompt_variables",
+    "render_import_block",
     "write_code_body",
+    "write_imports",
     # Errors
     "CodegenError",
     "CodegenPathError",
