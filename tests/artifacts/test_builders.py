@@ -14,17 +14,17 @@ from enum import Enum
 import pytest
 from pydantic import BaseModel, Field
 
-from llm_pipeline.artifacts.builders import (
-    ConstantBuilder,
-    EnumBuilder,
-    ExtractionBuilder,
-    ReviewBuilder,
-    SchemaBuilder,
-    StepBuilder,
-    ToolBuilder,
+from llm_pipeline.artifacts.base.builder import (
     build_code_body,
     json_schema_with_refs,
 )
+from llm_pipeline.artifacts.constants import ConstantBuilder
+from llm_pipeline.artifacts.enums import EnumBuilder
+from llm_pipeline.artifacts.extractions import ExtractionBuilder
+from llm_pipeline.artifacts.reviews import ReviewBuilder
+from llm_pipeline.artifacts.schemas import SchemaBuilder
+from llm_pipeline.artifacts.steps import StepBuilder
+from llm_pipeline.artifacts.tools import ToolBuilder
 from llm_pipeline.artifacts.base.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,

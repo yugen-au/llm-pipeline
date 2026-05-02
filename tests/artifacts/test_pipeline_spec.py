@@ -35,7 +35,7 @@ from llm_pipeline.artifacts import (
     NodeBindingSpec,
     PipelineSpec,
 )
-from llm_pipeline.artifacts.builders import PipelineBuilder
+from llm_pipeline.artifacts.pipelines import PipelineBuilder
 
 
 def _resolver_noop(_module: str, _symbol: str) -> tuple[str, str] | None:
