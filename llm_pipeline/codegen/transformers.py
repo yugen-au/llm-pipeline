@@ -23,6 +23,7 @@ __all__ = [
     "AddFieldToClass",
     "FieldNotFoundError",
     "ModifyFieldOnClass",
+    "SetAttributeOnClass",
     "TransformerError",
     "TargetClassNotFoundError",
 ]
@@ -192,6 +193,91 @@ class ModifyFieldOnClass(_ClassBodyTransformer):
             ):
                 return True
         return False
+
+
+class SetAttributeOnClass(_ClassBodyTransformer):
+    """Set ``attr_name = <new_value>`` on a named class — preserves shape.
+
+    Unlike :class:`ModifyFieldOnClass` (which swaps the whole
+    statement and is AnnAssign-only), this transformer:
+
+    - Matches both ``Assign`` (``value = 3``) and ``AnnAssign``
+      (``value: int = 3``) shapes.
+    - Replaces only the right-hand-side expression — the original
+      annotation (if present) is preserved.
+    - Appends ``attr_name = <new_value>`` at the end of the class
+      body when the slot is missing and ``append_if_missing=True``
+      (default).
+
+    The new value is provided as Python source text (e.g. ``"42"``,
+    ``"'hello'"``, ``"[1, 2, 3]"``) and parsed via
+    :func:`libcst.parse_expression`. Use ``repr()`` for literals or
+    hand-build for expressions that need it.
+
+    ``visited_field`` indicates whether the slot existed before the
+    visit (``True``) or was newly appended (``False``).
+    """
+
+    def __init__(
+        self,
+        class_name: str,
+        attr_name: str,
+        new_value_literal: str,
+        *,
+        append_if_missing: bool = True,
+    ) -> None:
+        super().__init__(class_name)
+        self.attr_name = attr_name
+        self.new_value_literal = new_value_literal
+        self.append_if_missing = append_if_missing
+        self.visited_field = False
+
+    def _transform_body(
+        self,
+        original_node: cst.ClassDef,
+        updated_node: cst.ClassDef,
+    ) -> cst.ClassDef:
+        body = updated_node.body
+        if not isinstance(body, cst.IndentedBlock):
+            return updated_node
+
+        new_value_expr = cst.parse_expression(self.new_value_literal)
+        new_inner: list = []
+        for inner in body.body:
+            if isinstance(inner, cst.SimpleStatementLine):
+                new_subs: list = []
+                for sub in inner.body:
+                    if (
+                        isinstance(sub, cst.Assign)
+                        and len(sub.targets) == 1
+                        and isinstance(sub.targets[0].target, cst.Name)
+                        and sub.targets[0].target.value == self.attr_name
+                    ):
+                        sub = sub.with_changes(value=new_value_expr)
+                        self.visited_field = True
+                    elif (
+                        isinstance(sub, cst.AnnAssign)
+                        and isinstance(sub.target, cst.Name)
+                        and sub.target.value == self.attr_name
+                        and sub.value is not None
+                    ):
+                        sub = sub.with_changes(value=new_value_expr)
+                        self.visited_field = True
+                    new_subs.append(sub)
+                inner = inner.with_changes(body=new_subs)
+            new_inner.append(inner)
+
+        if not self.visited_field and self.append_if_missing:
+            new_inner.append(cst.SimpleStatementLine(body=[
+                cst.Assign(
+                    targets=[cst.AssignTarget(target=cst.Name(self.attr_name))],
+                    value=new_value_expr,
+                )
+            ]))
+
+        return updated_node.with_changes(
+            body=body.with_changes(body=new_inner),
+        )
 
 
 def collect_class_field_names(

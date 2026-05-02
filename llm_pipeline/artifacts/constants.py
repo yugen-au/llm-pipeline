@@ -117,75 +117,27 @@ class ConstantWriter(Writer):
     def edit(self, original: str) -> str:
         import libcst as cst
 
-        class_name = self._class_name()
-        new_value_literal = repr(self.spec.value)
-
-        class _Replacer(cst.CSTTransformer):
-            def leave_ClassDef(self, _original, updated):
-                if updated.name.value != class_name:
-                    return updated
-                return _replace_value_assignment(updated, new_value_literal)
+        from llm_pipeline.codegen import set_class_attribute
 
         module = cst.parse_module(original)
-        return module.visit(_Replacer()).code
+        try:
+            updated = set_class_attribute(
+                module=module,
+                class_name=self._class_name(),
+                attr_name="value",
+                new_value_literal=repr(self.spec.value),
+            )
+        except Exception:
+            # Class missing in source — leave the file unchanged. The
+            # spec will surface "no_match" via routing if a UI flow
+            # cares; for codegen the right behaviour is round-trip the
+            # input verbatim.
+            return original
+        return updated.code
 
     def _class_name(self) -> str:
         """Source-side class name from the spec's qualname."""
         return self.spec.cls.rsplit(".", 1)[-1]
-
-
-def _replace_value_assignment(class_def, new_value_literal: str):
-    """Replace ``value = ...`` (or ``value: T = ...``) inside a ClassDef body.
-
-    Returns the updated :class:`cst.ClassDef`. Appends a fresh
-    ``value = <literal>`` line when no existing assignment is found
-    (covers the ``class X: pass`` shape).
-    """
-    import libcst as cst
-
-    body = class_def.body
-    if not isinstance(body, cst.IndentedBlock):
-        return class_def
-
-    found = False
-    new_inner: list = []
-    for inner in body.body:
-        if isinstance(inner, cst.SimpleStatementLine):
-            new_subs: list = []
-            for sub in inner.body:
-                if isinstance(sub, cst.Assign):
-                    if (
-                        len(sub.targets) == 1
-                        and isinstance(sub.targets[0].target, cst.Name)
-                        and sub.targets[0].target.value == "value"
-                    ):
-                        sub = sub.with_changes(
-                            value=cst.parse_expression(new_value_literal),
-                        )
-                        found = True
-                elif isinstance(sub, cst.AnnAssign):
-                    if (
-                        isinstance(sub.target, cst.Name)
-                        and sub.target.value == "value"
-                        and sub.value is not None
-                    ):
-                        sub = sub.with_changes(
-                            value=cst.parse_expression(new_value_literal),
-                        )
-                        found = True
-                new_subs.append(sub)
-            inner = inner.with_changes(body=new_subs)
-        new_inner.append(inner)
-
-    if not found:
-        new_inner.append(cst.SimpleStatementLine(body=[
-            cst.Assign(
-                targets=[cst.AssignTarget(target=cst.Name("value"))],
-                value=cst.parse_expression(new_value_literal),
-            )
-        ]))
-
-    return class_def.with_changes(body=body.with_changes(body=new_inner))
 
 
 MANIFEST = ArtifactManifest(

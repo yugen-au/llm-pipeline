@@ -53,6 +53,7 @@ from llm_pipeline.codegen.transformers import (
     AddFieldToClass,
     FieldNotFoundError,
     ModifyFieldOnClass,
+    SetAttributeOnClass,
     TargetClassNotFoundError,
     collect_class_field_names,
     find_class,
@@ -66,6 +67,7 @@ __all__ = [
     "edit_imports",
     "generate_prompt_variables",
     "render_import_block",
+    "set_class_attribute",
     "write_code_body",
     "write_imports",
 ]
@@ -336,6 +338,47 @@ def generate_prompt_variables(
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
+
+
+def set_class_attribute(
+    *,
+    module: cst.Module,
+    class_name: str,
+    attr_name: str,
+    new_value_literal: str,
+    append_if_missing: bool = True,
+) -> cst.Module:
+    """Set ``attr_name = <new_value>`` on the named class in ``module``.
+
+    Module-in / module-out so callers can chain multiple edits before
+    serialising. Matches both ``Assign`` (``value = 3``) and ``AnnAssign``
+    (``value: int = 3``) shapes — preserves the annotation when present
+    and only swaps the right-hand side.
+
+    ``new_value_literal`` is Python source text parsed via
+    :func:`libcst.parse_expression`. Use ``repr()`` for primitive
+    literals or hand-build for expressions (``"datetime.now()"`` etc.).
+
+    Raises :class:`CodegenError` if the class isn't found or, when
+    ``append_if_missing=False``, if the attribute slot is missing.
+    """
+    transformer = SetAttributeOnClass(
+        class_name=class_name,
+        attr_name=attr_name,
+        new_value_literal=new_value_literal,
+        append_if_missing=append_if_missing,
+    )
+    new_module = module.visit(transformer)
+    if not transformer.visited_target:
+        raise CodegenError(
+            f"set_class_attribute: class {class_name!r} not found"
+        )
+    if not transformer.visited_field and not append_if_missing:
+        raise CodegenError(
+            f"set_class_attribute: {class_name}.{attr_name} not present and "
+            f"append_if_missing=False"
+        )
+    return new_module
 
 
 def _guard_or_raise(source_file: Path, root: Path | None) -> Path:

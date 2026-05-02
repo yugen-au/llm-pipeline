@@ -28,6 +28,7 @@ from llm_pipeline.codegen.api import (
     edit_imports,
     generate_prompt_variables,
     render_import_block,
+    set_class_attribute,
     write_code_body,
     write_imports,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "edit_imports",
     "generate_prompt_variables",
     "render_import_block",
+    "set_class_attribute",
     "write_code_body",
     "write_imports",
     # Errors
