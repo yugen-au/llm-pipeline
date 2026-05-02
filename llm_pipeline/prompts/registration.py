@@ -4,7 +4,7 @@ steps into Phoenix prompts.
 Phoenix stores prompt definitions; pydantic remains authoritative for
 validation. At UI startup we walk every registered pipeline's steps,
 derive each step's response-format JSON schema (from its
-``Instructions`` class) and tool schemas (from ``PipelineTool.Args``
+``Instructions`` class) and tool schemas (from ``AgentTool.Args``
 or legacy ``register_agent`` callables), and POST a new prompt
 version when the derived schemas differ from what Phoenix has. The
 prompt name is the step's snake_case name.
@@ -187,14 +187,14 @@ def derive_tools(step_cls: Type) -> Optional[Dict[str, Any]]:
 
     tools_array: List[Dict[str, Any]] = []
     for tool_cls in pipeline_tools:
-        tools_array.append(_pipeline_tool_to_phoenix(tool_cls))
+        tools_array.append(_agent_tool_to_phoenix(tool_cls))
     for fn in agent_callables:
         tools_array.append(_callable_to_phoenix(fn))
 
     return {"type": "tools", "tools": tools_array}
 
 
-def _pipeline_tool_to_phoenix(tool_cls: Type) -> Dict[str, Any]:
+def _agent_tool_to_phoenix(tool_cls: Type) -> Dict[str, Any]:
     args_cls = getattr(tool_cls, "Args", None)
     parameters = (
         args_cls.model_json_schema()

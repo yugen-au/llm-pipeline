@@ -1,18 +1,10 @@
-"""``ToolSpec`` — pydantic-ai agent tools.
+"""``ToolSpec`` — :class:`AgentTool` subclasses.
 
-Tools are Level 3 artifacts. Each ``tools/foo.py`` declares a
-tool function (or a tool class — TBD which the convention settles
-on) that's bound to step agents via ``DEFAULT_TOOLS``. Today's
-tools register manually via ``register_agent``; the per-artifact
-discovery walker (Phase C.2) replaces that with structural
-registration.
-
-The shape carried here is a Phase C.1 *skeleton* — Inputs / Args /
-body — and may grow as we learn how tools should expose their
-internals to the UI. The minimum to make tool refs from a step's
-``tools`` list (``list[ArtifactRef]``) resolvable is the ``name``
-and ``cls`` fields inherited from :class:`ArtifactSpec`; the
-optional fields below let the UI render input forms when present.
+Each ``tools/foo.py`` declares an :class:`llm_pipeline.agent_tool.AgentTool`
+subclass with nested ``Inputs`` (StepInputs) and ``Args`` (BaseModel)
+classes plus a ``run`` classmethod. Steps bind tools via
+``DEFAULT_TOOLS``; the walker registers each tool in
+``registries[KIND_TOOL]``.
 """
 from __future__ import annotations
 
@@ -20,29 +12,34 @@ from typing import Literal
 
 from llm_pipeline.specs.base import ArtifactSpec
 from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.specs.fields import FieldRef, FieldsBase
 from llm_pipeline.specs.kinds import KIND_TOOL
 
 
-__all__ = ["ToolSpec"]
+__all__ = ["ToolFields", "ToolSpec"]
 
 
 class ToolSpec(ArtifactSpec):
-    """A pydantic-ai agent tool declared in ``llm_pipelines/tools/``.
-
-    Phase C.1 skeleton — fields below are likely to evolve as the
-    actual tool-discovery walker is built in Phase C.2.
-    """
+    """An ``AgentTool`` subclass declared in ``llm_pipelines/tools/``."""
 
     kind: Literal[KIND_TOOL] = KIND_TOOL  # type: ignore[assignment]
 
-    # Pydantic Inputs class shape — what the agent passes the tool.
+    # Pydantic Inputs class shape — pipeline-side data the tool needs.
     inputs: JsonSchemaWithRefs | None = None
 
-    # Pydantic Args class shape — arguments the tool function
-    # itself receives (distinct from agent-supplied Inputs in
-    # pydantic-ai's tool model).
+    # Pydantic Args class shape — what the LLM passes per call. Drives
+    # the tool schema sent to the model.
     args: JsonSchemaWithRefs | None = None
 
-    # Tool-callable body. ``None`` for tools whose body is
-    # framework-internal (rare). Editable in the UI when set.
+    # Body of ``run(cls, inputs, args, ctx)``.
     body: CodeBodySpec | None = None
+
+
+class ToolFields(FieldsBase):
+    """Routing-key vocabulary for :class:`ToolSpec` issue captures."""
+
+    SPEC_CLS = ToolSpec
+
+    INPUTS = FieldRef("inputs")
+    ARGS = FieldRef("args")
+    BODY = FieldRef("body")

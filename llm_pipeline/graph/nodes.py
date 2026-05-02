@@ -306,7 +306,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
     - ``INPUTS``: a ``StepInputs`` subclass — what the step *needs*.
     - ``INSTRUCTIONS``: a Pydantic ``BaseModel`` subclass — the
       LLM-call output schema. Conventionally inherits ``LLMResultMixin``.
-    - ``DEFAULT_TOOLS``: list of ``PipelineTool`` subclasses
+    - ``DEFAULT_TOOLS``: list of ``AgentTool`` subclasses
       auto-bound to the agent at run time.
     - ``prepare(self, inputs) -> list[XxxPrompt]``: builds one or more
       ``PromptVariables`` instances (one per LLM call) from the

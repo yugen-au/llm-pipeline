@@ -74,11 +74,11 @@ class TestDeriveTools:
         step = _step_double(instructions=WidgetInstructions, inputs=WidgetInputs)
         assert derive_tools(step) is None
 
-    def test_pipeline_tool_subclass_uses_args_schema(self):
-        from llm_pipeline.tool import PipelineTool
+    def test_agent_tool_subclass_uses_args_schema(self):
+        from llm_pipeline.agent_tool import AgentTool
         from llm_pipeline.inputs import StepInputs
 
-        class FetchDocsTool(PipelineTool):
+        class FetchDocsTool(AgentTool):
             """Look up framework docs."""
 
             class Inputs(StepInputs):

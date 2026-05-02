@@ -1,16 +1,17 @@
-"""Tests for the PipelineTool base class.
+"""Tests for the AgentTool base class.
 
-Covers class-creation validation of the Inputs/Args contract. Runtime
-dispatch is exercised once tools are wired into strategy Binds.
+Covers class-creation validation of the Inputs/Args contract.
+``__init_subclass__`` no longer raises — contract violations land on
+``cls._init_subclass_errors`` so the class always constructs and the
+walker can register a partial spec.
 """
 from __future__ import annotations
 
-import pytest
 from pydantic import BaseModel
 
+from llm_pipeline.agent_tool import AgentTool
 from llm_pipeline.inputs import StepInputs
 from llm_pipeline.resources import PipelineResource, Resource
-from llm_pipeline.tool import PipelineTool
 
 
 # ---------------------------------------------------------------------------
@@ -29,7 +30,7 @@ class _DocCacheStub(PipelineResource):
         return cls()
 
 
-class _ToolWithResource(PipelineTool):
+class _ToolWithResource(AgentTool):
     class Inputs(StepInputs):
         library_id: str
         cache: _DocCacheStub = Resource(library_id="library_id")
@@ -49,7 +50,7 @@ class _ToolWithResource(PipelineTool):
 
 class TestToolAcceptance:
     def test_minimal_tool_class_creates(self) -> None:
-        class FetchDocs(PipelineTool):
+        class FetchDocs(AgentTool):
             class Inputs(StepInputs):
                 library_id: str
 
@@ -62,7 +63,7 @@ class TestToolAcceptance:
 
         assert FetchDocs.Inputs.__name__ == "Inputs"
         assert FetchDocs.Args.__name__ == "Args"
-        assert FetchDocs.run.__func__ is not PipelineTool.run.__func__
+        assert FetchDocs.run.__func__ is not AgentTool.run.__func__
 
     def test_tool_inputs_can_declare_resource_dependency(self) -> None:
         # Module-scope classes dodge pydantic's forward-ref resolution
@@ -72,7 +73,7 @@ class TestToolAcceptance:
         assert specs["cache"].resource_cls is _DocCacheStub
 
     def test_run_invokable_via_classmethod(self) -> None:
-        class Echo(PipelineTool):
+        class Echo(AgentTool):
             class Inputs(StepInputs):
                 prefix: str
 
@@ -96,57 +97,66 @@ class TestToolAcceptance:
 # ---------------------------------------------------------------------------
 
 
-class TestToolValidationFailures:
-    def test_missing_inputs_raises(self) -> None:
-        with pytest.raises(TypeError, match="must declare both an Inputs"):
-            class _Bad(PipelineTool):
-                class Args(BaseModel):
-                    topic: str
+class TestToolValidationCaptures:
+    def test_missing_inputs_captured(self) -> None:
+        class _Bad(AgentTool):
+            class Args(BaseModel):
+                topic: str
 
-                @classmethod
-                def run(cls, inputs, args, ctx):  # pragma: no cover
-                    return None
+            @classmethod
+            def run(cls, inputs, args, ctx):  # pragma: no cover
+                return None
 
-    def test_missing_args_raises(self) -> None:
-        with pytest.raises(TypeError, match="must declare both an Inputs"):
-            class _Bad(PipelineTool):
-                class Inputs(StepInputs):
-                    x: str
+        codes = {i.code for i in _Bad._init_subclass_errors}
+        assert "missing_inputs" in codes
 
-                @classmethod
-                def run(cls, inputs, args, ctx):  # pragma: no cover
-                    return None
+    def test_missing_args_captured(self) -> None:
+        class _Bad(AgentTool):
+            class Inputs(StepInputs):
+                x: str
 
-    def test_inputs_not_stepinputs_subclass_raises(self) -> None:
-        with pytest.raises(TypeError, match="must be a StepInputs subclass"):
-            class _Bad(PipelineTool):
-                class Inputs(BaseModel):  # plain BaseModel, not StepInputs
-                    x: str
+            @classmethod
+            def run(cls, inputs, args, ctx):  # pragma: no cover
+                return None
 
-                class Args(BaseModel):
-                    topic: str
+        codes = {i.code for i in _Bad._init_subclass_errors}
+        assert "missing_args" in codes
 
-                @classmethod
-                def run(cls, inputs, args, ctx):  # pragma: no cover
-                    return None
+    def test_inputs_not_stepinputs_subclass_captured(self) -> None:
+        class _Bad(AgentTool):
+            class Inputs(BaseModel):  # plain BaseModel, not StepInputs
+                x: str
 
-    def test_args_not_basemodel_subclass_raises(self) -> None:
-        with pytest.raises(TypeError, match="must be a pydantic BaseModel"):
-            class _Bad(PipelineTool):
-                class Inputs(StepInputs):
-                    x: str
+            class Args(BaseModel):
+                topic: str
 
-                Args = dict  # not a BaseModel
+            @classmethod
+            def run(cls, inputs, args, ctx):  # pragma: no cover
+                return None
 
-                @classmethod
-                def run(cls, inputs, args, ctx):  # pragma: no cover
-                    return None
+        codes = {i.code for i in _Bad._init_subclass_errors}
+        assert "tool_inputs_not_stepinputs" in codes
 
-    def test_intermediate_base_without_inputs_or_args_is_allowed(self) -> None:
-        # Authors can write abstract intermediate bases that don't set
-        # Inputs/Args yet. Validation only fires when at least one is set.
-        class AbstractMiddle(PipelineTool):
+    def test_args_not_basemodel_subclass_captured(self) -> None:
+        class _Bad(AgentTool):
+            class Inputs(StepInputs):
+                x: str
+
+            Args = dict  # not a BaseModel
+
+            @classmethod
+            def run(cls, inputs, args, ctx):  # pragma: no cover
+                return None
+
+        codes = {i.code for i in _Bad._init_subclass_errors}
+        assert "tool_args_not_basemodel" in codes
+
+    def test_intermediate_base_without_inputs_or_args_is_clean(self) -> None:
+        # Abstract intermediates without Inputs/Args produce no captures.
+        class AbstractMiddle(AgentTool):
             pass
+
+        assert AbstractMiddle._init_subclass_errors == []
 
         class Concrete(AbstractMiddle):
             class Inputs(StepInputs):
@@ -159,4 +169,5 @@ class TestToolValidationFailures:
             def run(cls, inputs, args, ctx):
                 return ""
 
+        assert Concrete._init_subclass_errors == []
         assert Concrete.Inputs.__name__ == "Inputs"
