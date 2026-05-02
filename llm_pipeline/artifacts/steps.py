@@ -27,8 +27,8 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
-from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
+from llm_pipeline.artifacts.base import ArtifactField, ArtifactRef, ArtifactSpec, SymbolRef
+from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_STEP
@@ -36,7 +36,107 @@ from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
 
 
-__all__ = ["MANIFEST", "StepBuilder", "StepFields", "StepSpec", "StepsWalker"]
+__all__ = [
+    "MANIFEST",
+    "PromptData",
+    "PromptDataFields",
+    "PromptVariableDefs",
+    "StepBuilder",
+    "StepFields",
+    "StepSpec",
+    "StepsWalker",
+]
+
+
+# ---------------------------------------------------------------------------
+# Step-paired prompt sub-data
+# ---------------------------------------------------------------------------
+
+
+class PromptVariableDefs(JsonSchemaWithRefs):
+    """Unified view of a PromptVariables class's variable definitions.
+
+    Phoenix treats a prompt's variables as one flat dict — every
+    placeholder has a ``description``, an optional ``type``, and an
+    optional ``auto_generate`` expression. The Python implementation
+    splits them across two constructs (Pydantic fields for prepare-
+    supplied values; a ``ClassVar[dict[str, str]]`` for
+    auto_generate-supplied placeholders). This component is the
+    Phoenix-shaped view: both kinds in one place.
+
+    Extends :class:`JsonSchemaWithRefs` (Pydantic-fields portion +
+    refs from defaults / type-hints) with the auto_vars portion
+    (placeholder → expression + the refs each expression yields).
+    PromptVariables-class captures (``missing_field_description``,
+    ``auto_vars_*``) all live on the inherited ``issues`` slot.
+    """
+
+    # auto_generate expressions, keyed by placeholder name. Values
+    # are source-level expressions like ``enum_names(Sentiment)``
+    # which are parsed at render time to materialise concrete values.
+    auto_vars: dict[str, str] = Field(default_factory=dict)
+
+    # Per-placeholder refs derived from the auto_vars expressions —
+    # e.g. the placeholder ``"sentiment_options"`` mapping to a
+    # ``SymbolRef(kind=KIND_ENUM, name="sentiment", ...)``.
+    auto_vars_refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
+
+
+class PromptData(ArtifactField):
+    """Sub-data of a step: variables + YAML-resolved templates.
+
+    *Not* a first-class artifact. ``PromptData`` is embedded inside
+    ``StepSpec.prompt`` and rendered by the existing ``PromptEditor``
+    component as a child of ``StepEditor``. This matches Phoenix's
+    data model where a "prompt" *is* a step's LLM-call contract,
+    not a separately-editable thing.
+
+    The save flow when the user edits this section updates both the
+    YAML prompt file AND regenerates the paired per-step ``XPrompt``
+    class (existing ``llm-pipeline generate`` flow).
+
+    Prompt-variable-class issues (auto_vars shape, missing field
+    descriptions, etc.) live on ``self.variables.issues`` —
+    :class:`PromptVariableDefs` is the unified home for everything
+    about the variable declarations.
+    """
+
+    # Unified variable definitions — Pydantic-fields shape AND
+    # auto_generate expressions in one ArtifactField. Captures from
+    # PromptVariables.__pydantic_init_subclass__ route here via
+    # ``PromptDataFields.VARIABLES``.
+    variables: PromptVariableDefs
+
+    # Filesystem path of the paired YAML prompt file (e.g.
+    # ``llm-pipeline-prompts/sentiment_analysis.yaml``).
+    yaml_path: str
+
+    # Phoenix-resolved fields. ``None`` until the discovery-time
+    # Phoenix validator runs; populated thereafter from whichever
+    # source (YAML or Phoenix) wins per the existing sync rules.
+    system_template: str | None = None
+    user_template: str | None = None
+    model: str | None = None
+
+
+class PromptDataFields(FieldsBase):
+    """Routing-key vocabulary for :class:`PromptData` issue captures.
+
+    Captures from :class:`llm_pipeline.prompts.PromptVariables` all
+    route to ``PromptData.variables`` (a :class:`PromptVariableDefs`).
+    Other PromptData fields are primitives (yaml_path, templates,
+    model) — captures about them leave ``location.path`` unset and
+    land on top-level ``PromptData.issues``.
+    """
+
+    SPEC_CLS = PromptData
+
+    VARIABLES = FieldRef("variables")
+
+
+# ---------------------------------------------------------------------------
+# Step spec
+# ---------------------------------------------------------------------------
 
 
 class StepSpec(ArtifactSpec):

@@ -24,9 +24,6 @@ from llm_pipeline.artifacts.base import (
 from llm_pipeline.artifacts.base.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
-    PromptData,
-    PromptDataFields,
-    PromptVariableDefs,
 )
 from llm_pipeline.artifacts.base.issues import flatten_artifact_issues
 from llm_pipeline.artifacts.base.kinds import (
@@ -73,7 +70,13 @@ from llm_pipeline.artifacts.pipelines import (
 )
 from llm_pipeline.artifacts.reviews import ReviewFields, ReviewSpec
 from llm_pipeline.artifacts.schemas import SchemaSpec
-from llm_pipeline.artifacts.steps import StepFields, StepSpec
+from llm_pipeline.artifacts.steps import (
+    PromptData,
+    PromptDataFields,
+    PromptVariableDefs,
+    StepFields,
+    StepSpec,
+)
 from llm_pipeline.artifacts.tables import IndexSpec, TableSpec
 from llm_pipeline.artifacts.tools import ToolFields, ToolSpec
 
