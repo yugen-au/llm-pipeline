@@ -30,7 +30,9 @@ llm-pipeline = "llm_pipeline.cli:main"
 
 [project.entry-points."llm_pipeline.pipelines"]
 text_analyzer = "llm_pipelines.pipelines.text_analyzer:TextAnalyzerPipeline"
-step_creator = "llm_pipeline.creator:StepCreatorPipeline"
+# step_creator is loaded directly by the creator UI route — not via the
+# entry point — because it's a legacy (non-graph) pipeline kind that
+# the entry-point discovery would reject.
 
 [project.optional-dependencies]
 creator = ["jinja2>=3.0"]
