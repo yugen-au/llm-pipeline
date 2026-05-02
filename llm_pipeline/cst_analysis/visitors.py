@@ -208,6 +208,12 @@ class FieldDefaultVisitor(cst.CSTVisitor):
     Position fields on emitted SymbolRefs are left at the default
     "not applicable" sentinel (``line=-1``, ``col_start=col_end=0``)
     since JSON-Pointer addressing is the primary key.
+
+    Also captures :attr:`field_source` — the verbatim source text of
+    each field's annotation. Writers use this to round-trip the
+    user's exact annotation syntax for fields they didn't modify
+    (e.g. preserve ``Annotated[str, Field(description="...")]``
+    instead of normalising it to a canonical form).
     """
 
     METADATA_DEPENDENCIES = ()
@@ -217,18 +223,26 @@ class FieldDefaultVisitor(cst.CSTVisitor):
         target_qualname: str,
         import_map: ImportMap,
         resolver: ResolverHook,
+        module: cst.Module | None = None,
     ) -> None:
         super().__init__()
         self._target = target_qualname
         self._imports = import_map
         self._resolver = resolver
+        self._module = module
         self._refs_by_pointer: dict[str, list[SymbolRef]] = {}
+        self._field_source: dict[str, str] = {}
         self._qualname_stack: list[str] = []
         self._found_target = False
 
     @property
     def refs_by_pointer(self) -> dict[str, list[SymbolRef]]:
         return self._refs_by_pointer
+
+    @property
+    def field_source(self) -> dict[str, str]:
+        """Verbatim annotation text per field (``field_name -> "list[Foo]"``)."""
+        return self._field_source
 
     @property
     def found_target(self) -> bool:
@@ -270,6 +284,18 @@ class FieldDefaultVisitor(cst.CSTVisitor):
         if not isinstance(node.target, cst.Name):
             return  # Pydantic fields are simple ``name: type = ...``
         field_name = node.target.value
+
+        # Verbatim annotation text — used by writers to round-trip
+        # the field's exact syntax. ``module.code_for_node`` walks
+        # the original CST so whitespace / commas / quotes match the
+        # source. Falls back to silent skip when no module available.
+        if self._module is not None:
+            try:
+                self._field_source[field_name] = self._module.code_for_node(
+                    node.annotation.annotation,
+                ).strip()
+            except Exception:  # noqa: BLE001 — defensive
+                pass
 
         # 1. Type annotation -> $ref
         for ref in self._collect_refs(node.annotation.annotation):

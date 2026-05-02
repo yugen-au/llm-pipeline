@@ -1,26 +1,29 @@
 """Public static-analysis API.
 
-Two entry points, both pure functions taking a ``source`` string
+Three entry points, all pure functions taking a ``source`` string
 and a :data:`ResolverHook` callable:
 
 - :func:`analyze_code_body` returns a fully-populated
   :class:`CodeBodySpec` for the named function's body
   (line/col-positioned :class:`SymbolRef`s).
-- :func:`analyze_class_fields` returns a
-  ``{json_pointer: [SymbolRef, ...]}`` map for the named class's
-  Pydantic-style field declarations.
+- :func:`analyze_class_fields` returns a :class:`ClassFieldAnalysis`
+  for the named class — refs at JSON-Pointer keys plus verbatim
+  field-annotation source text. Writers use the source text to
+  round-trip annotations they didn't modify.
+- :func:`analyze_imports` returns one structured
+  :class:`ImportBlock` per top-level import statement.
 
-Both raise :class:`AnalysisError` on parse failures or when the
-target function/class is not found in ``source``. Targets are
-identified by qualname (``"FooStep.prepare"``,
-``"FooSchema"``, etc.).
+All raise :class:`AnalysisError` on parse failures or when the
+target is not found in ``source``. Targets are identified by
+qualname (``"FooStep.prepare"``, ``"FooSchema"``, etc.).
 
 The analyser does not reach into the runtime — it only inspects
-``source`` plus the resolver. This means it can run before any
-artifact registration takes place (Phase C wires the resolver to
-the per-kind registries; Phase B uses fakes for testing).
+``source`` plus the resolver. Wires up before any artifact
+registration takes place.
 """
 from __future__ import annotations
+
+from dataclasses import dataclass, field
 
 import libcst as cst
 from libcst.metadata import MetadataWrapper
@@ -40,11 +43,30 @@ from llm_pipeline.artifacts.base.blocks import CodeBodySpec
 
 __all__ = [
     "AnalysisError",
+    "ClassFieldAnalysis",
     "ResolverHook",
     "analyze_class_fields",
     "analyze_code_body",
     "analyze_imports",
 ]
+
+
+@dataclass(frozen=True)
+class ClassFieldAnalysis:
+    """Per-class static-analysis output.
+
+    - ``refs_by_pointer``: JSON-Pointer-keyed cross-artifact refs
+      from each field's annotation / default / Field(...) kwargs.
+      Suitable for :attr:`JsonSchemaWithRefs.refs`.
+    - ``field_source``: each field's annotation as verbatim source
+      text (``"list[Foo]"``, ``"Annotated[str, Field(...)]"``).
+      Writers consult this to preserve the user's exact syntax for
+      unchanged fields. Suitable for
+      :attr:`JsonSchemaWithRefs.field_source`.
+    """
+
+    refs_by_pointer: dict[str, list[SymbolRef]] = field(default_factory=dict)
+    field_source: dict[str, str] = field(default_factory=dict)
 
 
 class AnalysisError(Exception):
@@ -114,21 +136,17 @@ def analyze_class_fields(
     source: str,
     class_qualname: str,
     resolver: ResolverHook,
-) -> dict[str, list[SymbolRef]]:
-    """Return a JSON-Pointer-keyed map of refs from the named class's fields.
+) -> ClassFieldAnalysis:
+    """Return per-class static-analysis output.
 
-    For a Pydantic-style class, walks each ``field: type = value``
-    declaration and produces refs at:
+    Walks each ``field: type = value`` declaration in the target
+    class and produces a :class:`ClassFieldAnalysis` carrying:
 
-    - ``/properties/<field>/$ref`` — when the type annotation
-      resolves to a registered artifact.
-    - ``/properties/<field>/default`` — the assigned default
-      expression OR a positional first arg of ``Field(...)``.
-    - ``/properties/<field>/<json_schema_key>`` — for each
-      mapped Pydantic ``Field(...)`` kwarg (see
-      ``PYDANTIC_KWARG_TO_JSON_SCHEMA``).
-
-    Result is suitable for use as :class:`JsonSchemaWithRefs.refs`.
+    - ``refs_by_pointer``: cross-artifact refs at JSON-Pointer
+      keys (``/properties/<field>/$ref``,
+      ``/properties/<field>/default``, etc.).
+    - ``field_source``: each field's annotation as verbatim source
+      text (``"list[Foo]"``, ``"Annotated[str, Field(...)]"``).
 
     Raises :class:`AnalysisError` if ``source`` does not parse or
     if ``class_qualname`` is not found.
@@ -143,6 +161,7 @@ def analyze_class_fields(
         target_qualname=class_qualname,
         import_map=import_map,
         resolver=resolver,
+        module=module,
     )
     module.visit(visitor)
 
@@ -151,7 +170,10 @@ def analyze_class_fields(
             f"class {class_qualname!r} not found in source"
         )
 
-    return visitor.refs_by_pointer
+    return ClassFieldAnalysis(
+        refs_by_pointer=visitor.refs_by_pointer,
+        field_source=visitor.field_source,
+    )
 
 
 def analyze_imports(

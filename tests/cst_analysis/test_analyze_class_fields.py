@@ -42,11 +42,12 @@ class TestDirectDefaults:
         resolver = _resolver({
             ("pkg.constants", "MAX_RETRIES"): ("constant", "max_retries"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert "/properties/retries/default" in result
         refs = result["/properties/retries/default"]
         assert len(refs) == 1
@@ -59,11 +60,12 @@ class TestDirectDefaults:
             class FooSchema(BaseModel):
                 retries: int
         """)
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=_resolver({}),
         )
+        result = analysis.refs_by_pointer
         # No default expression to walk.
         assert "/properties/retries/default" not in result
 
@@ -85,11 +87,12 @@ class TestFieldKwargs:
         resolver = _resolver({
             ("pkg.constants", "MAX_RETRIES"): ("constant", "max_retries"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert "/properties/retries/default" in result
 
     def test_le_maps_to_maximum(self):
@@ -103,11 +106,12 @@ class TestFieldKwargs:
         resolver = _resolver({
             ("pkg.constants", "MAX_RETRIES"): ("constant", "max_retries"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert "/properties/retries/maximum" in result
         refs = result["/properties/retries/maximum"]
         assert any(r.name == "max_retries" for r in refs)
@@ -124,11 +128,12 @@ class TestFieldKwargs:
             ("pkg.constants", "MIN_R"): ("constant", "min_r"),
             ("pkg.constants", "MAX_R"): ("constant", "max_r"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert "/properties/retries/minimum" in result
         assert "/properties/retries/maximum" in result
         assert result["/properties/retries/minimum"][0].name == "min_r"
@@ -145,11 +150,12 @@ class TestFieldKwargs:
         resolver = _resolver({
             ("pkg.constants", "MAX_RETRIES"): ("constant", "max_retries"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert "/properties/retries/default" in result
         assert result["/properties/retries/default"][0].name == "max_retries"
 
@@ -165,11 +171,12 @@ class TestFieldKwargs:
                 retries: int = Field(default=1, alias=X)
         """)
         resolver = _resolver({("pkg.constants", "X"): ("constant", "x")})
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         # ``alias`` not in the kwarg map.
         assert all("alias" not in pointer for pointer in result.keys())
 
@@ -191,11 +198,12 @@ class TestTypeRefs:
         resolver = _resolver({
             ("pkg.enums", "Sentiment"): ("enum", "sentiment"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert "/properties/sentiment/$ref" in result
         refs = result["/properties/sentiment/$ref"]
         assert refs[0].name == "sentiment"
@@ -209,11 +217,12 @@ class TestTypeRefs:
                 raw: int
                 name: str
         """)
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=_resolver({}),
         )
+        result = analysis.refs_by_pointer
         assert result == {}
 
 
@@ -235,11 +244,12 @@ class TestCompositeExpressions:
         resolver = _resolver({
             ("pkg.constants", "MAX_RETRIES"): ("constant", "max_retries"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         refs = result["/properties/retries/maximum"]
         assert len(refs) == 1
         assert refs[0].name == "max_retries"
@@ -255,11 +265,12 @@ class TestCompositeExpressions:
                 value: int = Field(default=1, le=X + X)
         """)
         resolver = _resolver({("pkg.constants", "X"): ("constant", "x")})
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         assert len(result["/properties/value/maximum"]) == 1
 
     def test_two_distinct_symbols_emit_two_refs(self):
@@ -274,11 +285,12 @@ class TestCompositeExpressions:
             ("pkg.constants", "A"): ("constant", "a"),
             ("pkg.constants", "B"): ("constant", "b"),
         })
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         refs = result["/properties/v/default"]
         names = sorted(r.name for r in refs)
         assert names == ["a", "b"]
@@ -313,11 +325,12 @@ class TestErrors:
             class FooSchema(BaseModel):
                 pass
         """)
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=_resolver({}),
         )
+        result = analysis.refs_by_pointer
         assert result == {}
 
 
@@ -338,11 +351,12 @@ class TestSentinelPositions:
                 v: int = X
         """)
         resolver = _resolver({("pkg.constants", "X"): ("constant", "x")})
-        result = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source,
             class_qualname="FooSchema",
             resolver=resolver,
         )
+        result = analysis.refs_by_pointer
         ref = result["/properties/v/default"][0]
         assert ref.line == -1
         assert ref.col_start == 0

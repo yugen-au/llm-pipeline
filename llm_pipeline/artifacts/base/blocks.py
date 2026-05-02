@@ -114,3 +114,10 @@ class JsonSchemaWithRefs(ArtifactField):
     # e.g. ``{"/properties/retries/default":
     #         [SymbolRef(symbol="MAX_RETRIES", ...)]}``
     refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
+
+    # Verbatim source text of each field's annotation, captured at
+    # build time (``"list[Foo]"``, ``"Annotated[str, Field(...)]"``).
+    # Writers consult this to round-trip the user's exact syntax for
+    # fields they didn't modify; without it, annotations would be
+    # rendered from the JSON schema in a normalised form.
+    field_source: dict[str, str] = Field(default_factory=dict)

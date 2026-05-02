@@ -105,17 +105,22 @@ def json_schema_with_refs(
     if schema is None:
         return None
     refs: dict[str, list] = {}
+    field_source: dict[str, str] = {}
     try:
-        refs = analyze_class_fields(
+        analysis = analyze_class_fields(
             source=source_text,
             class_qualname=cls.__qualname__,
             resolver=resolver,
         )
     except AnalysisError:
-        refs = {}
+        pass
+    else:
+        refs = analysis.refs_by_pointer
+        field_source = analysis.field_source
     return JsonSchemaWithRefs(
         json_schema=schema,
         refs=refs,
+        field_source=field_source,
         description=_docstring(cls),
     )
 
