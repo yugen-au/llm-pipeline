@@ -21,14 +21,19 @@ libcst hot-swap needs to translate UI edits back into code.
 See ``.claude/plans/per-artifact-architecture.md`` for the full
 design.
 """
-from llm_pipeline.specs.base import ArtifactField, ArtifactSpec
+from llm_pipeline.specs.base import (
+    ArtifactField,
+    ArtifactSpec,
+    ImportArtifact,
+    ImportBlock,
+    SymbolRef,
+)
 from llm_pipeline.specs.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
     PromptDataFields,
     PromptVariableDefs,
-    SymbolRef,
 )
 from llm_pipeline.specs.constants import ConstantSpec
 from llm_pipeline.specs.enums import EnumMemberSpec, EnumSpec
@@ -81,6 +86,8 @@ __all__ = [
     "ArtifactField",
     "ArtifactSpec",
     "CodeBodySpec",
+    "ImportArtifact",
+    "ImportBlock",
     "JsonSchemaWithRefs",
     "PromptData",
     "PromptDataFields",

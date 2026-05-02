@@ -46,7 +46,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from llm_pipeline.graph.spec import ValidationIssue
 
 
-__all__ = ["ArtifactField", "ArtifactSpec"]
+__all__ = [
+    "ArtifactField",
+    "ArtifactSpec",
+    "ImportArtifact",
+    "ImportBlock",
+    "SymbolRef",
+]
 
 
 def _is_artifact_field_type(annotation: Any) -> bool:
@@ -173,6 +179,135 @@ class ArtifactField(BaseModel):
         return self
 
 
+class SymbolRef(BaseModel):
+    """A typed reference to another artifact.
+
+    Used wherever the UI needs to make something clickable and
+    resolvable — text positions inside Monaco code bodies, leaf
+    values inside rendered schema trees, list entries on related
+    artifacts, etc. The dispatch payload is always ``(kind,
+    name)``; ``symbol`` is the original identifier as it appeared
+    in source for display purposes.
+
+    Position fields (``line`` / ``col_start`` / ``col_end``) only
+    apply to refs inside a code-body block; for tree-shaped
+    consumers (``JsonSchemaWithRefs.refs``) the addressing happens
+    via the enclosing dict key (typically a JSON Pointer). The
+    fields default to ``-1`` / ``0`` when not applicable.
+
+    Lives in :mod:`llm_pipeline.specs.base` (alongside
+    :class:`ImportBlock`) because :class:`ArtifactSpec` references
+    it transitively via :attr:`ArtifactSpec.imports`. Per-kind
+    building blocks in :mod:`llm_pipeline.specs.blocks`
+    (:class:`CodeBodySpec` etc.) re-import it from here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Identifier as it appeared in source — what the UI shows in a
+    # hover tooltip, code-lens, etc.
+    symbol: str
+
+    # Dispatch payload: ``(kind, name)`` resolves via
+    # ``app.state.registries[kind][name]``.
+    kind: str
+    name: str
+
+    # Position within the enclosing code body. ``-1`` means
+    # "position not applicable" (used by refs that live inside
+    # ``JsonSchemaWithRefs.refs`` keyed by JSON Pointer rather
+    # than line/col).
+    line: int = -1
+    col_start: int = 0
+    col_end: int = 0
+
+
+class ImportArtifact(ArtifactField):
+    """One name brought in by an :class:`ImportBlock`.
+
+    Examples::
+
+        from llm_pipeline.graph import LLMStepNode
+            -> ImportArtifact(name="LLMStepNode", alias=None,
+                              ref=SymbolRef(kind="...", name="..."))
+
+        from llm_pipeline.graph import LLMStepNode as Step
+            -> ImportArtifact(name="LLMStepNode", alias="Step",
+                              ref=SymbolRef(...))
+
+        import os
+            -> ImportArtifact(name="os", alias=None, ref=None)
+
+        import llm_pipeline.graph as g
+            -> ImportArtifact(name="llm_pipeline.graph", alias="g",
+                              ref=...)
+
+    Inherits ``issues`` from :class:`ArtifactField` — per-name
+    issues land here (e.g. "imported name doesn't resolve to a
+    registered artifact in the project"). Statement-level issues
+    live on the parent :class:`ImportBlock.issues`.
+    """
+
+    # The name as written on the source side of the import. For
+    # ``from X import Y``, this is ``Y``. For ``import X.Y``, this
+    # is the full dotted path ``X.Y``.
+    name: str
+
+    # Local alias if present (the ``Z`` in ``... as Z``). ``None``
+    # when the imported name is used directly.
+    alias: str | None = None
+
+    # Registered-artifact dispatch payload — populated when
+    # :data:`name` resolves via the analyser's :data:`ResolverHook`.
+    # ``None`` for stdlib / third-party / not-yet-registered names.
+    ref: SymbolRef | None = None
+
+
+class ImportBlock(ArtifactField):
+    """One import statement at the top of an artifact's source file.
+
+    Every ``import X`` and ``from X import a, b`` statement in the
+    file's import section produces one :class:`ImportBlock` —
+    populated by :func:`llm_pipeline.cst_analysis.analyze_imports`,
+    kept in source order on :attr:`ArtifactSpec.imports`.
+
+    **Structured, not verbatim.** Unlike
+    :class:`llm_pipeline.specs.blocks.CodeBodySpec` (which carries
+    the body's exact source text for byte-equal round-trip), this
+    block decomposes the import into ``module`` + ``artifacts``.
+    Spec → code regenerates the statement in canonical form
+    (``from X import a, b, c\\n``), normalising idiosyncratic
+    formatting on the way. Pipeline files end up consistently
+    formatted — one of the explicit goals of the per-artifact
+    architecture.
+
+    Lives in :mod:`llm_pipeline.specs.base` because
+    :class:`ArtifactSpec` carries a ``list[ImportBlock]`` field —
+    putting it in :mod:`llm_pipeline.specs.blocks` would create an
+    import cycle (blocks → base → blocks).
+
+    Inherits ``issues`` from :class:`ArtifactField` — statement-level
+    issues (e.g. unresolved module path) land here; per-name
+    issues land on the relevant :class:`ImportArtifact.issues`.
+    """
+
+    # The module path on the LHS of ``from X import``. ``None`` for
+    # bare ``import X`` statements — in that case the imported name
+    # itself carries the (possibly dotted) path on the artifact.
+    module: str | None = None
+
+    # What this statement brings into scope, in source order. Always
+    # at least one entry on a valid import; an empty list signals a
+    # malformed statement (analyser would surface that on
+    # :attr:`issues`).
+    artifacts: list[ImportArtifact] = Field(default_factory=list)
+
+    # 0-indexed start line in the source file. Lets the UI render
+    # line numbers in the imports table and lets edit ops splice
+    # this statement at the right location when replacing it.
+    line_offset_in_file: int = 0
+
+
 class ArtifactSpec(ArtifactField):
     """Common contract for any UI-editable code artifact.
 
@@ -208,3 +343,12 @@ class ArtifactSpec(ArtifactField):
     # the file" navigation and by libcst codegen as the hot-swap
     # target.
     source_path: str
+
+    # Top-of-module import statements, in source order. One
+    # :class:`ImportBlock` per ``Import`` / ``ImportFrom`` node —
+    # populated by ``analyze_imports`` from the same source text
+    # the per-kind builder uses. Per-import refs let the UI render
+    # cmd-click navigation on each imported symbol; per-import
+    # issues land on the offending statement (not on a section
+    # list).
+    imports: list[ImportBlock] = Field(default_factory=list)

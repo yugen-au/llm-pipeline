@@ -37,9 +37,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import Field
 
-from llm_pipeline.specs.base import ArtifactField
+# ``SymbolRef`` is defined in ``base.py`` because
+# :class:`llm_pipeline.specs.base.ImportBlock` (which lives there
+# to break a base ↔ blocks cycle) carries
+# ``refs: list[SymbolRef]``. Re-exported below so existing callers
+# importing ``SymbolRef`` from this module keep working.
+from llm_pipeline.specs.base import ArtifactField, SymbolRef
 
 
 __all__ = [
@@ -50,43 +55,6 @@ __all__ = [
     "PromptVariableDefs",
     "SymbolRef",
 ]
-
-
-class SymbolRef(BaseModel):
-    """A typed reference to another artifact.
-
-    Used wherever the UI needs to make something clickable and
-    resolvable — text positions inside Monaco code bodies, leaf
-    values inside rendered schema trees, list entries on related
-    artifacts, etc. The dispatch payload is always ``(kind,
-    name)``; ``symbol`` is the original identifier as it appeared
-    in source for display purposes.
-
-    Position fields (``line`` / ``col_start`` / ``col_end``) only
-    apply to refs inside a ``CodeBodySpec``; for tree-shaped
-    consumers (``JsonSchemaWithRefs.refs``) the addressing happens
-    via the enclosing dict key (typically a JSON Pointer). The
-    fields default to ``-1`` / ``0`` when not applicable.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    # Identifier as it appeared in source — what the UI shows in a
-    # hover tooltip, code-lens, etc.
-    symbol: str
-
-    # Dispatch payload: ``(kind, name)`` resolves via
-    # ``app.state.registries[kind][name]``.
-    kind: str
-    name: str
-
-    # Position within the enclosing code body. ``-1`` means
-    # "position not applicable" (used by refs that live inside
-    # ``JsonSchemaWithRefs.refs`` keyed by JSON Pointer rather
-    # than line/col).
-    line: int = -1
-    col_start: int = 0
-    col_end: int = 0
 
 
 class CodeBodySpec(ArtifactField):

@@ -34,7 +34,8 @@ from llm_pipeline.cst_analysis.visitors import (
 # Import directly from the submodule (not the package __init__) to
 # avoid a circular import: ``llm_pipeline.specs.builders`` imports
 # back into ``cst_analysis``.
-from llm_pipeline.specs.blocks import CodeBodySpec, SymbolRef
+from llm_pipeline.specs.base import ImportArtifact, ImportBlock, SymbolRef
+from llm_pipeline.specs.blocks import CodeBodySpec
 
 
 __all__ = [
@@ -42,6 +43,7 @@ __all__ = [
     "ResolverHook",
     "analyze_class_fields",
     "analyze_code_body",
+    "analyze_imports",
 ]
 
 
@@ -150,6 +152,151 @@ def analyze_class_fields(
         )
 
     return visitor.refs_by_pointer
+
+
+def analyze_imports(
+    *,
+    source: str,
+    resolver: ResolverHook,
+) -> list[ImportBlock]:
+    """Return one structured :class:`ImportBlock` per top-level import.
+
+    Walks ``source``'s module body in declaration order; every
+    ``import X`` and ``from X import a, b`` produces one
+    :class:`ImportBlock` decomposed into ``module`` + ``artifacts``
+    rather than verbatim text. Each :class:`ImportArtifact` carries
+    its name, optional alias, and a :class:`SymbolRef` when the
+    name resolves to a registered artifact via ``resolver``.
+
+    Spec → code regenerates the statement in canonical form
+    (``from X import a, b, c\\n``), normalising idiosyncratic
+    formatting on the way — by design, so pipeline files end up
+    consistently formatted.
+
+    Skips (silent — these statements yield no :class:`ImportBlock`):
+
+    - Star imports (``from x import *``).
+    - Relative-only imports (``from . import x``) — would need
+      package context the analyser doesn't have.
+    - Conditional imports inside ``if TYPE_CHECKING:``, ``try``
+      blocks, function bodies, etc. — only direct top-level
+      module-body statements count.
+    """
+    try:
+        module = cst.parse_module(source)
+    except Exception as exc:  # noqa: BLE001 — uniform surface
+        raise AnalysisError(f"failed to parse source: {exc}") from exc
+
+    wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
+    positions = wrapper.resolve(cst.metadata.PositionProvider)
+
+    blocks: list[ImportBlock] = []
+    for stmt in wrapper.module.body:
+        if not isinstance(stmt, cst.SimpleStatementLine):
+            continue
+        for sub in stmt.body:
+            if not isinstance(sub, (cst.ImportFrom, cst.Import)):
+                continue
+            pos = positions.get(stmt)
+            line = (pos.start.line - 1) if pos is not None else 0
+            block = _build_import_block(sub, line, resolver)
+            if block is not None:
+                blocks.append(block)
+            # one import per SimpleStatementLine in practice; the
+            # rest of stmt.body would be unusual (semicolons) and
+            # we treat them as not import-statements
+            break
+    return blocks
+
+
+def _build_import_block(
+    node: cst.ImportFrom | cst.Import,
+    line_offset: int,
+    resolver: ResolverHook,
+) -> ImportBlock | None:
+    """Decompose an ``Import``/``ImportFrom`` node into the structured
+    :class:`ImportBlock` shape.
+
+    Returns ``None`` for shapes the analyser deliberately skips
+    (star imports, relative-only imports, malformed shapes) so the
+    caller can drop them.
+    """
+    if isinstance(node, cst.ImportFrom):
+        if node.module is None:
+            return None  # relative-only `from . import x` — skip
+        module_path = _dotted_to_str(node.module)
+        if not module_path:
+            return None
+        if isinstance(node.names, cst.ImportStar):
+            return None  # `from x import *` — skip
+        artifacts: list[ImportArtifact] = []
+        for alias in node.names:
+            if not isinstance(alias, cst.ImportAlias):
+                continue
+            if not isinstance(alias.name, cst.Name):
+                continue
+            original = alias.name.value
+            local_alias = (
+                alias.asname.name.value
+                if alias.asname and isinstance(alias.asname.name, cst.Name)
+                else None
+            )
+            resolved = resolver(module_path, original)
+            ref = (
+                SymbolRef(symbol=original, kind=resolved[0], name=resolved[1])
+                if resolved is not None else None
+            )
+            artifacts.append(ImportArtifact(
+                name=original, alias=local_alias, ref=ref,
+            ))
+        return ImportBlock(
+            module=module_path,
+            artifacts=artifacts,
+            line_offset_in_file=line_offset,
+        )
+
+    # ``import X[.Y][.Z] [as W]``: bare-import style — module=None;
+    # each alias becomes one ImportArtifact carrying the full
+    # dotted path as its name.
+    artifacts = []
+    for alias in node.names:
+        if not isinstance(alias, cst.ImportAlias):
+            continue
+        full = _dotted_to_str(alias.name)
+        if not full:
+            continue
+        local_alias = (
+            alias.asname.name.value
+            if alias.asname and isinstance(alias.asname.name, cst.Name)
+            else None
+        )
+        resolved = resolver(full, full)
+        ref = (
+            SymbolRef(symbol=full, kind=resolved[0], name=resolved[1])
+            if resolved is not None else None
+        )
+        artifacts.append(ImportArtifact(
+            name=full, alias=local_alias, ref=ref,
+        ))
+    if not artifacts:
+        return None
+    return ImportBlock(
+        module=None,
+        artifacts=artifacts,
+        line_offset_in_file=line_offset,
+    )
+
+
+def _dotted_to_str(node: cst.CSTNode) -> str:
+    """Convert a libcst dotted-name expression to a flat ``a.b.c`` string."""
+    if isinstance(node, cst.Name):
+        return node.value
+    if isinstance(node, cst.Attribute):
+        left = _dotted_to_str(node.value)
+        if not left:
+            return ""
+        return f"{left}.{node.attr.value}"
+    return ""
 
 
 # ---------------------------------------------------------------------------

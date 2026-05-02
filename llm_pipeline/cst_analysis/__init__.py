@@ -28,6 +28,7 @@ from llm_pipeline.cst_analysis.api import (
     ResolverHook,
     analyze_class_fields,
     analyze_code_body,
+    analyze_imports,
 )
 
 
@@ -36,4 +37,5 @@ __all__ = [
     "ResolverHook",
     "analyze_class_fields",
     "analyze_code_body",
+    "analyze_imports",
 ]
