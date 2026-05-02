@@ -144,8 +144,14 @@ class TestDetail:
         assert r.status_code == 200
         spec = r.json()
         assert spec["kind"] == "extraction"
-        # MODEL ref by registry key.
-        assert spec["table_name"] == "topic"
+        # ``table`` is an ArtifactRef carrying the source-side
+        # class name (``Topic``) plus a resolved ref pointing at
+        # the registered table.
+        assert spec["table"] is not None
+        assert spec["table"]["name"] == "Topic"
+        assert spec["table"]["ref"] is not None
+        assert spec["table"]["ref"]["kind"] == "table"
+        assert spec["table"]["ref"]["name"] == "topic"
         # extract body captured.
         assert spec["extract"] is not None
         assert "Topic" in spec["extract"]["source"]

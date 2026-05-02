@@ -297,25 +297,40 @@ class TestBuildStepSpec:
 
 
 class TestBuildExtractionSpec:
-    def test_table_name_derived_from_model(self):
+    def test_table_ref_derived_from_model(self):
         spec = build_extraction_spec(
             name="topic", cls=_ExtractionWithModel, source_path="/x.py",
             source_text="class _ExtractionWithModel: pass",
             resolver=_resolver({}),
         )
         assert spec.kind == KIND_EXTRACTION
-        # _TopicRow -> to_snake_case -> "_topic_row"
-        # (the leading underscore is preserved; it's a test fixture
-        # naming artefact — real user classes don't start with _).
-        assert spec.table_name == "_topic_row"
+        # ``table`` is an ArtifactRef carrying the source-side
+        # Python class name; ``ref`` stays None when the resolver
+        # doesn't match (this test passes an empty resolver).
+        assert spec.table is not None
+        assert spec.table.name == "_TopicRow"
+        assert spec.table.ref is None
 
-    def test_no_model_yields_none_table_name(self):
+    def test_table_resolves_when_resolver_matches(self):
+        # Resolver maps the MODEL class to a registered table.
+        module = _ExtractionWithModel.MODEL.__module__
+        spec = build_extraction_spec(
+            name="topic", cls=_ExtractionWithModel, source_path="/x.py",
+            source_text="class _ExtractionWithModel: pass",
+            resolver=_resolver({(module, "_TopicRow"): ("table", "topic_row")}),
+        )
+        assert spec.table is not None
+        assert spec.table.ref is not None
+        assert spec.table.ref.kind == "table"
+        assert spec.table.ref.name == "topic_row"
+
+    def test_no_model_yields_none_table(self):
         spec = build_extraction_spec(
             name="foo", cls=_ExtractionNoModel, source_path="/x.py",
             source_text="class _ExtractionNoModel: pass",
             resolver=_resolver({}),
         )
-        assert spec.table_name is None
+        assert spec.table is None
 
 
 class TestBuildReviewSpec:

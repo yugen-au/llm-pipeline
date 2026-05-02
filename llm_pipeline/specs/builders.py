@@ -30,6 +30,7 @@ from llm_pipeline.cst_analysis import (
     analyze_class_fields,
     analyze_code_body,
 )
+from llm_pipeline.specs.base import ArtifactRef, SymbolRef
 from llm_pipeline.specs.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
@@ -101,6 +102,34 @@ def _docstring(cls: type | None) -> str:
     if cls is None:
         return ""
     return inspect.getdoc(cls) or ""
+
+
+def _class_to_artifact_ref(
+    cls: type | None,
+    resolver: ResolverHook,
+) -> ArtifactRef | None:
+    """Build an :class:`ArtifactRef` from a Python class.
+
+    Used wherever a per-kind spec carries a reference to another
+    registered artifact via a class attribute (``ExtractionNode.MODEL``,
+    ``LLMStepNode.DEFAULT_TOOLS`` entries, ``Pipeline.start_node``,
+    etc.). The :attr:`ArtifactRef.name` is the source-side Python
+    identifier (``cls.__name__``); the :attr:`ArtifactRef.ref` is
+    populated when the resolver maps ``(cls.__module__,
+    cls.__name__)`` to a registered ``(kind, registry_key)``.
+
+    Returns ``None`` when ``cls`` is None.
+    """
+    if cls is None:
+        return None
+    module_path = getattr(cls, "__module__", "") or ""
+    symbol = cls.__name__
+    resolved = resolver(module_path, symbol) if module_path else None
+    ref = (
+        SymbolRef(symbol=symbol, kind=resolved[0], name=resolved[1])
+        if resolved is not None else None
+    )
+    return ArtifactRef(name=symbol, ref=ref)
 
 
 def _safe_model_json_schema(cls: type) -> dict[str, Any] | None:
@@ -544,18 +573,9 @@ class ExtractionBuilder(SpecBuilder):
         inputs_cls = getattr(cls, "INPUTS", None)
         model_cls = getattr(cls, "MODEL", None)
 
-        # MODEL class → registry-key (snake_case from class name).
-        # Actual TableSpec lookup happens at consumer side via the
-        # universal resolver.
-        table_name = None
-        if model_cls is not None:
-            from llm_pipeline.naming import to_snake_case
-
-            table_name = to_snake_case(model_cls.__name__)
-
         return {
             "inputs": self.json_schema(inputs_cls),
-            "table_name": table_name,
+            "table": _class_to_artifact_ref(model_cls, self.resolver),
             "extract": self.code_body("extract"),
             "run": self.code_body("run"),
         }

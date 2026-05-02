@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from llm_pipeline.specs import (
+    ArtifactRef,
     CodeBodySpec,
     ConstantSpec,
     EnumMemberSpec,
@@ -237,17 +238,18 @@ class TestExtractionSpec:
             source_path="/x.py",
         )
         assert e.kind == KIND_EXTRACTION
-        assert e.table_name is None
+        assert e.table is None
 
     def test_round_trip(self):
         e = ExtractionSpec(
             kind=KIND_EXTRACTION, name="topic", cls="m.TopicExtraction",
             source_path="/x.py",
-            table_name="topic_row",
+            table=ArtifactRef(name="TopicRow"),
             extract=CodeBodySpec(source="return [TopicRow(...)]"),
         )
         re_e = _round_trip(e)
-        assert re_e.table_name == "topic_row"
+        assert re_e.table is not None
+        assert re_e.table.name == "TopicRow"
         assert "TopicRow" in re_e.extract.source
 
 

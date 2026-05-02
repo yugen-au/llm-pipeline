@@ -6,21 +6,17 @@ points at the table; the ``extract(self, inputs)`` body shapes
 rows; the ``run(self, ctx)`` body wires the extraction into the
 graph.
 
-The ``table_name`` field references the table by registry key
-(``KIND_TABLE`` once the schemas/tables split lands; for now
-the schema registry covers SQLModel content too — the ref still
-resolves via the universal resolver).
-
-Phase C.1 declares the spec shape. Phase C.2's walker populates
-it: INPUTS schema via Pydantic introspection; ``extract`` /
-``run`` bodies via :func:`analyze_code_body`; ``table_name`` from
-``cls.MODEL.__qualname__`` -> snake_case lookup.
+The ``table`` field is an :class:`ArtifactRef` — the source-side
+class name (``cls.MODEL.__name__``) plus a resolved
+:class:`SymbolRef` when the resolver matches the registered table.
+Same shape used wherever a spec references another registered
+artifact (``StepSpec.tools``, ``PipelineSpec.start_node``, etc.).
 """
 from __future__ import annotations
 
 from typing import Literal
 
-from llm_pipeline.specs.base import ArtifactSpec
+from llm_pipeline.specs.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.specs.kinds import KIND_EXTRACTION
 
@@ -34,14 +30,10 @@ class ExtractionFields:
     See :class:`llm_pipeline.specs.steps.StepFields` for the rationale.
     Each value must equal an :class:`ArtifactField`-typed field name
     on :class:`ExtractionSpec`.
-
-    Note ``table_name`` is intentionally NOT here — it's a primitive
-    ``str | None`` and can't carry sub-component issues. Captures
-    about MODEL/table use ``location.field=None`` and live on
-    top-level ``ExtractionSpec.issues``.
     """
 
     INPUTS = "inputs"
+    TABLE = "table"
 
 
 class ExtractionSpec(ArtifactSpec):
@@ -52,10 +44,13 @@ class ExtractionSpec(ArtifactSpec):
     # The extraction's INPUTS class shape.
     inputs: JsonSchemaWithRefs | None = None
 
-    # The MODEL (SQLModel table) referenced by registry name.
-    # ``None`` when MODEL isn't set on the class (issue captured
-    # on ``self.issues``).
-    table_name: str | None = None
+    # The MODEL (SQLModel table) — wrapped as :class:`ArtifactRef`
+    # carrying the source-side class name + resolved (kind, name)
+    # ref when available. ``None`` when MODEL isn't set on the
+    # class (the missing-MODEL issue lives on ``self.issues``).
+    # Per-reference issues (e.g. unresolved table) land on
+    # ``self.table.issues``.
+    table: ArtifactRef | None = None
 
     # The body of ``extract(self, inputs)``. Returns a list of
     # MODEL instances; the framework persists + records them.
