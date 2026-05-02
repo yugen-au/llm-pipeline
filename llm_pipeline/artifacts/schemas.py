@@ -30,14 +30,23 @@ from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_SCHEMA
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
+from llm_pipeline.artifacts.base.renderers import render_pydantic_class
+from llm_pipeline.artifacts.base.template import ArtifactTemplate
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
     _to_registry_key,
 )
+from llm_pipeline.artifacts.base.writer import Writer
 
 
-__all__ = ["MANIFEST", "SchemaBuilder", "SchemaSpec", "SchemasWalker"]
+__all__ = [
+    "MANIFEST",
+    "SchemaBuilder",
+    "SchemaSpec",
+    "SchemaWriter",
+    "SchemasWalker",
+]
 
 
 class SchemaSpec(ArtifactSpec):
@@ -81,6 +90,66 @@ class SchemasWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+# ---------------------------------------------------------------------------
+# Writer
+# ---------------------------------------------------------------------------
+
+
+_SCHEMA_TEMPLATE = ArtifactTemplate(template="""\
+from pydantic import BaseModel
+
+
+{{ pydantic_class }}
+""")
+
+
+class SchemaWriter(Writer):
+    """Render / edit a :class:`SchemaSpec` to/from source.
+
+    - :meth:`write` produces a fresh Pydantic-class file. Imports
+      cover ``BaseModel`` only — annotations referencing other
+      registered artifacts (constants, schemas) need their imports
+      hand-added in V1; an import-derivation pass is a follow-up.
+    - :meth:`edit` rebuilds the matching ``class X(BaseModel):``
+      block via :func:`replace_class`. ``JsonSchemaWithRefs.field_source``
+      preserves the user's exact annotation syntax for fields they
+      didn't modify.
+    """
+
+    SPEC_CLS = SchemaSpec
+
+    def write(self) -> str:
+        return _SCHEMA_TEMPLATE.render(
+            pydantic_class=self._render_class(),
+        )
+
+    def edit(self, original: str) -> str:
+        import libcst as cst
+
+        from llm_pipeline.codegen import replace_class
+
+        module = cst.parse_module(original)
+        try:
+            updated = replace_class(
+                module=module,
+                class_name=self._class_name(),
+                new_class_source=self._render_class(),
+            )
+        except Exception:
+            return original
+        return updated.code
+
+    def _class_name(self) -> str:
+        return self.spec.cls.rsplit(".", 1)[-1]
+
+    def _render_class(self) -> str:
+        return render_pydantic_class(
+            name=self._class_name(),
+            schema=self.spec.definition,
+            base="BaseModel",
+        )
 
 
 MANIFEST = ArtifactManifest(
