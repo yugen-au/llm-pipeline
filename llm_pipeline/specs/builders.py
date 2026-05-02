@@ -19,8 +19,10 @@ class state, and analyser parse errors are all captured.
 """
 from __future__ import annotations
 
+import inspect
+from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 from llm_pipeline.cst_analysis import (
     AnalysisError,
@@ -56,6 +58,7 @@ from llm_pipeline.specs.tools import ToolSpec
 
 
 __all__ = [
+    # Standalone builders (constants, enums, pipelines)
     "build_code_body",
     "build_constant_spec",
     "build_enum_spec",
@@ -67,6 +70,14 @@ __all__ = [
     "build_table_spec",
     "build_tool_spec",
     "json_schema_with_refs",
+    # Class-based builders (the ABC + per-kind subclasses)
+    "ExtractionBuilder",
+    "ReviewBuilder",
+    "SchemaBuilder",
+    "SpecBuilder",
+    "StepBuilder",
+    "TableBuilder",
+    "ToolBuilder",
 ]
 
 
@@ -78,6 +89,18 @@ __all__ = [
 def _qualified(cls: type) -> str:
     """Return ``cls``'s fully-qualified ``module.qualname``."""
     return f"{cls.__module__}.{cls.__qualname__}"
+
+
+def _docstring(cls: type | None) -> str:
+    """Return ``cls``'s cleaned docstring, or empty string.
+
+    Uses :func:`inspect.getdoc` (handles indent stripping and walks
+    base classes appropriately for inherited docstrings). Empty
+    string when ``cls`` is None or has no docstring.
+    """
+    if cls is None:
+        return ""
+    return inspect.getdoc(cls) or ""
 
 
 def _safe_model_json_schema(cls: type) -> dict[str, Any] | None:
@@ -121,7 +144,11 @@ def json_schema_with_refs(
         )
     except AnalysisError:
         refs = {}
-    return JsonSchemaWithRefs(json_schema=schema, refs=refs)
+    return JsonSchemaWithRefs(
+        json_schema=schema,
+        refs=refs,
+        description=_docstring(cls),
+    )
 
 
 def build_code_body(
@@ -199,14 +226,113 @@ def build_enum_spec(
         name=name,
         cls=_qualified(enum_cls),
         source_path=source_path,
+        description=_docstring(enum_cls),
         value_type=value_type,
         members=members,
-    )
+    ).attach_class_captures(enum_cls)
 
 
 # ---------------------------------------------------------------------------
-# Level 3: schemas, tools (cst_analysis-aware)
+# SpecBuilder base class — for the class-based artifact kinds
 # ---------------------------------------------------------------------------
+
+
+class SpecBuilder(ABC):
+    """Per-kind builder base for class-based artifacts.
+
+    Encapsulates construction shared by every class-based kind
+    (schemas, tables, tools, steps, extractions, reviews):
+
+    1. Build kind-specific spec fields via :meth:`kind_fields`
+       (subclass hook).
+    2. Wrap in the per-kind :class:`ArtifactSpec` subclass with
+       identity (``kind`` / ``name`` / ``cls`` qualname /
+       ``source_path``) and ``description`` extracted from the
+       class's ``__doc__``.
+    3. Chain :meth:`ArtifactSpec.attach_class_captures` to route
+       any ``cls._init_subclass_errors`` onto the right
+       :class:`ArtifactField` sub-component.
+
+    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS`, and override
+    :meth:`kind_fields`. Convenience helpers :meth:`json_schema`
+    and :meth:`code_body` pre-fill ``source_text`` + ``resolver``
+    so the threaded-through-everything pattern shrinks to one-arg
+    calls per field.
+
+    Constants, enums, and pipelines have different signatures
+    (no ``cls`` to introspect, or special read-from-``cls._spec``
+    flow) and stay as standalone ``build_*`` functions.
+    """
+
+    KIND: ClassVar[str]
+    SPEC_CLS: ClassVar[type]
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        cls: type,
+        source_path: str,
+        source_text: str,
+        resolver: ResolverHook,
+    ) -> None:
+        self.name = name
+        self.cls = cls
+        self.source_path = source_path
+        self.source_text = source_text
+        self.resolver = resolver
+
+    def json_schema(self, cls: type | None) -> JsonSchemaWithRefs | None:
+        """Convenience wrapper: pre-fills ``source_text`` + ``resolver``."""
+        return json_schema_with_refs(
+            cls=cls,
+            source_text=self.source_text,
+            resolver=self.resolver,
+        )
+
+    def code_body(self, method_name: str) -> CodeBodySpec | None:
+        """Convenience wrapper: builds the function qualname from
+        ``self.cls`` + ``method_name`` and pre-fills source/resolver."""
+        return build_code_body(
+            function_qualname=f"{self.cls.__qualname__}.{method_name}",
+            source_text=self.source_text,
+            resolver=self.resolver,
+        )
+
+    @abstractmethod
+    def kind_fields(self) -> dict[str, Any]:
+        """Return per-kind keyword arguments for the spec constructor."""
+
+    def build(self):
+        return self.SPEC_CLS(
+            kind=self.KIND,
+            name=self.name,
+            cls=_qualified(self.cls),
+            source_path=self.source_path,
+            description=_docstring(self.cls),
+            **self.kind_fields(),
+        ).attach_class_captures(self.cls)
+
+
+# ---------------------------------------------------------------------------
+# Level 3: schemas, tables, tools (cst_analysis-aware)
+# ---------------------------------------------------------------------------
+
+
+class SchemaBuilder(SpecBuilder):
+    """Build a :class:`SchemaSpec` from a Pydantic ``BaseModel`` subclass."""
+
+    KIND = KIND_SCHEMA
+    SPEC_CLS = SchemaSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        # Schema generation never produces None for a valid BaseModel
+        # subclass; if it does, hand back an empty placeholder so
+        # consumers don't have to branch on None at every site.
+        definition = self.json_schema(self.cls) or JsonSchemaWithRefs(
+            json_schema={},
+        )
+        return {"definition": definition}
 
 
 def build_schema_spec(
@@ -217,24 +343,50 @@ def build_schema_spec(
     source_text: str,
     resolver: ResolverHook,
 ) -> SchemaSpec:
-    """Build a :class:`SchemaSpec` from a Pydantic ``BaseModel`` subclass."""
-    definition = json_schema_with_refs(
-        cls=cls,
-        source_text=source_text,
-        resolver=resolver,
-    )
-    # Schema generation never produces None for a valid BaseModel
-    # subclass; if it does, hand back an empty placeholder so
-    # consumers don't have to branch on None at every site.
-    if definition is None:
-        definition = JsonSchemaWithRefs(json_schema={})
-    return SchemaSpec(
-        kind=KIND_SCHEMA,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        definition=definition,
-    )
+    return SchemaBuilder(
+        name=name, cls=cls, source_path=source_path,
+        source_text=source_text, resolver=resolver,
+    ).build()
+
+
+class TableBuilder(SpecBuilder):
+    """Build a :class:`TableSpec` from a SQLModel-with-``table=True`` class.
+
+    Caller is expected to have already classified ``cls`` as a
+    table (via the discovery walker's ``__table__``-presence
+    check). Reads ``__tablename__`` and ``__table__.indexes``
+    from the class — no DB engine required.
+    """
+
+    KIND = KIND_TABLE
+    SPEC_CLS = TableSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        definition = self.json_schema(self.cls) or JsonSchemaWithRefs(
+            json_schema={},
+        )
+
+        table_name = getattr(self.cls, "__tablename__", "") or ""
+
+        indices: list[IndexSpec] = []
+        table = getattr(self.cls, "__table__", None)
+        if table is not None:
+            for idx in getattr(table, "indexes", []) or []:
+                try:
+                    columns = [c.name for c in idx.columns]
+                except Exception:  # noqa: BLE001 — defensive against odd backends
+                    columns = []
+                indices.append(IndexSpec(
+                    name=getattr(idx, "name", "") or "",
+                    columns=columns,
+                    unique=bool(getattr(idx, "unique", False)),
+                ))
+
+        return {
+            "definition": definition,
+            "table_name": table_name,
+            "indices": indices,
+        }
 
 
 def build_table_spec(
@@ -245,51 +397,50 @@ def build_table_spec(
     source_text: str,
     resolver: ResolverHook,
 ) -> TableSpec:
-    """Build a :class:`TableSpec` from a SQLModel-with-table=True class.
+    return TableBuilder(
+        name=name, cls=cls, source_path=source_path,
+        source_text=source_text, resolver=resolver,
+    ).build()
 
-    Caller is expected to have already classified ``cls`` as a
-    table (via the discovery walker's ``__table__``-presence
-    check). Reads ``__tablename__`` and ``__table__.indexes``
-    from the class — no DB engine required.
 
-    The JSON-schema-side analysis is shared with
-    :func:`build_schema_spec` (both go through
-    :func:`json_schema_with_refs`); only the table-specific
-    metadata is pulled separately here.
+class ToolBuilder(SpecBuilder):
+    """Build a :class:`ToolSpec` for an agent tool.
+
+    Phase C.1 skeleton — the call signature here is provisional,
+    matching the spec subclass shape. Phase C.2's tool walker
+    decides which classes count as Inputs/Args and which qualname
+    addresses the tool's callable body.
     """
-    definition = json_schema_with_refs(
-        cls=cls,
-        source_text=source_text,
-        resolver=resolver,
-    )
-    if definition is None:
-        definition = JsonSchemaWithRefs(json_schema={})
 
-    table_name = getattr(cls, "__tablename__", "") or ""
+    KIND = KIND_TOOL
+    SPEC_CLS = ToolSpec
 
-    indices: list[IndexSpec] = []
-    table = getattr(cls, "__table__", None)
-    if table is not None:
-        for idx in getattr(table, "indexes", []) or []:
-            try:
-                columns = [c.name for c in idx.columns]
-            except Exception:  # noqa: BLE001 — defensive against odd backends
-                columns = []
-            indices.append(IndexSpec(
-                name=getattr(idx, "name", "") or "",
-                columns=columns,
-                unique=bool(getattr(idx, "unique", False)),
-            ))
+    def __init__(
+        self,
+        *,
+        inputs_cls: type | None = None,
+        args_cls: type | None = None,
+        body_qualname: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.inputs_cls = inputs_cls
+        self.args_cls = args_cls
+        self.body_qualname = body_qualname
 
-    return TableSpec(
-        kind=KIND_TABLE,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        definition=definition,
-        table_name=table_name,
-        indices=indices,
-    )
+    def kind_fields(self) -> dict[str, Any]:
+        return {
+            "inputs": self.json_schema(self.inputs_cls),
+            "args": self.json_schema(self.args_cls),
+            "body": (
+                build_code_body(
+                    function_qualname=self.body_qualname,
+                    source_text=self.source_text,
+                    resolver=self.resolver,
+                )
+                if self.body_qualname else None
+            ),
+        }
 
 
 def build_tool_spec(
@@ -303,41 +454,67 @@ def build_tool_spec(
     args_cls: type | None = None,
     body_qualname: str | None = None,
 ) -> ToolSpec:
-    """Build a :class:`ToolSpec` for an agent tool.
-
-    Phase C.1 skeleton — the call signature here is provisional,
-    matching the spec subclass shape. Phase C.2's tool walker
-    decides which classes count as Inputs/Args and which qualname
-    addresses the tool's callable body. For now ``inputs_cls`` /
-    ``args_cls`` / ``body_qualname`` are passed in by the walker
-    or the test.
-    """
-    return ToolSpec(
-        kind=KIND_TOOL,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        inputs=json_schema_with_refs(
-            cls=inputs_cls, source_text=source_text, resolver=resolver,
-        ),
-        args=json_schema_with_refs(
-            cls=args_cls, source_text=source_text, resolver=resolver,
-        ),
-        body=(
-            build_code_body(
-                function_qualname=body_qualname,
-                source_text=source_text,
-                resolver=resolver,
-            )
-            if body_qualname
-            else None
-        ),
-    )
+    return ToolBuilder(
+        name=name, cls=cls, source_path=source_path,
+        source_text=source_text, resolver=resolver,
+        inputs_cls=inputs_cls, args_cls=args_cls,
+        body_qualname=body_qualname,
+    ).build()
 
 
 # ---------------------------------------------------------------------------
 # Level 4: nodes (steps, extractions, reviews)
 # ---------------------------------------------------------------------------
+
+
+class StepBuilder(SpecBuilder):
+    """Build a :class:`StepSpec` from an ``LLMStepNode`` subclass.
+
+    The ``prompt`` argument is provided by the walker — it
+    constructs :class:`PromptData` from the paired YAML +
+    ``_variables/`` PromptVariables class outside this builder.
+    Builders stay pure (no YAML reading, no Phoenix calls).
+    """
+
+    KIND = KIND_STEP
+    SPEC_CLS = StepSpec
+
+    def __init__(
+        self,
+        *,
+        prompt: PromptData | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.prompt = prompt
+
+    def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "INPUTS", None)
+        instructions_cls = getattr(cls, "INSTRUCTIONS", None)
+        default_tools = getattr(cls, "DEFAULT_TOOLS", None) or []
+
+        tool_names: list[str] = []
+        for tool in default_tools:
+            # Each tool is expected to be a class with a registry-key
+            # property/attribute. Fall back to its qualname if no
+            # ``name``/``step_name`` is set.
+            tool_name = (
+                getattr(tool, "name", None)
+                or getattr(tool, "tool_name", None)
+                or getattr(tool, "__name__", None)
+            )
+            if isinstance(tool_name, str) and tool_name:
+                tool_names.append(tool_name)
+
+        return {
+            "inputs": self.json_schema(inputs_cls),
+            "instructions": self.json_schema(instructions_cls),
+            "prepare": self.code_body("prepare"),
+            "run": self.code_body("run"),
+            "prompt": self.prompt,
+            "tool_names": tool_names,
+        }
 
 
 def build_step_spec(
@@ -349,60 +526,39 @@ def build_step_spec(
     resolver: ResolverHook,
     prompt: PromptData | None = None,
 ) -> StepSpec:
-    """Build a :class:`StepSpec` from an ``LLMStepNode`` subclass.
-
-    The ``prompt`` argument is provided by the walker — it
-    constructs ``PromptData`` from the paired YAML + ``_variables/``
-    PromptVariables class outside this builder. Builders stay
-    pure (no YAML reading, no Phoenix calls).
-    """
-    inputs_cls = getattr(cls, "INPUTS", None)
-    instructions_cls = getattr(cls, "INSTRUCTIONS", None)
-    default_tools = getattr(cls, "DEFAULT_TOOLS", None) or []
-
-    tool_names: list[str] = []
-    for tool in default_tools:
-        # Each tool is expected to be a class with a registry-key
-        # property/attribute. Fall back to its qualname if no
-        # ``name``/``step_name`` is set.
-        tool_name = (
-            getattr(tool, "name", None)
-            or getattr(tool, "tool_name", None)
-            or getattr(tool, "__name__", None)
-        )
-        if isinstance(tool_name, str) and tool_name:
-            tool_names.append(tool_name)
-
-    # ``attach_class_captures`` routes ``cls._init_subclass_errors``
-    # onto the matching ArtifactField sub-component (``inputs.issues``
-    # / ``instructions.issues`` / ``prepare.issues`` / ``run.issues``)
-    # by ``location.field`` (set to ``StepFields.X`` constants at
-    # the capture site); anything that doesn't match a routable
-    # ArtifactField falls back to the top-level ``StepSpec.issues``.
-    return StepSpec(
-        kind=KIND_STEP,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        inputs=json_schema_with_refs(
-            cls=inputs_cls, source_text=source_text, resolver=resolver,
-        ),
-        instructions=json_schema_with_refs(
-            cls=instructions_cls, source_text=source_text, resolver=resolver,
-        ),
-        prepare=build_code_body(
-            function_qualname=f"{cls.__qualname__}.prepare",
-            source_text=source_text,
-            resolver=resolver,
-        ),
-        run=build_code_body(
-            function_qualname=f"{cls.__qualname__}.run",
-            source_text=source_text,
-            resolver=resolver,
-        ),
+    return StepBuilder(
+        name=name, cls=cls, source_path=source_path,
+        source_text=source_text, resolver=resolver,
         prompt=prompt,
-        tool_names=tool_names,
-    ).attach_class_captures(cls)
+    ).build()
+
+
+class ExtractionBuilder(SpecBuilder):
+    """Build an :class:`ExtractionSpec` from an ``ExtractionNode`` subclass."""
+
+    KIND = KIND_EXTRACTION
+    SPEC_CLS = ExtractionSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "INPUTS", None)
+        model_cls = getattr(cls, "MODEL", None)
+
+        # MODEL class → registry-key (snake_case from class name).
+        # Actual TableSpec lookup happens at consumer side via the
+        # universal resolver.
+        table_name = None
+        if model_cls is not None:
+            from llm_pipeline.naming import to_snake_case
+
+            table_name = to_snake_case(model_cls.__name__)
+
+        return {
+            "inputs": self.json_schema(inputs_cls),
+            "table_name": table_name,
+            "extract": self.code_body("extract"),
+            "run": self.code_body("run"),
+        }
 
 
 def build_extraction_spec(
@@ -413,43 +569,32 @@ def build_extraction_spec(
     source_text: str,
     resolver: ResolverHook,
 ) -> ExtractionSpec:
-    """Build an :class:`ExtractionSpec` from an ``ExtractionNode`` subclass."""
-    inputs_cls = getattr(cls, "INPUTS", None)
-    model_cls = getattr(cls, "MODEL", None)
+    return ExtractionBuilder(
+        name=name, cls=cls, source_path=source_path,
+        source_text=source_text, resolver=resolver,
+    ).build()
 
-    # MODEL class -> registry-key (snake_case derived from class
-    # name). The actual SchemaSpec lookup happens at consumer
-    # side via the universal resolver.
-    table_name = None
-    if model_cls is not None:
-        from llm_pipeline.naming import to_snake_case
 
-        table_name = to_snake_case(model_cls.__name__)
+class ReviewBuilder(SpecBuilder):
+    """Build a :class:`ReviewSpec` from a ``ReviewNode`` subclass."""
 
-    # See ``build_step_spec`` for the routing rationale.
-    # ``ExtractionFields.TABLE_NAME`` captures land on top-level
-    # ``ExtractionSpec.issues`` because the spec's ``table_name``
-    # is a primitive ``str | None`` (not an ArtifactField).
-    return ExtractionSpec(
-        kind=KIND_EXTRACTION,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        inputs=json_schema_with_refs(
-            cls=inputs_cls, source_text=source_text, resolver=resolver,
-        ),
-        table_name=table_name,
-        extract=build_code_body(
-            function_qualname=f"{cls.__qualname__}.extract",
-            source_text=source_text,
-            resolver=resolver,
-        ),
-        run=build_code_body(
-            function_qualname=f"{cls.__qualname__}.run",
-            source_text=source_text,
-            resolver=resolver,
-        ),
-    ).attach_class_captures(cls)
+    KIND = KIND_REVIEW
+    SPEC_CLS = ReviewSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "INPUTS", None)
+        output_cls = getattr(cls, "OUTPUT", None)
+        webhook_url = getattr(cls, "webhook_url", None)
+        if not isinstance(webhook_url, str):
+            webhook_url = None
+
+        return {
+            "inputs": self.json_schema(inputs_cls),
+            "output": self.json_schema(output_cls),
+            "webhook_url": webhook_url,
+            "run": self.code_body("run"),
+        }
 
 
 def build_review_spec(
@@ -460,32 +605,10 @@ def build_review_spec(
     source_text: str,
     resolver: ResolverHook,
 ) -> ReviewSpec:
-    """Build a :class:`ReviewSpec` from a ``ReviewNode`` subclass."""
-    inputs_cls = getattr(cls, "INPUTS", None)
-    output_cls = getattr(cls, "OUTPUT", None)
-    webhook_url = getattr(cls, "webhook_url", None)
-    if not isinstance(webhook_url, str):
-        webhook_url = None
-
-    # See ``build_step_spec`` for the routing rationale.
-    return ReviewSpec(
-        kind=KIND_REVIEW,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        inputs=json_schema_with_refs(
-            cls=inputs_cls, source_text=source_text, resolver=resolver,
-        ),
-        output=json_schema_with_refs(
-            cls=output_cls, source_text=source_text, resolver=resolver,
-        ),
-        webhook_url=webhook_url,
-        run=build_code_body(
-            function_qualname=f"{cls.__qualname__}.run",
-            source_text=source_text,
-            resolver=resolver,
-        ),
-    ).attach_class_captures(cls)
+    return ReviewBuilder(
+        name=name, cls=cls, source_path=source_path,
+        source_text=source_text, resolver=resolver,
+    ).build()
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +667,7 @@ def build_pipeline_spec(
             name=name,
             cls=_qualified(cls),
             source_path=source_path,
+            description=_docstring(cls),
         )
 
     # Per-binding rows. ``cls._wiring`` is the deduped binding map
@@ -581,6 +705,7 @@ def build_pipeline_spec(
         name=name,
         cls=_qualified(cls),
         source_path=source_path,
+        description=_docstring(cls),
         input_data=input_data,
         nodes=node_bindings,
         edges=list(legacy.edges),

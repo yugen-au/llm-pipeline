@@ -48,6 +48,7 @@ from llm_pipeline.graph.spec import ValidationIssue
 
 __all__ = [
     "ArtifactField",
+    "ArtifactRef",
     "ArtifactSpec",
     "ImportArtifact",
     "ImportBlock",
@@ -101,6 +102,17 @@ class ArtifactField(BaseModel):
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    # Human-readable description of this component. Populated where
+    # there's a natural source — class / value docstrings on
+    # :class:`ArtifactSpec` subclasses, the wrapped Pydantic class's
+    # ``__doc__`` on :class:`JsonSchemaWithRefs`, the Phoenix
+    # prompt description on :class:`PromptData`. Empty by default
+    # for components without a natural docstring source
+    # (:class:`CodeBodySpec` — docstring already lives inside the
+    # body ``source``; :class:`ImportBlock` / :class:`ImportArtifact`
+    # — imports don't carry docstrings).
+    description: str = ""
 
     # Localised issues for this component. Builders that produce the
     # subclass populate this directly (libcst code-body analyser,
@@ -222,8 +234,48 @@ class SymbolRef(BaseModel):
     col_end: int = 0
 
 
-class ImportArtifact(ArtifactField):
+class ArtifactRef(ArtifactField):
+    """A reference to a registered artifact by source-side name.
+
+    Used wherever a spec field's value is a name that the
+    resolver can map to a registered artifact (a step's
+    ``DEFAULT_TOOLS`` entry, an extraction's ``MODEL`` slot, a
+    pipeline's ``start_node``, etc.). Carries:
+
+    - ``name``: the source-side spelling (typically the Python
+      identifier or qualname as it appears in code).
+    - ``ref``: the resolved :class:`SymbolRef` (kind + registry
+      key) when the resolver matches; ``None`` for unresolved /
+      stale / out-of-tree references.
+
+    Inherits ``issues`` from :class:`ArtifactField` — per-reference
+    problems (e.g. "table not found in registry", "tool ref
+    points at the wrong kind") land here, localised to the offending
+    reference rather than the parent spec's top-level issues.
+
+    :class:`ImportArtifact` extends this with an optional ``alias``
+    for ``from X import Y as Z`` shapes — the same primitive
+    underneath, plus the rename slot.
+    """
+
+    # Source-side name as written. For ``table: ArtifactRef``,
+    # typically the snake_case registry key (e.g. ``"topic"``);
+    # for ``tools[i]: ArtifactRef``, the tool's class name or
+    # registry key.
+    name: str
+
+    # Resolved registered-artifact ref. Populated when the
+    # resolver returns a (kind, name) pair for ``self.name``;
+    # ``None`` otherwise. Frontend cmd-click uses this to dispatch.
+    ref: SymbolRef | None = None
+
+
+class ImportArtifact(ArtifactRef):
     """One name brought in by an :class:`ImportBlock`.
+
+    Extends :class:`ArtifactRef` (the ``name + ref`` core) with an
+    optional ``alias`` slot for the ``from X import Y as Z`` /
+    ``import X as Y`` rename shapes.
 
     Examples::
 
@@ -241,26 +293,13 @@ class ImportArtifact(ArtifactField):
         import llm_pipeline.graph as g
             -> ImportArtifact(name="llm_pipeline.graph", alias="g",
                               ref=...)
-
-    Inherits ``issues`` from :class:`ArtifactField` — per-name
-    issues land here (e.g. "imported name doesn't resolve to a
-    registered artifact in the project"). Statement-level issues
-    live on the parent :class:`ImportBlock.issues`.
     """
 
-    # The name as written on the source side of the import. For
-    # ``from X import Y``, this is ``Y``. For ``import X.Y``, this
-    # is the full dotted path ``X.Y``.
-    name: str
-
     # Local alias if present (the ``Z`` in ``... as Z``). ``None``
-    # when the imported name is used directly.
+    # when the imported name is used directly. Inherited
+    # :attr:`name` and :attr:`ref` carry the source-side spelling
+    # and resolved dispatch payload.
     alias: str | None = None
-
-    # Registered-artifact dispatch payload — populated when
-    # :data:`name` resolves via the analyser's :data:`ResolverHook`.
-    # ``None`` for stdlib / third-party / not-yet-registered names.
-    ref: SymbolRef | None = None
 
 
 class ImportBlock(ArtifactField):
