@@ -14,15 +14,26 @@ artifact (``StepSpec.tools``, ``PipelineSpec.start_node``, etc.).
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_EXTRACTION
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _to_registry_key,
+)
 
 
-__all__ = ["ExtractionFields", "ExtractionSpec"]
+__all__ = [
+    "ExtractionBuilder",
+    "ExtractionFields",
+    "ExtractionSpec",
+    "ExtractionsWalker",
+]
 
 
 class ExtractionSpec(ArtifactSpec):
@@ -61,3 +72,37 @@ class ExtractionFields(FieldsBase):
 
     INPUTS = FieldRef("inputs")
     TABLE = FieldRef("table")
+
+
+class ExtractionBuilder(SpecBuilder):
+    """Build an :class:`ExtractionSpec` from an ``ExtractionNode`` subclass."""
+
+    KIND = KIND_EXTRACTION
+    SPEC_CLS = ExtractionSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "INPUTS", None)
+        model_cls = getattr(cls, "MODEL", None)
+
+        return {
+            "inputs": self.json_schema(inputs_cls),
+            "table": _class_to_artifact_ref(model_cls, self.resolver),
+            "extract": self.code_body("extract"),
+            "run": self.code_body("run"),
+        }
+
+
+class ExtractionsWalker(Walker):
+    """Register ``ExtractionNode`` subclasses from ``extractions/``."""
+
+    KIND = KIND_EXTRACTION
+    BUILDER = ExtractionBuilder
+
+    def qualifies(self, value, mod):
+        from llm_pipeline.graph.nodes import ExtractionNode
+
+        return _is_locally_defined_class(value, mod, ExtractionNode)
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name, strip_suffix="Extraction")

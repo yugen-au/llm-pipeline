@@ -1,21 +1,13 @@
-"""``ConstantSpec`` — module-level scalar / list / dict values.
+"""Constants — module-level scalar / list / dict values.
 
 Constants are Level 1 artifacts — they have no dependencies. Each
-``constants/foo.py`` file may declare any number of module-level
-assignments; the discovery walker registers each non-private,
-JSON-serialisable value as a separate :class:`ConstantSpec`.
+``constants/foo.py`` file declares one or more :class:`Constant`
+subclasses with a ``value`` ClassVar. The walker picks them up,
+the builder reads ``cls.value``, and the spec carries the simple
+type name + JSON-serialisable value.
 
-Editing a constant in the UI rewrites the module-level assignment
-expression via libcst codegen (Phase D-onwards). The ``value_type``
-field is the simple Python type name (``"int"``, ``"str"``,
-``"list"``, etc.) — not a deep type description. The frontend uses
-it to decide which input control to render (text / number / table /
-etc.).
-
-The ``value`` field holds the JSON-serialisable representation
-read from the loaded module. Consumers should treat it as
-read-only metadata — runtime callers always go through the
-registry's ``obj`` field on :class:`ArtifactRegistration`.
+Editing a constant in the UI rewrites the module-level class
+declaration via libcst codegen.
 """
 from __future__ import annotations
 
@@ -24,10 +16,16 @@ from typing import Any, Literal
 from pydantic import Field
 
 from llm_pipeline.artifacts.base import ArtifactSpec
+from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_CONSTANT
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _to_registry_key,
+)
 
 
-__all__ = ["ConstantSpec"]
+__all__ = ["ConstantBuilder", "ConstantSpec", "ConstantsWalker"]
 
 
 class ConstantSpec(ArtifactSpec):
@@ -40,7 +38,34 @@ class ConstantSpec(ArtifactSpec):
     # "bool", "list", "dict".
     value_type: str
 
-    # The actual value, as it lives in the module. Must be
-    # JSON-serialisable (str/int/float/bool/list/dict of those).
-    # Non-serialisable values fail at API-response time, not here.
+    # JSON-serialisable representation read from the loaded module.
     value: Any = Field(default=None)
+
+
+class ConstantBuilder(SpecBuilder):
+    """Build a :class:`ConstantSpec` from a :class:`Constant` subclass."""
+
+    KIND = KIND_CONSTANT
+    SPEC_CLS = ConstantSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        value = self.cls.value  # type: ignore[union-attr]
+        return {
+            "value_type": type(value).__name__,
+            "value": value,
+        }
+
+
+class ConstantsWalker(Walker):
+    """Register :class:`Constant` subclasses from ``constants/``."""
+
+    KIND = KIND_CONSTANT
+    BUILDER = ConstantBuilder
+
+    def qualifies(self, value, mod):
+        from llm_pipeline.constants import Constant
+
+        return _is_locally_defined_class(value, mod, Constant)
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name)

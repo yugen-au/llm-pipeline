@@ -17,15 +17,21 @@ class's ClassVar.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_REVIEW
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _to_registry_key,
+)
 
 
-__all__ = ["ReviewFields", "ReviewSpec"]
+__all__ = ["ReviewBuilder", "ReviewFields", "ReviewSpec", "ReviewsWalker"]
 
 
 class ReviewSpec(ArtifactSpec):
@@ -61,3 +67,40 @@ class ReviewFields(FieldsBase):
 
     INPUTS = FieldRef("inputs")
     OUTPUT = FieldRef("output")
+
+
+class ReviewBuilder(SpecBuilder):
+    """Build a :class:`ReviewSpec` from a ``ReviewNode`` subclass."""
+
+    KIND = KIND_REVIEW
+    SPEC_CLS = ReviewSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "INPUTS", None)
+        output_cls = getattr(cls, "OUTPUT", None)
+        webhook_url = getattr(cls, "webhook_url", None)
+        if not isinstance(webhook_url, str):
+            webhook_url = None
+
+        return {
+            "inputs": self.json_schema(inputs_cls),
+            "output": self.json_schema(output_cls),
+            "webhook_url": webhook_url,
+            "run": self.code_body("run"),
+        }
+
+
+class ReviewsWalker(Walker):
+    """Register ``ReviewNode`` subclasses from ``reviews/``."""
+
+    KIND = KIND_REVIEW
+    BUILDER = ReviewBuilder
+
+    def qualifies(self, value, mod):
+        from llm_pipeline.graph.nodes import ReviewNode
+
+        return _is_locally_defined_class(value, mod, ReviewNode)
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name, strip_suffix="Review")

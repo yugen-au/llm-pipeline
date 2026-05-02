@@ -1,14 +1,9 @@
-"""``EnumSpec`` — Python ``Enum`` subclasses.
+"""Enums — Python ``Enum`` subclasses.
 
 Enums are Level 2 artifacts (may reference Level 1 constants in
-their member values). Each ``enums/foo.py`` file may declare any
-number of Enum subclasses; the discovery walker registers each as
-its own :class:`EnumSpec`.
-
-The :class:`EnumMemberSpec` rows describe each member's
-``(name, value)`` pair. Consumers (auto_generate expressions,
-prompt-variable rendering, frontend selectors) use these rows
-directly rather than going back to the runtime ``Enum`` class.
+their member values). The walker picks up every ``Enum`` subclass
+in ``enums/foo.py`` and the builder records each member's
+``(name, value)`` pair.
 """
 from __future__ import annotations
 
@@ -17,10 +12,16 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 from llm_pipeline.artifacts.base import ArtifactSpec
+from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_ENUM
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _to_registry_key,
+)
 
 
-__all__ = ["EnumMemberSpec", "EnumSpec"]
+__all__ = ["EnumBuilder", "EnumMemberSpec", "EnumSpec", "EnumsWalker"]
 
 
 class EnumMemberSpec(BaseModel):
@@ -55,3 +56,39 @@ class EnumSpec(ArtifactSpec):
 
     # Member rows in declaration order.
     members: list[EnumMemberSpec]
+
+
+class EnumBuilder(SpecBuilder):
+    """Build an :class:`EnumSpec` from an ``Enum`` subclass."""
+
+    KIND = KIND_ENUM
+    SPEC_CLS = EnumSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        members = [
+            EnumMemberSpec(name=member.name, value=member.value)
+            for member in self.cls  # type: ignore[union-attr]
+        ]
+        # Pick the first member's value type as the representative;
+        # empty enums (rare) default to "str".
+        if members:
+            first_value = next(iter(self.cls)).value  # type: ignore[arg-type]
+            value_type = type(first_value).__name__
+        else:
+            value_type = "str"
+        return {"value_type": value_type, "members": members}
+
+
+class EnumsWalker(Walker):
+    """Register ``Enum`` subclasses from ``enums/``."""
+
+    KIND = KIND_ENUM
+    BUILDER = EnumBuilder
+
+    def qualifies(self, value, mod):
+        from enum import Enum
+
+        return _is_locally_defined_class(value, mod, Enum)
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name)

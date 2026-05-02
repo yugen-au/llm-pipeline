@@ -48,21 +48,25 @@ Limitations of the spec → code round-trip in V1:
 """
 from __future__ import annotations
 
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import Field
 
 from llm_pipeline.artifacts.base import ArtifactField, ArtifactRef, ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
+from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_PIPELINE
+from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
 
 
 __all__ = [
     "EdgeSpec",
     "NodeBindingSpec",
+    "PipelineBuilder",
     "PipelineFields",
     "PipelineSpec",
+    "PipelinesWalker",
     "SourceSpec",
     "WiringSpec",
 ]
@@ -184,3 +188,176 @@ class PipelineFields(FieldsBase):
     def source(cls, node_name: str, src_field: str) -> FieldRef:
         """Path to ``spec.nodes[i].wiring.field_sources[src_field]``."""
         return FieldRef(f"nodes[{node_name}].wiring.field_sources[{src_field}]")
+
+
+class PipelineBuilder(SpecBuilder):
+    """Build a :class:`PipelineSpec` directly from a ``Pipeline`` subclass.
+
+    Reads ``cls._wiring`` (deduped bindings), ``cls.INPUT_DATA``,
+    ``cls.start_node``, and the per-node ``run()`` return annotations
+    to construct nodes / input_data / start_node / edges. Routes
+    ``cls._init_subclass_errors`` onto matching components via
+    :meth:`attach_class_captures`.
+
+    Class-contract issues (missing INPUTS, prepare-signature
+    mismatches, etc.) live canonically on the standalone per-kind
+    spec — not duplicated here.
+    """
+
+    KIND = KIND_PIPELINE
+    SPEC_CLS = PipelineSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        from llm_pipeline.wiring import Extraction, Review, Step
+
+        cls = self.cls
+        deduped_bindings = list(getattr(cls, "_wiring", {}).values())
+        raw_nodes = [b.cls for b in deduped_bindings]
+
+        node_bindings: list[NodeBindingSpec] = []
+        for binding in deduped_bindings:
+            if isinstance(binding, Step):
+                binding_kind = "step"
+            elif isinstance(binding, Extraction):
+                binding_kind = "extraction"
+            elif isinstance(binding, Review):
+                binding_kind = "review"
+            else:
+                continue
+            node_bindings.append(NodeBindingSpec(
+                binding_kind=binding_kind,
+                node_name=_node_name_for_binding(binding),
+                wiring=_build_wiring_spec(binding),
+            ))
+
+        edges = _build_edges(raw_nodes)
+
+        input_data_cls = getattr(cls, "INPUT_DATA", None)
+        input_data = self.json_schema(input_data_cls)
+
+        start_node_ref = _class_to_artifact_ref(
+            getattr(cls, "start_node", None), self.resolver,
+        )
+
+        return {
+            "input_data": input_data,
+            "nodes": node_bindings,
+            "edges": edges,
+            "start_node": start_node_ref,
+        }
+
+
+class PipelinesWalker(Walker):
+    """Register ``Pipeline`` subclasses from ``pipelines/``."""
+
+    KIND = KIND_PIPELINE
+    BUILDER = PipelineBuilder
+
+    def qualifies(self, value, mod):
+        from llm_pipeline.graph.pipeline import Pipeline
+
+        return _is_locally_defined_class(value, mod, Pipeline)
+
+    def name_for(self, attr_name, value):
+        return value.pipeline_name()
+
+
+# ---------------------------------------------------------------------------
+# Helpers used by PipelineBuilder
+# ---------------------------------------------------------------------------
+
+
+def _node_name_for_binding(binding) -> str:
+    """Snake_case registry key for ``binding.cls``."""
+    from llm_pipeline.naming import to_snake_case
+    from llm_pipeline.wiring import Extraction, Review, Step
+
+    cls = binding.cls
+    if isinstance(binding, Step):
+        return cls.step_name()
+    suffix = "Extraction" if isinstance(binding, Extraction) else "Review"
+    return to_snake_case(cls.__name__, strip_suffix=suffix)
+
+
+def _build_wiring_spec(binding) -> WiringSpec:
+    """Serialise a binding's ``inputs_spec`` into a :class:`WiringSpec`."""
+    spec = binding.inputs_spec
+    return WiringSpec(
+        inputs_cls=f"{spec.inputs_cls.__module__}.{spec.inputs_cls.__qualname__}",
+        field_sources={
+            name: _serialise_source(src)
+            for name, src in spec.field_sources.items()
+        },
+    )
+
+
+def _serialise_source(source) -> SourceSpec:
+    from llm_pipeline.wiring import Computed, FromInput, FromOutput, FromPipeline
+
+    if isinstance(source, FromInput):
+        return SourceSpec(kind="from_input", path=source.path)
+    if isinstance(source, FromOutput):
+        return SourceSpec(
+            kind="from_output",
+            step_cls=source.step_cls.__name__,
+            index=source.index,
+            field=source.field,
+        )
+    if isinstance(source, FromPipeline):
+        return SourceSpec(kind="from_pipeline", attr=source.attr)
+    if isinstance(source, Computed):
+        return SourceSpec(
+            kind="computed",
+            fn=getattr(source.fn, "__qualname__", repr(source.fn)),
+            sources=[_serialise_source(s) for s in source.sources],
+        )
+    raise TypeError(f"Unknown Source subclass {type(source).__name__!r}")
+
+
+def _build_edges(raw_nodes: list[type]) -> list[EdgeSpec]:
+    """Build the EdgeSpec list from each node's ``run()`` return annotations."""
+    from llm_pipeline.graph.validator import _next_node_classes
+
+    edges = []
+    for node in raw_nodes:
+        targets = _next_node_classes(node, raw_nodes)
+        if _run_returns_end(node, raw_nodes):
+            edges.append(EdgeSpec(from_node=node.__name__, to_node="End"))
+        for target in targets:
+            edges.append(EdgeSpec(
+                from_node=node.__name__, to_node=target.__name__,
+            ))
+    return edges
+
+
+def _run_returns_end(node_cls: type, raw_nodes: list[type]) -> bool:
+    """True if ``node_cls.run()``'s return annotation reaches ``End``."""
+    import typing
+    from types import UnionType
+    from pydantic_graph import End
+
+    return_annotation = node_cls.run.__annotations__.get("return")
+    if return_annotation is None:
+        return False
+    if isinstance(return_annotation, str):
+        try:
+            name_to_node = {n.__name__: n for n in raw_nodes}
+            return_annotation = eval(  # noqa: S307
+                return_annotation,
+                getattr(node_cls.run, "__globals__", {}),
+                name_to_node | {"End": End},
+            )
+        except (NameError, SyntaxError):
+            return False
+
+    def _has_end(ann) -> bool:
+        if ann is End:
+            return True
+        origin = typing.get_origin(ann)
+        if origin is End:
+            return True
+        if origin is typing.Union or origin is UnionType:
+            return any(_has_end(arg) for arg in typing.get_args(ann))
+        return False
+
+    return _has_end(return_annotation)

@@ -24,16 +24,23 @@ Deferred for follow-up phases:
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
+from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_TABLE
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _is_table,
+    _to_registry_key,
+)
 
 
-__all__ = ["IndexSpec", "TableSpec"]
+__all__ = ["IndexSpec", "TableBuilder", "TableSpec", "TablesWalker"]
 
 
 class IndexSpec(BaseModel):
@@ -80,3 +87,63 @@ class TableSpec(ArtifactSpec):
     # Declared indices in source order. Empty when the class has
     # only the implicit primary-key index.
     indices: list[IndexSpec] = Field(default_factory=list)
+
+
+class TableBuilder(SpecBuilder):
+    """Build a :class:`TableSpec` from a SQLModel-with-``table=True`` class.
+
+    Reads ``__tablename__`` and ``__table__.indexes`` from the class
+    — no DB engine required.
+    """
+
+    KIND = KIND_TABLE
+    SPEC_CLS = TableSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        definition = self.json_schema(self.cls) or JsonSchemaWithRefs(
+            json_schema={},
+        )
+
+        table_name = getattr(self.cls, "__tablename__", "") or ""
+
+        indices: list[IndexSpec] = []
+        table = getattr(self.cls, "__table__", None)
+        if table is not None:
+            for idx in getattr(table, "indexes", []) or []:
+                try:
+                    columns = [c.name for c in idx.columns]
+                except Exception:  # noqa: BLE001 — defensive against odd backends
+                    columns = []
+                indices.append(IndexSpec(
+                    name=getattr(idx, "name", "") or "",
+                    columns=columns,
+                    unique=bool(getattr(idx, "unique", False)),
+                ))
+
+        return {
+            "definition": definition,
+            "table_name": table_name,
+            "indices": indices,
+        }
+
+
+class TablesWalker(Walker):
+    """Register SQLModel-with-``table=True`` classes from ``tables/``.
+
+    The ``__table__`` presence check is a defensive filter — only
+    classes SQLModel marks as real tables get registered.
+    """
+
+    KIND = KIND_TABLE
+    BUILDER = TableBuilder
+
+    def qualifies(self, value, mod):
+        from pydantic import BaseModel
+
+        return (
+            _is_locally_defined_class(value, mod, BaseModel)
+            and _is_table(value)
+        )
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name)

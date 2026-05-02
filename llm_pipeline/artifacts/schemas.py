@@ -23,14 +23,20 @@ reason ``JsonSchemaWithRefs.json_schema`` is named explicitly.)
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
+from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_SCHEMA
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _to_registry_key,
+)
 
 
-__all__ = ["SchemaSpec"]
+__all__ = ["SchemaBuilder", "SchemaSpec", "SchemasWalker"]
 
 
 class SchemaSpec(ArtifactSpec):
@@ -42,3 +48,37 @@ class SchemaSpec(ArtifactSpec):
     # from ``cls.model_json_schema()`` + ``analyze_class_fields``
     # at spec-build time.
     definition: JsonSchemaWithRefs
+
+
+class SchemaBuilder(SpecBuilder):
+    """Build a :class:`SchemaSpec` from a Pydantic ``BaseModel`` subclass."""
+
+    KIND = KIND_SCHEMA
+    SPEC_CLS = SchemaSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        # Schema generation never produces None for a valid BaseModel
+        # subclass; if it does, hand back an empty placeholder.
+        definition = self.json_schema(self.cls) or JsonSchemaWithRefs(
+            json_schema={},
+        )
+        return {"definition": definition}
+
+
+class SchemasWalker(Walker):
+    """Register Pydantic ``BaseModel`` subclasses from ``schemas/``.
+
+    Pure data shapes only. SQLModel-with-table classes belong in
+    ``llm_pipelines/tables/`` — folder layout is the source-of-truth.
+    """
+
+    KIND = KIND_SCHEMA
+    BUILDER = SchemaBuilder
+
+    def qualifies(self, value, mod):
+        from pydantic import BaseModel
+
+        return _is_locally_defined_class(value, mod, BaseModel)
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name)

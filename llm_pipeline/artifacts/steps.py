@@ -23,17 +23,19 @@ the paired YAML + ``_variables/`` PromptVariables class.
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field
 
 from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
+from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
 from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_STEP
+from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
 
 
-__all__ = ["StepFields", "StepSpec"]
+__all__ = ["StepBuilder", "StepFields", "StepSpec", "StepsWalker"]
 
 
 class StepSpec(ArtifactSpec):
@@ -95,3 +97,71 @@ class StepFields(FieldsBase):
     INPUTS = FieldRef("inputs")
     INSTRUCTIONS = FieldRef("instructions")
     PREPARE = FieldRef("prepare")
+
+
+class StepBuilder(SpecBuilder):
+    """Build a :class:`StepSpec` from an ``LLMStepNode`` subclass.
+
+    The ``prompt`` argument is provided by the walker — it constructs
+    :class:`PromptData` from the paired YAML + per-step ``XPrompt``
+    class outside this builder. Builders stay pure (no YAML reading,
+    no Phoenix calls).
+    """
+
+    KIND = KIND_STEP
+    SPEC_CLS = StepSpec
+
+    def __init__(
+        self,
+        *,
+        prompt: PromptData | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.prompt = prompt
+
+    def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "INPUTS", None)
+        instructions_cls = getattr(cls, "INSTRUCTIONS", None)
+        default_tools = getattr(cls, "DEFAULT_TOOLS", None) or []
+
+        # One ArtifactRef per DEFAULT_TOOLS entry. Source-side name
+        # is the tool's Python class name; ``ref`` is populated when
+        # the resolver maps that to a registered tool.
+        tools = [
+            ref for ref in (
+                _class_to_artifact_ref(tool, self.resolver)
+                for tool in default_tools
+            ) if ref is not None
+        ]
+
+        return {
+            "inputs": self.json_schema(inputs_cls),
+            "instructions": self.json_schema(instructions_cls),
+            "prepare": self.code_body("prepare"),
+            "run": self.code_body("run"),
+            "prompt": self.prompt,
+            "tools": tools,
+        }
+
+
+class StepsWalker(Walker):
+    """Register ``LLMStepNode`` subclasses from ``steps/``.
+
+    ``StepSpec.prompt`` is left ``None`` here. Building :class:`PromptData`
+    requires reading the paired YAML and the per-step ``XPrompt`` class
+    — separate orchestration concern. Steps still get inputs / instructions
+    / prepare / run / tools populated.
+    """
+
+    KIND = KIND_STEP
+    BUILDER = StepBuilder
+
+    def qualifies(self, value, mod):
+        from llm_pipeline.graph.nodes import LLMStepNode
+
+        return _is_locally_defined_class(value, mod, LLMStepNode)
+
+    def name_for(self, attr_name, value):
+        return value.step_name()
