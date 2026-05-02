@@ -48,7 +48,7 @@ Limitations of the spec → code round-trip in V1:
 """
 from __future__ import annotations
 
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pydantic import Field
 
@@ -76,6 +76,11 @@ class NodeBindingSpec(ArtifactField):
     from the wrapper's ``_init_post_errors`` (binding-kind
     mismatches like ``Step(SomeReviewNode)``, etc.).
     """
+
+    # ``node_name`` is the lookup key when NodeBindingSpec appears
+    # in a ``list[NodeBindingSpec]`` slot
+    # (``PipelineSpec.nodes[topic_extraction]``).
+    IDENTITY_FIELD: ClassVar[str | None] = "node_name"
 
     # Which wrapper class wraps the node — gates binding-specific
     # UI affordances (``Step`` shows prompt section; ``Extraction``

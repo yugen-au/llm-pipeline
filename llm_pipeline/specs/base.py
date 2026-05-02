@@ -34,8 +34,7 @@ trigger routing.
 """
 from __future__ import annotations
 
-import types
-from typing import Any, Self, Union, get_args, get_origin
+from typing import Any, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -44,6 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # field. Phase C moves the validation types into ``llm_pipeline.specs``
 # so this cross-package import goes away.
 from llm_pipeline.graph.spec import ValidationIssue
+from llm_pipeline.specs.fields import parse_path
 
 
 __all__ = [
@@ -54,29 +54,6 @@ __all__ = [
     "ImportBlock",
     "SymbolRef",
 ]
-
-
-def _is_artifact_field_type(annotation: Any) -> bool:
-    """True if ``annotation`` declares an :class:`ArtifactField` slot.
-
-    Walks ``Union``/``Optional`` arms — ``ArtifactField | None``,
-    ``Optional[CodeBodySpec]`` etc. all qualify. Anything that
-    doesn't have ``ArtifactField`` somewhere in its type tree
-    (``str``, ``list[str]``, ``int | None``, etc.) returns False —
-    that's the "primitive field, can't carry issues" case.
-
-    Used by :meth:`ArtifactField.attach_class_captures` to enforce
-    the routing contract: ``ValidationLocation.field`` must name a
-    spec field whose annotation references ``ArtifactField``, or
-    be ``None`` for top-level issues. Anything else is a broken
-    constant and raises.
-    """
-    if isinstance(annotation, type) and issubclass(annotation, ArtifactField):
-        return True
-    origin = get_origin(annotation)
-    if origin is Union or origin is types.UnionType:
-        return any(_is_artifact_field_type(arg) for arg in get_args(annotation))
-    return False
 
 
 class ArtifactField(BaseModel):
@@ -122,6 +99,18 @@ class ArtifactField(BaseModel):
     # doesn't match a sub-component field on this spec.
     issues: list[ValidationIssue] = Field(default_factory=list)
 
+    # Lookup key for ``list[ArtifactField]`` slots. When a routing
+    # path uses bracketed access on a list-typed slot
+    # (``nodes[topic_extraction]``), the walker iterates the list
+    # and matches the bracketed key against
+    # ``getattr(item, IDENTITY_FIELD)``. Subclasses that appear
+    # as list elements pin this to the field name carrying the
+    # element's stable identity (``NodeBindingSpec.IDENTITY_FIELD =
+    # "node_name"``, ``ArtifactRef.IDENTITY_FIELD = "name"``,
+    # etc.). Defaults to ``None`` — list-as-element types that
+    # don't pin it can't be routed to by key.
+    IDENTITY_FIELD: ClassVar[str | None] = None
+
     def attach_class_captures(self, source_cls: type | None) -> Self:
         """Distribute ``source_cls._init_subclass_errors`` onto matching components.
 
@@ -130,70 +119,217 @@ class ArtifactField(BaseModel):
         carrying ``_init_subclass_errors``). The routing loop is a
         no-op in that case via the ``getattr(...,  [])`` fallback.
 
-        Each issue's ``ValidationLocation.field`` is interpreted as a
-        routing key:
+        Each issue's ``ValidationLocation.path`` (or legacy ``field``)
+        is interpreted as a typed routing path — see
+        :class:`llm_pipeline.specs.fields.FieldRef` for the
+        construction surface and
+        :func:`llm_pipeline.specs.fields.parse_path` for the syntax.
 
-        - ``None`` → ``self.issues`` (intentional top-level issue;
-          e.g. naming-convention violations on the artifact itself).
-        - A spec field name whose annotation declares an
-          :class:`ArtifactField` slot → ``getattr(self, field).issues``
-          when the runtime value is populated, falling back to
-          ``self.issues`` when the value is ``None`` (graceful: the
-          slot is typed for routing but the artifact's source class
-          hasn't populated it — common for "missing INPUTS" style
-          captures).
-        - Anything else (unknown field, or field annotated with a
-          non-``ArtifactField`` type like ``str`` / ``list[str]``)
-          → :class:`RuntimeError`. Capture sites must use a
-          constant from the per-kind fields class
-          (``StepFields.INPUTS`` etc.) or ``None``; mismatches are
-          a broken contract and surface immediately rather than
-          silently routing to top-level.
+        Routing is **strict on structural mistakes** and permissive
+        only on runtime gaps:
 
-        Generic — uses Pydantic's ``model_fields`` introspection,
-        no per-kind routing tables.
+        - Empty path / ``None`` → ``self.issues`` (intentional top-
+          level issue; naming violations etc.).
+        - Walks each path segment against the current ArtifactField's
+          ``model_fields``. The attribute MUST exist; the annotation
+          MUST be ArtifactField-typed; bracketed access MUST match
+          the container shape. Any structural mismatch raises
+          :class:`RuntimeError` immediately — capture sites should
+          use :class:`FieldRef` constants from a per-kind ``Fields``
+          class which validate paths at class load time.
+        - **Permissive only on runtime gaps**: when the runtime value
+          at a structurally-valid attribute is ``None`` (slot not
+          populated — e.g. ``StepSpec.inputs=None`` when the source
+          class didn't declare INPUTS), or when a bracketed key
+          doesn't match any element in the list / dict (the keyed
+          element wasn't created — e.g. a node was filtered before
+          spec construction), the walker stops at the parent and
+          lands the issue there. These are real "the spec wasn't
+          populated" cases, not bugs.
+
+        Sub-component context **finer than the ArtifactField hierarchy**
+        (per-variable detail, JSON Pointer into a schema, etc.) lives
+        on ``ValidationLocation.subfield`` — free-form metadata the
+        router ignores; the UI uses it to attach indicators at
+        finer granularity than routing.
 
         Returns ``self`` for builder chaining::
 
             return StepSpec(...).attach_class_captures(cls)
         """
-        spec_fields = type(self).model_fields
         for issue in getattr(source_cls, "_init_subclass_errors", []):
-            field = issue.location.field
-            if field is None:
-                self.issues.append(issue)
-                continue
-            if field not in spec_fields:
-                raise RuntimeError(
-                    f"{type(self).__name__}: ValidationIssue "
-                    f"{issue.code!r} sets location.field={field!r}, "
-                    f"but {type(self).__name__} has no such field. "
-                    f"Use a constant from the per-kind fields class "
-                    f"(e.g. StepFields.INPUTS) or set field=None for "
-                    f"top-level issues."
-                )
-            if not _is_artifact_field_type(spec_fields[field].annotation):
-                raise RuntimeError(
-                    f"{type(self).__name__}: ValidationIssue "
-                    f"{issue.code!r} sets location.field={field!r}, "
-                    f"but {type(self).__name__}.{field} is not an "
-                    f"ArtifactField sub-component (annotation: "
-                    f"{spec_fields[field].annotation!r}). Routing "
-                    f"keys must point at ArtifactField sub-components; "
-                    f"use field=None for issues about primitive fields."
-                )
-            target = getattr(self, field, None)
-            if target is None:
-                # Field is typed for routing but the runtime value
-                # isn't populated (e.g. ``StepSpec.inputs=None`` when
-                # the source class's ``INPUTS`` is missing). The
-                # issue is ABOUT the missing slot, so top-level is
-                # the right home — there's literally no sub-component
-                # to attach to.
-                self.issues.append(issue)
-            else:
-                target.issues.append(issue)
+            path = issue.location.path or issue.location.field
+            target = self if not path else _navigate_to_artifact_field(
+                self, path, issue=issue,
+            )
+            target.issues.append(issue)
         return self
+
+
+def _navigate_to_artifact_field(
+    root: "ArtifactField",
+    path: str,
+    *,
+    issue: object = None,
+) -> "ArtifactField":
+    """Walk ``path`` from ``root`` to the targeted :class:`ArtifactField`.
+
+    Strict on structural mistakes — raises :class:`RuntimeError` when
+    a segment names an attribute that doesn't exist on the parent's
+    ArtifactField type, when the attribute isn't ArtifactField-typed,
+    or when bracket usage doesn't match container shape. Capture
+    sites should use :class:`FieldRef` constants from a per-kind
+    ``Fields`` class so these mistakes get caught at class load time
+    rather than reaching the walker.
+
+    Permissive only on runtime gaps:
+
+    - Slot value is ``None`` (typed for routing but not populated)
+      → land on parent.
+    - Bracketed key doesn't match any list element / dict entry
+      → land on parent.
+
+    The ``issue`` kwarg is the :class:`ValidationIssue` whose path
+    is being walked — passed only for error-message context if the
+    walk raises.
+    """
+    issue_code = getattr(getattr(issue, "code", None), "__str__", lambda: "?")()
+    try:
+        segments = parse_path(path)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"{type(root).__name__}: ValidationIssue {issue_code!r} "
+            f"sets malformed path={path!r}: {exc}"
+        ) from None
+
+    current = root
+    for attr, key in segments:
+        # --- structural check: attribute exists on the current type
+        spec_fields = type(current).model_fields
+        if attr not in spec_fields:
+            raise RuntimeError(
+                f"{type(root).__name__}: ValidationIssue {issue_code!r} "
+                f"sets path={path!r}, but {type(current).__name__} has "
+                f"no field {attr!r}. Use a FieldRef constant from the "
+                f"per-kind Fields class so structural mistakes get "
+                f"caught at class-load time."
+            )
+        annotation = spec_fields[attr].annotation
+        if _artifact_field_arg(annotation) is None:
+            raise RuntimeError(
+                f"{type(root).__name__}: ValidationIssue {issue_code!r} "
+                f"sets path={path!r}, but {type(current).__name__}.{attr} "
+                f"is not ArtifactField-typed (annotation: {annotation!r}). "
+                f"Routing keys must point at ArtifactField sub-components; "
+                f"use ``ValidationLocation.subfield`` for sub-component "
+                f"context the router shouldn't descend into."
+            )
+        kind = _container_kind(annotation)
+
+        # --- structural check: bracket usage matches container shape
+        if key is not None and kind == "plain":
+            raise RuntimeError(
+                f"{type(root).__name__}: ValidationIssue {issue_code!r} "
+                f"sets path={path!r}, but {type(current).__name__}.{attr} "
+                f"is a single ArtifactField — don't use bracketed key "
+                f"access here."
+            )
+        if key is None and kind in ("list", "dict"):
+            raise RuntimeError(
+                f"{type(root).__name__}: ValidationIssue {issue_code!r} "
+                f"sets path={path!r}, but {type(current).__name__}.{attr} "
+                f"is a {kind} — must use bracketed key access."
+            )
+
+        # --- runtime descent (permissive on gaps)
+        next_obj = getattr(current, attr, None)
+        if next_obj is None:
+            # Slot typed for routing but not populated. Land on parent.
+            return current
+        if key is not None:
+            if isinstance(next_obj, dict):
+                next_obj = next_obj.get(key)
+            elif isinstance(next_obj, list):
+                next_obj = _lookup_in_list(next_obj, key)
+            else:
+                # Shouldn't happen given the structural check above,
+                # but stay defensive.
+                return current
+            if next_obj is None:
+                # Key not present in the runtime container — the
+                # element wasn't created. Land on parent.
+                return current
+        if not isinstance(next_obj, ArtifactField):
+            # Static type said ArtifactField but runtime says
+            # otherwise — corrupt spec; raise loudly.
+            raise RuntimeError(
+                f"{type(root).__name__}: ValidationIssue {issue_code!r} "
+                f"path={path!r}: descended into {type(next_obj).__name__} "
+                f"which isn't an ArtifactField — internal inconsistency."
+            )
+        current = next_obj
+    return current
+
+
+def _artifact_field_arg(annotation: Any) -> "type | None":
+    """Return the ArtifactField subclass inside an annotation, or ``None``.
+
+    Walks ``Optional[X]`` / ``X | None`` / ``list[X]`` / ``dict[K, X]``.
+    """
+    import types as _types
+    from typing import Union, get_args, get_origin
+
+    if isinstance(annotation, type) and issubclass(annotation, ArtifactField):
+        return annotation
+    origin = get_origin(annotation)
+    if origin is Union or origin is _types.UnionType:
+        for arg in get_args(annotation):
+            inner = _artifact_field_arg(arg)
+            if inner is not None:
+                return inner
+    elif origin is list:
+        args = get_args(annotation)
+        if args:
+            return _artifact_field_arg(args[0])
+    elif origin is dict:
+        args = get_args(annotation)
+        if len(args) >= 2:
+            return _artifact_field_arg(args[1])
+    return None
+
+
+def _container_kind(annotation: Any) -> str:
+    """Return ``"list"`` / ``"dict"`` / ``"plain"`` for an ArtifactField slot."""
+    import types as _types
+    from typing import Union, get_args, get_origin
+
+    origin = get_origin(annotation)
+    if origin is Union or origin is _types.UnionType:
+        for arg in get_args(annotation):
+            if arg is type(None):
+                continue
+            kind = _container_kind(arg)
+            if kind != "plain":
+                return kind
+        return "plain"
+    if origin is list:
+        return "list"
+    if origin is dict:
+        return "dict"
+    return "plain"
+
+
+def _lookup_in_list(items: list, key: str) -> "ArtifactField | None":
+    """Find the first item where ``IDENTITY_FIELD`` matches ``key``."""
+    for item in items:
+        if not isinstance(item, ArtifactField):
+            continue
+        identity = type(item).IDENTITY_FIELD
+        if identity is None:
+            continue
+        if getattr(item, identity, None) == key:
+            return item
+    return None
 
 
 class SymbolRef(BaseModel):
@@ -262,6 +398,10 @@ class ArtifactRef(ArtifactField):
     for ``from X import Y as Z`` shapes — the same primitive
     underneath, plus the rename slot.
     """
+
+    # ``name`` is the lookup key when ArtifactRef appears in a
+    # ``list[ArtifactRef]`` slot (``StepSpec.tools[name]``).
+    IDENTITY_FIELD: ClassVar[str | None] = "name"
 
     # Source-side name as written. For ``table: ArtifactRef``,
     # typically the snake_case registry key (e.g. ``"topic"``);

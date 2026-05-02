@@ -18,22 +18,11 @@ from typing import Literal
 
 from llm_pipeline.specs.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.specs.fields import FieldRef, FieldsBase
 from llm_pipeline.specs.kinds import KIND_EXTRACTION
 
 
 __all__ = ["ExtractionFields", "ExtractionSpec"]
-
-
-class ExtractionFields:
-    """Routing-key constants for :class:`ExtractionSpec` issue captures.
-
-    See :class:`llm_pipeline.specs.steps.StepFields` for the rationale.
-    Each value must equal an :class:`ArtifactField`-typed field name
-    on :class:`ExtractionSpec`.
-    """
-
-    INPUTS = "inputs"
-    TABLE = "table"
 
 
 class ExtractionSpec(ArtifactSpec):
@@ -58,3 +47,17 @@ class ExtractionSpec(ArtifactSpec):
 
     # The body of ``run(self, ctx)`` — graph wiring.
     run: CodeBodySpec | None = None
+
+
+class ExtractionFields(FieldsBase):
+    """Routing-key vocabulary for :class:`ExtractionSpec` issue captures.
+
+    See :class:`llm_pipeline.specs.steps.StepFields` for the routing
+    pattern. Path validity is checked at class-load time against
+    :class:`ExtractionSpec`.
+    """
+
+    SPEC_CLS = ExtractionSpec
+
+    INPUTS = FieldRef("inputs")
+    TABLE = FieldRef("table")

@@ -45,6 +45,7 @@ from pydantic import Field
 # ``refs: list[SymbolRef]``. Re-exported below so existing callers
 # importing ``SymbolRef`` from this module keep working.
 from llm_pipeline.specs.base import ArtifactField, SymbolRef
+from llm_pipeline.specs.fields import FieldRef, FieldsBase
 
 
 __all__ = [
@@ -163,25 +164,6 @@ class PromptVariableDefs(JsonSchemaWithRefs):
     auto_vars_refs: dict[str, list[SymbolRef]] = Field(default_factory=dict)
 
 
-class PromptDataFields:
-    """Routing-key constants for :class:`PromptData` issue captures.
-
-    Captures from :class:`llm_pipeline.prompts.PromptVariables`
-    (``missing_field_description``, ``auto_vars_*``,
-    ``auto_vars_field_overlap``) describe problems with the prompt's
-    variable declarations — they all route to ``PromptData.variables``
-    (a :class:`PromptVariableDefs`, which is an
-    :class:`ArtifactField`). The single constant here documents
-    that boundary.
-
-    Other PromptData fields are primitives (yaml_path, templates,
-    model) — captures about them, if any, use ``location.field=None``
-    and live on top-level ``PromptData.issues``.
-    """
-
-    VARIABLES = "variables"
-
-
 class PromptData(ArtifactField):
     """Sub-data of a step: variables + YAML-resolved templates.
 
@@ -220,3 +202,25 @@ class PromptData(ArtifactField):
     system_template: str | None = None
     user_template: str | None = None
     model: str | None = None
+
+
+class PromptDataFields(FieldsBase):
+    """Routing-key vocabulary for :class:`PromptData` issue captures.
+
+    Captures from :class:`llm_pipeline.prompts.PromptVariables`
+    (``missing_field_description``, ``auto_vars_*``,
+    ``auto_vars_field_overlap``) describe problems with the prompt's
+    variable declarations — they all route to ``PromptData.variables``
+    (a :class:`PromptVariableDefs`, which is an
+    :class:`ArtifactField`). The single constant here documents
+    that boundary.
+
+    Other PromptData fields are primitives (yaml_path, templates,
+    model) — captures about them, if any, leave ``location.path``
+    unset (or use ``None``) and land on top-level
+    ``PromptData.issues``.
+    """
+
+    SPEC_CLS = PromptData
+
+    VARIABLES = FieldRef("variables")

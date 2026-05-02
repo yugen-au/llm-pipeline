@@ -21,21 +21,11 @@ from typing import Literal
 
 from llm_pipeline.specs.base import ArtifactSpec
 from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.specs.fields import FieldRef, FieldsBase
 from llm_pipeline.specs.kinds import KIND_REVIEW
 
 
 __all__ = ["ReviewFields", "ReviewSpec"]
-
-
-class ReviewFields:
-    """Routing-key constants for :class:`ReviewSpec` issue captures.
-
-    See :class:`llm_pipeline.specs.steps.StepFields` for the rationale.
-    Each value must equal a field name on :class:`ReviewSpec`.
-    """
-
-    INPUTS = "inputs"
-    OUTPUT = "output"
 
 
 class ReviewSpec(ArtifactSpec):
@@ -57,3 +47,17 @@ class ReviewSpec(ArtifactSpec):
 
     # The body of ``run(self, ctx)`` — graph wiring.
     run: CodeBodySpec | None = None
+
+
+class ReviewFields(FieldsBase):
+    """Routing-key vocabulary for :class:`ReviewSpec` issue captures.
+
+    See :class:`llm_pipeline.specs.steps.StepFields` for the routing
+    pattern. Path validity is checked at class-load time against
+    :class:`ReviewSpec`.
+    """
+
+    SPEC_CLS = ReviewSpec
+
+    INPUTS = FieldRef("inputs")
+    OUTPUT = FieldRef("output")

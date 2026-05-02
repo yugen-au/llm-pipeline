@@ -29,32 +29,11 @@ from pydantic import Field
 
 from llm_pipeline.specs.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
+from llm_pipeline.specs.fields import FieldRef, FieldsBase
 from llm_pipeline.specs.kinds import KIND_STEP
 
 
 __all__ = ["StepFields", "StepSpec"]
-
-
-class StepFields:
-    """Routing-key constants for :class:`StepSpec` issue captures.
-
-    Capture sites in :class:`LLMStepNode.__init_subclass__` (and the
-    ``prepare()`` resolver in :mod:`llm_pipeline.graph.nodes`) set
-    ``ValidationLocation.field`` to one of these values so the
-    :meth:`ArtifactField.attach_class_captures` router can localise
-    the issue onto the matching :class:`StepSpec` field.
-
-    Constants list ONLY the fields a capture site references — no
-    orphan constants for spec fields nobody routes to. Adding a new
-    capture site that targets a different StepSpec field is the
-    trigger for adding a new constant here.
-
-    Each value must equal a field name on :class:`StepSpec` exactly.
-    """
-
-    INPUTS = "inputs"
-    INSTRUCTIONS = "instructions"
-    PREPARE = "prepare"
 
 
 class StepSpec(ArtifactSpec):
@@ -92,3 +71,27 @@ class StepSpec(ArtifactSpec):
     # matches. Per-tool issues (e.g. unresolved tool reference)
     # land on ``self.tools[i].issues``.
     tools: list[ArtifactRef] = Field(default_factory=list)
+
+
+class StepFields(FieldsBase):
+    """Routing-key vocabulary for :class:`StepSpec` issue captures.
+
+    Capture sites in :class:`LLMStepNode.__init_subclass__` (and the
+    ``prepare()`` resolver in :mod:`llm_pipeline.graph.nodes`) tag
+    each :class:`ValidationIssue` with one of these :class:`FieldRef`
+    constants on ``location.path``. The
+    :meth:`ArtifactField.attach_class_captures` walker resolves the
+    path to the matching sub-component.
+
+    Constants list ONLY the fields a capture site references — no
+    orphan constants for spec fields nobody routes to. Adding a new
+    capture site that targets a different StepSpec field is the
+    trigger for adding a new constant here. Path validity is checked
+    at class-load time against :class:`StepSpec`.
+    """
+
+    SPEC_CLS = StepSpec
+
+    INPUTS = FieldRef("inputs")
+    INSTRUCTIONS = FieldRef("instructions")
+    PREPARE = FieldRef("prepare")

@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
     from llm_pipeline.graph.pipeline import Pipeline
@@ -100,17 +100,54 @@ class WiringSpec(BaseModel):
 class ValidationLocation(BaseModel):
     """Where in a pipeline a validation issue lives.
 
-    Free-form: any combination of pipeline / node / field may be set.
-    Empty values mean "scope not narrower than the parent". e.g.,
-    a wiring drift on a step's INPUTS field has all three set; a
-    pipeline-wide cycle issue has only ``pipeline``.
+    ``pipeline`` and ``node`` are display-only context — surface
+    text the UI shows alongside an issue.
+
+    ``path`` is the typed routing path —
+    :meth:`ArtifactField.attach_class_captures` walks it to land
+    each issue on the right sub-component. Constructed via
+    :class:`llm_pipeline.specs.fields.FieldRef` (typically a
+    constant on a per-kind ``*Fields`` class) so typos / stale slot
+    names raise at class-load time rather than failing silently.
+    Coerced to ``str`` here for JSON-serialisability; the syntax is
+    documented in :func:`llm_pipeline.specs.fields.parse_path`.
+
+    ``field`` is the legacy single-segment routing key — preserved
+    for back-compat with capture sites that haven't migrated to
+    ``path``. The walker treats ``field`` as a top-level path when
+    ``path`` is unset.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     pipeline: str | None = None
     node: str | None = None  # node class name (e.g. "TopicExtractionStep")
-    field: str | None = None  # attribute / member name within the node
+    field: str | None = None  # legacy single-segment routing key
+    path: str | None = None  # typed routing path (FieldRef coerced to str)
+
+    # Sub-component context the ROUTER ignores — free-form metadata
+    # the UI uses to attach indicators at finer granularity than
+    # the ArtifactField hierarchy supports. Examples:
+    # - prompt-variable field name (``"sentiment"``) when the issue
+    #   is about that specific field within a prompt's variables
+    #   schema (router lands on ``PromptData.variables.issues``;
+    #   UI uses ``subfield`` to highlight the offending variable).
+    # - JSON Pointer into a JsonSchemaWithRefs (``"/properties/x"``)
+    #   for issues about a specific schema property.
+    # The routing layer never consults this — it's purely UI metadata.
+    subfield: str | None = None
+
+    @field_validator("path", "field", mode="before")
+    @classmethod
+    def _coerce_to_str(cls, v: object) -> str | None:
+        # Accept FieldRef (or anything with __str__ that's not None)
+        # so capture sites can pass FieldRef constants directly without
+        # writing ``str(StepFields.INPUTS)`` everywhere.
+        if v is None:
+            return None
+        if isinstance(v, str):
+            return v
+        return str(v)
 
 
 class ValidationIssue(BaseModel):
