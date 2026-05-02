@@ -64,13 +64,30 @@ class Writer(ABC):
         :class:`ArtifactTemplate` against :attr:`spec`.
         """
 
-    def apply(self, content: str, *, path: Path | None = None) -> None:
-        """Write ``content`` to disk.
+    def apply(
+        self,
+        content: str,
+        *,
+        path: Path | None = None,
+        root: Path | None = None,
+    ) -> bool:
+        """Write ``content`` to disk via the path-guarded codegen IO.
 
-        Defaults to ``self.spec.source_path``; pass ``path`` to
-        override (e.g. for sandboxed writes that should not clobber
-        the live file).
+        Defaults to ``self.spec.source_path``. Parses the content
+        string into a libcst ``Module`` first — catches malformed
+        output before touching disk and lets us reuse the codegen
+        atomic-write + dry-run + path-guard pipeline.
+
+        Returns ``True`` if the file was written (or would be written
+        in dry-run mode), ``False`` if the existing content already
+        matched and no write was needed. Raises
+        :class:`llm_pipeline.codegen.CodegenPathError` when the
+        target falls outside the configured ``llm_pipelines/`` root.
         """
+        import libcst as cst
+
+        from llm_pipeline.codegen.io import write_module_if_changed
+
         target = Path(path) if path else Path(self.spec.source_path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        module = cst.parse_module(content)
+        return write_module_if_changed(target, module, root=root)
