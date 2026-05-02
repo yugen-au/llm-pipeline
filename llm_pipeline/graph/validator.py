@@ -17,7 +17,7 @@ from typing import Any
 
 from llm_pipeline.inputs import PipelineInputData
 from llm_pipeline.artifacts.pipelines import PipelineFields
-from llm_pipeline.artifacts.validation import ValidationIssue, ValidationLocation
+from llm_pipeline.artifacts.base.validation import ValidationIssue, ValidationLocation
 from llm_pipeline.wiring import (
     Computed,
     Extraction,

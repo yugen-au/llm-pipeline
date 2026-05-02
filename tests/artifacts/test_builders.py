@@ -25,7 +25,7 @@ from llm_pipeline.artifacts.builders import (
     build_code_body,
     json_schema_with_refs,
 )
-from llm_pipeline.artifacts.kinds import (
+from llm_pipeline.artifacts.base.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,

@@ -30,7 +30,7 @@ from llm_pipeline.cst_analysis import (
     analyze_code_body,
 )
 from llm_pipeline.artifacts.base import ArtifactRef, SymbolRef
-from llm_pipeline.artifacts.blocks import (
+from llm_pipeline.artifacts.base.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
@@ -38,7 +38,7 @@ from llm_pipeline.artifacts.blocks import (
 from llm_pipeline.artifacts.constants import ConstantSpec
 from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
 from llm_pipeline.artifacts.extractions import ExtractionSpec
-from llm_pipeline.artifacts.kinds import (
+from llm_pipeline.artifacts.base.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,

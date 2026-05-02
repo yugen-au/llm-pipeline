@@ -45,7 +45,7 @@ from pydantic import Field
 # ``refs: list[SymbolRef]``. Re-exported below so existing callers
 # importing ``SymbolRef`` from this module keep working.
 from llm_pipeline.artifacts.base import ArtifactField, SymbolRef
-from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 
 
 __all__ = [

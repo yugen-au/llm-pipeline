@@ -29,7 +29,7 @@ from llm_pipeline.artifacts.base import (
     ImportBlock,
     SymbolRef,
 )
-from llm_pipeline.artifacts.blocks import (
+from llm_pipeline.artifacts.base.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
@@ -39,7 +39,7 @@ from llm_pipeline.artifacts.blocks import (
 from llm_pipeline.artifacts.constants import ConstantSpec
 from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
 from llm_pipeline.artifacts.extractions import ExtractionFields, ExtractionSpec
-from llm_pipeline.artifacts.kinds import (
+from llm_pipeline.artifacts.base.kinds import (
     ALL_KINDS,
     KIND_CONSTANT,
     KIND_ENUM,
@@ -56,9 +56,9 @@ from llm_pipeline.artifacts.kinds import (
 # cycle (manifest → walkers → specs.X submodules → specs/__init__,
 # all hitting partially-initialised modules). Callers that need the
 # level index import from the manifest module directly.
-from llm_pipeline.artifacts.issues import flatten_artifact_issues
+from llm_pipeline.artifacts.base.issues import flatten_artifact_issues
 from llm_pipeline.artifacts.pipelines import NodeBindingSpec, PipelineSpec
-from llm_pipeline.artifacts.registration import ArtifactRegistration
+from llm_pipeline.artifacts.base.registration import ArtifactRegistration
 from llm_pipeline.artifacts.reviews import ReviewFields, ReviewSpec
 from llm_pipeline.artifacts.schemas import SchemaSpec
 from llm_pipeline.artifacts.steps import StepFields, StepSpec

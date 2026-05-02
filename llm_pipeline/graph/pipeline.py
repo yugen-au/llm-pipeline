@@ -62,7 +62,7 @@ from pydantic_graph import Graph
 from llm_pipeline.graph.state import PipelineDeps, PipelineState
 from llm_pipeline.graph.validator import validate_pipeline
 from llm_pipeline.inputs import PipelineInputData
-from llm_pipeline.artifacts.validation import ValidationIssue, ValidationLocation
+from llm_pipeline.artifacts.base.validation import ValidationIssue, ValidationLocation
 from llm_pipeline.wiring import Extraction, Review, Step
 
 if TYPE_CHECKING:

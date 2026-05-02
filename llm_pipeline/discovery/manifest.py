@@ -1,10 +1,10 @@
 """Single source of truth for per-kind discovery metadata.
 
 Per-kind metadata used to live in four hand-maintained tables —
-:data:`llm_pipeline.artifacts.kinds.LEVEL_BY_KIND`,
+:data:`llm_pipeline.artifacts.base.kinds.LEVEL_BY_KIND`,
 :data:`llm_pipeline.discovery.loading._LOAD_ORDER`,
 :data:`llm_pipeline.discovery.walkers.WALKERS_BY_SUBFOLDER`, and
-:data:`llm_pipeline.artifacts.kinds.ALL_KINDS`.
+:data:`llm_pipeline.artifacts.base.kinds.ALL_KINDS`.
 Adding a new kind required editing each one; forgetting any was a
 silent bug. This module collapses them into :data:`KIND_MANIFESTS`;
 the four tables become derived views.
@@ -36,7 +36,7 @@ from llm_pipeline.discovery.walkers import (
 from llm_pipeline.artifacts.constants import ConstantSpec
 from llm_pipeline.artifacts.enums import EnumSpec
 from llm_pipeline.artifacts.extractions import ExtractionFields, ExtractionSpec
-from llm_pipeline.artifacts.kinds import (
+from llm_pipeline.artifacts.base.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
@@ -170,7 +170,7 @@ WALKERS_BY_SUBFOLDER: dict[str, list[Walker]] = {
 # and the KIND_* / ALL_KINDS constants. Cheap insurance — fires
 # loudly on import if someone adds a kind to one and not the other.
 def _check_manifest_consistency() -> None:
-    from llm_pipeline.artifacts.kinds import ALL_KINDS
+    from llm_pipeline.artifacts.base.kinds import ALL_KINDS
 
     manifest_kinds = set(KIND_MANIFESTS)
     declared_kinds = set(ALL_KINDS)

@@ -38,8 +38,8 @@ from typing import Any, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from llm_pipeline.artifacts.fields import parse_path
-from llm_pipeline.artifacts.validation import ValidationIssue
+from llm_pipeline.artifacts.base.fields import parse_path
+from llm_pipeline.artifacts.base.validation import ValidationIssue
 
 
 __all__ = [
@@ -117,9 +117,9 @@ class ArtifactField(BaseModel):
 
         Each issue's ``ValidationLocation.path`` (or legacy ``field``)
         is interpreted as a typed routing path — see
-        :class:`llm_pipeline.artifacts.fields.FieldRef` for the
+        :class:`llm_pipeline.artifacts.base.fields.FieldRef` for the
         construction surface and
-        :func:`llm_pipeline.artifacts.fields.parse_path` for the syntax.
+        :func:`llm_pipeline.artifacts.base.fields.parse_path` for the syntax.
 
         Routing is **strict on structural mistakes** and permissive
         only on runtime gaps:
@@ -347,7 +347,7 @@ class SymbolRef(BaseModel):
     Lives in :mod:`llm_pipeline.artifacts.base` (alongside
     :class:`ImportBlock`) because :class:`ArtifactSpec` references
     it transitively via :attr:`ArtifactSpec.imports`. Per-kind
-    building blocks in :mod:`llm_pipeline.artifacts.blocks`
+    building blocks in :mod:`llm_pipeline.artifacts.base.blocks`
     (:class:`CodeBodySpec` etc.) re-import it from here.
     """
 
@@ -452,7 +452,7 @@ class ImportBlock(ArtifactField):
     kept in source order on :attr:`ArtifactSpec.imports`.
 
     **Structured, not verbatim.** Unlike
-    :class:`llm_pipeline.artifacts.blocks.CodeBodySpec` (which carries
+    :class:`llm_pipeline.artifacts.base.blocks.CodeBodySpec` (which carries
     the body's exact source text for byte-equal round-trip), this
     block decomposes the import into ``module`` + ``artifacts``.
     Spec → code regenerates the statement in canonical form
@@ -463,7 +463,7 @@ class ImportBlock(ArtifactField):
 
     Lives in :mod:`llm_pipeline.artifacts.base` because
     :class:`ArtifactSpec` carries a ``list[ImportBlock]`` field —
-    putting it in :mod:`llm_pipeline.artifacts.blocks` would create an
+    putting it in :mod:`llm_pipeline.artifacts.base.blocks` would create an
     import cycle (blocks → base → blocks).
 
     Inherits ``issues`` from :class:`ArtifactField` — statement-level

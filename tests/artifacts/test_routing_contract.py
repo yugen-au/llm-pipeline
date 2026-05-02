@@ -38,7 +38,7 @@ from llm_pipeline.artifacts import (
     StepFields,
     StepSpec,
 )
-from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 
 
 # ---------------------------------------------------------------------------

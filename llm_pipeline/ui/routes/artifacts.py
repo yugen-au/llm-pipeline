@@ -29,7 +29,7 @@ from llm_pipeline.artifacts import (
     ArtifactRegistration,
     flatten_artifact_issues,
 )
-from llm_pipeline.artifacts.kinds import ALL_KINDS
+from llm_pipeline.artifacts.base.kinds import ALL_KINDS
 
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])

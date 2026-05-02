@@ -28,7 +28,7 @@ class ValidationLocation(BaseModel):
     ``path`` is the typed routing path; the
     :meth:`ArtifactField.attach_class_captures` walker uses it to
     land each issue on the right sub-component. Constructed via
-    :class:`llm_pipeline.artifacts.fields.FieldRef`.
+    :class:`llm_pipeline.artifacts.base.fields.FieldRef`.
 
     ``field`` is the legacy single-segment key, kept for back-compat.
 

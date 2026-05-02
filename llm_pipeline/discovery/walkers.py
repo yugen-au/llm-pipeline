@@ -35,7 +35,7 @@ from llm_pipeline.cst_analysis import ResolverHook, analyze_imports
 # manifest's import chain acyclic. ``specs/__init__.py`` imports
 # from ``discovery.manifest``, which imports this module — going
 # through ``llm_pipeline.artifacts`` here would trigger that cycle.
-from llm_pipeline.artifacts.kinds import (
+from llm_pipeline.artifacts.base.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
@@ -46,7 +46,7 @@ from llm_pipeline.artifacts.kinds import (
     KIND_TABLE,
     KIND_TOOL,
 )
-from llm_pipeline.artifacts.registration import ArtifactRegistration
+from llm_pipeline.artifacts.base.registration import ArtifactRegistration
 from llm_pipeline.artifacts.builders import (
     ConstantBuilder,
     EnumBuilder,

@@ -35,7 +35,7 @@ from llm_pipeline.cst_analysis.visitors import (
 # avoid a circular import: ``llm_pipeline.artifacts.builders`` imports
 # back into ``cst_analysis``.
 from llm_pipeline.artifacts.base import ImportArtifact, ImportBlock, SymbolRef
-from llm_pipeline.artifacts.blocks import CodeBodySpec
+from llm_pipeline.artifacts.base.blocks import CodeBodySpec
 
 
 __all__ = [

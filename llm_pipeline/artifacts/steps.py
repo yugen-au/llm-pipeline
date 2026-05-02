@@ -28,9 +28,9 @@ from typing import Literal
 from pydantic import Field
 
 from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
-from llm_pipeline.artifacts.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
-from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
-from llm_pipeline.artifacts.kinds import KIND_STEP
+from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
+from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.base.kinds import KIND_STEP
 
 
 __all__ = ["StepFields", "StepSpec"]

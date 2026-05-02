@@ -29,8 +29,8 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm_pipeline.artifacts.base import ArtifactSpec
-from llm_pipeline.artifacts.blocks import JsonSchemaWithRefs
-from llm_pipeline.artifacts.kinds import KIND_TABLE
+from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
+from llm_pipeline.artifacts.base.kinds import KIND_TABLE
 
 
 __all__ = ["IndexSpec", "TableSpec"]
