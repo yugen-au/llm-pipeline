@@ -52,13 +52,48 @@ from typing import ClassVar, Literal
 
 from pydantic import Field
 
-from llm_pipeline.graph.spec import EdgeSpec, WiringSpec
 from llm_pipeline.specs.base import ArtifactField, ArtifactRef, ArtifactSpec
 from llm_pipeline.specs.blocks import JsonSchemaWithRefs
+from llm_pipeline.specs.fields import FieldRef, FieldsBase
 from llm_pipeline.specs.kinds import KIND_PIPELINE
 
 
-__all__ = ["NodeBindingSpec", "PipelineSpec"]
+__all__ = [
+    "EdgeSpec",
+    "NodeBindingSpec",
+    "PipelineFields",
+    "PipelineSpec",
+    "SourceSpec",
+    "WiringSpec",
+]
+
+
+class SourceSpec(ArtifactField):
+    """Serialised view of one wiring source adapter."""
+
+    kind: Literal["from_input", "from_output", "from_pipeline", "computed"]
+    path: str | None = None
+    step_cls: str | None = None
+    index: int | None = None
+    field: str | None = None
+    attr: str | None = None
+    fn: str | None = None
+    sources: list["SourceSpec"] | None = None
+
+
+class WiringSpec(ArtifactField):
+    """A node's pipeline-level wiring (its ``inputs_spec`` serialised)."""
+
+    inputs_cls: str
+    field_sources: dict[str, SourceSpec]
+
+
+class EdgeSpec(ArtifactField):
+    """A directed edge between pipeline nodes (or to ``End``)."""
+
+    from_node: str
+    to_node: str
+    branch: str | None = None
 
 
 class NodeBindingSpec(ArtifactField):
@@ -131,3 +166,21 @@ class PipelineSpec(ArtifactSpec):
     # matches. ``None`` when ``cls.start_node`` is unset (typically
     # because the pipeline has no valid bindings).
     start_node: ArtifactRef | None = None
+
+
+class PipelineFields(FieldsBase):
+    """Routing keys for :class:`PipelineSpec` issue captures."""
+
+    SPEC_CLS = PipelineSpec
+
+    INPUT_DATA = FieldRef("input_data")
+
+    @classmethod
+    def node(cls, node_name: str) -> FieldRef:
+        """Path to ``spec.nodes[i]`` where ``i.node_name == node_name``."""
+        return FieldRef(f"nodes[{node_name}]")
+
+    @classmethod
+    def source(cls, node_name: str, src_field: str) -> FieldRef:
+        """Path to ``spec.nodes[i].wiring.field_sources[src_field]``."""
+        return FieldRef(f"nodes[{node_name}].wiring.field_sources[{src_field}]")

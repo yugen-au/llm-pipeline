@@ -24,7 +24,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
+
+from llm_pipeline.specs.pipelines import EdgeSpec, SourceSpec, WiringSpec
+from llm_pipeline.specs.validation import (
+    ValidationIssue,
+    ValidationLocation,
+    ValidationSummary,
+)
 
 if TYPE_CHECKING:
     from llm_pipeline.graph.pipeline import Pipeline
@@ -45,159 +52,6 @@ __all__ = [
     "derive_issues",
     "is_runnable",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Source descriptors (FromInput / FromOutput / FromPipeline / Computed)
-# ---------------------------------------------------------------------------
-
-
-class SourceSpec(BaseModel):
-    """Serialised view of a single ``Source`` adapter.
-
-    ``kind`` is the discriminator. Each variant uses a subset of the
-    optional fields:
-
-    - ``from_input``: ``path``
-    - ``from_output``: ``step_cls``, ``index``, ``field``
-    - ``from_pipeline``: ``attr``
-    - ``computed``: ``fn`` (function repr) + ``sources`` (recursive)
-
-    ``issues`` carries any validation problems specific to this
-    source adapter (e.g. ``from_input_unknown_path`` when the
-    referenced INPUT_DATA path doesn't exist). The frontend reads
-    ``node.wiring.field_sources[name].issues`` to render an inline
-    error on that exact input.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    kind: Literal["from_input", "from_output", "from_pipeline", "computed"]
-    path: str | None = None
-    step_cls: str | None = None
-    index: int | None = None
-    field: str | None = None
-    attr: str | None = None
-    fn: str | None = None
-    sources: list["SourceSpec"] | None = None
-    issues: list["ValidationIssue"] = Field(default_factory=list)
-
-
-class WiringSpec(BaseModel):
-    """A node's pipeline-level wiring (its ``inputs_spec`` serialised)."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    inputs_cls: str  # fully-qualified class name
-    field_sources: dict[str, SourceSpec]
-
-
-# ---------------------------------------------------------------------------
-# Validation issues (derived from the spec at read time)
-# ---------------------------------------------------------------------------
-
-
-class ValidationLocation(BaseModel):
-    """Where in a pipeline a validation issue lives.
-
-    ``pipeline`` and ``node`` are display-only context — surface
-    text the UI shows alongside an issue.
-
-    ``path`` is the typed routing path —
-    :meth:`ArtifactField.attach_class_captures` walks it to land
-    each issue on the right sub-component. Constructed via
-    :class:`llm_pipeline.specs.fields.FieldRef` (typically a
-    constant on a per-kind ``*Fields`` class) so typos / stale slot
-    names raise at class-load time rather than failing silently.
-    Coerced to ``str`` here for JSON-serialisability; the syntax is
-    documented in :func:`llm_pipeline.specs.fields.parse_path`.
-
-    ``field`` is the legacy single-segment routing key — preserved
-    for back-compat with capture sites that haven't migrated to
-    ``path``. The walker treats ``field`` as a top-level path when
-    ``path`` is unset.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    pipeline: str | None = None
-    node: str | None = None  # node class name (e.g. "TopicExtractionStep")
-    field: str | None = None  # legacy single-segment routing key
-    path: str | None = None  # typed routing path (FieldRef coerced to str)
-
-    # Sub-component context the ROUTER ignores — free-form metadata
-    # the UI uses to attach indicators at finer granularity than
-    # the ArtifactField hierarchy supports. Examples:
-    # - prompt-variable field name (``"sentiment"``) when the issue
-    #   is about that specific field within a prompt's variables
-    #   schema (router lands on ``PromptData.variables.issues``;
-    #   UI uses ``subfield`` to highlight the offending variable).
-    # - JSON Pointer into a JsonSchemaWithRefs (``"/properties/x"``)
-    #   for issues about a specific schema property.
-    # The routing layer never consults this — it's purely UI metadata.
-    subfield: str | None = None
-
-    @field_validator("path", "field", mode="before")
-    @classmethod
-    def _coerce_to_str(cls, v: object) -> str | None:
-        # Accept FieldRef (or anything with __str__ that's not None)
-        # so capture sites can pass FieldRef constants directly without
-        # writing ``str(StepFields.INPUTS)`` everywhere.
-        if v is None:
-            return None
-        if isinstance(v, str):
-            return v
-        return str(v)
-
-
-class ValidationIssue(BaseModel):
-    """A single thing wrong (or worth flagging) about a pipeline.
-
-    Issues are localised onto the spec component they describe:
-    pipeline-wide issues sit on ``PipelineSpec.issues``; node-level
-    on ``NodeSpec.issues``; per-wiring-field on
-    ``SourceSpec.issues``; prompt-class on ``PromptSpec.issues``.
-    The frontend walks the spec and renders error styling on the
-    component carrying the issue — no string-matching by location.
-
-    :func:`derive_issues` returns a flat list across every level
-    when callers need the full set (e.g. :func:`is_runnable`,
-    ``ValidationSummary.issue_count``).
-
-    Severity gates runnability: any ``error`` blocks the pipeline
-    from running; ``warning`` is informational.
-
-    The ``code`` is a stable machine-readable identifier (e.g.
-    ``missing_inputs``, ``from_output_not_upstream``). Frontends
-    can branch UX on it; humans read ``message`` and
-    ``suggestion``. ``location`` retains pipeline / node / field
-    pointers for human-readable context (logs, error messages),
-    not for routing.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    severity: Literal["error", "warning"]
-    code: str
-    message: str
-    location: ValidationLocation
-    suggestion: str | None = None
-
-
-class ValidationSummary(BaseModel):
-    """API-shaped digest of a pipeline's validation state.
-
-    Computed from a ``PipelineEntry`` for the ``GET /api/pipelines``
-    list response. The frontend renders ``severity`` as a badge; the
-    ``issues`` list backs the detail panel.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    runnable: bool
-    severity: Literal["clean", "warnings", "errors", "import_error"]
-    issue_count: int
-    issues: list[ValidationIssue]
 
 
 # ---------------------------------------------------------------------------
@@ -283,26 +137,6 @@ class NodeSpec(BaseModel):
     wiring: WiringSpec
     prompt: PromptSpec | None = None  # only for steps
     issues: list["ValidationIssue"] = Field(default_factory=list)
-
-
-class EdgeSpec(BaseModel):
-    """A directed graph edge from one node to the next (or to End).
-
-    ``branch`` is the optional label identifying which decision-branch
-    this edge belongs to. Today's union-return-driven topology
-    populates ``None`` (no labelled branches). Future binding-driven
-    branching (where the pipeline binding declares a ``next: dict[str,
-    NodeCls]`` mapping) populates the branch label per edge. The
-    field is forward-compatible: a node with two return-type targets
-    today renders as two ``EdgeSpec`` records both with ``branch=None``,
-    same shape the runtime work will reuse with labels.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    from_node: str
-    to_node: str  # node name or "End"
-    branch: str | None = None
 
 
 # ---------------------------------------------------------------------------

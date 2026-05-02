@@ -38,12 +38,8 @@ from typing import Any, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# ValidationIssue must be a runtime import (not under TYPE_CHECKING)
-# because Pydantic needs the actual class to validate the ``issues``
-# field. Phase C moves the validation types into ``llm_pipeline.specs``
-# so this cross-package import goes away.
-from llm_pipeline.graph.spec import ValidationIssue
 from llm_pipeline.specs.fields import parse_path
+from llm_pipeline.specs.validation import ValidationIssue
 
 
 __all__ = [
