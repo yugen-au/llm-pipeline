@@ -193,7 +193,7 @@ def discover_from_convention(
             # Per-kind walker pass 1 (null resolver — bare specs):
             if registries is not None:
                 for walker in WALKERS_BY_SUBFOLDER.get(subfolder, []):
-                    walker(modules, registries, _null_resolver)
+                    walker.walk(modules, registries, _null_resolver)
 
     # Pass 2: rebuild cst_analysis-aware specs with a resolver
     # that sees every kind populated. Constants / enums / tools /
@@ -206,7 +206,7 @@ def discover_from_convention(
             if not modules:
                 continue
             for walker in WALKERS_BY_SUBFOLDER.get(subfolder, []):
-                walker(modules, registries, full_resolver)
+                walker.walk(modules, registries, full_resolver)
 
     if all_pipeline_reg:
         logger.info(

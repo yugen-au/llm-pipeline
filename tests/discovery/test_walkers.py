@@ -27,15 +27,15 @@ from llm_pipeline.discovery import init_empty_registries
 from llm_pipeline.discovery.loading import load_convention_module
 from llm_pipeline.discovery.resolver import make_resolver
 from llm_pipeline.discovery.walkers import (
-    walk_constants,
-    walk_enums,
-    walk_extractions,
-    walk_pipelines,
-    walk_reviews,
-    walk_schemas,
-    walk_steps,
-    walk_tables,
-    walk_tools,
+    ConstantsWalker,
+    EnumsWalker,
+    ExtractionsWalker,
+    PipelinesWalker,
+    ReviewsWalker,
+    SchemasWalker,
+    StepsWalker,
+    TablesWalker,
+    ToolsWalker,
 )
 from llm_pipeline.graph import (
     ExtractionNode,
@@ -80,7 +80,7 @@ class TestWalkConstants:
         mod = load_convention_module(path, "_test_consts")
 
         regs = init_empty_registries()
-        walk_constants([mod], regs, _null_resolver)
+        ConstantsWalker().walk([mod], regs, _null_resolver)
 
         assert "max_retries" in regs[KIND_CONSTANT]
         assert "default_label" in regs[KIND_CONSTANT]
@@ -113,7 +113,7 @@ class TestWalkEnums:
         mod = load_convention_module(path, "_test_enums")
 
         regs = init_empty_registries()
-        walk_enums([mod], regs, _null_resolver)
+        EnumsWalker().walk([mod], regs, _null_resolver)
 
         assert "sentiment" in regs[KIND_ENUM]
         spec = regs[KIND_ENUM]["sentiment"].spec
@@ -143,7 +143,7 @@ class TestWalkEnums:
         importing_mod = load_convention_module(importing, "_test_enum_importing")
 
         regs = init_empty_registries()
-        walk_enums([importing_mod], regs, _null_resolver)
+        EnumsWalker().walk([importing_mod], regs, _null_resolver)
         # ``Sentiment`` is imported, not defined here, so it's skipped.
         assert regs[KIND_ENUM] == {}
 
@@ -167,7 +167,7 @@ class TestWalkSchemas:
         mod = load_convention_module(path, "_test_schemas_basic")
 
         regs = init_empty_registries()
-        walk_schemas([mod], regs, _null_resolver)
+        SchemasWalker().walk([mod], regs, _null_resolver)
 
         assert "address" in regs[KIND_SCHEMA]
         spec = regs[KIND_SCHEMA]["address"].spec
@@ -192,7 +192,7 @@ class TestWalkSchemas:
         mod = load_convention_module(path, "_test_schemas_w_table")
 
         regs = init_empty_registries()
-        walk_schemas([mod], regs, _null_resolver)
+        SchemasWalker().walk([mod], regs, _null_resolver)
         # walk_schemas registers it as a schema (folder is source of truth).
         assert "stray_table" in regs[KIND_SCHEMA]
         # walk_tables wouldn't have run on this folder.
@@ -220,7 +220,7 @@ class TestWalkTables:
         mod = load_convention_module(path, "_test_tables_basic")
 
         regs = init_empty_registries()
-        walk_tables([mod], regs, _null_resolver)
+        TablesWalker().walk([mod], regs, _null_resolver)
 
         assert "topic_row" in regs[KIND_TABLE]
         spec = regs[KIND_TABLE]["topic_row"].spec
@@ -241,7 +241,7 @@ class TestWalkTables:
         mod = load_convention_module(path, "_test_tables_nontable")
 
         regs = init_empty_registries()
-        walk_tables([mod], regs, _null_resolver)
+        TablesWalker().walk([mod], regs, _null_resolver)
         assert regs[KIND_TABLE] == {}
 
 
@@ -276,15 +276,15 @@ class TestTwoPassResolution:
         regs = init_empty_registries()
 
         # Pass 1
-        walk_constants([consts_mod], regs, _null_resolver)
-        walk_schemas([schemas_mod], regs, _null_resolver)
+        ConstantsWalker().walk([consts_mod], regs, _null_resolver)
+        SchemasWalker().walk([schemas_mod], regs, _null_resolver)
         # No refs yet — resolver returned None for every lookup.
         foo_spec = regs[KIND_SCHEMA]["foo"].spec
         assert foo_spec.definition.refs == {}
 
         # Pass 2 — rebuild with full resolver.
         full_resolver = make_resolver(regs)
-        walk_schemas([schemas_mod], regs, full_resolver)
+        SchemasWalker().walk([schemas_mod], regs, full_resolver)
         foo_spec = regs[KIND_SCHEMA]["foo"].spec
         assert "/properties/retries/default" in foo_spec.definition.refs
         ref = foo_spec.definition.refs["/properties/retries/default"][0]
@@ -339,7 +339,7 @@ class TestWalkSteps:
         mod = _step_module(tmp_path)
 
         regs = init_empty_registries()
-        walk_steps([mod], regs, _null_resolver)
+        StepsWalker().walk([mod], regs, _null_resolver)
 
         assert "foo" in regs[KIND_STEP]
         spec = regs[KIND_STEP]["foo"].spec
@@ -361,7 +361,7 @@ class TestNoOpWalkers:
         # rationale (tool convention not yet pinned). Verifying
         # registries stay empty.
         regs = init_empty_registries()
-        walk_tools([], regs, _null_resolver)
+        ToolsWalker().walk([], regs, _null_resolver)
         assert regs[KIND_TOOL] == {}
 
     def test_walk_pipelines_does_nothing(self):
@@ -369,5 +369,5 @@ class TestNoOpWalkers:
         # ``app.state.pipeline_registry`` for now — the existing
         # graph PipelineSpec doesn't subclass ArtifactSpec yet.
         regs = init_empty_registries()
-        walk_pipelines([], regs, _null_resolver)
+        PipelinesWalker().walk([], regs, _null_resolver)
         assert regs[KIND_PIPELINE] == {}

@@ -44,6 +44,7 @@ from llm_pipeline.specs.kinds import (
     KIND_SCHEMA,
     KIND_STEP,
     KIND_TABLE,
+    KIND_TOOL,
 )
 from llm_pipeline.specs.registration import ArtifactRegistration
 from llm_pipeline.specs.builders import (
@@ -59,15 +60,16 @@ from llm_pipeline.specs.builders import (
 
 
 __all__ = [
-    "walk_constants",
-    "walk_enums",
-    "walk_extractions",
-    "walk_pipelines",
-    "walk_reviews",
-    "walk_schemas",
-    "walk_steps",
-    "walk_tables",
-    "walk_tools",
+    "ConstantsWalker",
+    "EnumsWalker",
+    "ExtractionsWalker",
+    "PipelinesWalker",
+    "ReviewsWalker",
+    "SchemasWalker",
+    "StepsWalker",
+    "TablesWalker",
+    "ToolsWalker",
+    "Walker",
 ]
 
 
@@ -285,14 +287,6 @@ class ConstantsWalker(Walker):
         )
 
 
-def walk_constants(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    ConstantsWalker().walk(modules, registries, resolver)
-
-
 # ---------------------------------------------------------------------------
 # Level 2: enums
 # ---------------------------------------------------------------------------
@@ -317,14 +311,6 @@ class EnumsWalker(Walker):
             enum_cls=value,
             source_path=_module_path(mod),
         )
-
-
-def walk_enums(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    EnumsWalker().walk(modules, registries, resolver)
 
 
 # ---------------------------------------------------------------------------
@@ -358,14 +344,6 @@ class SchemasWalker(Walker):
             source_text=source_text,
             resolver=resolver,
         )
-
-
-def walk_schemas(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    SchemasWalker().walk(modules, registries, resolver)
 
 
 # ---------------------------------------------------------------------------
@@ -404,37 +382,38 @@ class TablesWalker(Walker):
         )
 
 
-def walk_tables(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    TablesWalker().walk(modules, registries, resolver)
-
-
 # ---------------------------------------------------------------------------
 # Level 3: tools (skeleton — no-op until tool convention firms up)
 # ---------------------------------------------------------------------------
 
 
-def walk_tools(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    """Skeleton walker for ``tools/``.
+class ToolsWalker(Walker):
+    """Skeleton walker for ``tools/`` — registers nothing until the convention firms up.
 
     The current ``tools/`` convention is "files that call
     ``register_agent``" — there isn't a structurally identifiable
-    tool class shape this walker can inspect generically. Kept as
-    a function (rather than a :class:`Walker` subclass) because
-    there's nothing to walk yet.
+    tool class shape this walker can inspect generically. Tools
+    registered via :func:`register_agent` continue to live in their
+    existing global registry; ``registries[KIND_TOOL]`` stays empty.
 
-    For now this is a documented no-op. Tools registered via
-    ``register_agent`` continue to live in their existing global
-    registry; ``registries[KIND_TOOL]`` stays empty.
+    Flows through the same :meth:`Walker.walk` machinery as every
+    other walker; the only kind-specific behaviour is :meth:`qualifies`
+    returning ``False`` for every member, so nothing ends up in the
+    registry. When the tool convention is settled, replacing
+    ``qualifies`` (and adding a real :meth:`build_spec`) is the only
+    surface that needs to change.
     """
-    del modules, registries, resolver  # no-op
+
+    KIND = KIND_TOOL
+
+    def qualifies(self, value, mod):
+        return False
+
+    def name_for(self, attr_name, value):  # pragma: no cover — never called
+        return ""
+
+    def build_spec(self, **kwargs):  # pragma: no cover — never called
+        raise NotImplementedError
 
 
 # ---------------------------------------------------------------------------
@@ -473,14 +452,6 @@ class StepsWalker(Walker):
         )
 
 
-def walk_steps(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    StepsWalker().walk(modules, registries, resolver)
-
-
 # ---------------------------------------------------------------------------
 # Level 4: extractions
 # ---------------------------------------------------------------------------
@@ -509,14 +480,6 @@ class ExtractionsWalker(Walker):
         )
 
 
-def walk_extractions(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    ExtractionsWalker().walk(modules, registries, resolver)
-
-
 # ---------------------------------------------------------------------------
 # Level 4: reviews
 # ---------------------------------------------------------------------------
@@ -543,14 +506,6 @@ class ReviewsWalker(Walker):
             source_text=source_text,
             resolver=resolver,
         )
-
-
-def walk_reviews(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    ReviewsWalker().walk(modules, registries, resolver)
 
 
 # ---------------------------------------------------------------------------
@@ -588,14 +543,6 @@ class PipelinesWalker(Walker):
             source_text=source_text,
             resolver=resolver,
         )
-
-
-def walk_pipelines(
-    modules: list[ModuleType],
-    registries: dict[str, dict[str, ArtifactRegistration]],
-    resolver: ResolverHook,
-) -> None:
-    PipelinesWalker().walk(modules, registries, resolver)
 
 
 # Subfolder→walker dispatch lives in

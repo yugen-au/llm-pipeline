@@ -20,18 +20,18 @@ file).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
 
 from llm_pipeline.discovery.walkers import (
-    walk_constants,
-    walk_enums,
-    walk_extractions,
-    walk_pipelines,
-    walk_reviews,
-    walk_schemas,
-    walk_steps,
-    walk_tables,
-    walk_tools,
+    ConstantsWalker,
+    EnumsWalker,
+    ExtractionsWalker,
+    PipelinesWalker,
+    ReviewsWalker,
+    SchemasWalker,
+    StepsWalker,
+    TablesWalker,
+    ToolsWalker,
+    Walker,
 )
 from llm_pipeline.specs.constants import ConstantSpec
 from llm_pipeline.specs.enums import EnumSpec
@@ -80,8 +80,10 @@ class KindManifest:
     - ``fields_cls``: the per-kind ``Fields`` constants class
       (routing keys for ``__init_subclass__`` captures), or
       ``None`` for kinds without capture sites.
-    - ``walker_fn``: the function-form walker called from
-      ``conventions.discover_from_convention`` for this subfolder.
+    - ``walker``: the per-kind :class:`Walker` instance —
+      ``conventions.discover_from_convention`` calls
+      ``walker.walk(modules, registries, resolver)`` for the
+      matching subfolder.
     """
 
     kind: str
@@ -89,7 +91,7 @@ class KindManifest:
     level: int
     spec_cls: type
     fields_cls: type | None
-    walker_fn: Callable
+    walker: Walker
 
 
 # Single source of truth. Adding a new kind = one entry here.
@@ -97,47 +99,47 @@ KIND_MANIFESTS: dict[str, KindManifest] = {
     KIND_CONSTANT: KindManifest(
         kind=KIND_CONSTANT, subfolder="constants", level=1,
         spec_cls=ConstantSpec, fields_cls=None,
-        walker_fn=walk_constants,
+        walker=ConstantsWalker(),
     ),
     KIND_ENUM: KindManifest(
         kind=KIND_ENUM, subfolder="enums", level=2,
         spec_cls=EnumSpec, fields_cls=None,
-        walker_fn=walk_enums,
+        walker=EnumsWalker(),
     ),
     KIND_SCHEMA: KindManifest(
         kind=KIND_SCHEMA, subfolder="schemas", level=3,
         spec_cls=SchemaSpec, fields_cls=None,
-        walker_fn=walk_schemas,
+        walker=SchemasWalker(),
     ),
     KIND_TABLE: KindManifest(
         kind=KIND_TABLE, subfolder="tables", level=3,
         spec_cls=TableSpec, fields_cls=None,
-        walker_fn=walk_tables,
+        walker=TablesWalker(),
     ),
     KIND_TOOL: KindManifest(
         kind=KIND_TOOL, subfolder="tools", level=3,
         spec_cls=ToolSpec, fields_cls=None,
-        walker_fn=walk_tools,
+        walker=ToolsWalker(),
     ),
     KIND_EXTRACTION: KindManifest(
         kind=KIND_EXTRACTION, subfolder="extractions", level=4,
         spec_cls=ExtractionSpec, fields_cls=ExtractionFields,
-        walker_fn=walk_extractions,
+        walker=ExtractionsWalker(),
     ),
     KIND_REVIEW: KindManifest(
         kind=KIND_REVIEW, subfolder="reviews", level=4,
         spec_cls=ReviewSpec, fields_cls=ReviewFields,
-        walker_fn=walk_reviews,
+        walker=ReviewsWalker(),
     ),
     KIND_STEP: KindManifest(
         kind=KIND_STEP, subfolder="steps", level=4,
         spec_cls=StepSpec, fields_cls=StepFields,
-        walker_fn=walk_steps,
+        walker=StepsWalker(),
     ),
     KIND_PIPELINE: KindManifest(
         kind=KIND_PIPELINE, subfolder="pipelines", level=5,
         spec_cls=PipelineSpec, fields_cls=None,
-        walker_fn=walk_pipelines,
+        walker=PipelinesWalker(),
     ),
 }
 
@@ -159,8 +161,8 @@ LOAD_ORDER: list[str] = [
     )
 ]
 
-WALKERS_BY_SUBFOLDER: dict[str, list[Callable]] = {
-    m.subfolder: [m.walker_fn] for m in KIND_MANIFESTS.values()
+WALKERS_BY_SUBFOLDER: dict[str, list[Walker]] = {
+    m.subfolder: [m.walker] for m in KIND_MANIFESTS.values()
 }
 
 
