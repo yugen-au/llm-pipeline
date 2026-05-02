@@ -904,7 +904,7 @@ def _apply_code_body(
         AnalysisError,
         analyze_code_body,
     )
-    from llm_pipeline.specs import CodeBodySpec
+    from llm_pipeline.artifacts import CodeBodySpec
 
     resolved = _guard_or_raise(source_file, root)
     if not resolved.exists():

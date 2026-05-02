@@ -27,10 +27,10 @@ from typing import Literal
 
 from pydantic import Field
 
-from llm_pipeline.specs.base import ArtifactRef, ArtifactSpec
-from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
-from llm_pipeline.specs.fields import FieldRef, FieldsBase
-from llm_pipeline.specs.kinds import KIND_STEP
+from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
+from llm_pipeline.artifacts.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
+from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.kinds import KIND_STEP
 
 
 __all__ = ["StepFields", "StepSpec"]

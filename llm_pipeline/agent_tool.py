@@ -23,7 +23,7 @@ from llm_pipeline.inputs import StepInputs
 from llm_pipeline.runtime import PipelineContext
 
 if TYPE_CHECKING:
-    from llm_pipeline.specs.validation import ValidationIssue
+    from llm_pipeline.artifacts.validation import ValidationIssue
 
 __all__ = ["AgentTool", "resolve_tool_binds"]
 
@@ -39,8 +39,8 @@ class AgentTool:
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        from llm_pipeline.specs.tools import ToolFields
-        from llm_pipeline.specs.validation import (
+        from llm_pipeline.artifacts.tools import ToolFields
+        from llm_pipeline.artifacts.validation import (
             ValidationIssue,
             ValidationLocation,
         )

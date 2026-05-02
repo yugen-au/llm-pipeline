@@ -16,8 +16,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from llm_pipeline.specs.base import ArtifactSpec
-from llm_pipeline.specs.kinds import KIND_ENUM
+from llm_pipeline.artifacts.base import ArtifactSpec
+from llm_pipeline.artifacts.kinds import KIND_ENUM
 
 
 __all__ = ["EnumMemberSpec", "EnumSpec"]

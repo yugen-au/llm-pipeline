@@ -181,7 +181,7 @@ class TestDetail:
         # round-trips through the relevant ``ArtifactSpec``
         # subclass — this catches any field that lost its shape
         # crossing the JSON boundary.
-        from llm_pipeline.specs import StepSpec
+        from llm_pipeline.artifacts import StepSpec
 
         c = _client()
         r = c.get("/api/artifacts/step/sentiment_analysis")

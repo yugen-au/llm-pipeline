@@ -22,11 +22,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from llm_pipeline.specs.base import ArtifactField
+from llm_pipeline.artifacts.base import ArtifactField
 
 if TYPE_CHECKING:
     from llm_pipeline.graph.spec import ValidationIssue
-    from llm_pipeline.specs.base import ArtifactSpec
+    from llm_pipeline.artifacts.base import ArtifactSpec
 
 
 __all__ = ["flatten_artifact_issues"]

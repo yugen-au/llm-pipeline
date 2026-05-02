@@ -9,7 +9,7 @@ single flat list — used by the API list endpoint and any
 from __future__ import annotations
 
 from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     CodeBodySpec,
     ConstantSpec,
     JsonSchemaWithRefs,

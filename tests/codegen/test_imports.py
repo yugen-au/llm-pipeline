@@ -26,7 +26,7 @@ from llm_pipeline.codegen import (
     write_imports,
 )
 from llm_pipeline.cst_analysis import analyze_imports
-from llm_pipeline.specs import ImportArtifact, ImportBlock
+from llm_pipeline.artifacts import ImportArtifact, ImportBlock
 
 
 def _write(root: Path, name: str, content: str) -> Path:

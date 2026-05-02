@@ -27,7 +27,7 @@ imports from ``llm_pipeline.graph``.
 from __future__ import annotations
 
 from llm_pipeline.graph.instructions import LLMResultMixin
-from llm_pipeline.specs.pipelines import EdgeSpec, SourceSpec, WiringSpec
+from llm_pipeline.artifacts.pipelines import EdgeSpec, SourceSpec, WiringSpec
 from llm_pipeline.graph.nodes import (
     ExtractionNode,
     LLMStepNode,
@@ -87,7 +87,7 @@ __all__ = [
     "FromOutput",
     "FromPipeline",
     "SourcesSpec",
-    # Wiring/edge spec types (now live in llm_pipeline.specs)
+    # Wiring/edge spec types (now live in llm_pipeline.artifacts)
     "EdgeSpec",
     "WiringSpec",
     "SourceSpec",

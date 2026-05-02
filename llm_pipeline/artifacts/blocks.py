@@ -40,12 +40,12 @@ from typing import Any
 from pydantic import Field
 
 # ``SymbolRef`` is defined in ``base.py`` because
-# :class:`llm_pipeline.specs.base.ImportBlock` (which lives there
+# :class:`llm_pipeline.artifacts.base.ImportBlock` (which lives there
 # to break a base ↔ blocks cycle) carries
 # ``refs: list[SymbolRef]``. Re-exported below so existing callers
 # importing ``SymbolRef`` from this module keep working.
-from llm_pipeline.specs.base import ArtifactField, SymbolRef
-from llm_pipeline.specs.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.base import ArtifactField, SymbolRef
+from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
 
 
 __all__ = [

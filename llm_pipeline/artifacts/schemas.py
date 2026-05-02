@@ -25,9 +25,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from llm_pipeline.specs.base import ArtifactSpec
-from llm_pipeline.specs.blocks import JsonSchemaWithRefs
-from llm_pipeline.specs.kinds import KIND_SCHEMA
+from llm_pipeline.artifacts.base import ArtifactSpec
+from llm_pipeline.artifacts.blocks import JsonSchemaWithRefs
+from llm_pipeline.artifacts.kinds import KIND_SCHEMA
 
 
 __all__ = ["SchemaSpec"]

@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from llm_pipeline.specs.base import ArtifactRef, ArtifactSpec
-from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
-from llm_pipeline.specs.fields import FieldRef, FieldsBase
-from llm_pipeline.specs.kinds import KIND_EXTRACTION
+from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
+from llm_pipeline.artifacts.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.kinds import KIND_EXTRACTION
 
 
 __all__ = ["ExtractionFields", "ExtractionSpec"]
@@ -52,7 +52,7 @@ class ExtractionSpec(ArtifactSpec):
 class ExtractionFields(FieldsBase):
     """Routing-key vocabulary for :class:`ExtractionSpec` issue captures.
 
-    See :class:`llm_pipeline.specs.steps.StepFields` for the routing
+    See :class:`llm_pipeline.artifacts.steps.StepFields` for the routing
     pattern. Path validity is checked at class-load time against
     :class:`ExtractionSpec`.
     """

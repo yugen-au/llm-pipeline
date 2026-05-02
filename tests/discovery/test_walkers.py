@@ -45,7 +45,7 @@ from llm_pipeline.graph import (
     StepInputs,
 )
 from llm_pipeline.prompts import PromptVariables
-from llm_pipeline.specs.kinds import (
+from llm_pipeline.artifacts.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,

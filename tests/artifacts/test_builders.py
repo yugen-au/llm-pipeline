@@ -14,7 +14,7 @@ from enum import Enum
 import pytest
 from pydantic import BaseModel, Field
 
-from llm_pipeline.specs.builders import (
+from llm_pipeline.artifacts.builders import (
     ConstantBuilder,
     EnumBuilder,
     ExtractionBuilder,
@@ -25,7 +25,7 @@ from llm_pipeline.specs.builders import (
     build_code_body,
     json_schema_with_refs,
 )
-from llm_pipeline.specs.kinds import (
+from llm_pipeline.artifacts.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,

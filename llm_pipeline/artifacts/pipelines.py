@@ -52,10 +52,10 @@ from typing import ClassVar, Literal
 
 from pydantic import Field
 
-from llm_pipeline.specs.base import ArtifactField, ArtifactRef, ArtifactSpec
-from llm_pipeline.specs.blocks import JsonSchemaWithRefs
-from llm_pipeline.specs.fields import FieldRef, FieldsBase
-from llm_pipeline.specs.kinds import KIND_PIPELINE
+from llm_pipeline.artifacts.base import ArtifactField, ArtifactRef, ArtifactSpec
+from llm_pipeline.artifacts.blocks import JsonSchemaWithRefs
+from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.kinds import KIND_PIPELINE
 
 
 __all__ = [

@@ -22,8 +22,8 @@ issue onto the matching ``ArtifactField`` sub-component (by
 
 The routing keys (the values that capture sites set as
 ``ValidationLocation.field``) are declared as constants on per-kind
-"fields" classes — :class:`llm_pipeline.specs.steps.StepFields`,
-:class:`llm_pipeline.specs.extractions.ExtractionFields`, etc. —
+"fields" classes — :class:`llm_pipeline.artifacts.steps.StepFields`,
+:class:`llm_pipeline.artifacts.extractions.ExtractionFields`, etc. —
 so capture sites import a typed constant (``StepFields.INPUTS``)
 instead of writing a bare string. Typos become ``AttributeError``
 at class-load time rather than silent fall-throughs at runtime.
@@ -38,8 +38,8 @@ from typing import Any, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from llm_pipeline.specs.fields import parse_path
-from llm_pipeline.specs.validation import ValidationIssue
+from llm_pipeline.artifacts.fields import parse_path
+from llm_pipeline.artifacts.validation import ValidationIssue
 
 
 __all__ = [
@@ -117,9 +117,9 @@ class ArtifactField(BaseModel):
 
         Each issue's ``ValidationLocation.path`` (or legacy ``field``)
         is interpreted as a typed routing path — see
-        :class:`llm_pipeline.specs.fields.FieldRef` for the
+        :class:`llm_pipeline.artifacts.fields.FieldRef` for the
         construction surface and
-        :func:`llm_pipeline.specs.fields.parse_path` for the syntax.
+        :func:`llm_pipeline.artifacts.fields.parse_path` for the syntax.
 
         Routing is **strict on structural mistakes** and permissive
         only on runtime gaps:
@@ -344,10 +344,10 @@ class SymbolRef(BaseModel):
     via the enclosing dict key (typically a JSON Pointer). The
     fields default to ``-1`` / ``0`` when not applicable.
 
-    Lives in :mod:`llm_pipeline.specs.base` (alongside
+    Lives in :mod:`llm_pipeline.artifacts.base` (alongside
     :class:`ImportBlock`) because :class:`ArtifactSpec` references
     it transitively via :attr:`ArtifactSpec.imports`. Per-kind
-    building blocks in :mod:`llm_pipeline.specs.blocks`
+    building blocks in :mod:`llm_pipeline.artifacts.blocks`
     (:class:`CodeBodySpec` etc.) re-import it from here.
     """
 
@@ -452,7 +452,7 @@ class ImportBlock(ArtifactField):
     kept in source order on :attr:`ArtifactSpec.imports`.
 
     **Structured, not verbatim.** Unlike
-    :class:`llm_pipeline.specs.blocks.CodeBodySpec` (which carries
+    :class:`llm_pipeline.artifacts.blocks.CodeBodySpec` (which carries
     the body's exact source text for byte-equal round-trip), this
     block decomposes the import into ``module`` + ``artifacts``.
     Spec → code regenerates the statement in canonical form
@@ -461,9 +461,9 @@ class ImportBlock(ArtifactField):
     formatted — one of the explicit goals of the per-artifact
     architecture.
 
-    Lives in :mod:`llm_pipeline.specs.base` because
+    Lives in :mod:`llm_pipeline.artifacts.base` because
     :class:`ArtifactSpec` carries a ``list[ImportBlock]`` field —
-    putting it in :mod:`llm_pipeline.specs.blocks` would create an
+    putting it in :mod:`llm_pipeline.artifacts.blocks` would create an
     import cycle (blocks → base → blocks).
 
     Inherits ``issues`` from :class:`ArtifactField` — statement-level

@@ -317,7 +317,7 @@ class TestAttachClassCaptures:
     when builders call ``.attach_class_captures(cls)``."""
 
     def test_inputs_capture_routes_to_step_spec_inputs(self):
-        from llm_pipeline.specs import (
+        from llm_pipeline.artifacts import (
             JsonSchemaWithRefs,
             KIND_STEP,
             StepSpec,
@@ -365,7 +365,7 @@ class TestAttachClassCaptures:
         and route onto PromptData.variables.issues (the unified
         PromptVariableDefs sub-component). Single home for both
         Pydantic-fields and auto_vars problems."""
-        from llm_pipeline.specs import (
+        from llm_pipeline.artifacts import (
             PromptData,
             PromptVariableDefs,
         )
@@ -385,7 +385,7 @@ class TestAttachClassCaptures:
         assert "missing_field_description" in var_codes
 
     def test_top_level_issue_lands_on_spec_issues(self):
-        from llm_pipeline.specs import (
+        from llm_pipeline.artifacts import (
             JsonSchemaWithRefs,
             KIND_STEP,
             StepSpec,

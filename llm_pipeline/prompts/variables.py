@@ -92,7 +92,7 @@ class PromptVariables(BaseModel):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.specs import PromptDataFields
+        from llm_pipeline.artifacts import PromptDataFields
 
         errors: list[ValidationIssue] = []
 

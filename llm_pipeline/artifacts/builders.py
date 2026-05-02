@@ -29,16 +29,16 @@ from llm_pipeline.cst_analysis import (
     analyze_class_fields,
     analyze_code_body,
 )
-from llm_pipeline.specs.base import ArtifactRef, SymbolRef
-from llm_pipeline.specs.blocks import (
+from llm_pipeline.artifacts.base import ArtifactRef, SymbolRef
+from llm_pipeline.artifacts.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
 )
-from llm_pipeline.specs.constants import ConstantSpec
-from llm_pipeline.specs.enums import EnumMemberSpec, EnumSpec
-from llm_pipeline.specs.extractions import ExtractionSpec
-from llm_pipeline.specs.kinds import (
+from llm_pipeline.artifacts.constants import ConstantSpec
+from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
+from llm_pipeline.artifacts.extractions import ExtractionSpec
+from llm_pipeline.artifacts.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
@@ -49,12 +49,12 @@ from llm_pipeline.specs.kinds import (
     KIND_TABLE,
     KIND_TOOL,
 )
-from llm_pipeline.specs.pipelines import NodeBindingSpec, PipelineSpec
-from llm_pipeline.specs.reviews import ReviewSpec
-from llm_pipeline.specs.schemas import SchemaSpec
-from llm_pipeline.specs.steps import StepSpec
-from llm_pipeline.specs.tables import IndexSpec, TableSpec
-from llm_pipeline.specs.tools import ToolSpec
+from llm_pipeline.artifacts.pipelines import NodeBindingSpec, PipelineSpec
+from llm_pipeline.artifacts.reviews import ReviewSpec
+from llm_pipeline.artifacts.schemas import SchemaSpec
+from llm_pipeline.artifacts.steps import StepSpec
+from llm_pipeline.artifacts.tables import IndexSpec, TableSpec
+from llm_pipeline.artifacts.tools import ToolSpec
 
 
 __all__ = [
@@ -539,7 +539,7 @@ class PipelineBuilder(SpecBuilder):
     SPEC_CLS = PipelineSpec
 
     def kind_fields(self) -> dict[str, Any]:
-        from llm_pipeline.specs.pipelines import (
+        from llm_pipeline.artifacts.pipelines import (
             EdgeSpec,
             NodeBindingSpec,
         )
@@ -596,7 +596,7 @@ def _node_name_for_binding(binding) -> str:
 
 def _build_wiring_spec(binding):
     """Serialise a binding's ``inputs_spec`` into a WiringSpec."""
-    from llm_pipeline.specs.pipelines import SourceSpec, WiringSpec
+    from llm_pipeline.artifacts.pipelines import SourceSpec, WiringSpec
 
     spec = binding.inputs_spec
     return WiringSpec(
@@ -609,7 +609,7 @@ def _build_wiring_spec(binding):
 
 
 def _serialise_source(source):
-    from llm_pipeline.specs.pipelines import SourceSpec
+    from llm_pipeline.artifacts.pipelines import SourceSpec
     from llm_pipeline.wiring import Computed, FromInput, FromOutput, FromPipeline
 
     if isinstance(source, FromInput):
@@ -635,7 +635,7 @@ def _serialise_source(source):
 def _build_edges(raw_nodes: list[type]):
     """Build the EdgeSpec list from each node's ``run()`` return annotations."""
     from llm_pipeline.graph.validator import _next_node_classes
-    from llm_pipeline.specs.pipelines import EdgeSpec
+    from llm_pipeline.artifacts.pipelines import EdgeSpec
 
     edges = []
     for node in raw_nodes:

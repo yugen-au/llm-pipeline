@@ -23,8 +23,8 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from llm_pipeline.specs.base import ArtifactSpec
-from llm_pipeline.specs.kinds import KIND_CONSTANT
+from llm_pipeline.artifacts.base import ArtifactSpec
+from llm_pipeline.artifacts.kinds import KIND_CONSTANT
 
 
 __all__ = ["ConstantSpec"]

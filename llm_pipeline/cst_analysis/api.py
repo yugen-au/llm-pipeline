@@ -32,10 +32,10 @@ from llm_pipeline.cst_analysis.visitors import (
     FunctionLocation,
 )
 # Import directly from the submodule (not the package __init__) to
-# avoid a circular import: ``llm_pipeline.specs.builders`` imports
+# avoid a circular import: ``llm_pipeline.artifacts.builders`` imports
 # back into ``cst_analysis``.
-from llm_pipeline.specs.base import ImportArtifact, ImportBlock, SymbolRef
-from llm_pipeline.specs.blocks import CodeBodySpec
+from llm_pipeline.artifacts.base import ImportArtifact, ImportBlock, SymbolRef
+from llm_pipeline.artifacts.blocks import CodeBodySpec
 
 
 __all__ = [

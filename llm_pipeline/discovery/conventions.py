@@ -23,7 +23,7 @@ from llm_pipeline.discovery.manifest import LOAD_ORDER, WALKERS_BY_SUBFOLDER
 from llm_pipeline.discovery.resolver import make_resolver
 
 if False:  # type-only — no runtime import to avoid circular cost
-    from llm_pipeline.specs import ArtifactRegistration  # noqa: F401
+    from llm_pipeline.artifacts import ArtifactRegistration  # noqa: F401
 
 
 __all__ = ["discover_from_convention"]

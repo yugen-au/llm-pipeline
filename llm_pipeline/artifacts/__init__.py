@@ -21,7 +21,7 @@ libcst hot-swap needs to translate UI edits back into code.
 See ``.claude/plans/per-artifact-architecture.md`` for the full
 design.
 """
-from llm_pipeline.specs.base import (
+from llm_pipeline.artifacts.base import (
     ArtifactField,
     ArtifactRef,
     ArtifactSpec,
@@ -29,17 +29,17 @@ from llm_pipeline.specs.base import (
     ImportBlock,
     SymbolRef,
 )
-from llm_pipeline.specs.blocks import (
+from llm_pipeline.artifacts.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
     PromptDataFields,
     PromptVariableDefs,
 )
-from llm_pipeline.specs.constants import ConstantSpec
-from llm_pipeline.specs.enums import EnumMemberSpec, EnumSpec
-from llm_pipeline.specs.extractions import ExtractionFields, ExtractionSpec
-from llm_pipeline.specs.kinds import (
+from llm_pipeline.artifacts.constants import ConstantSpec
+from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
+from llm_pipeline.artifacts.extractions import ExtractionFields, ExtractionSpec
+from llm_pipeline.artifacts.kinds import (
     ALL_KINDS,
     KIND_CONSTANT,
     KIND_ENUM,
@@ -56,17 +56,17 @@ from llm_pipeline.specs.kinds import (
 # cycle (manifest → walkers → specs.X submodules → specs/__init__,
 # all hitting partially-initialised modules). Callers that need the
 # level index import from the manifest module directly.
-from llm_pipeline.specs.issues import flatten_artifact_issues
-from llm_pipeline.specs.pipelines import NodeBindingSpec, PipelineSpec
-from llm_pipeline.specs.registration import ArtifactRegistration
-from llm_pipeline.specs.reviews import ReviewFields, ReviewSpec
-from llm_pipeline.specs.schemas import SchemaSpec
-from llm_pipeline.specs.steps import StepFields, StepSpec
-from llm_pipeline.specs.tables import IndexSpec, TableSpec
-from llm_pipeline.specs.tools import ToolSpec
+from llm_pipeline.artifacts.issues import flatten_artifact_issues
+from llm_pipeline.artifacts.pipelines import NodeBindingSpec, PipelineSpec
+from llm_pipeline.artifacts.registration import ArtifactRegistration
+from llm_pipeline.artifacts.reviews import ReviewFields, ReviewSpec
+from llm_pipeline.artifacts.schemas import SchemaSpec
+from llm_pipeline.artifacts.steps import StepFields, StepSpec
+from llm_pipeline.artifacts.tables import IndexSpec, TableSpec
+from llm_pipeline.artifacts.tools import ToolSpec
 
-# Note: builders live in ``llm_pipeline.specs.builders`` and are
-# imported directly from there (e.g. ``from llm_pipeline.specs.builders
+# Note: builders live in ``llm_pipeline.artifacts.builders`` and are
+# imported directly from there (e.g. ``from llm_pipeline.artifacts.builders
 # import build_step_spec``). They depend on
 # ``llm_pipeline.cst_analysis`` which itself depends on the
 # building-block types here — re-exporting builders from this

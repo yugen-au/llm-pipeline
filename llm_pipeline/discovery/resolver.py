@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from llm_pipeline.cst_analysis import ResolverHook
 
 if TYPE_CHECKING:
-    from llm_pipeline.specs import ArtifactRegistration
+    from llm_pipeline.artifacts import ArtifactRegistration
 
 
 __all__ = ["make_resolver"]

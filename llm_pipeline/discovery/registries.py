@@ -6,7 +6,7 @@ discovery flow:
     app.state.registries: dict[str, dict[str, ArtifactRegistration]]
 
 Keys are :data:`KIND_*` constants from
-:mod:`llm_pipeline.specs.kinds`. Inner keys are snake_case
+:mod:`llm_pipeline.artifacts.kinds`. Inner keys are snake_case
 artifact names. Values are :class:`ArtifactRegistration` records
 pairing a typed spec with the runtime class/value.
 
@@ -20,10 +20,10 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 
-from llm_pipeline.specs.kinds import ALL_KINDS
+from llm_pipeline.artifacts.kinds import ALL_KINDS
 
 if TYPE_CHECKING:
-    from llm_pipeline.specs import ArtifactRegistration
+    from llm_pipeline.artifacts import ArtifactRegistration
 
 
 __all__ = ["init_empty_registries"]

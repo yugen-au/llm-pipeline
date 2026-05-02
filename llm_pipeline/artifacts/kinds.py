@@ -9,7 +9,7 @@ the :data:`ALL_KINDS` list. Per-kind metadata — dependency level,
 subfolder name, walker, spec class, fields class — lives in
 :mod:`llm_pipeline.discovery.manifest`'s :data:`KIND_MANIFESTS`,
 the single source of truth. The ``LEVEL_BY_KIND`` derived view is
-re-exported from :mod:`llm_pipeline.specs` for callers that only
+re-exported from :mod:`llm_pipeline.artifacts` for callers that only
 need the level index.
 
 ``utilities/`` is walked at discovery for side-effects (raw-file

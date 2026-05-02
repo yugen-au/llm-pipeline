@@ -1,7 +1,7 @@
 """Tests for :class:`PipelineSpec` and ``build_pipeline_spec``.
 
 Covers the per-artifact translation of a Pipeline's legacy
-``cls._spec`` into the new :class:`llm_pipeline.specs.PipelineSpec`.
+``cls._spec`` into the new :class:`llm_pipeline.artifacts.PipelineSpec`.
 The runtime introspection happens at ``Pipeline.__init_subclass__``
 time (the legacy validator); this builder transforms that into
 the new shape and the walker registers it.
@@ -30,12 +30,12 @@ from llm_pipeline.graph import (
     StepInputs,
 )
 from llm_pipeline.prompts import PromptVariables
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     KIND_PIPELINE,
     NodeBindingSpec,
     PipelineSpec,
 )
-from llm_pipeline.specs.builders import PipelineBuilder
+from llm_pipeline.artifacts.builders import PipelineBuilder
 
 
 def _resolver_noop(_module: str, _symbol: str) -> tuple[str, str] | None:

@@ -24,7 +24,7 @@ from __future__ import annotations
 import pytest
 
 from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     ExtractionFields,
     ExtractionSpec,
     KIND_EXTRACTION,
@@ -38,7 +38,7 @@ from llm_pipeline.specs import (
     StepFields,
     StepSpec,
 )
-from llm_pipeline.specs.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
 
 
 # ---------------------------------------------------------------------------

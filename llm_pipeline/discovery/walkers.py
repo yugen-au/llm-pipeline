@@ -3,7 +3,7 @@
 Each walker takes a list of loaded modules (the output of
 :func:`._load_subfolder` for one subfolder), introspects them for
 the kind-specific artifact shape, calls the matching builder from
-:mod:`llm_pipeline.specs.builders`, and inserts the resulting
+:mod:`llm_pipeline.artifacts.builders`, and inserts the resulting
 :class:`ArtifactRegistration` into ``registries[KIND]``.
 
 Walker order MUST match the per-kind level so a walker's resolver
@@ -34,8 +34,8 @@ from llm_pipeline.cst_analysis import ResolverHook, analyze_imports
 # Import from submodules (not the ``specs`` package) to keep the
 # manifest's import chain acyclic. ``specs/__init__.py`` imports
 # from ``discovery.manifest``, which imports this module — going
-# through ``llm_pipeline.specs`` here would trigger that cycle.
-from llm_pipeline.specs.kinds import (
+# through ``llm_pipeline.artifacts`` here would trigger that cycle.
+from llm_pipeline.artifacts.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
@@ -46,8 +46,8 @@ from llm_pipeline.specs.kinds import (
     KIND_TABLE,
     KIND_TOOL,
 )
-from llm_pipeline.specs.registration import ArtifactRegistration
-from llm_pipeline.specs.builders import (
+from llm_pipeline.artifacts.registration import ArtifactRegistration
+from llm_pipeline.artifacts.builders import (
     ConstantBuilder,
     EnumBuilder,
     ExtractionBuilder,
@@ -471,7 +471,7 @@ class PipelinesWalker(Walker):
     Each pipeline class has its legacy
     :class:`llm_pipeline.graph.spec.PipelineSpec` already built and
     validated at ``Pipeline.__init_subclass__`` time. The new
-    :class:`llm_pipeline.specs.PipelineSpec` is a per-artifact
+    :class:`llm_pipeline.artifacts.PipelineSpec` is a per-artifact
     translation of that — populated by :class:`PipelineBuilder`.
     Both registries coexist during the migration.
     """

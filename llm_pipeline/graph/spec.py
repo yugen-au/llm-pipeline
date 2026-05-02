@@ -3,15 +3,15 @@
 The legacy ``PipelineSpec`` / ``NodeSpec`` / ``PromptSpec`` /
 ``ToolSpec`` and the ``build_pipeline_spec`` / ``derive_issues`` /
 ``is_runnable`` helpers were retired with the per-artifact migration.
-The new ``PipelineSpec`` lives in :mod:`llm_pipeline.specs.pipelines`;
-validation types live in :mod:`llm_pipeline.specs.validation`. This
+The new ``PipelineSpec`` lives in :mod:`llm_pipeline.artifacts.pipelines`;
+validation types live in :mod:`llm_pipeline.artifacts.validation`. This
 module re-exports the names that survived so existing imports keep
 working until callers update.
 """
 from __future__ import annotations
 
-from llm_pipeline.specs.pipelines import EdgeSpec, SourceSpec, WiringSpec
-from llm_pipeline.specs.validation import (
+from llm_pipeline.artifacts.pipelines import EdgeSpec, SourceSpec, WiringSpec
+from llm_pipeline.artifacts.validation import (
     ValidationIssue,
     ValidationLocation,
     ValidationSummary,

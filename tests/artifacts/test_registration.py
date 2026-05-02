@@ -1,7 +1,7 @@
 """Tests for ``ArtifactRegistration``."""
 from __future__ import annotations
 
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     ArtifactRegistration,
     ConstantSpec,
     KIND_CONSTANT,

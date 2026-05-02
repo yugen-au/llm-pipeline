@@ -1,7 +1,7 @@
 """Pipeline structural validator.
 
 Returns ``list[ValidationIssue]`` with ``location.path`` set per the
-:class:`llm_pipeline.specs.pipelines.PipelineFields` routing table.
+:class:`llm_pipeline.artifacts.pipelines.PipelineFields` routing table.
 The caller (``Pipeline.__init_subclass__``) stores the list on
 ``cls._init_subclass_errors``; the per-artifact ``PipelineBuilder``
 later routes each issue onto the matching spec sub-component via
@@ -16,8 +16,8 @@ from __future__ import annotations
 from typing import Any
 
 from llm_pipeline.inputs import PipelineInputData
-from llm_pipeline.specs.pipelines import PipelineFields
-from llm_pipeline.specs.validation import ValidationIssue, ValidationLocation
+from llm_pipeline.artifacts.pipelines import PipelineFields
+from llm_pipeline.artifacts.validation import ValidationIssue, ValidationLocation
 from llm_pipeline.wiring import (
     Computed,
     Extraction,

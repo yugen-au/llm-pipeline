@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     ArtifactRef,
     CodeBodySpec,
     ConstantSpec,

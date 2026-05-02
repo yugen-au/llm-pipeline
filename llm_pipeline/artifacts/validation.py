@@ -1,6 +1,6 @@
 """Validation issue types — bottom of the spec dependency graph.
 
-``ArtifactField`` (in :mod:`llm_pipeline.specs.base`) carries
+``ArtifactField`` (in :mod:`llm_pipeline.artifacts.base`) carries
 ``issues: list[ValidationIssue]``; many other spec components also
 reference these types. Defining them here, with no spec imports,
 keeps the import graph acyclic — :mod:`specs.base` imports from
@@ -28,7 +28,7 @@ class ValidationLocation(BaseModel):
     ``path`` is the typed routing path; the
     :meth:`ArtifactField.attach_class_captures` walker uses it to
     land each issue on the right sub-component. Constructed via
-    :class:`llm_pipeline.specs.fields.FieldRef`.
+    :class:`llm_pipeline.artifacts.fields.FieldRef`.
 
     ``field`` is the legacy single-segment key, kept for back-compat.
 

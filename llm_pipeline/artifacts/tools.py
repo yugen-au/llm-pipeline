@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from llm_pipeline.specs.base import ArtifactSpec
-from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs
-from llm_pipeline.specs.fields import FieldRef, FieldsBase
-from llm_pipeline.specs.kinds import KIND_TOOL
+from llm_pipeline.artifacts.base import ArtifactSpec
+from llm_pipeline.artifacts.blocks import CodeBodySpec, JsonSchemaWithRefs
+from llm_pipeline.artifacts.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.kinds import KIND_TOOL
 
 
 __all__ = ["ToolFields", "ToolSpec"]

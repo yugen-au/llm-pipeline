@@ -25,11 +25,11 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     ArtifactRegistration,
     flatten_artifact_issues,
 )
-from llm_pipeline.specs.kinds import ALL_KINDS
+from llm_pipeline.artifacts.kinds import ALL_KINDS
 
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])

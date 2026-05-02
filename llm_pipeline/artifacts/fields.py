@@ -189,7 +189,7 @@ def _artifact_field_arg(annotation: Any) -> type | None:
     position; the outer container shape is encoded by
     :func:`_container_kind`.
     """
-    from llm_pipeline.specs.base import ArtifactField
+    from llm_pipeline.artifacts.base import ArtifactField
 
     if isinstance(annotation, type) and issubclass(annotation, ArtifactField):
         return annotation

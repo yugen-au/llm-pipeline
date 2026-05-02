@@ -169,7 +169,7 @@ def _resolve_prompt_variables_cls(
     """
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
     from llm_pipeline.prompts.variables import PromptVariables
-    from llm_pipeline.specs.steps import StepFields
+    from llm_pipeline.artifacts.steps import StepFields
 
     here = ValidationLocation(node=cls.__name__, field=StepFields.PREPARE)
 
@@ -351,7 +351,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.specs.steps import StepFields
+        from llm_pipeline.artifacts.steps import StepFields
 
         errors: list[ValidationIssue] = []
 
@@ -730,7 +730,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.specs.extractions import ExtractionFields
+        from llm_pipeline.artifacts.extractions import ExtractionFields
 
         errors: list[ValidationIssue] = []
 
@@ -905,7 +905,7 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.specs.reviews import ReviewFields
+        from llm_pipeline.artifacts.reviews import ReviewFields
 
         errors: list[ValidationIssue] = []
 

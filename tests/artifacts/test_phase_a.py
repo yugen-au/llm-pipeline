@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from llm_pipeline.discovery.manifest import LEVEL_BY_KIND
 from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     ALL_KINDS,
     KIND_CONSTANT,
     KIND_ENUM,

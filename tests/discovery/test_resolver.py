@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from llm_pipeline.discovery import init_empty_registries
 from llm_pipeline.discovery.resolver import make_resolver
-from llm_pipeline.specs import (
+from llm_pipeline.artifacts import (
     ArtifactRegistration,
     ConstantSpec,
     EnumMemberSpec,
