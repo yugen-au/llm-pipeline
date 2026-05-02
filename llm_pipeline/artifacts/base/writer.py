@@ -1,40 +1,31 @@
 """``Writer`` ABC — per-kind ``ArtifactSpec`` ⇒ source code.
 
-The inverse of :class:`SpecBuilder`. A Writer takes a populated
-spec and produces the Python source text that, when loaded by the
-discovery walker, would round-trip back to the same spec.
+Two paths converge on a single sink:
 
-Used by codegen / sandbox / creator flows that mutate an artifact
-through its spec and need to write the result back to disk.
+- :meth:`edit` — start from existing source, apply spec changes
+  (libcst surgery, targeted text replacement). Use when the UI
+  saves a change to an existing artifact.
+- :meth:`write` — start from nothing, render the spec from scratch
+  via the kind's :class:`ArtifactTemplate`. Use when the creator
+  generates a new artifact.
+- :meth:`apply` — atomic write to disk. Same for every kind.
 
-Phase scope: this module ships the ABC contract only. Per-kind
-:class:`Writer` subclasses (and the disk-write side) land alongside
-each kind in subsequent commits, once the open questions below
-are resolved.
+Both ``edit`` and ``write`` return a final source string; ``apply``
+takes that string and writes it. Per-kind writers pick whichever
+path makes sense for their input and produce the same string-shaped
+output.
 
-Open questions (to settle before concrete subclasses):
-
-* **Round-trip fidelity**: does the writer preserve hand edits in
-  spec sub-components it doesn't itself populate (e.g. a step's
-  ``prepare`` body when only the inputs schema changed), or is the
-  spec always the single source of truth?
-* **Refs vs literals**: a spec carries :class:`ArtifactRef`
-  instances pointing at sibling artifacts — does the writer emit
-  the original Python identifier (round-trip) or re-resolve
-  through the registry?
-* **Imports**: does the writer regenerate the import block from
-  ``spec.imports``, or does it preserve the existing import order
-  / commented imports / ``__future__`` lines from a prior pass?
-* **Code body source**: :class:`CodeBodySpec` carries ``source``
-  text plus refs — is ``source`` the single source of truth for
-  the body, or do refs round-trip independently?
-
-Until these are settled, :meth:`Writer.write` raises
-:class:`NotImplementedError`.
+Per-sub-component renderers (in
+:mod:`llm_pipeline.artifacts.base.renderers`) handle the granular
+"this :class:`ArtifactField` ⇒ Python text" conversions; the
+per-kind :class:`ArtifactTemplate` orchestrates them into the
+overall file shape. libcst handles fine-grained surgical edits in
+:meth:`edit`.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import ClassVar, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -45,24 +36,41 @@ __all__ = ["Writer"]
 
 
 class Writer(ABC):
-    """Per-kind writer base — universal source-code generator.
+    """Per-kind writer base.
 
-    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS` and override
-    :meth:`write`. The base ``__init__`` stashes the spec for the
-    subclass to read.
+    Subclasses pin :attr:`SPEC_CLS` and implement :meth:`edit` and
+    :meth:`write`. :meth:`apply` is shared.
     """
 
-    KIND: ClassVar[str]
     SPEC_CLS: ClassVar[type]
 
     def __init__(self, *, spec: "ArtifactSpec") -> None:
         self.spec = spec
 
     @abstractmethod
-    def write(self) -> str:
-        """Render :attr:`spec` to Python source text.
+    def edit(self, original: str) -> str:
+        """Apply the spec to existing source, return updated source.
 
-        Returns the file's full contents (module docstring, imports,
-        class declarations, function bodies). Caller decides where to
-        put it on disk.
+        Implementations typically use libcst to parse ``original``,
+        find the target nodes, replace them with renderer-produced
+        fragments from :attr:`spec`, then serialise back.
         """
+
+    @abstractmethod
+    def write(self) -> str:
+        """Render :attr:`spec` to a fresh source file.
+
+        Implementations typically render the kind's
+        :class:`ArtifactTemplate` against :attr:`spec`.
+        """
+
+    def apply(self, content: str, *, path: Path | None = None) -> None:
+        """Write ``content`` to disk.
+
+        Defaults to ``self.spec.source_path``; pass ``path`` to
+        override (e.g. for sandboxed writes that should not clobber
+        the live file).
+        """
+        target = Path(path) if path else Path(self.spec.source_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
