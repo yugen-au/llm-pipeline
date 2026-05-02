@@ -10,7 +10,7 @@ sequenceDiagram
   participant TgtComp as Target component<br/>(picked by kind)
 
   User->>SrcComp: clicks a reference<br/>(symbol in code body,<br/>value in tree, name in list)
-  Note over SrcComp: locate the matching ref<br/>SymbolRef by line/col<br/>(in CodeBodySpec) or<br/>by JSON Pointer<br/>(in JsonSchemaWithRefs),<br/>or a flat string field<br/>(prompt_name, tool_names)
+  Note over SrcComp: locate the matching ref<br/>SymbolRef by line/col<br/>(in CodeBodySpec) or<br/>by JSON Pointer<br/>(in JsonSchemaWithRefs),<br/>or an ArtifactRef<br/>(prompt_name, tools[i], table)
   SrcComp->>Resolver: (kind, name)
   Resolver->>Registries: registries[kind][name]
   Registries-->>Resolver: ArtifactRegistration.spec

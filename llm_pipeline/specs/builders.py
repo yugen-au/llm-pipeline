@@ -523,18 +523,15 @@ class StepBuilder(SpecBuilder):
         instructions_cls = getattr(cls, "INSTRUCTIONS", None)
         default_tools = getattr(cls, "DEFAULT_TOOLS", None) or []
 
-        tool_names: list[str] = []
-        for tool in default_tools:
-            # Each tool is expected to be a class with a registry-key
-            # property/attribute. Fall back to its qualname if no
-            # ``name``/``step_name`` is set.
-            tool_name = (
-                getattr(tool, "name", None)
-                or getattr(tool, "tool_name", None)
-                or getattr(tool, "__name__", None)
-            )
-            if isinstance(tool_name, str) and tool_name:
-                tool_names.append(tool_name)
+        # One ArtifactRef per DEFAULT_TOOLS entry. Source-side name
+        # is the tool's Python class name; ``ref`` is populated when
+        # the resolver maps that to a registered tool.
+        tools = [
+            ref for ref in (
+                _class_to_artifact_ref(tool, self.resolver)
+                for tool in default_tools
+            ) if ref is not None
+        ]
 
         return {
             "inputs": self.json_schema(inputs_cls),
@@ -542,7 +539,7 @@ class StepBuilder(SpecBuilder):
             "prepare": self.code_body("prepare"),
             "run": self.code_body("run"),
             "prompt": self.prompt,
-            "tool_names": tool_names,
+            "tools": tools,
         }
 
 

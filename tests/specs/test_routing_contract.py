@@ -138,13 +138,16 @@ class TestStrictAttachContract:
 
     def test_primitive_field_target_raises(self):
         """Field exists on spec but isn't ArtifactField-typed →
-        RuntimeError. ``StepSpec.tool_names`` is ``list[str]``."""
+        RuntimeError. ``StepSpec.tools`` is ``list[ArtifactRef]``;
+        the routing check treats list-of-ArtifactField as primitive
+        (per-element routing would need an index, which the
+        ``location.field`` key shape doesn't carry)."""
         spec = self._empty_step_spec()
-        bad_cls = _bogus_capture_class("tool_names")
+        bad_cls = _bogus_capture_class("tools")
         with pytest.raises(RuntimeError) as exc_info:
             spec.attach_class_captures(bad_cls)
         msg = str(exc_info.value)
-        assert "tool_names" in msg
+        assert "tools" in msg
         assert "not an ArtifactField" in msg
 
     def test_field_none_routes_to_top_level(self):

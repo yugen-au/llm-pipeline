@@ -27,7 +27,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from llm_pipeline.specs.base import ArtifactSpec
+from llm_pipeline.specs.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.specs.blocks import CodeBodySpec, JsonSchemaWithRefs, PromptData
 from llm_pipeline.specs.kinds import KIND_STEP
 
@@ -86,7 +86,9 @@ class StepSpec(ArtifactSpec):
     # Phoenix treats a step's prompt as part of the same record.
     prompt: PromptData | None = None
 
-    # Names of tools attached via DEFAULT_TOOLS — registry keys
-    # into ``registries[KIND_TOOL]``. Resolution to ToolSpec
-    # happens at consumer side via the universal resolver.
-    tool_names: list[str] = Field(default_factory=list)
+    # Tools attached via DEFAULT_TOOLS — one :class:`ArtifactRef`
+    # per entry, carrying the source-side Python class name plus a
+    # resolved ref into ``registries[KIND_TOOL]`` when the resolver
+    # matches. Per-tool issues (e.g. unresolved tool reference)
+    # land on ``self.tools[i].issues``.
+    tools: list[ArtifactRef] = Field(default_factory=list)

@@ -198,7 +198,7 @@ class TestStepSpec:
             source_path="/x.py",
         )
         assert s.kind == KIND_STEP
-        assert s.tool_names == []
+        assert s.tools == []
         # All composite slots default to None.
         assert s.inputs is None
         assert s.instructions is None
@@ -218,10 +218,10 @@ class TestStepSpec:
                 variables=PromptVariableDefs(json_schema={"type": "object"}),
                 yaml_path="prompts/x.yaml",
             ),
-            tool_names=["a", "b"],
+            tools=[ArtifactRef(name="ToolA"), ArtifactRef(name="ToolB")],
         )
         re_s = _round_trip(s)
-        assert re_s.tool_names == ["a", "b"]
+        assert [t.name for t in re_s.tools] == ["ToolA", "ToolB"]
         assert re_s.prompt.yaml_path == "prompts/x.yaml"
         assert re_s.prepare.source == "return []"
 

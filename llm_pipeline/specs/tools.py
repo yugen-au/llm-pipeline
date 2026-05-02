@@ -10,9 +10,9 @@ registration.
 The shape carried here is a Phase C.1 *skeleton* — Inputs / Args /
 body — and may grow as we learn how tools should expose their
 internals to the UI. The minimum to make tool refs from a step's
-``tool_names`` list resolvable is the ``name`` and ``cls`` fields
-inherited from :class:`ArtifactSpec`; the optional fields below
-let the UI render input forms when present.
+``tools`` list (``list[ArtifactRef]``) resolvable is the ``name``
+and ``cls`` fields inherited from :class:`ArtifactSpec`; the
+optional fields below let the UI render input forms when present.
 """
 from __future__ import annotations
 

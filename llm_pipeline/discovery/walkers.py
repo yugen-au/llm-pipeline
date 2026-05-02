@@ -445,7 +445,7 @@ class StepsWalker(Walker):
     :class:`PromptData` requires reading the paired YAML and the
     ``_variables/`` PromptVariables class — separate orchestration
     concern. Steps still get inputs / instructions / prepare /
-    run / tool_names populated.
+    run / tools populated.
     """
 
     KIND = KIND_STEP

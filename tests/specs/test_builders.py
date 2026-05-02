@@ -278,13 +278,30 @@ class TestBuildStepSpec:
         assert spec.run is not None
         assert "return []" in spec.prepare.source
 
-    def test_tool_names_extracted(self):
+    def test_tools_extracted_as_artifact_refs(self):
         spec = build_step_spec(
             name="foo", cls=_StepWithTools, source_path="/x.py",
             source_text="class _StepWithTools: pass",
             resolver=_resolver({}),
         )
-        assert spec.tool_names == ["search", "summarise"]
+        # One ArtifactRef per DEFAULT_TOOLS entry, in source order;
+        # source-side name is the tool's Python class name.
+        assert [t.name for t in spec.tools] == ["_ToolA", "_ToolB"]
+        # Empty resolver → no resolved refs.
+        assert all(t.ref is None for t in spec.tools)
+
+    def test_tools_resolve_when_resolver_matches(self):
+        module = _ToolA.__module__
+        spec = build_step_spec(
+            name="foo", cls=_StepWithTools, source_path="/x.py",
+            source_text="class _StepWithTools: pass",
+            resolver=_resolver({
+                (module, "_ToolA"): ("tool", "search"),
+                (module, "_ToolB"): ("tool", "summarise"),
+            }),
+        )
+        assert [t.ref.name for t in spec.tools] == ["search", "summarise"]
+        assert all(t.ref.kind == "tool" for t in spec.tools)
 
     def test_missing_inputs_yields_none(self):
         spec = build_step_spec(
