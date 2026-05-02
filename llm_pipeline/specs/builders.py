@@ -717,6 +717,15 @@ def build_pipeline_spec(
         cls=input_data_cls, source_text=source_text, resolver=resolver,
     )
 
+    # ``cls.start_node`` is the Python class (e.g. ``ClassifyStep``);
+    # ``_class_to_artifact_ref`` produces an ArtifactRef whose
+    # ``name`` is the source-side class name and ``ref`` is the
+    # resolved (kind, registry-key) pair when the resolver matches.
+    # Returns ``None`` when ``cls.start_node`` is unset.
+    start_node_ref = _class_to_artifact_ref(
+        getattr(cls, "start_node", None), resolver,
+    )
+
     return PipelineSpec(
         kind=KIND_PIPELINE,
         name=name,
@@ -726,6 +735,6 @@ def build_pipeline_spec(
         input_data=input_data,
         nodes=node_bindings,
         edges=list(legacy.edges),
-        start_node=legacy.start_node,
+        start_node=start_node_ref,
         issues=list(legacy.issues),
     )

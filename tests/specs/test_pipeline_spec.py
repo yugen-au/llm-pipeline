@@ -215,7 +215,32 @@ class TestBuildPipelineSpec:
         edge_pairs = {(e.from_node, e.to_node) for e in spec.edges}
         assert ("_ClassifyStep", "_ClassifyExtraction") in edge_pairs
         assert ("_ClassifyExtraction", "End") in edge_pairs
-        assert spec.start_node == "_ClassifyStep"
+        # ``start_node`` is now an ArtifactRef carrying the source-side
+        # Python class name. ``ref`` is None here because the test
+        # uses the no-op resolver.
+        assert spec.start_node is not None
+        assert spec.start_node.name == "_ClassifyStep"
+        assert spec.start_node.ref is None
+
+    def test_start_node_resolves_when_resolver_matches(self):
+        module = _ClassifyStep.__module__
+
+        def resolver(m: str, s: str) -> tuple[str, str] | None:
+            if m == module and s == "_ClassifyStep":
+                return ("step", "_classify")
+            return None
+
+        spec = build_pipeline_spec(
+            name="fixture",
+            cls=_FixturePipeline,
+            source_path="/tmp/fixture.py",
+            source_text="",
+            resolver=resolver,
+        )
+        assert spec.start_node is not None
+        assert spec.start_node.ref is not None
+        assert spec.start_node.ref.kind == "step"
+        assert spec.start_node.ref.name == "_classify"
 
     def test_node_binding_is_artifact_field(self):
         spec = build_pipeline_spec(
@@ -243,7 +268,8 @@ class TestBuildPipelineSpec:
         re_spec = PipelineSpec.model_validate(payload)
         assert re_spec.name == spec.name
         assert len(re_spec.nodes) == len(spec.nodes)
-        assert re_spec.start_node == spec.start_node
+        assert re_spec.start_node is not None
+        assert re_spec.start_node.name == spec.start_node.name
 
 
 # ---------------------------------------------------------------------------

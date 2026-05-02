@@ -53,7 +53,7 @@ from typing import Literal
 from pydantic import Field
 
 from llm_pipeline.graph.spec import EdgeSpec, WiringSpec
-from llm_pipeline.specs.base import ArtifactField, ArtifactSpec
+from llm_pipeline.specs.base import ArtifactField, ArtifactRef, ArtifactSpec
 from llm_pipeline.specs.blocks import JsonSchemaWithRefs
 from llm_pipeline.specs.kinds import KIND_PIPELINE
 
@@ -119,6 +119,10 @@ class PipelineSpec(ArtifactSpec):
     # is the placeholder for future binding-driven branching.
     edges: list[EdgeSpec] = Field(default_factory=list)
 
-    # ``__name__`` of the pipeline's start node (``cls.start_node``),
-    # or ``None`` when the pipeline has no valid bindings.
-    start_node: str | None = None
+    # The pipeline's start node — wrapped as :class:`ArtifactRef`
+    # carrying the source-side Python class name plus a resolved
+    # ref into the matching node registry (``KIND_STEP`` /
+    # ``KIND_EXTRACTION`` / ``KIND_REVIEW``) when the resolver
+    # matches. ``None`` when ``cls.start_node`` is unset (typically
+    # because the pipeline has no valid bindings).
+    start_node: ArtifactRef | None = None
