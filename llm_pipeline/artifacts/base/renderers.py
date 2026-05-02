@@ -111,6 +111,7 @@ def render_pydantic_class(
     name: str,
     schema: JsonSchemaWithRefs,
     base: str = "BaseModel",
+    class_kwargs: str = "",
     indent: str = "    ",
 ) -> str:
     """Render a Pydantic-style class declaration.
@@ -129,13 +130,18 @@ def render_pydantic_class(
     Python literal — but the source-side default expression isn't
     captured in V1, so any non-trivial default re-renders from the
     JSON form.
+
+    ``class_kwargs`` is appended to the class header for kwarg-style
+    bases (``"table=True"`` for SQLModel — produces
+    ``class Foo(SQLModel, table=True):``).
     """
     props: dict[str, dict[str, Any]] = (schema.json_schema or {}).get(
         "properties", {},
     ) or {}
     required = set((schema.json_schema or {}).get("required", []) or [])
 
-    lines = [f"class {name}({base}):"]
+    header_extras = f", {class_kwargs}" if class_kwargs else ""
+    lines = [f"class {name}({base}{header_extras}):"]
     description = schema.description.strip() if schema.description else ""
     if description:
         lines.append(f'{indent}"""{description}"""')

@@ -33,15 +33,25 @@ from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_TABLE
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
+from llm_pipeline.artifacts.base.renderers import render_pydantic_class
+from llm_pipeline.artifacts.base.template import ArtifactTemplate
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
     _is_table,
     _to_registry_key,
 )
+from llm_pipeline.artifacts.base.writer import Writer
 
 
-__all__ = ["MANIFEST", "IndexSpec", "TableBuilder", "TableSpec", "TablesWalker"]
+__all__ = [
+    "MANIFEST",
+    "IndexSpec",
+    "TableBuilder",
+    "TableSpec",
+    "TableWriter",
+    "TablesWalker",
+]
 
 
 class IndexSpec(BaseModel):
@@ -146,6 +156,79 @@ class TablesWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+# ---------------------------------------------------------------------------
+# Writer
+# ---------------------------------------------------------------------------
+
+
+_TABLE_TEMPLATE = ArtifactTemplate(template="""\
+from sqlmodel import SQLModel
+
+
+{{ pydantic_class }}
+""")
+
+
+class TableWriter(Writer):
+    """Render / edit a :class:`TableSpec` to/from source.
+
+    - :meth:`write` produces a fresh ``SQLModel(..., table=True)``
+      file. Imports are minimal (just ``SQLModel``); annotations
+      referencing other artifacts need their imports hand-added in
+      V1.
+    - :meth:`edit` rebuilds the matching ``class X(SQLModel,
+      table=True):`` block via :func:`replace_class`.
+
+    Index declarations (``__table_args__``) are tracked on the spec
+    but **not yet emitted by the writer** in V1 — round-tripping
+    SQLAlchemy ``Index(...)`` constructs needs more design work
+    around constraint-name preservation. Existing indexes on the
+    source class survive edits because :func:`replace_class` only
+    swaps the ``ClassDef`` body, not module-level scaffolding.
+    """
+
+    SPEC_CLS = TableSpec
+
+    def write(self) -> str:
+        return _TABLE_TEMPLATE.render(
+            pydantic_class=self._render_class_with_tablename(),
+        )
+
+    def edit(self, original: str) -> str:
+        import libcst as cst
+
+        from llm_pipeline.codegen import replace_class
+
+        module = cst.parse_module(original)
+        try:
+            updated = replace_class(
+                module=module,
+                class_name=self._class_name(),
+                new_class_source=self._render_class_with_tablename(),
+            )
+        except Exception:
+            return original
+        return updated.code
+
+    def _class_name(self) -> str:
+        return self.spec.cls.rsplit(".", 1)[-1]
+
+    def _render_class(self) -> str:
+        return render_pydantic_class(
+            name=self._class_name(),
+            schema=self.spec.definition,
+            base="SQLModel",
+            class_kwargs="table=True",
+        )
+
+    def _render_class_with_tablename(self) -> str:
+        """Add ``__tablename__`` line to the rendered class body."""
+        rendered = self._render_class()
+        if self.spec.table_name:
+            rendered += f"\n    __tablename__ = {self.spec.table_name!r}"
+        return rendered
 
 
 MANIFEST = ArtifactManifest(
