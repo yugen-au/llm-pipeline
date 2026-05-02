@@ -1,7 +1,6 @@
 """Per-kind discovery walkers — populate ``app.state.registries``.
 
-Each walker takes a list of loaded modules (the output of
-:func:`._load_subfolder` for one subfolder), introspects them for
+Each walker takes a list of loaded modules, introspects them for
 the kind-specific artifact shape, calls the matching builder from
 :mod:`llm_pipeline.artifacts.builders`, and inserts the resulting
 :class:`ArtifactRegistration` into ``registries[KIND]``.
@@ -12,29 +11,14 @@ hook can resolve everything below it. Within-level peer references
 pattern: pass 1 populates registries with empty refs; pass 2
 rebuilds with a resolver that sees every kind populated.
 
-Architecture: a small :class:`Walker` ABC owns the iteration
-scaffold (per-module source/imports analysis + member enumeration
-+ name filtering + registry insertion). Each kind subclasses with
-three hooks — ``qualifies``, ``name_for``, ``build_spec`` — and
-the rest is inherited. Public ``walk_*`` functions are thin
-wrappers around the matching walker instance, registered in
-:data:`llm_pipeline.discovery.manifest.KIND_MANIFESTS` for
-dispatch.
+The :class:`Walker` ABC + shared module-source / locality / naming
+helpers live in :mod:`llm_pipeline.artifacts.base.walker`.
 """
 from __future__ import annotations
 
-import inspect
 import logging
-from abc import ABC, abstractmethod
-from pathlib import Path
 from types import ModuleType
-from typing import Any, ClassVar
 
-from llm_pipeline.cst_analysis import ResolverHook, analyze_imports
-# Import from submodules (not the ``specs`` package) to keep the
-# manifest's import chain acyclic. ``specs/__init__.py`` imports
-# from ``discovery.manifest``, which imports this module — going
-# through ``llm_pipeline.artifacts`` here would trigger that cycle.
 from llm_pipeline.artifacts.base.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
@@ -46,7 +30,12 @@ from llm_pipeline.artifacts.base.kinds import (
     KIND_TABLE,
     KIND_TOOL,
 )
-from llm_pipeline.artifacts.base.registration import ArtifactRegistration
+from llm_pipeline.artifacts.base.walker import (
+    Walker,
+    _is_locally_defined_class,
+    _is_table,
+    _to_registry_key,
+)
 from llm_pipeline.artifacts.builders import (
     ConstantBuilder,
     EnumBuilder,
@@ -54,7 +43,6 @@ from llm_pipeline.artifacts.builders import (
     PipelineBuilder,
     ReviewBuilder,
     SchemaBuilder,
-    SpecBuilder,
     StepBuilder,
     TableBuilder,
     ToolBuilder,
@@ -76,195 +64,6 @@ __all__ = [
 
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _module_source(mod: ModuleType) -> str:
-    """Read ``mod.__file__`` and return its text, or "" if unavailable."""
-    path = getattr(mod, "__file__", None)
-    if not path:
-        return ""
-    try:
-        return Path(path).read_text(encoding="utf-8")
-    except OSError:
-        return ""
-
-
-def _module_path(mod: ModuleType) -> str:
-    """Filesystem path of ``mod.__file__`` as a string, or "" if unavailable."""
-    path = getattr(mod, "__file__", None)
-    return str(path) if path else ""
-
-
-def _is_locally_defined_class(value: object, mod: ModuleType, base: type) -> bool:
-    """``True`` iff ``value`` is a strict subclass of ``base`` defined in ``mod``."""
-    return (
-        inspect.isclass(value)
-        and issubclass(value, base)
-        and value is not base
-        and getattr(value, "__module__", None) == mod.__name__
-    )
-
-
-def _is_table(cls: type) -> bool:
-    """``True`` iff ``cls`` is a SQLModel class with ``table=True``.
-
-    SQLModel only sets ``__table__`` on classes declared with
-    ``table=True``; non-table SQLModel subclasses (used as bases
-    or pure data shapes) leave it unset. This single check covers
-    both "is SQLModel" and "has a real table" without needing a
-    SQLModel import here.
-    """
-    return getattr(cls, "__table__", None) is not None
-
-
-def _imports_for_module(source_text: str, resolver: ResolverHook) -> list:
-    """Analyse imports for a module's source. Empty list when source is unavailable.
-
-    Walked once per module by each walker; the returned list is
-    shared across every artifact registered from that module so
-    we don't re-parse for each one.
-    """
-    if not source_text:
-        return []
-    try:
-        return analyze_imports(source=source_text, resolver=resolver)
-    except Exception:  # noqa: BLE001 — analysis is best-effort
-        return []
-
-
-def _to_registry_key(identifier: str, *, strip_suffix: str | None = None) -> str:
-    """Snake-case the Python identifier into the registry key.
-
-    Defers to :func:`llm_pipeline.naming.to_snake_case`. The strip
-    suffix lets us drop the conventional class-name suffix
-    (``Step`` / ``Extraction`` / ``Review``).
-    """
-    from llm_pipeline.naming import to_snake_case
-
-    if strip_suffix is None:
-        return to_snake_case(identifier)
-    return to_snake_case(identifier, strip_suffix=strip_suffix)
-
-
-# ---------------------------------------------------------------------------
-# Walker base class — owns the per-module iteration scaffold
-# ---------------------------------------------------------------------------
-
-
-class Walker(ABC):
-    """Per-kind discovery walker base.
-
-    Encapsulates the iteration shared by every kind:
-
-    1. For each module: read its source text, analyse imports.
-    2. For each member of the module: skip ``_``-prefixed names,
-       skip members that don't pass :meth:`qualifies`.
-    3. Compute the registry key via :meth:`name_for`.
-    4. Build the per-kind spec via :meth:`build_spec` (default
-       implementation calls ``self.BUILDER(...).build()`` for the
-       standard class-based pattern; value-based kinds override).
-    5. Stamp ``spec.imports`` with the once-per-module list.
-    6. Insert into ``registries[KIND][name]``.
-
-    Subclasses pin :attr:`KIND` and :attr:`BUILDER`, override
-    :meth:`qualifies` and :meth:`name_for`, and (when value-based)
-    override :meth:`build_spec`. Adding a new kind = a new subclass
-    plus an entry in
-    :data:`llm_pipeline.discovery.manifest.KIND_MANIFESTS` — the
-    iteration scaffold is inherited.
-    """
-
-    # The ``KIND_*`` constant for the artifact registry slot this
-    # walker populates.
-    KIND: ClassVar[str]
-
-    # The :class:`SpecBuilder` subclass this walker dispatches to.
-    # The default :meth:`build_spec` instantiates ``BUILDER`` with
-    # the standard class-based signature (``name``, ``cls=value``,
-    # ``source_path``, ``source_text``, ``resolver``); value-based
-    # kinds (constants) override :meth:`build_spec` to pass their
-    # own kwargs.
-    BUILDER: ClassVar[type[SpecBuilder]]
-
-    @abstractmethod
-    def qualifies(self, value: Any, mod: ModuleType) -> bool:
-        """Return ``True`` if ``value`` is a member of this kind in ``mod``.
-
-        Called for every non-private member; only members for which
-        this returns ``True`` get registered.
-        """
-
-    @abstractmethod
-    def name_for(self, attr_name: str, value: Any) -> str:
-        """Return the registry key for ``value`` (snake_case).
-
-        Most kinds derive from ``attr_name``; node kinds delegate to
-        a class method (``cls.step_name()`` etc.).
-        """
-
-    def build_spec(
-        self,
-        *,
-        name: str,
-        attr_name: str,
-        value: Any,
-        mod: ModuleType,
-        source_text: str,
-        resolver: ResolverHook,
-    ):
-        """Construct the per-kind spec via :attr:`BUILDER`.
-
-        Default implementation: standard class-based call —
-        ``self.BUILDER(name=name, cls=value, source_path=...,
-        source_text=..., resolver=...).build()``.
-
-        Value-based kinds (constants) override to supply their own
-        builder kwargs.
-
-        ``attr_name`` is the original Python identifier (e.g.
-        ``MAX_RETRIES``); ``name`` is the snake-cased registry key
-        (e.g. ``max_retries``).
-        """
-        return self.BUILDER(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-        ).build()
-
-    def walk(
-        self,
-        modules: list[ModuleType],
-        registries: dict[str, dict[str, ArtifactRegistration]],
-        resolver: ResolverHook,
-    ) -> None:
-        for mod in modules:
-            source_text = _module_source(mod)
-            imports = _imports_for_module(source_text, resolver)
-            for attr_name, value in inspect.getmembers(mod):
-                if attr_name.startswith("_"):
-                    continue
-                if not self.qualifies(value, mod):
-                    continue
-                name = self.name_for(attr_name, value)
-                spec = self.build_spec(
-                    name=name,
-                    attr_name=attr_name,
-                    value=value,
-                    mod=mod,
-                    source_text=source_text,
-                    resolver=resolver,
-                )
-                spec.imports = imports
-                registries[self.KIND][name] = ArtifactRegistration(
-                    spec=spec, obj=value,
-                )
 
 
 # ---------------------------------------------------------------------------

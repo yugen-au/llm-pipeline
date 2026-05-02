@@ -2,38 +2,35 @@
 
 Each builder takes a loaded class/value plus its source-file
 context and returns a populated per-kind :class:`ArtifactSpec`.
-Builders are pure functions — they introspect the runtime
-class/value and call into :mod:`llm_pipeline.cst_analysis` for
-source-side metadata; they don't touch disk.
-
-Phase C.1 ships the builders. Phase C.2 wires them into
-per-folder discovery walkers; that walker layer reads files via
-``codegen.read_module`` (or the equivalent) and feeds the
-``source_text`` + a registry-aware ``resolver`` into these
-builders.
+Builders introspect the runtime class/value and call into
+:mod:`llm_pipeline.cst_analysis` for source-side metadata; they
+don't touch disk.
 
 Builders never raise — partial state surfaces via the spec's
-``issues`` field on the relevant component (per the localised-
-issues design from the plan). Schema-generation failures, missing
-class state, and analyser parse errors are all captured.
+``issues`` field on the relevant component. Schema-generation
+failures, missing class state, and analyser parse errors are all
+captured.
+
+The :class:`SpecBuilder` ABC + shared helpers live in
+:mod:`llm_pipeline.artifacts.base.builder`.
 """
 from __future__ import annotations
 
-import inspect
-from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any
 
-from llm_pipeline.cst_analysis import (
-    AnalysisError,
-    ResolverHook,
-    analyze_class_fields,
-    analyze_code_body,
-)
-from llm_pipeline.artifacts.base import ArtifactRef, SymbolRef
+from llm_pipeline.cst_analysis import ResolverHook
 from llm_pipeline.artifacts.base.blocks import (
     CodeBodySpec,
     JsonSchemaWithRefs,
     PromptData,
+)
+from llm_pipeline.artifacts.base.builder import (
+    SpecBuilder,
+    _class_to_artifact_ref,
+    _docstring,
+    _qualified,
+    build_code_body,
+    json_schema_with_refs,
 )
 from llm_pipeline.artifacts.constants import ConstantSpec
 from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
@@ -58,9 +55,10 @@ from llm_pipeline.artifacts.tools import ToolSpec
 
 
 __all__ = [
-    # Helpers (used by walkers and a few specialised callers)
+    # Re-exported from base.builder for back-compat
     "build_code_body",
     "json_schema_with_refs",
+    "SpecBuilder",
     # Per-kind builders — every kind goes through SpecBuilder.
     "ConstantBuilder",
     "EnumBuilder",
@@ -68,217 +66,10 @@ __all__ = [
     "PipelineBuilder",
     "ReviewBuilder",
     "SchemaBuilder",
-    "SpecBuilder",
     "StepBuilder",
     "TableBuilder",
     "ToolBuilder",
 ]
-
-
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _qualified(cls: type) -> str:
-    """Return ``cls``'s fully-qualified ``module.qualname``."""
-    return f"{cls.__module__}.{cls.__qualname__}"
-
-
-def _docstring(cls: type | None) -> str:
-    """Return ``cls``'s cleaned docstring, or empty string.
-
-    Uses :func:`inspect.getdoc` (handles indent stripping and walks
-    base classes appropriately for inherited docstrings). Empty
-    string when ``cls`` is None or has no docstring.
-    """
-    if cls is None:
-        return ""
-    return inspect.getdoc(cls) or ""
-
-
-def _class_to_artifact_ref(
-    cls: type | None,
-    resolver: ResolverHook,
-) -> ArtifactRef | None:
-    """Build an :class:`ArtifactRef` from a Python class.
-
-    Used wherever a per-kind spec carries a reference to another
-    registered artifact via a class attribute (``ExtractionNode.MODEL``,
-    ``LLMStepNode.DEFAULT_TOOLS`` entries, ``Pipeline.start_node``,
-    etc.). The :attr:`ArtifactRef.name` is the source-side Python
-    identifier (``cls.__name__``); the :attr:`ArtifactRef.ref` is
-    populated when the resolver maps ``(cls.__module__,
-    cls.__name__)`` to a registered ``(kind, registry_key)``.
-
-    Returns ``None`` when ``cls`` is None.
-    """
-    if cls is None:
-        return None
-    module_path = getattr(cls, "__module__", "") or ""
-    symbol = cls.__name__
-    resolved = resolver(module_path, symbol) if module_path else None
-    ref = (
-        SymbolRef(symbol=symbol, kind=resolved[0], name=resolved[1])
-        if resolved is not None else None
-    )
-    return ArtifactRef(name=symbol, ref=ref)
-
-
-def _safe_model_json_schema(cls: type) -> dict[str, Any] | None:
-    """Call ``cls.model_json_schema()``; return ``None`` on any failure.
-
-    Pydantic schema generation can blow up on unusual user models
-    (custom validators, self-references, etc.). Builders treat
-    those as "no schema available" and let the spec-level issue
-    surfacing convey the partial state.
-    """
-    try:
-        return cls.model_json_schema()  # type: ignore[no-any-return,attr-defined]
-    except Exception:  # noqa: BLE001 — uniform fallback
-        return None
-
-
-def json_schema_with_refs(
-    *,
-    cls: type | None,
-    source_text: str,
-    resolver: ResolverHook,
-) -> JsonSchemaWithRefs | None:
-    """Build a :class:`JsonSchemaWithRefs` for a Pydantic-shaped class.
-
-    Returns ``None`` when ``cls`` is None or its schema can't be
-    generated. Source-side ref analysis is best-effort: a parse
-    failure or "class not found in source" yields an empty refs
-    dict, not an error — the schema half stays valid.
-    """
-    if cls is None:
-        return None
-    schema = _safe_model_json_schema(cls)
-    if schema is None:
-        return None
-    refs: dict[str, list] = {}
-    try:
-        refs = analyze_class_fields(
-            source=source_text,
-            class_qualname=cls.__qualname__,
-            resolver=resolver,
-        )
-    except AnalysisError:
-        refs = {}
-    return JsonSchemaWithRefs(
-        json_schema=schema,
-        refs=refs,
-        description=_docstring(cls),
-    )
-
-
-def build_code_body(
-    *,
-    function_qualname: str,
-    source_text: str,
-    resolver: ResolverHook,
-) -> CodeBodySpec | None:
-    """Analyse a function body and return a populated :class:`CodeBodySpec`.
-
-    Returns ``None`` if the function isn't found in ``source_text``
-    (caller should treat this as "no body to render" rather than
-    an error — the missing function is surfaced by the per-kind
-    capture model elsewhere).
-    """
-    try:
-        return analyze_code_body(
-            source=source_text,
-            function_qualname=function_qualname,
-            resolver=resolver,
-        )
-    except AnalysisError:
-        return None
-
-
-# ---------------------------------------------------------------------------
-# SpecBuilder base class — universal entrypoint for every kind
-# ---------------------------------------------------------------------------
-
-
-class SpecBuilder(ABC):
-    """Per-kind builder base — universal entrypoint for every kind.
-
-    Every kind goes through a :class:`SpecBuilder` subclass; the walker
-    layer treats them uniformly via :meth:`build`. Every kind is
-    class-based — schemas, tables, tools, steps, extractions, reviews,
-    enums, pipelines all carry their declaring Python class. Constants
-    (declared as :class:`llm_pipeline.constants.Constant` subclasses
-    with a ``value`` ClassVar) sit on the same dispatch footing.
-
-    The base ``build()`` does the same three things for everyone:
-
-    1. Build kind-specific spec fields via :meth:`kind_fields`
-       (subclass hook).
-    2. Wrap in the per-kind :class:`ArtifactSpec` subclass with
-       identity (``kind`` / ``name`` / ``cls`` qualname /
-       ``source_path``) and ``description``.
-    3. Chain :meth:`ArtifactSpec.attach_class_captures` to route
-       any ``cls._init_subclass_errors`` onto the right
-       :class:`ArtifactField` sub-component.
-
-    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS` and override
-    :meth:`kind_fields`. Convenience helpers :meth:`json_schema` and
-    :meth:`code_body` pre-fill ``source_text`` + ``resolver`` so
-    subclasses can shrink threaded-through-everything calls to a
-    single argument.
-    """
-
-    KIND: ClassVar[str]
-    SPEC_CLS: ClassVar[type]
-
-    def __init__(
-        self,
-        *,
-        name: str,
-        cls: type,
-        source_path: str,
-        source_text: str = "",
-        resolver: ResolverHook | None = None,
-    ) -> None:
-        self.name = name
-        self.cls = cls
-        self.source_path = source_path
-        self.source_text = source_text
-        # Default resolver is a null lookup — kinds that don't consult
-        # cst_analysis (constants, enums) leave it alone.
-        self.resolver: ResolverHook = resolver or (lambda _m, _s: None)
-
-    def json_schema(self, cls: type | None) -> JsonSchemaWithRefs | None:
-        """Convenience wrapper: pre-fills ``source_text`` + ``resolver``."""
-        return json_schema_with_refs(
-            cls=cls,
-            source_text=self.source_text,
-            resolver=self.resolver,
-        )
-
-    def code_body(self, method_name: str) -> CodeBodySpec | None:
-        """Convenience wrapper: builds the function qualname from
-        ``self.cls`` + ``method_name`` and pre-fills source/resolver."""
-        return build_code_body(
-            function_qualname=f"{self.cls.__qualname__}.{method_name}",
-            source_text=self.source_text,
-            resolver=self.resolver,
-        )
-
-    @abstractmethod
-    def kind_fields(self) -> dict[str, Any]:
-        """Return per-kind keyword arguments for the spec constructor."""
-
-    def build(self):
-        return self.SPEC_CLS(
-            kind=self.KIND,
-            name=self.name,
-            cls=_qualified(self.cls),
-            source_path=self.source_path,
-            description=_docstring(self.cls),
-            **self.kind_fields(),
-        ).attach_class_captures(self.cls)
 
 
 # ---------------------------------------------------------------------------
