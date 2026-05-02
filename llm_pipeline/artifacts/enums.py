@@ -15,14 +15,23 @@ from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.builder import SpecBuilder
 from llm_pipeline.artifacts.base.kinds import KIND_ENUM
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
+from llm_pipeline.artifacts.base.template import ArtifactTemplate
 from llm_pipeline.artifacts.base.walker import (
     Walker,
     _is_locally_defined_class,
     _to_registry_key,
 )
+from llm_pipeline.artifacts.base.writer import Writer
 
 
-__all__ = ["MANIFEST", "EnumBuilder", "EnumMemberSpec", "EnumSpec", "EnumsWalker"]
+__all__ = [
+    "MANIFEST",
+    "EnumBuilder",
+    "EnumMemberSpec",
+    "EnumSpec",
+    "EnumWriter",
+    "EnumsWalker",
+]
 
 
 class EnumMemberSpec(BaseModel):
@@ -91,6 +100,71 @@ class EnumsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
+
+
+# ---------------------------------------------------------------------------
+# Writer
+# ---------------------------------------------------------------------------
+
+
+_ENUM_TEMPLATE = ArtifactTemplate(template="""\
+from enum import Enum
+
+
+class {{ class_name }}(Enum):
+{{ body }}
+""")
+
+
+class EnumWriter(Writer):
+    """Render / edit an :class:`EnumSpec` to/from source.
+
+    - :meth:`write` produces a fresh single-class file.
+    - :meth:`edit` rebuilds the matching ``class X(Enum):`` block in
+      the existing source from the spec's members. Bulk replace —
+      member-level docstrings / comments aren't preserved on edit
+      (acceptable trade-off for V1; declared values are the
+      source-of-truth).
+    """
+
+    SPEC_CLS = EnumSpec
+
+    def write(self) -> str:
+        return _ENUM_TEMPLATE.render(
+            class_name=self._class_name(),
+            body=self._render_body(indent="    "),
+        )
+
+    def edit(self, original: str) -> str:
+        import libcst as cst
+
+        from llm_pipeline.codegen import replace_class
+
+        new_class_source = (
+            f"class {self._class_name()}(Enum):\n"
+            f"{self._render_body(indent='    ')}\n"
+        )
+        module = cst.parse_module(original)
+        try:
+            updated = replace_class(
+                module=module,
+                class_name=self._class_name(),
+                new_class_source=new_class_source,
+            )
+        except Exception:
+            return original
+        return updated.code
+
+    def _class_name(self) -> str:
+        return self.spec.cls.rsplit(".", 1)[-1]
+
+    def _render_body(self, *, indent: str) -> str:
+        if not self.spec.members:
+            return f"{indent}pass"
+        return "\n".join(
+            f"{indent}{m.name} = {repr(m.value)}"
+            for m in self.spec.members
+        )
 
 
 MANIFEST = ArtifactManifest(

@@ -67,6 +67,7 @@ __all__ = [
     "edit_imports",
     "generate_prompt_variables",
     "render_import_block",
+    "replace_class",
     "set_class_attribute",
     "write_code_body",
     "write_imports",
@@ -379,6 +380,47 @@ def set_class_attribute(
             f"append_if_missing=False"
         )
     return new_module
+
+
+def replace_class(
+    *,
+    module: cst.Module,
+    class_name: str,
+    new_class_source: str,
+) -> cst.Module:
+    """Swap the named class with ``new_class_source`` parsed as a ClassDef.
+
+    Module-in / module-out so callers can chain edits before
+    serialising. ``new_class_source`` is full Python source for a
+    single ``class`` declaration — parsed via
+    :func:`libcst.parse_statement` and the resulting :class:`ClassDef`
+    replaces the original. Original ``leading_lines`` (blank lines /
+    comments above the class) are preserved by the transformer.
+
+    Use when you want to rebuild a whole class — Enum members,
+    Pydantic field shape changes, base-class swaps. For surgical
+    single-attribute edits use :func:`set_class_attribute` instead;
+    for single field-statement edits use the
+    :class:`ModifyFieldOnClass` transformer.
+
+    Raises :class:`CodegenError` when the class isn't found, the
+    source doesn't parse to a ClassDef, or the replacement class's
+    name doesn't match ``class_name``.
+    """
+    parsed = cst.parse_statement(new_class_source.strip())
+    if not isinstance(parsed, cst.ClassDef):
+        raise CodegenError(
+            f"replace_class: new_class_source did not parse to a ClassDef "
+            f"(got {type(parsed).__name__})"
+        )
+    if parsed.name.value != class_name:
+        raise CodegenError(
+            f"replace_class: new class name {parsed.name.value!r} doesn't "
+            f"match target class_name {class_name!r}"
+        )
+    if find_class(module, class_name) is None:
+        raise CodegenError(f"replace_class: class {class_name!r} not found")
+    return _replace_classdef(module, class_name, parsed)
 
 
 def _guard_or_raise(source_file: Path, root: Path | None) -> Path:
