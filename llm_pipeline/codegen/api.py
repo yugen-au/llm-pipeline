@@ -68,6 +68,7 @@ __all__ = [
     "generate_prompt_variables",
     "render_import_block",
     "replace_class",
+    "replace_method_body",
     "set_class_attribute",
     "write_code_body",
     "write_imports",
@@ -380,6 +381,45 @@ def set_class_attribute(
             f"append_if_missing=False"
         )
     return new_module
+
+
+def replace_method_body(
+    *,
+    source: str,
+    class_name: str,
+    method_name: str,
+    new_body: str,
+) -> str:
+    """Replace ``{class_name}.{method_name}``'s body — string in, string out.
+
+    The string-mode counterpart to :func:`edit_code_body` /
+    :func:`write_code_body`. Locates the body's line range via
+    :func:`llm_pipeline.cst_analysis.analyze_code_body` and splices
+    ``new_body`` in at exactly that range. The signature, decorators,
+    neighbouring methods, and surrounding text pass through verbatim.
+
+    Used by Writer.edit() implementations that compose multiple edits
+    before serialising — the file path / disk write live on
+    :meth:`Writer.apply` rather than here.
+
+    Raises :class:`CodegenError` if ``source`` doesn't parse or the
+    target method is missing.
+    """
+    from llm_pipeline.cst_analysis import AnalysisError, analyze_code_body
+
+    try:
+        spec = analyze_code_body(
+            source=source,
+            function_qualname=f"{class_name}.{method_name}",
+            resolver=lambda _m, _s: None,
+        )
+    except AnalysisError as exc:
+        raise CodegenError(
+            f"replace_method_body: could not locate "
+            f"{class_name}.{method_name}: {exc}"
+        ) from exc
+
+    return _splice_body(source, spec, new_body)
 
 
 def replace_class(
