@@ -145,12 +145,16 @@ def render_pydantic_class(
     description = schema.description.strip() if schema.description else ""
     if description:
         lines.append(f'{indent}"""{description}"""')
-        lines.append("")
 
     if not props:
-        lines.append(f"{indent}pass")
+        # A class body needs at least one statement. If we already
+        # emitted a docstring it counts; otherwise inject ``pass``.
+        if not description:
+            lines.append(f"{indent}pass")
         return "\n".join(lines)
 
+    if description:
+        lines.append("")  # blank line between docstring and fields
     for field_name, prop in props.items():
         annotation = (
             schema.field_source.get(field_name)
