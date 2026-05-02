@@ -22,7 +22,6 @@ from typing import Any, Literal
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
-from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_REVIEW
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
@@ -32,7 +31,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["MANIFEST", "ReviewBuilder", "ReviewFields", "ReviewSpec", "ReviewsWalker"]
+__all__ = ["MANIFEST", "ReviewBuilder", "ReviewSpec", "ReviewsWalker"]
 
 
 class ReviewSpec(ArtifactSpec):
@@ -54,20 +53,6 @@ class ReviewSpec(ArtifactSpec):
 
     # The body of ``run(self, ctx)`` — graph wiring.
     run: CodeBodySpec | None = None
-
-
-class ReviewFields(FieldsBase):
-    """Routing-key vocabulary for :class:`ReviewSpec` issue captures.
-
-    See :class:`llm_pipeline.artifacts.steps.StepFields` for the routing
-    pattern. Path validity is checked at class-load time against
-    :class:`ReviewSpec`.
-    """
-
-    SPEC_CLS = ReviewSpec
-
-    INPUTS = FieldRef("inputs")
-    OUTPUT = FieldRef("output")
 
 
 class ReviewBuilder(SpecBuilder):
@@ -109,6 +94,5 @@ MANIFEST = ArtifactManifest(
     subfolder="reviews",
     level=4,
     spec_cls=ReviewSpec,
-    fields_cls=ReviewFields,
     walker=ReviewsWalker(),
 )

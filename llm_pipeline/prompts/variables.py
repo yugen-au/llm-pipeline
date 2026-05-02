@@ -92,7 +92,7 @@ class PromptVariables(BaseModel):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.artifacts import PromptDataFields
+        from llm_pipeline.artifacts import PromptData
 
         errors: list[ValidationIssue] = []
 
@@ -103,7 +103,7 @@ class PromptVariables(BaseModel):
         # placeholder names live in the message text; routing key
         # stays at the ``variables`` boundary.
         here = ValidationLocation(
-            node=cls.__name__, field=PromptDataFields.VARIABLES,
+            node=cls.__name__, field=PromptData.VARIABLES,
         )
 
         # 1. Every field must use Field(description=...).

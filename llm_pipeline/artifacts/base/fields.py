@@ -7,36 +7,33 @@ component the issue is about. The framework's
 :meth:`ArtifactField.attach_class_captures` walker uses the path
 to land the issue on the right component.
 
-Two pieces:
+:class:`FieldRef` is a path expression. Composes via attribute
+access (``FieldRef("prompt").variables``) and key indexing
+(``FieldRef("nodes")["topic_extraction"]``). Stringifies to a
+dotted path with bracketed keys (``prompt.variables``,
+``nodes[topic_extraction].wiring.field_sources[label]``).
 
-- :class:`FieldRef`: a path expression. Composes via attribute
-  access (``FieldRef("prompt").variables``) and key indexing
-  (``FieldRef("nodes")["topic_extraction"]``). Stringifies to a
-  dotted path with bracketed keys (``prompt.variables``,
-  ``nodes[topic_extraction].wiring.field_sources[label]``).
-- :class:`FieldsBase`: per-kind constants vocabulary base.
-  Subclasses pin :attr:`SPEC_CLS` and declare each routing slot
-  as a class-level :class:`FieldRef`. ``__init_subclass__``
-  validates each FieldRef against the spec's ArtifactField
-  hierarchy at class-load time — typos / stale slot names raise
-  immediately on import rather than failing silently at routing
-  time.
+UPPER_CASE FieldRef constants are auto-generated as class
+attributes on every :class:`ArtifactField` subclass by
+:meth:`ArtifactField.__pydantic_init_subclass__` — capture sites
+reference them off the spec directly (``StepSpec.INPUTS``,
+``ToolSpec.ARGS``, ``PromptData.VARIABLES``).
 
 Dynamic paths (per-node, per-source, per-prompt-variable — keyed
-by runtime values) are exposed as classmethods that return
-:class:`FieldRef`. Those skip class-load validation; the classmethod
-is responsible for producing a structurally correct path.
+by runtime values) are classmethods on the spec that return
+:class:`FieldRef`. Those skip class-load validation; the
+classmethod is responsible for producing a structurally correct
+path.
 """
 from __future__ import annotations
 
 import re
 import types
-from typing import Any, ClassVar, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 
 __all__ = [
     "FieldRef",
-    "FieldsBase",
     "parse_path",
 ]
 
@@ -129,55 +126,7 @@ def parse_path(path: str) -> list[tuple[str, str | None]]:
 
 
 # ---------------------------------------------------------------------------
-# FieldsBase
-# ---------------------------------------------------------------------------
-
-
-class FieldsBase:
-    """Per-kind routing-key vocabulary base.
-
-    Subclasses pin :attr:`SPEC_CLS` and declare each routing slot as
-    a class-level :class:`FieldRef`. ``__init_subclass__`` validates
-    every static FieldRef against ``SPEC_CLS`` at class-load time:
-
-    - Each segment must address an :class:`ArtifactField` slot in
-      the (nested) spec structure.
-    - Bracketed segments (``foo[name]``) require the parent slot to
-      be a ``dict[str, ArtifactField]`` or a ``list[ArtifactField]``
-      whose element type declares ``IDENTITY_FIELD``.
-    - Typos / stale slot names raise :class:`TypeError` immediately
-      at import rather than failing silently at routing time.
-
-    Dynamic paths are exposed as classmethods that return
-    :class:`FieldRef`. Those skip class-load validation — the
-    classmethod is responsible for producing a structurally correct
-    path. (At capture time the path is well-formed; the runtime
-    walker tolerates stale paths gracefully by landing on the
-    deepest reachable ancestor.)
-    """
-
-    SPEC_CLS: ClassVar[type]
-
-    def __init_subclass__(cls, **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        spec_cls = cls.__dict__.get("SPEC_CLS")
-        if spec_cls is None:
-            # Intermediate base class (no SPEC_CLS pinned) — skip
-            # validation. Concrete subclasses MUST pin SPEC_CLS.
-            return
-        for attr_name, value in vars(cls).items():
-            if attr_name.startswith("_") or not isinstance(value, FieldRef):
-                continue
-            try:
-                _validate_field_ref(spec_cls, value)
-            except ValueError as exc:
-                raise TypeError(
-                    f"{cls.__name__}.{attr_name} = {value!r}: {exc}"
-                ) from None
-
-
-# ---------------------------------------------------------------------------
-# Path validation against an ArtifactSpec subclass
+# Annotation introspection — used by ArtifactField auto-gen
 # ---------------------------------------------------------------------------
 
 
@@ -185,9 +134,6 @@ def _artifact_field_arg(annotation: Any) -> type | None:
     """Return the :class:`ArtifactField` subclass inside an annotation, or ``None``.
 
     Walks ``Optional[X]`` / ``X | None`` / ``list[X]`` / ``dict[K, X]``.
-    The returned class is the ArtifactField subclass at the inner
-    position; the outer container shape is encoded by
-    :func:`_container_kind`.
     """
     from llm_pipeline.artifacts.base import ArtifactField
 
@@ -208,85 +154,3 @@ def _artifact_field_arg(annotation: Any) -> type | None:
         if len(args) >= 2:
             return _artifact_field_arg(args[1])
     return None
-
-
-def _container_kind(annotation: Any) -> str:
-    """Return ``"list"`` / ``"dict"`` / ``"plain"`` for an ArtifactField slot.
-
-    Used by :func:`_validate_field_ref` to decide whether a bracketed
-    segment is required, allowed, or rejected.
-    """
-    origin = get_origin(annotation)
-    if origin is Union or origin is types.UnionType:
-        # Peel off ``None`` from ``X | None``; pick the first
-        # container-or-plain answer from the remaining arms.
-        for arg in get_args(annotation):
-            if arg is type(None):
-                continue
-            kind = _container_kind(arg)
-            if kind != "plain":
-                return kind
-        return "plain"
-    if origin is list:
-        return "list"
-    if origin is dict:
-        return "dict"
-    return "plain"
-
-
-def _validate_field_ref(spec_cls: type, ref: FieldRef) -> None:
-    """Walk a :class:`FieldRef` path against ``spec_cls``'s field structure.
-
-    Each segment must address an :class:`ArtifactField` slot in the
-    nested type. Bracketed segments require list/dict containers;
-    list elements must declare ``IDENTITY_FIELD`` for the lookup
-    to be meaningful. Raises :class:`ValueError` on the first
-    invalid segment.
-    """
-    current = spec_cls
-    for attr, key in parse_path(str(ref)):
-        if not hasattr(current, "model_fields"):
-            raise ValueError(
-                f"segment {attr!r}: parent {current.__name__} is not a "
-                f"Pydantic model — can't descend further"
-            )
-        fields = current.model_fields
-        if attr not in fields:
-            raise ValueError(
-                f"segment {attr!r}: {current.__name__} has no field "
-                f"{attr!r}"
-            )
-        annotation = fields[attr].annotation
-        artifact_cls = _artifact_field_arg(annotation)
-        if artifact_cls is None:
-            raise ValueError(
-                f"segment {attr!r}: {current.__name__}.{attr} is not "
-                f"an ArtifactField (annotation: {annotation!r})"
-            )
-        kind = _container_kind(annotation)
-        if key is not None:
-            if kind == "plain":
-                raise ValueError(
-                    f"segment {attr}[{key}]: {current.__name__}.{attr} "
-                    f"is a single ArtifactField, not a list/dict — "
-                    f"don't use bracketed key access here"
-                )
-            if kind == "list" and not getattr(artifact_cls, "IDENTITY_FIELD", None):
-                raise ValueError(
-                    f"segment {attr}[{key}]: list element type "
-                    f"{artifact_cls.__name__} has no IDENTITY_FIELD "
-                    f"ClassVar — can't look up by key"
-                )
-        else:
-            if kind == "list":
-                raise ValueError(
-                    f"segment {attr!r}: {current.__name__}.{attr} is "
-                    f"a list — must use bracketed key access (e.g. "
-                    f"{attr}[<key>])"
-                )
-            if kind == "dict":
-                raise ValueError(
-                    f"segment {attr!r}: {current.__name__}.{attr} is "
-                    f"a dict — must use bracketed key access"
-                )
-        current = artifact_cls

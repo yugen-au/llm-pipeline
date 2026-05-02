@@ -39,7 +39,7 @@ class AgentTool:
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        from llm_pipeline.artifacts.tools import ToolFields
+        from llm_pipeline.artifacts.tools import ToolSpec
         from llm_pipeline.artifacts.base.validation import (
             ValidationIssue,
             ValidationLocation,
@@ -69,7 +69,7 @@ class AgentTool:
                     f"subclass."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ToolFields.INPUTS,
+                    node=cls.__name__, field=ToolSpec.INPUTS,
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
@@ -84,7 +84,7 @@ class AgentTool:
                     f"BaseModel subclass declaring the LLM call args."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ToolFields.ARGS,
+                    node=cls.__name__, field=ToolSpec.ARGS,
                 ),
                 suggestion=(
                     f"Set ARGS = <YourArgsClass> on {cls.__name__} "
@@ -104,7 +104,7 @@ class AgentTool:
                     f"subclass; got {inputs_cls!r}."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ToolFields.INPUTS,
+                    node=cls.__name__, field=ToolSpec.INPUTS,
                 ),
                 suggestion="Subclass llm_pipeline.inputs.StepInputs.",
             ))
@@ -121,7 +121,7 @@ class AgentTool:
                     f"subclass; got {args_cls!r}."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ToolFields.ARGS,
+                    node=cls.__name__, field=ToolSpec.ARGS,
                 ),
                 suggestion="Subclass pydantic.BaseModel.",
             ))
@@ -140,7 +140,7 @@ class AgentTool:
                             f"'{expected}', got '{inputs_cls.__name__}'."
                         ),
                         location=ValidationLocation(
-                            node=cls.__name__, field=ToolFields.INPUTS,
+                            node=cls.__name__, field=ToolSpec.INPUTS,
                         ),
                         suggestion=(
                             f"Rename {inputs_cls.__name__} to {expected}."
@@ -156,7 +156,7 @@ class AgentTool:
                             f"'{expected}', got '{args_cls.__name__}'."
                         ),
                         location=ValidationLocation(
-                            node=cls.__name__, field=ToolFields.ARGS,
+                            node=cls.__name__, field=ToolSpec.ARGS,
                         ),
                         suggestion=(
                             f"Rename {args_cls.__name__} to {expected}."

@@ -152,6 +152,5 @@ MANIFEST = ArtifactManifest(
     subfolder="tables",
     level=3,
     spec_cls=TableSpec,
-    fields_cls=None,
     walker=TablesWalker(),
 )

@@ -74,6 +74,5 @@ MANIFEST = ArtifactManifest(
     subfolder="constants",
     level=1,
     spec_cls=ConstantSpec,
-    fields_cls=None,
     walker=ConstantsWalker(),
 )

@@ -13,7 +13,6 @@ from typing import Any, Literal
 from llm_pipeline.artifacts.base import ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder
-from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_TOOL
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
@@ -23,7 +22,7 @@ from llm_pipeline.artifacts.base.walker import (
 )
 
 
-__all__ = ["MANIFEST", "ToolBuilder", "ToolFields", "ToolSpec", "ToolsWalker"]
+__all__ = ["MANIFEST", "ToolBuilder", "ToolSpec", "ToolsWalker"]
 
 
 class ToolSpec(ArtifactSpec):
@@ -40,16 +39,6 @@ class ToolSpec(ArtifactSpec):
 
     # Body of ``run(cls, inputs, args, ctx)``.
     body: CodeBodySpec | None = None
-
-
-class ToolFields(FieldsBase):
-    """Routing-key vocabulary for :class:`ToolSpec` issue captures."""
-
-    SPEC_CLS = ToolSpec
-
-    INPUTS = FieldRef("inputs")
-    ARGS = FieldRef("args")
-    BODY = FieldRef("body")
 
 
 class ToolBuilder(SpecBuilder):
@@ -97,6 +86,5 @@ MANIFEST = ArtifactManifest(
     subfolder="tools",
     level=3,
     spec_cls=ToolSpec,
-    fields_cls=ToolFields,
     walker=ToolsWalker(),
 )

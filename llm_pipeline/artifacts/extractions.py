@@ -19,7 +19,6 @@ from typing import Any, Literal
 from llm_pipeline.artifacts.base import ArtifactRef, ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
-from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_EXTRACTION
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import (
@@ -32,7 +31,6 @@ from llm_pipeline.artifacts.base.walker import (
 __all__ = [
     "MANIFEST",
     "ExtractionBuilder",
-    "ExtractionFields",
     "ExtractionSpec",
     "ExtractionsWalker",
 ]
@@ -60,20 +58,6 @@ class ExtractionSpec(ArtifactSpec):
 
     # The body of ``run(self, ctx)`` — graph wiring.
     run: CodeBodySpec | None = None
-
-
-class ExtractionFields(FieldsBase):
-    """Routing-key vocabulary for :class:`ExtractionSpec` issue captures.
-
-    See :class:`llm_pipeline.artifacts.steps.StepFields` for the routing
-    pattern. Path validity is checked at class-load time against
-    :class:`ExtractionSpec`.
-    """
-
-    SPEC_CLS = ExtractionSpec
-
-    INPUTS = FieldRef("inputs")
-    TABLE = FieldRef("table")
 
 
 class ExtractionBuilder(SpecBuilder):
@@ -112,6 +96,5 @@ MANIFEST = ArtifactManifest(
     subfolder="extractions",
     level=4,
     spec_cls=ExtractionSpec,
-    fields_cls=ExtractionFields,
     walker=ExtractionsWalker(),
 )

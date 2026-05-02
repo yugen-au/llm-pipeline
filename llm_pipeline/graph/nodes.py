@@ -169,9 +169,9 @@ def _resolve_prompt_variables_cls(
     """
     from llm_pipeline.graph.spec import ValidationIssue, ValidationLocation
     from llm_pipeline.prompts.variables import PromptVariables
-    from llm_pipeline.artifacts.steps import StepFields
+    from llm_pipeline.artifacts.steps import StepSpec
 
-    here = ValidationLocation(node=cls.__name__, field=StepFields.PREPARE)
+    here = ValidationLocation(node=cls.__name__, field=StepSpec.PREPARE)
 
     if cls.prepare is LLMStepNode.prepare:  # type: ignore[attr-defined]
         errors.append(ValidationIssue(
@@ -351,7 +351,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.artifacts.steps import StepFields
+        from llm_pipeline.artifacts.steps import StepSpec
 
         errors: list[ValidationIssue] = []
 
@@ -370,7 +370,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                 ),
             ))
 
-        # Required attrs. ``field`` is a constant from ``StepFields``
+        # Required attrs. ``field`` is a constant from ``StepSpec``
         # so the router can localise the issue onto the matching
         # ArtifactField sub-component (``StepSpec.inputs`` /
         # ``StepSpec.instructions``) when present. Here the attr is
@@ -384,7 +384,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"StepInputs subclass."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=StepFields.INPUTS,
+                    node=cls.__name__, field=StepSpec.INPUTS,
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on "
@@ -400,7 +400,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"output schema."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=StepFields.INSTRUCTIONS,
+                    node=cls.__name__, field=StepSpec.INSTRUCTIONS,
                 ),
                 suggestion=(
                     f"Set INSTRUCTIONS = <YourInstructionsClass> on "
@@ -427,7 +427,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"{instructions_cls!r}."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=StepFields.INSTRUCTIONS,
+                    node=cls.__name__, field=StepSpec.INSTRUCTIONS,
                 ),
                 suggestion=(
                     f"Make {getattr(instructions_cls, '__name__', 'INSTRUCTIONS')} "
@@ -452,7 +452,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                             f"'{inputs_cls.__name__}'."
                         ),
                         location=ValidationLocation(
-                            node=cls.__name__, field=StepFields.INPUTS,
+                            node=cls.__name__, field=StepSpec.INPUTS,
                         ),
                         suggestion=(
                             f"Rename {inputs_cls.__name__} to "
@@ -473,7 +473,7 @@ class LLMStepNode(BaseNode[PipelineState, PipelineDeps, Any]):
                             f"'{instructions_cls.__name__}'."
                         ),
                         location=ValidationLocation(
-                            node=cls.__name__, field=StepFields.INSTRUCTIONS,
+                            node=cls.__name__, field=StepSpec.INSTRUCTIONS,
                         ),
                         suggestion=(
                             f"Rename {instructions_cls.__name__} to "
@@ -730,7 +730,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.artifacts.extractions import ExtractionFields
+        from llm_pipeline.artifacts.extractions import ExtractionSpec
 
         errors: list[ValidationIssue] = []
 
@@ -748,7 +748,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
                 ),
             ))
 
-        # Required attrs. ``ExtractionFields.INPUTS`` routes to
+        # Required attrs. ``ExtractionSpec.INPUTS`` routes to
         # ``ExtractionSpec.inputs`` (a JsonSchemaWithRefs sub-component).
         # MODEL-related captures use ``field=None`` because
         # ``ExtractionSpec.table_name`` is a primitive ``str | None``
@@ -762,7 +762,7 @@ class ExtractionNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"StepInputs subclass."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ExtractionFields.INPUTS,
+                    node=cls.__name__, field=ExtractionSpec.INPUTS,
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
@@ -905,7 +905,7 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
             ValidationIssue,
             ValidationLocation,
         )
-        from llm_pipeline.artifacts.reviews import ReviewFields
+        from llm_pipeline.artifacts.reviews import ReviewSpec
 
         errors: list[ValidationIssue] = []
 
@@ -923,8 +923,8 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
                 ),
             ))
 
-        # Required attrs. ``ReviewFields.INPUTS`` and
-        # ``ReviewFields.OUTPUT`` route to the matching
+        # Required attrs. ``ReviewSpec.INPUTS`` and
+        # ``ReviewSpec.OUTPUT`` route to the matching
         # JsonSchemaWithRefs sub-components on ``ReviewSpec``.
         if cls.INPUTS is None:
             errors.append(ValidationIssue(
@@ -934,7 +934,7 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"reviewer sees)."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ReviewFields.INPUTS,
+                    node=cls.__name__, field=ReviewSpec.INPUTS,
                 ),
                 suggestion=(
                     f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
@@ -949,7 +949,7 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"reviewer's structured response shape)."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ReviewFields.OUTPUT,
+                    node=cls.__name__, field=ReviewSpec.OUTPUT,
                 ),
                 suggestion=(
                     f"Set OUTPUT = <YourOutputClass> on {cls.__name__} "
@@ -973,7 +973,7 @@ class ReviewNode(BaseNode[PipelineState, PipelineDeps, Any]):
                     f"response shape, got {output_cls!r}."
                 ),
                 location=ValidationLocation(
-                    node=cls.__name__, field=ReviewFields.OUTPUT,
+                    node=cls.__name__, field=ReviewSpec.OUTPUT,
                 ),
                 suggestion=(
                     "Subclass pydantic.BaseModel and set OUTPUT "

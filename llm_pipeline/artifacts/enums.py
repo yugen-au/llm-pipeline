@@ -97,6 +97,5 @@ MANIFEST = ArtifactManifest(
     subfolder="enums",
     level=2,
     spec_cls=EnumSpec,
-    fields_cls=None,
     walker=EnumsWalker(),
 )

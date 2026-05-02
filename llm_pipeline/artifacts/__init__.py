@@ -59,26 +59,23 @@ from llm_pipeline.artifacts import (
 )
 from llm_pipeline.artifacts.constants import ConstantSpec
 from llm_pipeline.artifacts.enums import EnumMemberSpec, EnumSpec
-from llm_pipeline.artifacts.extractions import ExtractionFields, ExtractionSpec
+from llm_pipeline.artifacts.extractions import ExtractionSpec
 from llm_pipeline.artifacts.pipelines import (
     EdgeSpec,
     NodeBindingSpec,
-    PipelineFields,
     PipelineSpec,
     SourceSpec,
     WiringSpec,
 )
-from llm_pipeline.artifacts.reviews import ReviewFields, ReviewSpec
+from llm_pipeline.artifacts.reviews import ReviewSpec
 from llm_pipeline.artifacts.schemas import SchemaSpec
 from llm_pipeline.artifacts.steps import (
     PromptData,
-    PromptDataFields,
     PromptVariableDefs,
-    StepFields,
     StepSpec,
 )
 from llm_pipeline.artifacts.tables import IndexSpec, TableSpec
-from llm_pipeline.artifacts.tools import ToolFields, ToolSpec
+from llm_pipeline.artifacts.tools import ToolSpec
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +174,6 @@ __all__ = [
     "ImportBlock",
     "JsonSchemaWithRefs",
     "PromptData",
-    "PromptDataFields",
     "PromptVariableDefs",
     "SymbolRef",
     "Walker",
@@ -186,20 +182,15 @@ __all__ = [
     "EdgeSpec",
     "EnumMemberSpec",
     "EnumSpec",
-    "ExtractionFields",
     "ExtractionSpec",
     "IndexSpec",
     "NodeBindingSpec",
-    "PipelineFields",
     "PipelineSpec",
-    "ReviewFields",
     "ReviewSpec",
     "SchemaSpec",
     "SourceSpec",
-    "StepFields",
     "StepSpec",
     "TableSpec",
-    "ToolFields",
     "ToolSpec",
     "WiringSpec",
     # Registration wrapper

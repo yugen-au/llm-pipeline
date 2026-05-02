@@ -30,7 +30,6 @@ from pydantic import Field
 from llm_pipeline.artifacts.base import ArtifactField, ArtifactRef, ArtifactSpec, SymbolRef
 from llm_pipeline.artifacts.base.blocks import CodeBodySpec, JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
-from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
 from llm_pipeline.artifacts.base.kinds import KIND_STEP
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
@@ -39,10 +38,8 @@ from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
 __all__ = [
     "MANIFEST",
     "PromptData",
-    "PromptDataFields",
     "PromptVariableDefs",
     "StepBuilder",
-    "StepFields",
     "StepSpec",
     "StepsWalker",
 ]
@@ -104,7 +101,7 @@ class PromptData(ArtifactField):
     # Unified variable definitions — Pydantic-fields shape AND
     # auto_generate expressions in one ArtifactField. Captures from
     # PromptVariables.__pydantic_init_subclass__ route here via
-    # ``PromptDataFields.VARIABLES``.
+    # ``PromptData.VARIABLES`` (auto-generated).
     variables: PromptVariableDefs
 
     # Filesystem path of the paired YAML prompt file (e.g.
@@ -117,21 +114,6 @@ class PromptData(ArtifactField):
     system_template: str | None = None
     user_template: str | None = None
     model: str | None = None
-
-
-class PromptDataFields(FieldsBase):
-    """Routing-key vocabulary for :class:`PromptData` issue captures.
-
-    Captures from :class:`llm_pipeline.prompts.PromptVariables` all
-    route to ``PromptData.variables`` (a :class:`PromptVariableDefs`).
-    Other PromptData fields are primitives (yaml_path, templates,
-    model) — captures about them leave ``location.path`` unset and
-    land on top-level ``PromptData.issues``.
-    """
-
-    SPEC_CLS = PromptData
-
-    VARIABLES = FieldRef("variables")
 
 
 # ---------------------------------------------------------------------------
@@ -174,30 +156,6 @@ class StepSpec(ArtifactSpec):
     # matches. Per-tool issues (e.g. unresolved tool reference)
     # land on ``self.tools[i].issues``.
     tools: list[ArtifactRef] = Field(default_factory=list)
-
-
-class StepFields(FieldsBase):
-    """Routing-key vocabulary for :class:`StepSpec` issue captures.
-
-    Capture sites in :class:`LLMStepNode.__init_subclass__` (and the
-    ``prepare()`` resolver in :mod:`llm_pipeline.graph.nodes`) tag
-    each :class:`ValidationIssue` with one of these :class:`FieldRef`
-    constants on ``location.path``. The
-    :meth:`ArtifactField.attach_class_captures` walker resolves the
-    path to the matching sub-component.
-
-    Constants list ONLY the fields a capture site references — no
-    orphan constants for spec fields nobody routes to. Adding a new
-    capture site that targets a different StepSpec field is the
-    trigger for adding a new constant here. Path validity is checked
-    at class-load time against :class:`StepSpec`.
-    """
-
-    SPEC_CLS = StepSpec
-
-    INPUTS = FieldRef("inputs")
-    INSTRUCTIONS = FieldRef("instructions")
-    PREPARE = FieldRef("prepare")
 
 
 class StepBuilder(SpecBuilder):
@@ -270,6 +228,5 @@ MANIFEST = ArtifactManifest(
     subfolder="steps",
     level=4,
     spec_cls=StepSpec,
-    fields_cls=StepFields,
     walker=StepsWalker(),
 )

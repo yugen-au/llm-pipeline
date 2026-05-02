@@ -12,7 +12,7 @@ This module asserts that contract: define a class, immediately
 inspect its captures. No ``Pipeline`` subclass anywhere.
 
 ``location.field`` is set to a constant from the per-kind fields
-class (``StepFields.INPUTS`` etc.) so
+class (``StepSpec.INPUTS`` etc.) so
 :meth:`ArtifactField.attach_class_captures` can localise each issue
 onto the matching ``ArtifactField`` sub-component when builders
 call ``.attach_class_captures(cls)``.
@@ -361,7 +361,7 @@ class TestAttachClassCaptures:
         assert "step_inputs_name_mismatch" in inputs_codes
 
     def test_prompt_variables_captures_route_to_prompt_data_variables(self):
-        """PromptVariables captures use field=PromptDataFields.VARIABLES
+        """PromptVariables captures use field=PromptData.VARIABLES
         and route onto PromptData.variables.issues (the unified
         PromptVariableDefs sub-component). Single home for both
         Pydantic-fields and auto_vars problems."""

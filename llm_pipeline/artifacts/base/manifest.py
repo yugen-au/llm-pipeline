@@ -22,9 +22,11 @@ __all__ = ["ArtifactManifest"]
 class ArtifactManifest:
     """Per-kind metadata. One entry per first-class artifact kind.
 
-    The discriminator value (``KIND_*`` constant) lives on the spec
-    class as :attr:`ArtifactSpec.KIND` — the manifest derives it
-    via :attr:`kind` rather than carrying it as a duplicate field.
+    The discriminator value (``KIND_*`` constant) and routing-key
+    constants live on the spec class itself
+    (:attr:`ArtifactSpec.KIND` + auto-generated UPPER_CASE
+    :class:`FieldRef` attributes) — the manifest derives :attr:`kind`
+    from the spec rather than carrying duplicates.
 
     - ``subfolder``: directory under ``llm_pipelines/`` holding
       this kind's files.
@@ -32,16 +34,12 @@ class ArtifactManifest:
       kinds at level < N. Drives module load order and walker
       resolver visibility.
     - ``spec_cls``: the per-kind :class:`ArtifactSpec` subclass.
-    - ``fields_cls``: the per-kind ``Fields`` constants class
-      (routing keys for ``__init_subclass__`` captures), or
-      ``None`` for kinds without capture sites.
     - ``walker``: the per-kind :class:`Walker` instance.
     """
 
     subfolder: str
     level: int
     spec_cls: type
-    fields_cls: type | None
     walker: "Walker"
 
     @property

@@ -55,7 +55,7 @@ from pydantic import Field
 from llm_pipeline.artifacts.base import ArtifactField, ArtifactRef, ArtifactSpec
 from llm_pipeline.artifacts.base.blocks import JsonSchemaWithRefs
 from llm_pipeline.artifacts.base.builder import SpecBuilder, _class_to_artifact_ref
-from llm_pipeline.artifacts.base.fields import FieldRef, FieldsBase
+from llm_pipeline.artifacts.base.fields import FieldRef
 from llm_pipeline.artifacts.base.kinds import KIND_PIPELINE
 from llm_pipeline.artifacts.base.manifest import ArtifactManifest
 from llm_pipeline.artifacts.base.walker import Walker, _is_locally_defined_class
@@ -66,7 +66,6 @@ __all__ = [
     "EdgeSpec",
     "NodeBindingSpec",
     "PipelineBuilder",
-    "PipelineFields",
     "PipelineSpec",
     "PipelinesWalker",
     "SourceSpec",
@@ -173,13 +172,11 @@ class PipelineSpec(ArtifactSpec):
     # because the pipeline has no valid bindings).
     start_node: ArtifactRef | None = None
 
-
-class PipelineFields(FieldsBase):
-    """Routing keys for :class:`PipelineSpec` issue captures."""
-
-    SPEC_CLS = PipelineSpec
-
-    INPUT_DATA = FieldRef("input_data")
+    # Auto-generated routing-key constants for the ArtifactField-typed
+    # fields above (``INPUT_DATA``, ``NODES``, ``EDGES``, ``START_NODE``)
+    # are produced by :meth:`ArtifactField.__pydantic_init_subclass__`.
+    # Parameterised lookups for runtime-keyed paths live as
+    # classmethods alongside.
 
     @classmethod
     def node(cls, node_name: str) -> FieldRef:
@@ -367,6 +364,5 @@ MANIFEST = ArtifactManifest(
     subfolder="pipelines",
     level=5,
     spec_cls=PipelineSpec,
-    fields_cls=None,
     walker=PipelinesWalker(),
 )

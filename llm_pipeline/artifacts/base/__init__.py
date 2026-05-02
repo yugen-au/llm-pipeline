@@ -20,13 +20,15 @@ issue onto the matching ``ArtifactField`` sub-component (by
 ``location.field``), with anything unmatched falling back to
 ``self.issues``.
 
-The routing keys (the values that capture sites set as
-``ValidationLocation.field``) are declared as constants on per-kind
-"fields" classes — :class:`llm_pipeline.artifacts.steps.StepFields`,
-:class:`llm_pipeline.artifacts.extractions.ExtractionFields`, etc. —
-so capture sites import a typed constant (``StepFields.INPUTS``)
-instead of writing a bare string. Typos become ``AttributeError``
-at class-load time rather than silent fall-throughs at runtime.
+Routing keys (the values capture sites set as
+``ValidationLocation.path``) are auto-generated UPPER_CASE
+:class:`FieldRef` constants on every :class:`ArtifactField`
+subclass — :meth:`__pydantic_init_subclass__` walks
+``model_fields`` and assigns ``cls.<NAME>`` for each
+ArtifactField-typed slot. Capture sites reference them off the
+spec directly (``StepSpec.INPUTS``, ``ToolSpec.ARGS``,
+``PromptData.VARIABLES``); typos become ``AttributeError`` at
+import time.
 
 JSON round-trip safety: routing is a runtime call on a method, not
 hidden in ``__init__``. ``model_dump``/``model_validate`` don't
@@ -106,6 +108,34 @@ class ArtifactField(BaseModel):
     # etc.). Defaults to ``None`` — list-as-element types that
     # don't pin it can't be routed to by key.
     IDENTITY_FIELD: ClassVar[str | None] = None
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Auto-generate UPPER_CASE :class:`FieldRef` constants.
+
+        Walks ``model_fields`` and, for every ArtifactField-typed
+        slot, sets ``cls.<NAME>`` (snake_case → UPPER_CASE) to a
+        :class:`FieldRef` pointing at that slot. Capture sites
+        reference routing keys directly off the spec
+        (``StepSpec.INPUTS`` etc.) — no separate Fields class.
+
+        Skips when the constant is already declared on the class
+        (subclass override). Primitives, ``Literal[...]`` discriminators,
+        ``str`` / ``int`` / ``list[BaseModel]`` etc. are skipped.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+        from llm_pipeline.artifacts.base.fields import (
+            FieldRef,
+            _artifact_field_arg,
+        )
+
+        for attr_name, field in cls.model_fields.items():
+            if _artifact_field_arg(field.annotation) is None:
+                continue
+            const_name = attr_name.upper()
+            if const_name in cls.__dict__:
+                continue
+            setattr(cls, const_name, FieldRef(attr_name))
 
     def attach_class_captures(self, source_cls: type | None) -> Self:
         """Distribute ``source_cls._init_subclass_errors`` onto matching components.

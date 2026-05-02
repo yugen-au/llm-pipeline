@@ -87,6 +87,5 @@ MANIFEST = ArtifactManifest(
     subfolder="schemas",
     level=3,
     spec_cls=SchemaSpec,
-    fields_cls=None,
     walker=SchemasWalker(),
 )

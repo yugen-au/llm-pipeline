@@ -1,7 +1,7 @@
 """Pipeline structural validator.
 
 Returns ``list[ValidationIssue]`` with ``location.path`` set per the
-:class:`llm_pipeline.artifacts.pipelines.PipelineFields` routing table.
+:class:`llm_pipeline.artifacts.pipelines.PipelineSpec` routing table.
 The caller (``Pipeline.__init_subclass__``) stores the list on
 ``cls._init_subclass_errors``; the per-artifact ``PipelineBuilder``
 later routes each issue onto the matching spec sub-component via
@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_pipeline.inputs import PipelineInputData
-from llm_pipeline.artifacts.pipelines import PipelineFields
+from llm_pipeline.artifacts.pipelines import PipelineSpec
 from llm_pipeline.artifacts.base.validation import ValidationIssue, ValidationLocation
 from llm_pipeline.wiring import (
     Computed,
@@ -123,7 +123,7 @@ def _check_input_data(
         ),
         location=ValidationLocation(
             pipeline=pipeline_cls.__name__,
-            path=PipelineFields.INPUT_DATA,
+            path=PipelineSpec.INPUT_DATA,
         ),
         suggestion=(
             "Subclass PipelineInputData and assign INPUT_DATA = "
@@ -327,7 +327,7 @@ def _check_binding(
             ))
 
     # Binding-kind cross-check → routes to nodes[node_name].
-    binding_path = PipelineFields.node(node_name)
+    binding_path = PipelineSpec.node(node_name)
     if isinstance(binding, Step) and not issubclass(node_cls, llm_step_base):
         issues.append(ValidationIssue(
             severity="error", code="step_binding_wrong_kind",
@@ -394,7 +394,7 @@ def _check_source(
     """Validate a single source. Routes to nodes[name].wiring.field_sources[k]."""
     here = ValidationLocation(
         node=node_cls.__name__,
-        path=PipelineFields.source(node_name, field_name),
+        path=PipelineSpec.source(node_name, field_name),
     )
     location_str = f"{node_cls.__name__} inputs_spec[{field_name!r}]"
     issues: list[ValidationIssue] = []

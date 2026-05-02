@@ -17,8 +17,8 @@ JsonViewer / JsonEditor, etc.).
   Used for any Pydantic-shaped data (INPUTS, INSTRUCTIONS, OUTPUT,
   schema definitions, prompt variable definitions). Issue-bearing.
 
-Step-specific sub-data — ``PromptData``, ``PromptVariableDefs``,
-``PromptDataFields`` — lives in :mod:`llm_pipeline.artifacts.steps`
+Step-specific sub-data — ``PromptData`` and
+``PromptVariableDefs`` — lives in :mod:`llm_pipeline.artifacts.steps`
 because it's only embedded inside ``StepSpec`` and is paired 1:1
 with the step.
 """
