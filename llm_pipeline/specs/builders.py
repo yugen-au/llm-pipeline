@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import inspect
 from abc import ABC, abstractmethod
-from enum import Enum
 from typing import Any, ClassVar
 
 from llm_pipeline.cst_analysis import (
@@ -59,20 +58,14 @@ from llm_pipeline.specs.tools import ToolSpec
 
 
 __all__ = [
-    # Standalone builders (constants, enums, pipelines)
+    # Helpers (used by walkers and a few specialised callers)
     "build_code_body",
-    "build_constant_spec",
-    "build_enum_spec",
-    "build_extraction_spec",
-    "build_pipeline_spec",
-    "build_review_spec",
-    "build_schema_spec",
-    "build_step_spec",
-    "build_table_spec",
-    "build_tool_spec",
     "json_schema_with_refs",
-    # Class-based builders (the ABC + per-kind subclasses)
+    # Per-kind builders — every kind goes through SpecBuilder.
+    "ConstantBuilder",
+    "EnumBuilder",
     "ExtractionBuilder",
+    "PipelineBuilder",
     "ReviewBuilder",
     "SchemaBuilder",
     "SpecBuilder",
@@ -204,93 +197,38 @@ def build_code_body(
 
 
 # ---------------------------------------------------------------------------
-# Level 1-2: constants + enums (no cst_analysis needed)
-# ---------------------------------------------------------------------------
-
-
-def build_constant_spec(
-    *,
-    name: str,
-    value: Any,
-    cls_path: str,
-    source_path: str,
-) -> ConstantSpec:
-    """Build a :class:`ConstantSpec` from a module-level value.
-
-    ``cls_path`` is the dotted Python identifier
-    (``"llm_pipelines.constants.retries.MAX_RETRIES"``) — what
-    the resolver hook receives when another artifact imports it.
-    """
-    return ConstantSpec(
-        kind=KIND_CONSTANT,
-        name=name,
-        cls=cls_path,
-        source_path=source_path,
-        value_type=type(value).__name__,
-        value=value,
-    )
-
-
-def build_enum_spec(
-    *,
-    name: str,
-    enum_cls: type[Enum],
-    source_path: str,
-) -> EnumSpec:
-    """Build an :class:`EnumSpec` from an Enum subclass."""
-    members = [
-        EnumMemberSpec(name=member.name, value=member.value)
-        for member in enum_cls
-    ]
-    # Most enums are homogeneous; pick the first member's value
-    # type as the representative. Empty enums (rare) default to
-    # ``"str"`` so the field always has a concrete value.
-    if members:
-        first_value = next(iter(enum_cls)).value
-        value_type = type(first_value).__name__
-    else:
-        value_type = "str"
-    return EnumSpec(
-        kind=KIND_ENUM,
-        name=name,
-        cls=_qualified(enum_cls),
-        source_path=source_path,
-        description=_docstring(enum_cls),
-        value_type=value_type,
-        members=members,
-    ).attach_class_captures(enum_cls)
-
-
-# ---------------------------------------------------------------------------
-# SpecBuilder base class — for the class-based artifact kinds
+# SpecBuilder base class — universal entrypoint for every kind
 # ---------------------------------------------------------------------------
 
 
 class SpecBuilder(ABC):
-    """Per-kind builder base for class-based artifacts.
+    """Per-kind builder base — universal entrypoint for every kind.
 
-    Encapsulates construction shared by every class-based kind
-    (schemas, tables, tools, steps, extractions, reviews):
+    Every kind goes through a :class:`SpecBuilder` subclass; the walker
+    layer treats them uniformly via :meth:`build`. Class-based kinds
+    (schemas, tables, tools, steps, extractions, reviews, enums,
+    pipelines) carry the source class on :attr:`cls`; value-based
+    kinds (constants) pass ``cls=None`` and override :meth:`cls_str`
+    to supply the dotted Python identifier directly.
+
+    The base ``build()`` does the same three things for everyone:
 
     1. Build kind-specific spec fields via :meth:`kind_fields`
        (subclass hook).
     2. Wrap in the per-kind :class:`ArtifactSpec` subclass with
        identity (``kind`` / ``name`` / ``cls`` qualname /
-       ``source_path``) and ``description`` extracted from the
-       class's ``__doc__``.
+       ``source_path``) and ``description``.
     3. Chain :meth:`ArtifactSpec.attach_class_captures` to route
        any ``cls._init_subclass_errors`` onto the right
-       :class:`ArtifactField` sub-component.
+       :class:`ArtifactField` sub-component. ``attach_class_captures``
+       is a no-op when ``self.cls`` is ``None`` (value-based kinds).
 
-    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS`, and override
-    :meth:`kind_fields`. Convenience helpers :meth:`json_schema`
-    and :meth:`code_body` pre-fill ``source_text`` + ``resolver``
-    so the threaded-through-everything pattern shrinks to one-arg
-    calls per field.
+    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS`, override
+    :meth:`kind_fields`, and (when value-based) override :meth:`cls_str`.
 
-    Constants, enums, and pipelines have different signatures
-    (no ``cls`` to introspect, or special read-from-``cls._spec``
-    flow) and stay as standalone ``build_*`` functions.
+    Convenience helpers :meth:`json_schema` and :meth:`code_body`
+    pre-fill ``source_text`` + ``resolver`` so subclasses can shrink
+    threaded-through-everything calls to a single argument.
     """
 
     KIND: ClassVar[str]
@@ -300,16 +238,30 @@ class SpecBuilder(ABC):
         self,
         *,
         name: str,
-        cls: type,
+        cls: type | None,
         source_path: str,
-        source_text: str,
-        resolver: ResolverHook,
+        source_text: str = "",
+        resolver: ResolverHook | None = None,
     ) -> None:
         self.name = name
         self.cls = cls
         self.source_path = source_path
         self.source_text = source_text
-        self.resolver = resolver
+        # Default resolver is a null lookup — value-based kinds don't
+        # need one, but ``json_schema`` / ``code_body`` helpers expect
+        # the field to exist.
+        self.resolver: ResolverHook = resolver or (lambda _m, _s: None)
+
+    def cls_str(self) -> str:
+        """The dotted Python identifier of this artifact's source.
+
+        Default: ``cls.__module__.__qualname__``. Value-based kinds
+        (constants) override to supply the dotted attribute path
+        directly, since their ``cls`` is ``None``.
+        """
+        if self.cls is None:
+            return ""
+        return _qualified(self.cls)
 
     def json_schema(self, cls: type | None) -> JsonSchemaWithRefs | None:
         """Convenience wrapper: pre-fills ``source_text`` + ``resolver``."""
@@ -321,7 +273,13 @@ class SpecBuilder(ABC):
 
     def code_body(self, method_name: str) -> CodeBodySpec | None:
         """Convenience wrapper: builds the function qualname from
-        ``self.cls`` + ``method_name`` and pre-fills source/resolver."""
+        ``self.cls`` + ``method_name`` and pre-fills source/resolver.
+
+        Returns ``None`` when ``self.cls`` is ``None`` — value-based
+        kinds don't have a class to look methods up on.
+        """
+        if self.cls is None:
+            return None
         return build_code_body(
             function_qualname=f"{self.cls.__qualname__}.{method_name}",
             source_text=self.source_text,
@@ -336,11 +294,81 @@ class SpecBuilder(ABC):
         return self.SPEC_CLS(
             kind=self.KIND,
             name=self.name,
-            cls=_qualified(self.cls),
+            cls=self.cls_str(),
             source_path=self.source_path,
             description=_docstring(self.cls),
             **self.kind_fields(),
         ).attach_class_captures(self.cls)
+
+
+# ---------------------------------------------------------------------------
+# Level 1: constants (value-based — overrides ``cls_str``)
+# ---------------------------------------------------------------------------
+
+
+class ConstantBuilder(SpecBuilder):
+    """Build a :class:`ConstantSpec` from a module-level scalar / list / dict.
+
+    Constants are *values*, not classes — there's no Python class
+    object, just a value at a dotted attribute path. Passes
+    ``cls=None`` to the SpecBuilder base and overrides
+    :meth:`cls_str` to supply the path directly.
+
+    The walker constructs ``cls_path`` as ``f"{mod.__name__}.{attr_name}"``
+    — what the resolver hook receives when another artifact imports
+    the constant.
+    """
+
+    KIND = KIND_CONSTANT
+    SPEC_CLS = ConstantSpec
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        value: Any,
+        cls_path: str,
+        source_path: str,
+    ) -> None:
+        super().__init__(name=name, cls=None, source_path=source_path)
+        self.value = value
+        self._cls_path = cls_path
+
+    def cls_str(self) -> str:
+        return self._cls_path
+
+    def kind_fields(self) -> dict[str, Any]:
+        return {
+            "value_type": type(self.value).__name__,
+            "value": self.value,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Level 2: enums (class-based — Enum subclasses fit the standard signature)
+# ---------------------------------------------------------------------------
+
+
+class EnumBuilder(SpecBuilder):
+    """Build an :class:`EnumSpec` from an ``Enum`` subclass."""
+
+    KIND = KIND_ENUM
+    SPEC_CLS = EnumSpec
+
+    def kind_fields(self) -> dict[str, Any]:
+        members = [
+            EnumMemberSpec(name=member.name, value=member.value)
+            for member in self.cls  # type: ignore[union-attr]  — cls is non-None for enums
+        ]
+        # Most enums are homogeneous; pick the first member's value
+        # type as the representative. Empty enums (rare) default to
+        # ``"str"`` so the field always has a concrete value.
+        if members:
+            first_value = next(iter(self.cls)).value  # type: ignore[arg-type]
+            value_type = type(first_value).__name__
+        else:
+            value_type = "str"
+        return {"value_type": value_type, "members": members}
 
 
 # ---------------------------------------------------------------------------
@@ -362,20 +390,6 @@ class SchemaBuilder(SpecBuilder):
             json_schema={},
         )
         return {"definition": definition}
-
-
-def build_schema_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-) -> SchemaSpec:
-    return SchemaBuilder(
-        name=name, cls=cls, source_path=source_path,
-        source_text=source_text, resolver=resolver,
-    ).build()
 
 
 class TableBuilder(SpecBuilder):
@@ -418,20 +432,6 @@ class TableBuilder(SpecBuilder):
         }
 
 
-def build_table_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-) -> TableSpec:
-    return TableBuilder(
-        name=name, cls=cls, source_path=source_path,
-        source_text=source_text, resolver=resolver,
-    ).build()
-
-
 class ToolBuilder(SpecBuilder):
     """Build a :class:`ToolSpec` for an agent tool.
 
@@ -470,25 +470,6 @@ class ToolBuilder(SpecBuilder):
                 if self.body_qualname else None
             ),
         }
-
-
-def build_tool_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-    inputs_cls: type | None = None,
-    args_cls: type | None = None,
-    body_qualname: str | None = None,
-) -> ToolSpec:
-    return ToolBuilder(
-        name=name, cls=cls, source_path=source_path,
-        source_text=source_text, resolver=resolver,
-        inputs_cls=inputs_cls, args_cls=args_cls,
-        body_qualname=body_qualname,
-    ).build()
 
 
 # ---------------------------------------------------------------------------
@@ -543,22 +524,6 @@ class StepBuilder(SpecBuilder):
         }
 
 
-def build_step_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-    prompt: PromptData | None = None,
-) -> StepSpec:
-    return StepBuilder(
-        name=name, cls=cls, source_path=source_path,
-        source_text=source_text, resolver=resolver,
-        prompt=prompt,
-    ).build()
-
-
 class ExtractionBuilder(SpecBuilder):
     """Build an :class:`ExtractionSpec` from an ``ExtractionNode`` subclass."""
 
@@ -576,20 +541,6 @@ class ExtractionBuilder(SpecBuilder):
             "extract": self.code_body("extract"),
             "run": self.code_body("run"),
         }
-
-
-def build_extraction_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-) -> ExtractionSpec:
-    return ExtractionBuilder(
-        name=name, cls=cls, source_path=source_path,
-        source_text=source_text, resolver=resolver,
-    ).build()
 
 
 class ReviewBuilder(SpecBuilder):
@@ -614,39 +565,24 @@ class ReviewBuilder(SpecBuilder):
         }
 
 
-def build_review_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-) -> ReviewSpec:
-    return ReviewBuilder(
-        name=name, cls=cls, source_path=source_path,
-        source_text=source_text, resolver=resolver,
-    ).build()
-
-
 # ---------------------------------------------------------------------------
-# Level 5: pipelines
+# Level 5: pipelines (custom ``build()`` — translates legacy ``cls._spec``)
 # ---------------------------------------------------------------------------
 
 
-def build_pipeline_spec(
-    *,
-    name: str,
-    cls: type,
-    source_path: str,
-    source_text: str,
-    resolver: ResolverHook,
-) -> PipelineSpec:
+class PipelineBuilder(SpecBuilder):
     """Build a :class:`PipelineSpec` for a ``Pipeline`` subclass.
 
     The legacy :class:`llm_pipeline.graph.spec.PipelineSpec` is
     already built and validated at ``Pipeline.__init_subclass__``
     time (cached on ``cls._spec``). This builder TRANSLATES that
-    legacy spec into the new per-artifact shape:
+    legacy spec into the new per-artifact shape — overriding
+    :meth:`build` rather than implementing :meth:`kind_fields`
+    because of the early-return when ``cls._spec`` is missing
+    (rare; ``Pipeline.__init_subclass__`` always builds a shell
+    even on framework-edge failures, but the guard remains).
+
+    What lands where:
 
     - Pipeline-level issues (cycles, naming, ``input_data_wrong_type``,
       ``invalid_binding_type``, ``duplicate_node_class``, etc.) are
@@ -669,72 +605,76 @@ def build_pipeline_spec(
     over ``cls.INPUT_DATA``, so its refs reflect cross-artifact
     references in the pipeline file. The legacy spec only carried
     the schema; this version captures refs too.
-
-    Tolerates partial state: if ``cls._spec`` is missing (rare —
-    ``Pipeline.__init_subclass__`` always builds it, even on
-    framework-edge failures it returns a shell), returns a minimal
-    :class:`PipelineSpec` so consumers don't have to branch on None.
     """
-    from llm_pipeline.wiring import Extraction, Review, Step
 
-    legacy = getattr(cls, "_spec", None)
-    if legacy is None:
-        return PipelineSpec(
-            kind=KIND_PIPELINE,
-            name=name,
-            cls=_qualified(cls),
-            source_path=source_path,
-            description=_docstring(cls),
+    KIND = KIND_PIPELINE
+    SPEC_CLS = PipelineSpec
+
+    def kind_fields(self) -> dict[str, Any]:  # pragma: no cover — build() overridden
+        # The base ``build()`` isn't used; ``kind_fields`` left as a
+        # contract stub so the ABC is satisfied.
+        return {}
+
+    def build(self) -> PipelineSpec:
+        from llm_pipeline.wiring import Extraction, Review, Step
+
+        cls = self.cls
+        legacy = getattr(cls, "_spec", None)
+        if legacy is None:
+            return PipelineSpec(
+                kind=KIND_PIPELINE,
+                name=self.name,
+                cls=self.cls_str(),
+                source_path=self.source_path,
+                description=_docstring(cls),
+            )
+
+        # Per-binding rows. ``cls._wiring`` is the deduped binding map
+        # in the same order as ``legacy.nodes`` (both built from the
+        # filtered+deduped binding list at __init_subclass__ time).
+        deduped_bindings = list(getattr(cls, "_wiring", {}).values())
+
+        node_bindings: list[NodeBindingSpec] = []
+        for binding, legacy_node in zip(deduped_bindings, legacy.nodes):
+            if isinstance(binding, Step):
+                binding_kind = "step"
+            elif isinstance(binding, Extraction):
+                binding_kind = "extraction"
+            elif isinstance(binding, Review):
+                binding_kind = "review"
+            else:
+                # Pipeline.__init_subclass__ filters non-Step/Extraction/Review
+                # bindings out before building _wiring; this shouldn't
+                # happen but stay defensive.
+                continue
+            node_bindings.append(NodeBindingSpec(
+                binding_kind=binding_kind,
+                node_name=legacy_node.name,
+                wiring=legacy_node.wiring,
+                issues=list(getattr(binding, "_init_post_errors", [])),
+            ))
+
+        input_data_cls = getattr(cls, "INPUT_DATA", None)
+        input_data = self.json_schema(input_data_cls)
+
+        # ``cls.start_node`` is the Python class (e.g. ``ClassifyStep``);
+        # ``_class_to_artifact_ref`` produces an ArtifactRef whose
+        # ``name`` is the source-side class name and ``ref`` is the
+        # resolved (kind, registry-key) pair when the resolver matches.
+        # Returns ``None`` when ``cls.start_node`` is unset.
+        start_node_ref = _class_to_artifact_ref(
+            getattr(cls, "start_node", None), self.resolver,
         )
 
-    # Per-binding rows. ``cls._wiring`` is the deduped binding map
-    # in the same order as ``legacy.nodes`` (both built from the
-    # filtered+deduped binding list at __init_subclass__ time).
-    deduped_bindings = list(getattr(cls, "_wiring", {}).values())
-
-    node_bindings: list[NodeBindingSpec] = []
-    for binding, legacy_node in zip(deduped_bindings, legacy.nodes):
-        if isinstance(binding, Step):
-            binding_kind = "step"
-        elif isinstance(binding, Extraction):
-            binding_kind = "extraction"
-        elif isinstance(binding, Review):
-            binding_kind = "review"
-        else:
-            # Pipeline.__init_subclass__ filters non-Step/Extraction/Review
-            # bindings out before building _wiring; this shouldn't
-            # happen but stay defensive.
-            continue
-        node_bindings.append(NodeBindingSpec(
-            binding_kind=binding_kind,
-            node_name=legacy_node.name,
-            wiring=legacy_node.wiring,
-            issues=list(getattr(binding, "_init_post_errors", [])),
-        ))
-
-    input_data_cls = getattr(cls, "INPUT_DATA", None)
-    input_data = json_schema_with_refs(
-        cls=input_data_cls, source_text=source_text, resolver=resolver,
-    )
-
-    # ``cls.start_node`` is the Python class (e.g. ``ClassifyStep``);
-    # ``_class_to_artifact_ref`` produces an ArtifactRef whose
-    # ``name`` is the source-side class name and ``ref`` is the
-    # resolved (kind, registry-key) pair when the resolver matches.
-    # Returns ``None`` when ``cls.start_node`` is unset.
-    start_node_ref = _class_to_artifact_ref(
-        getattr(cls, "start_node", None), resolver,
-    )
-
-    return PipelineSpec(
-        kind=KIND_PIPELINE,
-        name=name,
-        cls=_qualified(cls),
-        source_path=source_path,
-        description=_docstring(cls),
-        input_data=input_data,
-        nodes=node_bindings,
-        edges=list(legacy.edges),
-        start_node=start_node_ref,
-        issues=list(legacy.issues),
-    )
+        return PipelineSpec(
+            kind=KIND_PIPELINE,
+            name=self.name,
+            cls=self.cls_str(),
+            source_path=self.source_path,
+            description=_docstring(cls),
+            input_data=input_data,
+            nodes=node_bindings,
+            edges=list(legacy.edges),
+            start_node=start_node_ref,
+            issues=list(legacy.issues),
+        )

@@ -35,7 +35,7 @@ from llm_pipeline.specs import (
     NodeBindingSpec,
     PipelineSpec,
 )
-from llm_pipeline.specs.builders import build_pipeline_spec
+from llm_pipeline.specs.builders import PipelineBuilder
 
 
 def _resolver_noop(_module: str, _symbol: str) -> tuple[str, str] | None:
@@ -129,13 +129,13 @@ class _FixturePipeline(Pipeline):
 
 class TestBuildPipelineSpec:
     def test_kind_and_identity(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         assert isinstance(spec, PipelineSpec)
         assert spec.kind == KIND_PIPELINE
         assert spec.name == "fixture"
@@ -143,13 +143,13 @@ class TestBuildPipelineSpec:
         assert spec.source_path == "/tmp/fixture.py"
 
     def test_input_data_is_artifact_field(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         assert spec.input_data is not None
         # It's a JsonSchemaWithRefs ArtifactField (routable target)
         assert hasattr(spec.input_data, "json_schema")
@@ -157,39 +157,39 @@ class TestBuildPipelineSpec:
         assert "text" in spec.input_data.json_schema.get("properties", {})
 
     def test_node_bindings_one_per_pipeline_node(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         assert len(spec.nodes) == 2
         # Order matches Pipeline.nodes declaration order.
         assert spec.nodes[0].binding_kind == "step"
         assert spec.nodes[1].binding_kind == "extraction"
 
     def test_node_binding_carries_registry_key_name(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         # Snake-case derivation, suffix-stripped — matches what
         # walk_steps / walk_extractions registers under.
         names = [nb.node_name for nb in spec.nodes]
         assert names == ["_classify", "_classify"]
 
     def test_node_binding_wiring_preserved(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         # Step's wiring: text from FromInput
         step_wiring = spec.nodes[0].wiring
         assert "text" in step_wiring.field_sources
@@ -205,13 +205,13 @@ class TestBuildPipelineSpec:
         assert ex_wiring.field_sources["run_id"].attr == "run_id"
 
     def test_edges_and_start_node(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         edge_pairs = {(e.from_node, e.to_node) for e in spec.edges}
         assert ("_ClassifyStep", "_ClassifyExtraction") in edge_pairs
         assert ("_ClassifyExtraction", "End") in edge_pairs
@@ -230,26 +230,26 @@ class TestBuildPipelineSpec:
                 return ("step", "_classify")
             return None
 
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=resolver,
-        )
+        ).build()
         assert spec.start_node is not None
         assert spec.start_node.ref is not None
         assert spec.start_node.ref.kind == "step"
         assert spec.start_node.ref.name == "_classify"
 
     def test_node_binding_is_artifact_field(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         # Each NodeBindingSpec carries its own issues slot
         # (binding-wrapper issues land here via _init_post_errors).
         for nb in spec.nodes:
@@ -257,13 +257,13 @@ class TestBuildPipelineSpec:
             assert hasattr(nb, "issues")
 
     def test_round_trip_serialisation(self):
-        spec = build_pipeline_spec(
+        spec = PipelineBuilder(
             name="fixture",
             cls=_FixturePipeline,
             source_path="/tmp/fixture.py",
             source_text="",
             resolver=_resolver_noop,
-        )
+        ).build()
         payload = spec.model_dump(mode="json")
         re_spec = PipelineSpec.model_validate(payload)
         assert re_spec.name == spec.name

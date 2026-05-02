@@ -14,14 +14,14 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 from llm_pipeline.specs.builders import (
+    ConstantBuilder,
+    EnumBuilder,
+    ExtractionBuilder,
+    ReviewBuilder,
+    SchemaBuilder,
+    StepBuilder,
+    ToolBuilder,
     build_code_body,
-    build_constant_spec,
-    build_enum_spec,
-    build_extraction_spec,
-    build_review_spec,
-    build_schema_spec,
-    build_step_spec,
-    build_tool_spec,
     json_schema_with_refs,
 )
 from llm_pipeline.specs.kinds import (
@@ -137,21 +137,21 @@ class _SearchTool:
 
 class TestBuildConstantSpec:
     def test_int_constant(self):
-        spec = build_constant_spec(
+        spec = ConstantBuilder(
             name="max_retries", value=3,
             cls_path="pkg.constants.retries.MAX_RETRIES",
             source_path="/x/constants/retries.py",
-        )
+        ).build()
         assert spec.kind == KIND_CONSTANT
         assert spec.value_type == "int"
         assert spec.value == 3
 
     def test_dict_constant_serialises(self):
-        spec = build_constant_spec(
+        spec = ConstantBuilder(
             name="config", value={"a": 1, "b": [1, 2]},
             cls_path="pkg.constants.CONFIG",
             source_path="/x.py",
-        )
+        ).build()
         # Round-trip through JSON to confirm serialisability.
         re = type(spec).model_validate(spec.model_dump(mode="json"))
         assert re.value == {"a": 1, "b": [1, 2]}
@@ -163,9 +163,9 @@ class TestBuildEnumSpec:
             POSITIVE = "pos"
             NEGATIVE = "neg"
 
-        spec = build_enum_spec(
-            name="sentiment", enum_cls=Sentiment, source_path="/x.py",
-        )
+        spec = EnumBuilder(
+            name="sentiment", cls=Sentiment, source_path="/x.py",
+        ).build()
         assert spec.kind == KIND_ENUM
         assert spec.value_type == "str"
         assert {(m.name, m.value) for m in spec.members} == {
@@ -177,14 +177,14 @@ class TestBuildEnumSpec:
             OPEN = 1
             CLOSED = 2
 
-        spec = build_enum_spec(name="status", enum_cls=Status, source_path="/x.py")
+        spec = EnumBuilder(name="status", cls=Status, source_path="/x.py").build()
         assert spec.value_type == "int"
 
     def test_cls_path_derived_from_class(self):
         class Color(Enum):
             RED = "red"
 
-        spec = build_enum_spec(name="color", enum_cls=Color, source_path="/x.py")
+        spec = EnumBuilder(name="color", cls=Color, source_path="/x.py").build()
         # Module + qualname.
         assert spec.cls.endswith(".Color")
 
@@ -207,10 +207,10 @@ class TestBuildSchemaSpec:
                 street: str
                 zipcode: int = 1000
         """)
-        spec = build_schema_spec(
+        spec = SchemaBuilder(
             name="address", cls=Address, source_path="/x.py",
             source_text=source, resolver=_resolver({}),
-        )
+        ).build()
         assert spec.kind == KIND_SCHEMA
         # Pydantic JSON schema present.
         assert "properties" in spec.definition.json_schema
@@ -230,10 +230,10 @@ class TestBuildSchemaSpec:
         resolver = _resolver({
             ("pkg.constants", "MAX_RETRIES"): ("constant", "max_retries"),
         })
-        spec = build_schema_spec(
+        spec = SchemaBuilder(
             name="foo", cls=_SchemaWithConst, source_path="/x.py",
             source_text=source, resolver=resolver,
-        )
+        ).build()
         assert "/properties/retries/default" in spec.definition.refs
 
 
@@ -266,10 +266,10 @@ class TestBuildStepSpec:
                 def run(self, ctx):
                     return None
         """)
-        spec = build_step_spec(
+        spec = StepBuilder(
             name="foo", cls=_StepWithBodies, source_path="/x.py",
             source_text=source, resolver=_resolver({}),
-        )
+        ).build()
         assert spec.kind == KIND_STEP
         assert spec.inputs is not None
         assert spec.instructions is not None
@@ -279,11 +279,11 @@ class TestBuildStepSpec:
         assert "return []" in spec.prepare.source
 
     def test_tools_extracted_as_artifact_refs(self):
-        spec = build_step_spec(
+        spec = StepBuilder(
             name="foo", cls=_StepWithTools, source_path="/x.py",
             source_text="class _StepWithTools: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         # One ArtifactRef per DEFAULT_TOOLS entry, in source order;
         # source-side name is the tool's Python class name.
         assert [t.name for t in spec.tools] == ["_ToolA", "_ToolB"]
@@ -292,34 +292,34 @@ class TestBuildStepSpec:
 
     def test_tools_resolve_when_resolver_matches(self):
         module = _ToolA.__module__
-        spec = build_step_spec(
+        spec = StepBuilder(
             name="foo", cls=_StepWithTools, source_path="/x.py",
             source_text="class _StepWithTools: pass",
             resolver=_resolver({
                 (module, "_ToolA"): ("tool", "search"),
                 (module, "_ToolB"): ("tool", "summarise"),
             }),
-        )
+        ).build()
         assert [t.ref.name for t in spec.tools] == ["search", "summarise"]
         assert all(t.ref.kind == "tool" for t in spec.tools)
 
     def test_missing_inputs_yields_none(self):
-        spec = build_step_spec(
+        spec = StepBuilder(
             name="foo", cls=_StepEmpty, source_path="/x.py",
             source_text="class _StepEmpty: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         assert spec.inputs is None
         assert spec.instructions is None
 
 
 class TestBuildExtractionSpec:
     def test_table_ref_derived_from_model(self):
-        spec = build_extraction_spec(
+        spec = ExtractionBuilder(
             name="topic", cls=_ExtractionWithModel, source_path="/x.py",
             source_text="class _ExtractionWithModel: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         assert spec.kind == KIND_EXTRACTION
         # ``table`` is an ArtifactRef carrying the source-side
         # Python class name; ``ref`` stays None when the resolver
@@ -331,63 +331,63 @@ class TestBuildExtractionSpec:
     def test_table_resolves_when_resolver_matches(self):
         # Resolver maps the MODEL class to a registered table.
         module = _ExtractionWithModel.MODEL.__module__
-        spec = build_extraction_spec(
+        spec = ExtractionBuilder(
             name="topic", cls=_ExtractionWithModel, source_path="/x.py",
             source_text="class _ExtractionWithModel: pass",
             resolver=_resolver({(module, "_TopicRow"): ("table", "topic_row")}),
-        )
+        ).build()
         assert spec.table is not None
         assert spec.table.ref is not None
         assert spec.table.ref.kind == "table"
         assert spec.table.ref.name == "topic_row"
 
     def test_no_model_yields_none_table(self):
-        spec = build_extraction_spec(
+        spec = ExtractionBuilder(
             name="foo", cls=_ExtractionNoModel, source_path="/x.py",
             source_text="class _ExtractionNoModel: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         assert spec.table is None
 
 
 class TestBuildReviewSpec:
     def test_webhook_url_captured(self):
-        spec = build_review_spec(
+        spec = ReviewBuilder(
             name="foo", cls=_ReviewWithWebhook, source_path="/x.py",
             source_text="class _ReviewWithWebhook: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         assert spec.kind == KIND_REVIEW
         assert spec.webhook_url == "https://hooks.example.com/x"
 
     def test_no_webhook_yields_none(self):
-        spec = build_review_spec(
+        spec = ReviewBuilder(
             name="foo", cls=_ReviewNoWebhook, source_path="/x.py",
             source_text="class _ReviewNoWebhook: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         assert spec.webhook_url is None
 
 
 class TestBuildToolSpec:
     def test_skeleton_with_no_extras(self):
-        spec = build_tool_spec(
+        spec = ToolBuilder(
             name="search", cls=_SearchTool, source_path="/x.py",
             source_text="class _SearchTool: pass",
             resolver=_resolver({}),
-        )
+        ).build()
         assert spec.kind == KIND_TOOL
         assert spec.inputs is None
         assert spec.args is None
         assert spec.body is None
 
     def test_with_inputs_class(self):
-        spec = build_tool_spec(
+        spec = ToolBuilder(
             name="search", cls=_SearchTool, source_path="/x.py",
             source_text="class _SearchTool: pass",
             resolver=_resolver({}),
             inputs_cls=_ToolInputs,
-        )
+        ).build()
         assert spec.inputs is not None
         assert "query" in spec.inputs.json_schema.get("properties", {})
 

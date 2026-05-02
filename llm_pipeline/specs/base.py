@@ -122,8 +122,13 @@ class ArtifactField(BaseModel):
     # doesn't match a sub-component field on this spec.
     issues: list[ValidationIssue] = Field(default_factory=list)
 
-    def attach_class_captures(self, source_cls: type) -> Self:
+    def attach_class_captures(self, source_cls: type | None) -> Self:
         """Distribute ``source_cls._init_subclass_errors`` onto matching components.
+
+        ``source_cls`` is allowed to be ``None`` (value-based artifact
+        kinds — constants — pass ``None`` because there's no class
+        carrying ``_init_subclass_errors``). The routing loop is a
+        no-op in that case via the ``getattr(...,  [])`` fallback.
 
         Each issue's ``ValidationLocation.field`` is interpreted as a
         routing key:

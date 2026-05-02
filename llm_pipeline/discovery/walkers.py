@@ -48,14 +48,16 @@ from llm_pipeline.specs.kinds import (
 )
 from llm_pipeline.specs.registration import ArtifactRegistration
 from llm_pipeline.specs.builders import (
-    build_constant_spec,
-    build_enum_spec,
-    build_extraction_spec,
-    build_pipeline_spec,
-    build_review_spec,
-    build_schema_spec,
-    build_step_spec,
-    build_table_spec,
+    ConstantBuilder,
+    EnumBuilder,
+    ExtractionBuilder,
+    PipelineBuilder,
+    ReviewBuilder,
+    SchemaBuilder,
+    SpecBuilder,
+    StepBuilder,
+    TableBuilder,
+    ToolBuilder,
 )
 
 
@@ -163,19 +165,31 @@ class Walker(ABC):
     2. For each member of the module: skip ``_``-prefixed names,
        skip members that don't pass :meth:`qualifies`.
     3. Compute the registry key via :meth:`name_for`.
-    4. Build the per-kind spec via :meth:`build_spec`.
+    4. Build the per-kind spec via :meth:`build_spec` (default
+       implementation calls ``self.BUILDER(...).build()`` for the
+       standard class-based pattern; value-based kinds override).
     5. Stamp ``spec.imports`` with the once-per-module list.
     6. Insert into ``registries[KIND][name]``.
 
-    Subclasses pin :attr:`KIND` and override the three kind-
-    specific hooks. Adding a new kind = a new subclass plus an
-    entry in :data:`llm_pipeline.discovery.manifest.KIND_MANIFESTS`
-    — the iteration scaffold is inherited.
+    Subclasses pin :attr:`KIND` and :attr:`BUILDER`, override
+    :meth:`qualifies` and :meth:`name_for`, and (when value-based)
+    override :meth:`build_spec`. Adding a new kind = a new subclass
+    plus an entry in
+    :data:`llm_pipeline.discovery.manifest.KIND_MANIFESTS` — the
+    iteration scaffold is inherited.
     """
 
     # The ``KIND_*`` constant for the artifact registry slot this
     # walker populates.
     KIND: ClassVar[str]
+
+    # The :class:`SpecBuilder` subclass this walker dispatches to.
+    # The default :meth:`build_spec` instantiates ``BUILDER`` with
+    # the standard class-based signature (``name``, ``cls=value``,
+    # ``source_path``, ``source_text``, ``resolver``); value-based
+    # kinds (constants) override :meth:`build_spec` to pass their
+    # own kwargs.
+    BUILDER: ClassVar[type[SpecBuilder]]
 
     @abstractmethod
     def qualifies(self, value: Any, mod: ModuleType) -> bool:
@@ -193,7 +207,6 @@ class Walker(ABC):
         a class method (``cls.step_name()`` etc.).
         """
 
-    @abstractmethod
     def build_spec(
         self,
         *,
@@ -204,15 +217,26 @@ class Walker(ABC):
         source_text: str,
         resolver: ResolverHook,
     ):
-        """Construct the per-kind spec. Subclass calls the matching
-        ``build_*_spec`` from :mod:`llm_pipeline.specs.builders`.
+        """Construct the per-kind spec via :attr:`BUILDER`.
+
+        Default implementation: standard class-based call —
+        ``self.BUILDER(name=name, cls=value, source_path=...,
+        source_text=..., resolver=...).build()``.
+
+        Value-based kinds (constants) override to supply their own
+        builder kwargs.
 
         ``attr_name`` is the original Python identifier (e.g.
         ``MAX_RETRIES``); ``name`` is the snake-cased registry key
-        (e.g. ``max_retries``). Most subclasses just need ``name``;
-        constants need ``attr_name`` to construct the dotted
-        ``cls_path`` that the resolver uses for reverse lookup.
+        (e.g. ``max_retries``).
         """
+        return self.BUILDER(
+            name=name,
+            cls=value,
+            source_path=_module_path(mod),
+            source_text=source_text,
+            resolver=resolver,
+        ).build()
 
     def walk(
         self,
@@ -259,13 +283,18 @@ class ConstantsWalker(Walker):
     ``from .other import X``, ``X`` will also appear in the registry
     under foo's module path. Document rather than work around —
     users shouldn't re-import in constants files.
+
+    Overrides :meth:`build_spec` because constants are *values*, not
+    classes — the default class-based dispatch (``cls=value``)
+    doesn't apply.
     """
 
     KIND = KIND_CONSTANT
+    BUILDER = ConstantBuilder
 
     def qualifies(self, value, mod):
         # Plain primitive value, NOT a class (Enum subclasses go to
-        # walk_enums).
+        # EnumsWalker).
         return (
             isinstance(value, _CONSTANT_VALUE_TYPES)
             and not inspect.isclass(value)
@@ -279,12 +308,12 @@ class ConstantsWalker(Walker):
         # what an importer of this module would write
         # (``from constants import MAX_RETRIES``), and it's what
         # the resolver's reverse index looks up against.
-        return build_constant_spec(
+        return ConstantBuilder(
             name=name,
             value=value,
             cls_path=f"{mod.__name__}.{attr_name}",
             source_path=_module_path(mod),
-        )
+        ).build()
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +325,7 @@ class EnumsWalker(Walker):
     """Register ``Enum`` subclasses from ``enums/``."""
 
     KIND = KIND_ENUM
+    BUILDER = EnumBuilder
 
     def qualifies(self, value, mod):
         from enum import Enum
@@ -304,13 +334,6 @@ class EnumsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_enum_spec(
-            name=name,
-            enum_cls=value,
-            source_path=_module_path(mod),
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +350,7 @@ class SchemasWalker(Walker):
     """
 
     KIND = KIND_SCHEMA
+    BUILDER = SchemaBuilder
 
     def qualifies(self, value, mod):
         from pydantic import BaseModel
@@ -335,15 +359,6 @@ class SchemasWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_schema_spec(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +375,7 @@ class TablesWalker(Walker):
     """
 
     KIND = KIND_TABLE
+    BUILDER = TableBuilder
 
     def qualifies(self, value, mod):
         from pydantic import BaseModel
@@ -371,15 +387,6 @@ class TablesWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_table_spec(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -400,20 +407,18 @@ class ToolsWalker(Walker):
     other walker; the only kind-specific behaviour is :meth:`qualifies`
     returning ``False`` for every member, so nothing ends up in the
     registry. When the tool convention is settled, replacing
-    ``qualifies`` (and adding a real :meth:`build_spec`) is the only
+    ``qualifies`` (and providing real builder kwargs) is the only
     surface that needs to change.
     """
 
     KIND = KIND_TOOL
+    BUILDER = ToolBuilder
 
     def qualifies(self, value, mod):
         return False
 
     def name_for(self, attr_name, value):  # pragma: no cover — never called
         return ""
-
-    def build_spec(self, **kwargs):  # pragma: no cover — never called
-        raise NotImplementedError
 
 
 # ---------------------------------------------------------------------------
@@ -424,14 +429,15 @@ class ToolsWalker(Walker):
 class StepsWalker(Walker):
     """Register ``LLMStepNode`` subclasses from ``steps/``.
 
-    ``StepSpec.prompt`` is left ``None`` here. Building
-    :class:`PromptData` requires reading the paired YAML and the
-    ``_variables/`` PromptVariables class — separate orchestration
-    concern. Steps still get inputs / instructions / prepare /
-    run / tools populated.
+    ``StepSpec.prompt`` is left ``None`` here (the default in
+    :class:`StepBuilder`). Building :class:`PromptData` requires
+    reading the paired YAML and the per-step ``XPrompt`` class —
+    separate orchestration concern. Steps still get
+    inputs / instructions / prepare / run / tools populated.
     """
 
     KIND = KIND_STEP
+    BUILDER = StepBuilder
 
     def qualifies(self, value, mod):
         from llm_pipeline.graph.nodes import LLMStepNode
@@ -440,16 +446,6 @@ class StepsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return value.step_name()
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_step_spec(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-            prompt=None,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -461,6 +457,7 @@ class ExtractionsWalker(Walker):
     """Register ``ExtractionNode`` subclasses from ``extractions/``."""
 
     KIND = KIND_EXTRACTION
+    BUILDER = ExtractionBuilder
 
     def qualifies(self, value, mod):
         from llm_pipeline.graph.nodes import ExtractionNode
@@ -469,15 +466,6 @@ class ExtractionsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name, strip_suffix="Extraction")
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_extraction_spec(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -489,6 +477,7 @@ class ReviewsWalker(Walker):
     """Register ``ReviewNode`` subclasses from ``reviews/``."""
 
     KIND = KIND_REVIEW
+    BUILDER = ReviewBuilder
 
     def qualifies(self, value, mod):
         from llm_pipeline.graph.nodes import ReviewNode
@@ -497,15 +486,6 @@ class ReviewsWalker(Walker):
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name, strip_suffix="Review")
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_review_spec(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -517,15 +497,15 @@ class PipelinesWalker(Walker):
     """Register ``Pipeline`` subclasses from ``pipelines/``.
 
     Each pipeline class has its legacy
-    :class:`llm_pipeline.graph.spec.PipelineSpec` already built
-    and validated at ``Pipeline.__init_subclass__`` time. The new
+    :class:`llm_pipeline.graph.spec.PipelineSpec` already built and
+    validated at ``Pipeline.__init_subclass__`` time. The new
     :class:`llm_pipeline.specs.PipelineSpec` is a per-artifact
-    translation of that — populated by
-    :func:`llm_pipeline.specs.builders.build_pipeline_spec`. Both
-    registries coexist during the migration.
+    translation of that — populated by :class:`PipelineBuilder`.
+    Both registries coexist during the migration.
     """
 
     KIND = KIND_PIPELINE
+    BUILDER = PipelineBuilder
 
     def qualifies(self, value, mod):
         from llm_pipeline.graph.pipeline import Pipeline
@@ -534,15 +514,6 @@ class PipelinesWalker(Walker):
 
     def name_for(self, attr_name, value):
         return value.pipeline_name()
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        return build_pipeline_spec(
-            name=name,
-            cls=value,
-            source_path=_module_path(mod),
-            source_text=source_text,
-            resolver=resolver,
-        )
 
 
 # Subfolder→walker dispatch lives in
