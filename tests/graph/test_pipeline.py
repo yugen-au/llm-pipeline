@@ -580,29 +580,17 @@ class TestNamingConventions:
         )
 
     def test_step_must_end_with_step(self):
-        class BadPipeline(Pipeline):
-            INPUT_DATA = SmokeInput
-            nodes = [Step(
-                BetaButNotS,
-                inputs_spec=NoSuffixInputs.sources(text=FromInput("text")),
-            )]
-
+        # Per-kind class-contract issues live on the NODE class's
+        # _init_subclass_errors, not aggregated up into the Pipeline's.
         assert any(
             e.code == "step_name_suffix"
-            for e in BadPipeline._init_subclass_errors
+            for e in BetaButNotS._init_subclass_errors
         )
 
     def test_inputs_class_name_must_match_step(self):
-        class BadPipeline(Pipeline):
-            INPUT_DATA = SmokeInput
-            nodes = [Step(
-                GammaStep,
-                inputs_spec=WrongName.sources(text=FromInput("text")),
-            )]
-
         assert any(
             e.code == "step_inputs_name_mismatch"
-            for e in BadPipeline._init_subclass_errors
+            for e in GammaStep._init_subclass_errors
         )
 
 
@@ -672,20 +660,10 @@ class TestExtractionValidation:
         assert "HappyExtraction" in HappyExtractionPipeline._graph.node_defs
 
     def test_extraction_must_end_with_extraction(self):
-        class BadPipeline(Pipeline):
-            INPUT_DATA = SmokeInput
-            nodes = [
-                Step(XStep, inputs_spec=XInputs.sources(
-                    text=FromInput("text"),
-                )),
-                Extraction(NotExtNode, inputs_spec=FromXInputs.sources(
-                    label=FromOutput(XStep, field="label"),
-                )),
-            ]
-
+        # Per-kind class-contract issue lives on the NODE class.
         assert any(
             e.code == "extraction_name_suffix"
-            for e in BadPipeline._init_subclass_errors
+            for e in NotExtNode._init_subclass_errors
         )
 
     def test_extraction_reading_downstream_step_raises(self):

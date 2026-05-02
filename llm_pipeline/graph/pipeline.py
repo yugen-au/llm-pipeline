@@ -59,18 +59,14 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from pydantic_graph import Graph
 
-from llm_pipeline.graph.spec import (
-    PipelineSpec,
-    build_pipeline_spec,
-    derive_issues,
-)
 from llm_pipeline.graph.state import PipelineDeps, PipelineState
-from llm_pipeline.graph.validator import validate_pipeline_into_spec
+from llm_pipeline.graph.validator import validate_pipeline
 from llm_pipeline.inputs import PipelineInputData
+from llm_pipeline.specs.validation import ValidationIssue, ValidationLocation
 from llm_pipeline.wiring import Extraction, Review, Step
 
 if TYPE_CHECKING:
-    from llm_pipeline.graph.spec import NodeSpec, ValidationIssue
+    pass
 
 __all__ = ["Pipeline", "PipelineEnd"]
 
@@ -87,38 +83,6 @@ class PipelineEnd:
     Carries no data — the canonical run output is ``state.outputs``,
     surfaced via the runtime's return value.
     """
-
-
-def _stamp_class_captures(
-    spec: "PipelineSpec",
-    deduped_bindings: list[NodeBinding],
-) -> None:
-    """Copy class- and binding-level captures onto their spec homes.
-
-    - Node class ``_init_subclass_errors`` → ``NodeSpec.issues``.
-    - Binding wrapper ``_init_post_errors`` → ``NodeSpec.issues``.
-    - PromptVariables ``_init_subclass_errors`` → ``PromptSpec.issues``.
-
-    ``deduped_bindings`` is in 1:1 order with ``spec.nodes``.
-    """
-    from llm_pipeline.graph.nodes import LLMStepNode
-
-    for binding, node_spec in zip(deduped_bindings, spec.nodes):
-        node_cls = binding.cls
-        node_spec.issues.extend(
-            getattr(node_cls, "_init_subclass_errors", []),
-        )
-        node_spec.issues.extend(getattr(binding, "_init_post_errors", []))
-        if (
-            isinstance(node_cls, type)
-            and issubclass(node_cls, LLMStepNode)
-            and node_spec.prompt is not None
-        ):
-            pv_cls = getattr(node_cls, "prompt_variables_cls", None)
-            if pv_cls is not None:
-                node_spec.prompt.issues.extend(
-                    getattr(pv_cls, "_init_subclass_errors", []),
-                )
 
 
 class Pipeline:
@@ -160,14 +124,10 @@ class Pipeline:
     # Wiring dict keyed by node base class. Threaded into PipelineDeps
     # by the runtime so node bodies read their wiring from there.
     _wiring: ClassVar[dict[type, NodeBinding]] = {}
-    # Typed introspection surface, built once at __init_subclass__
-    # and surfaced via ``Pipeline.inspect()``. Phoenix-aware fields on
-    # each node's ``prompt`` start as ``None`` and are filled in by
-    # the discovery-time Phoenix validator.
-    _spec: ClassVar[PipelineSpec | None] = None
-    # Flat aggregated list returned by ``derive_issues(_spec)`` at
-    # __init_subclass__ time. Each subclass gets its own fresh list.
-    _init_subclass_errors: ClassVar[list["ValidationIssue"]] = []
+    # Issues collected at __init_subclass__ time. The per-artifact
+    # PipelineBuilder routes them onto the new PipelineSpec via
+    # attach_class_captures.
+    _init_subclass_errors: ClassVar[list[ValidationIssue]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -175,25 +135,17 @@ class Pipeline:
             cls._init_subclass_errors = []
             return
 
-        from llm_pipeline.graph.spec import (
-            ValidationIssue,
-            ValidationLocation,
-        )
-
-        pre_spec_issues: list[ValidationIssue] = []
+        issues: list[ValidationIssue] = []
 
         # 1. Filter to valid binding wrappers.
         valid_bindings: list[NodeBinding] = []
         for i, binding in enumerate(cls.nodes):
             if not isinstance(binding, (Step, Extraction, Review)):
-                pre_spec_issues.append(ValidationIssue(
+                issues.append(ValidationIssue(
                     severity="error", code="invalid_binding_type",
                     message=(
                         f"{cls.__name__}.nodes[{i}] must be a Step, "
-                        f"Extraction, or Review wrapper; got "
-                        f"{binding!r}. Bare node classes are no longer "
-                        f"accepted — wrap them with the appropriate "
-                        f"binding."
+                        f"Extraction, or Review wrapper; got {binding!r}."
                     ),
                     location=ValidationLocation(pipeline=cls.__name__),
                     suggestion=(
@@ -212,20 +164,16 @@ class Pipeline:
             if not isinstance(binding.cls, type):
                 continue
             if binding.cls in wiring:
-                pre_spec_issues.append(ValidationIssue(
+                issues.append(ValidationIssue(
                     severity="error", code="duplicate_node_class",
                     message=(
                         f"{cls.__name__}.nodes contains duplicate node "
-                        f"class {binding.cls.__name__}. Each node class "
-                        f"may appear at most once per pipeline."
+                        f"class {binding.cls.__name__}."
                     ),
                     location=ValidationLocation(
                         pipeline=cls.__name__, node=binding.cls.__name__,
                     ),
-                    suggestion=(
-                        "Remove the duplicate, or use a different node "
-                        "class."
-                    ),
+                    suggestion="Remove the duplicate.",
                 ))
                 continue
             wiring[binding.cls] = binding
@@ -250,7 +198,7 @@ class Pipeline:
                 cls._graph = Graph(nodes=tuple(raw_nodes), name=cls.__name__)
                 cls._node_classes = {n.__name__: n for n in raw_nodes}
             except Exception as exc:
-                pre_spec_issues.append(ValidationIssue(
+                issues.append(ValidationIssue(
                     severity="error", code="graph_build_failed",
                     message=(
                         f"Could not build pydantic-graph for "
@@ -264,19 +212,19 @@ class Pipeline:
             cls._graph = None
             cls._node_classes = {}
 
-        # 5. Spec skeleton build (always returns a usable spec).
-        cls._spec = build_pipeline_spec(cls)
-
-        # 6. Stamp captures + run validator → mutates spec in place.
-        cls._spec.issues.extend(pre_spec_issues)
-        _stamp_class_captures(cls._spec, deduped_bindings)
-        validate_pipeline_into_spec(
+        # 5. Run structural validator — appends path-routed issues.
+        issues.extend(validate_pipeline(
             cls,
-            spec=cls._spec,
             bindings=deduped_bindings,
             input_cls=cls.INPUT_DATA,
-        )
-        cls._init_subclass_errors = derive_issues(cls._spec)
+            start_node=cls.start_node,
+        ))
+
+        # Wrapper __post_init__ captures (binding_*).
+        for binding in deduped_bindings:
+            issues.extend(getattr(binding, "_init_post_errors", []))
+
+        cls._init_subclass_errors = issues
 
     @classmethod
     def graph(cls) -> Graph[PipelineState, PipelineDeps, Any]:
@@ -294,19 +242,3 @@ class Pipeline:
         from llm_pipeline.naming import to_snake_case
 
         return to_snake_case(cls.__name__, strip_suffix="Pipeline")
-
-    @classmethod
-    def inspect(cls) -> PipelineSpec:
-        """Return the typed ``PipelineSpec`` introspection surface.
-
-        Built once at ``__init_subclass__`` time and cached. The same
-        instance is returned on every call. Phoenix-aware fields on
-        each node's ``prompt`` are populated by the discovery-time
-        Phoenix validator; ``None`` until that runs.
-        """
-        if cls._spec is None:
-            raise RuntimeError(
-                f"{cls.__name__} has no compiled spec — declare "
-                f"`nodes = [...]` and re-import the module."
-            )
-        return cls._spec

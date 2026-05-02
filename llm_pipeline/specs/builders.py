@@ -539,71 +539,36 @@ class ReviewBuilder(SpecBuilder):
 
 
 class PipelineBuilder(SpecBuilder):
-    """Build a :class:`PipelineSpec` for a ``Pipeline`` subclass.
+    """Build a :class:`PipelineSpec` directly from a ``Pipeline`` subclass.
 
-    The legacy :class:`llm_pipeline.graph.spec.PipelineSpec` is
-    already built and validated at ``Pipeline.__init_subclass__``
-    time (cached on ``cls._spec``). This builder TRANSLATES that
-    legacy spec into the new per-artifact shape — overriding
-    :meth:`build` rather than implementing :meth:`kind_fields`
-    because of the early-return when ``cls._spec`` is missing
-    (rare; ``Pipeline.__init_subclass__`` always builds a shell
-    even on framework-edge failures, but the guard remains).
+    Reads ``cls._wiring`` (deduped bindings), ``cls.INPUT_DATA``,
+    ``cls.start_node``, and the per-node ``run()`` return annotations
+    to construct nodes / input_data / start_node / edges. Routes
+    ``cls._init_subclass_errors`` onto matching components via
+    :meth:`attach_class_captures`.
 
-    What lands where:
-
-    - Pipeline-level issues (cycles, naming, ``input_data_wrong_type``,
-      ``invalid_binding_type``, ``duplicate_node_class``, etc.) are
-      copied from ``cls._spec.issues`` to the new spec's
-      ``self.issues``. The legacy validator already placed them
-      correctly; we just preserve placement.
-    - Per-binding rows: one :class:`NodeBindingSpec` per deduped
-      binding, carrying ``binding_kind`` (wrapper type),
-      ``node_name`` (snake_case registry key), the wiring (reused
-      :class:`WiringSpec` from the legacy spec — already validator-
-      populated with per-source issues), and per-binding-wrapper
-      issues from ``binding._init_post_errors``.
-    - Class-contract issues (missing INPUTS, prepare-signature
-      mismatches, etc.) are NOT copied here — they live canonically
-      on the standalone per-kind spec
-      (``registries[KIND_STEP][node_name]`` etc.). The frontend
-      follows the ``node_name`` ref to find them.
-
-    ``input_data`` is built fresh via :func:`json_schema_with_refs`
-    over ``cls.INPUT_DATA``, so its refs reflect cross-artifact
-    references in the pipeline file. The legacy spec only carried
-    the schema; this version captures refs too.
+    Class-contract issues (missing INPUTS, prepare-signature
+    mismatches, etc.) live canonically on the standalone per-kind
+    spec (``registries[KIND_STEP][node_name]`` etc.) — not duplicated
+    here. The frontend follows the ``node_name`` ref to find them.
     """
 
     KIND = KIND_PIPELINE
     SPEC_CLS = PipelineSpec
 
-    def kind_fields(self) -> dict[str, Any]:  # pragma: no cover — build() overridden
-        # The base ``build()`` isn't used; ``kind_fields`` left as a
-        # contract stub so the ABC is satisfied.
-        return {}
-
-    def build(self) -> PipelineSpec:
+    def kind_fields(self) -> dict[str, Any]:
+        from llm_pipeline.specs.pipelines import (
+            EdgeSpec,
+            NodeBindingSpec,
+        )
         from llm_pipeline.wiring import Extraction, Review, Step
 
         cls = self.cls
-        legacy = getattr(cls, "_spec", None)
-        if legacy is None:
-            return PipelineSpec(
-                kind=KIND_PIPELINE,
-                name=self.name,
-                cls=_qualified(cls),
-                source_path=self.source_path,
-                description=_docstring(cls),
-            )
-
-        # Per-binding rows. ``cls._wiring`` is the deduped binding map
-        # in the same order as ``legacy.nodes`` (both built from the
-        # filtered+deduped binding list at __init_subclass__ time).
         deduped_bindings = list(getattr(cls, "_wiring", {}).values())
+        raw_nodes = [b.cls for b in deduped_bindings]
 
         node_bindings: list[NodeBindingSpec] = []
-        for binding, legacy_node in zip(deduped_bindings, legacy.nodes):
+        for binding in deduped_bindings:
             if isinstance(binding, Step):
                 binding_kind = "step"
             elif isinstance(binding, Extraction):
@@ -611,38 +576,125 @@ class PipelineBuilder(SpecBuilder):
             elif isinstance(binding, Review):
                 binding_kind = "review"
             else:
-                # Pipeline.__init_subclass__ filters non-Step/Extraction/Review
-                # bindings out before building _wiring; this shouldn't
-                # happen but stay defensive.
                 continue
             node_bindings.append(NodeBindingSpec(
                 binding_kind=binding_kind,
-                node_name=legacy_node.name,
-                wiring=legacy_node.wiring,
-                issues=list(getattr(binding, "_init_post_errors", [])),
+                node_name=_node_name_for_binding(binding),
+                wiring=_build_wiring_spec(binding),
             ))
+
+        edges = _build_edges(raw_nodes)
 
         input_data_cls = getattr(cls, "INPUT_DATA", None)
         input_data = self.json_schema(input_data_cls)
 
-        # ``cls.start_node`` is the Python class (e.g. ``ClassifyStep``);
-        # ``_class_to_artifact_ref`` produces an ArtifactRef whose
-        # ``name`` is the source-side class name and ``ref`` is the
-        # resolved (kind, registry-key) pair when the resolver matches.
-        # Returns ``None`` when ``cls.start_node`` is unset.
         start_node_ref = _class_to_artifact_ref(
             getattr(cls, "start_node", None), self.resolver,
         )
 
-        return PipelineSpec(
-            kind=KIND_PIPELINE,
-            name=self.name,
-            cls=_qualified(cls),
-            source_path=self.source_path,
-            description=_docstring(cls),
-            input_data=input_data,
-            nodes=node_bindings,
-            edges=list(legacy.edges),
-            start_node=start_node_ref,
-            issues=list(legacy.issues),
+        return {
+            "input_data": input_data,
+            "nodes": node_bindings,
+            "edges": edges,
+            "start_node": start_node_ref,
+        }
+
+
+def _node_name_for_binding(binding) -> str:
+    """Snake_case registry key for ``binding.cls``."""
+    from llm_pipeline.naming import to_snake_case
+    from llm_pipeline.wiring import Extraction, Review, Step
+
+    cls = binding.cls
+    if isinstance(binding, Step):
+        return cls.step_name()
+    suffix = "Extraction" if isinstance(binding, Extraction) else "Review"
+    return to_snake_case(cls.__name__, strip_suffix=suffix)
+
+
+def _build_wiring_spec(binding):
+    """Serialise a binding's ``inputs_spec`` into a WiringSpec."""
+    from llm_pipeline.specs.pipelines import SourceSpec, WiringSpec
+
+    spec = binding.inputs_spec
+    return WiringSpec(
+        inputs_cls=f"{spec.inputs_cls.__module__}.{spec.inputs_cls.__qualname__}",
+        field_sources={
+            name: _serialise_source(src)
+            for name, src in spec.field_sources.items()
+        },
+    )
+
+
+def _serialise_source(source):
+    from llm_pipeline.specs.pipelines import SourceSpec
+    from llm_pipeline.wiring import Computed, FromInput, FromOutput, FromPipeline
+
+    if isinstance(source, FromInput):
+        return SourceSpec(kind="from_input", path=source.path)
+    if isinstance(source, FromOutput):
+        return SourceSpec(
+            kind="from_output",
+            step_cls=source.step_cls.__name__,
+            index=source.index,
+            field=source.field,
         )
+    if isinstance(source, FromPipeline):
+        return SourceSpec(kind="from_pipeline", attr=source.attr)
+    if isinstance(source, Computed):
+        return SourceSpec(
+            kind="computed",
+            fn=getattr(source.fn, "__qualname__", repr(source.fn)),
+            sources=[_serialise_source(s) for s in source.sources],
+        )
+    raise TypeError(f"Unknown Source subclass {type(source).__name__!r}")
+
+
+def _build_edges(raw_nodes: list[type]):
+    """Build the EdgeSpec list from each node's ``run()`` return annotations."""
+    from llm_pipeline.graph.validator import _next_node_classes
+    from llm_pipeline.specs.pipelines import EdgeSpec
+
+    edges = []
+    for node in raw_nodes:
+        targets = _next_node_classes(node, raw_nodes)
+        if _run_returns_end(node, raw_nodes):
+            edges.append(EdgeSpec(from_node=node.__name__, to_node="End"))
+        for target in targets:
+            edges.append(EdgeSpec(
+                from_node=node.__name__, to_node=target.__name__,
+            ))
+    return edges
+
+
+def _run_returns_end(node_cls: type, raw_nodes: list[type]) -> bool:
+    """True if ``node_cls.run()``'s return annotation reaches ``End``."""
+    import typing
+    from types import UnionType
+    from pydantic_graph import End
+
+    return_annotation = node_cls.run.__annotations__.get("return")
+    if return_annotation is None:
+        return False
+    if isinstance(return_annotation, str):
+        try:
+            name_to_node = {n.__name__: n for n in raw_nodes}
+            return_annotation = eval(  # noqa: S307
+                return_annotation,
+                getattr(node_cls.run, "__globals__", {}),
+                name_to_node | {"End": End},
+            )
+        except (NameError, SyntaxError):
+            return False
+
+    def _has_end(ann) -> bool:
+        if ann is End:
+            return True
+        origin = typing.get_origin(ann)
+        if origin is End:
+            return True
+        if origin is typing.Union or origin is UnionType:
+            return any(_has_end(arg) for arg in typing.get_args(ann))
+        return False
+
+    return _has_end(return_annotation)
