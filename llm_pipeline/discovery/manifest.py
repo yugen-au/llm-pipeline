@@ -52,7 +52,7 @@ from llm_pipeline.specs.reviews import ReviewFields, ReviewSpec
 from llm_pipeline.specs.schemas import SchemaSpec
 from llm_pipeline.specs.steps import StepFields, StepSpec
 from llm_pipeline.specs.tables import TableSpec
-from llm_pipeline.specs.tools import ToolSpec
+from llm_pipeline.specs.tools import ToolFields, ToolSpec
 
 
 __all__ = [
@@ -118,7 +118,7 @@ KIND_MANIFESTS: dict[str, KindManifest] = {
     ),
     KIND_TOOL: KindManifest(
         kind=KIND_TOOL, subfolder="tools", level=3,
-        spec_cls=ToolSpec, fields_cls=None,
+        spec_cls=ToolSpec, fields_cls=ToolFields,
         walker=ToolsWalker(),
     ),
     KIND_EXTRACTION: KindManifest(

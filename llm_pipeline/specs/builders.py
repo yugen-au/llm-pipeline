@@ -401,42 +401,24 @@ class TableBuilder(SpecBuilder):
 
 
 class ToolBuilder(SpecBuilder):
-    """Build a :class:`ToolSpec` for an agent tool.
+    """Build a :class:`ToolSpec` from an :class:`AgentTool` subclass.
 
-    Phase C.1 skeleton — the call signature here is provisional,
-    matching the spec subclass shape. Phase C.2's tool walker
-    decides which classes count as Inputs/Args and which qualname
-    addresses the tool's callable body.
+    Reads ``cls.Inputs`` / ``cls.Args`` / ``cls.run`` directly. Missing
+    attrs produce ``None``-valued spec fields; the per-class capture
+    model surfaces the contract violation.
     """
 
     KIND = KIND_TOOL
     SPEC_CLS = ToolSpec
 
-    def __init__(
-        self,
-        *,
-        inputs_cls: type | None = None,
-        args_cls: type | None = None,
-        body_qualname: str | None = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(**kwargs)
-        self.inputs_cls = inputs_cls
-        self.args_cls = args_cls
-        self.body_qualname = body_qualname
-
     def kind_fields(self) -> dict[str, Any]:
+        cls = self.cls
+        inputs_cls = getattr(cls, "Inputs", None)
+        args_cls = getattr(cls, "Args", None)
         return {
-            "inputs": self.json_schema(self.inputs_cls),
-            "args": self.json_schema(self.args_cls),
-            "body": (
-                build_code_body(
-                    function_qualname=self.body_qualname,
-                    source_text=self.source_text,
-                    resolver=self.resolver,
-                )
-                if self.body_qualname else None
-            ),
+            "inputs": self.json_schema(inputs_cls),
+            "args": self.json_schema(args_cls),
+            "body": self.code_body("run"),
         }
 
 

@@ -372,15 +372,46 @@ class TestWalkSteps:
 # ---------------------------------------------------------------------------
 
 
-class TestNoOpWalkers:
-    def test_walk_tools_does_nothing(self):
-        # Skeleton walker — see walkers.py docstring for the
-        # rationale (tool convention not yet pinned). Verifying
-        # registries stay empty.
-        regs = init_empty_registries()
-        ToolsWalker().walk([], regs, _null_resolver)
-        assert regs[KIND_TOOL] == {}
+class TestWalkTools:
+    def test_registers_agent_tool_subclasses(self, tmp_path: Path):
+        source = textwrap.dedent("""
+            from pydantic import BaseModel
 
+            from llm_pipeline.agent_tool import AgentTool
+            from llm_pipeline.inputs import StepInputs
+
+            class FetchDocsTool(AgentTool):
+                \"\"\"Look up framework docs.\"\"\"
+
+                class Inputs(StepInputs):
+                    library_id: str
+
+                class Args(BaseModel):
+                    query: str
+                    limit: int = 5
+
+                @classmethod
+                def run(cls, inputs, args, ctx):
+                    return ""
+        """)
+        path = tmp_path / "tools.py"
+        path.write_text(source)
+        mod = load_convention_module(path, "_test_tools")
+
+        regs = init_empty_registries()
+        ToolsWalker().walk([mod], regs, _null_resolver)
+
+        assert "fetch_docs" in regs[KIND_TOOL]
+        spec = regs[KIND_TOOL]["fetch_docs"].spec
+        assert spec.kind == KIND_TOOL
+        assert spec.name == "fetch_docs"
+        assert spec.inputs is not None
+        assert spec.args is not None
+        # Args schema has the LLM-call parameters.
+        assert "query" in spec.args.json_schema["properties"]
+
+
+class TestNoOpWalkers:
     def test_walk_pipelines_does_nothing(self):
         # Pipeline registration stays in legacy
         # ``app.state.pipeline_registry`` for now — the existing

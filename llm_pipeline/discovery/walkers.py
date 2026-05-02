@@ -368,35 +368,29 @@ class TablesWalker(Walker):
 
 
 # ---------------------------------------------------------------------------
-# Level 3: tools (skeleton — no-op until tool convention firms up)
+# Level 3: tools
 # ---------------------------------------------------------------------------
 
 
 class ToolsWalker(Walker):
-    """Skeleton walker for ``tools/`` — registers nothing until the convention firms up.
+    """Register :class:`AgentTool` subclasses from ``tools/``.
 
-    The current ``tools/`` convention is "files that call
-    ``register_agent``" — there isn't a structurally identifiable
-    tool class shape this walker can inspect generically. Tools
-    registered via :func:`register_agent` continue to live in their
-    existing global registry; ``registries[KIND_TOOL]`` stays empty.
-
-    Flows through the same :meth:`Walker.walk` machinery as every
-    other walker; the only kind-specific behaviour is :meth:`qualifies`
-    returning ``False`` for every member, so nothing ends up in the
-    registry. When the tool convention is settled, replacing
-    ``qualifies`` (and providing real builder kwargs) is the only
-    surface that needs to change.
+    Each subclass declares nested ``Inputs`` (StepInputs) and ``Args``
+    (BaseModel) classes plus a ``run`` classmethod. Class-level
+    contract violations live on ``cls._init_subclass_errors`` and
+    flow into ``ToolSpec`` via :meth:`ArtifactSpec.attach_class_captures`.
     """
 
     KIND = KIND_TOOL
     BUILDER = ToolBuilder
 
     def qualifies(self, value, mod):
-        return False
+        from llm_pipeline.agent_tool import AgentTool
 
-    def name_for(self, attr_name, value):  # pragma: no cover — never called
-        return ""
+        return _is_locally_defined_class(value, mod, AgentTool)
+
+    def name_for(self, attr_name, value):
+        return _to_registry_key(attr_name, strip_suffix="Tool")
 
 
 # ---------------------------------------------------------------------------

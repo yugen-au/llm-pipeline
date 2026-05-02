@@ -123,12 +123,36 @@ class _ReviewNoWebhook:
     webhook_url = None
 
 
-class _ToolInputs(BaseModel):
+from llm_pipeline.agent_tool import AgentTool
+from llm_pipeline.inputs import StepInputs
+
+
+class _SearchToolInputs(StepInputs):
+    library_id: str = ""
+
+
+class _SearchToolArgs(BaseModel):
     query: str
+    limit: int = 5
 
 
-class _SearchTool:
-    pass
+class _SearchTool(AgentTool):
+    """Search the docs index."""
+
+    Inputs = _SearchToolInputs
+    Args = _SearchToolArgs
+
+    @classmethod
+    def run(cls, inputs, args, ctx):
+        return ""
+
+
+class _BareTool:
+    """Stand-in for an AgentTool subclass with no Inputs/Args set —
+    exercises the builder's tolerance for missing class attrs."""
+
+    Inputs = None
+    Args = None
 
 
 # ---------------------------------------------------------------------------
@@ -392,10 +416,10 @@ class TestBuildReviewSpec:
 
 
 class TestBuildToolSpec:
-    def test_skeleton_with_no_extras(self):
+    def test_partial_with_no_inputs_or_args(self):
         spec = ToolBuilder(
-            name="search", cls=_SearchTool, source_path="/x.py",
-            source_text="class _SearchTool: pass",
+            name="bare", cls=_BareTool, source_path="/x.py",
+            source_text="class _BareTool: pass",
             resolver=_resolver({}),
         ).build()
         assert spec.kind == KIND_TOOL
@@ -403,15 +427,16 @@ class TestBuildToolSpec:
         assert spec.args is None
         assert spec.body is None
 
-    def test_with_inputs_class(self):
+    def test_reads_inputs_args_from_class(self):
         spec = ToolBuilder(
             name="search", cls=_SearchTool, source_path="/x.py",
             source_text="class _SearchTool: pass",
             resolver=_resolver({}),
-            inputs_cls=_ToolInputs,
         ).build()
         assert spec.inputs is not None
-        assert "query" in spec.inputs.json_schema.get("properties", {})
+        assert "library_id" in spec.inputs.json_schema.get("properties", {})
+        assert spec.args is not None
+        assert "query" in spec.args.json_schema.get("properties", {})
 
 
 # ---------------------------------------------------------------------------
