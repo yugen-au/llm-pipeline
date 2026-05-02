@@ -27,15 +27,7 @@ imports from ``llm_pipeline.graph``.
 from __future__ import annotations
 
 from llm_pipeline.graph.instructions import LLMResultMixin
-from llm_pipeline.graph.spec import (
-    EdgeSpec,
-    NodeSpec,
-    PipelineSpec,
-    PromptSpec,
-    SourceSpec,
-    ToolSpec,
-    WiringSpec,
-)
+from llm_pipeline.specs.pipelines import EdgeSpec, SourceSpec, WiringSpec
 from llm_pipeline.graph.nodes import (
     ExtractionNode,
     LLMStepNode,
@@ -95,12 +87,8 @@ __all__ = [
     "FromOutput",
     "FromPipeline",
     "SourcesSpec",
-    # Typed introspection surface (Pipeline.inspect())
-    "PipelineSpec",
-    "NodeSpec",
+    # Wiring/edge spec types (now live in llm_pipeline.specs)
     "EdgeSpec",
     "WiringSpec",
-    "PromptSpec",
-    "ToolSpec",
     "SourceSpec",
 ]
