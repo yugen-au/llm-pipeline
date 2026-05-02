@@ -1,21 +1,20 @@
-"""Kind constants and dependency levels for first-class artifacts.
+"""Kind constants for first-class artifacts.
 
 Every editable artifact under ``llm_pipelines/`` belongs to exactly
 one *kind*. Kinds are the dispatch unit on both backend (the
 ``app.state.registries`` index) and frontend (``COMPONENT_BY_KIND``).
-Kinds also have a *level* that establishes the dependency tier — a
-kind may reference any kind at a strictly lower level (within-level
-peer references are allowed too, so long as no cycle).
 
-``utilities/`` and ``_variables/`` are walked at discovery for
-side-effects (file imports, generated-file presence) but do *not*
-contribute first-class kinds:
+This module declares ONLY the bare ``KIND_*`` string constants and
+the :data:`ALL_KINDS` list. Per-kind metadata — dependency level,
+subfolder name, walker, spec class, fields class — lives in
+:mod:`llm_pipeline.discovery.manifest`'s :data:`KIND_MANIFESTS`,
+the single source of truth. The ``LEVEL_BY_KIND`` derived view is
+re-exported from :mod:`llm_pipeline.specs` for callers that only
+need the level index.
 
-- ``utilities/``: free-form Python escape hatch. Surfaced as raw
-  files in the UI, no spec, no validation.
-- ``_variables/``: generated PromptVariables files. Their data
-  flows into the owning step's ``StepSpec.prompt`` (a
-  ``PromptData`` building block), not into a separate registry.
+``utilities/`` is walked at discovery for side-effects (raw-file
+surfacing in the UI) but doesn't contribute a first-class kind —
+it's a free-form Python escape hatch with no spec, no validation.
 
 See ``.claude/plans/per-artifact-architecture.md`` for the full
 artifact catalogue and dependency-level rationale.
@@ -33,7 +32,6 @@ __all__ = [
     "KIND_STEP",
     "KIND_TABLE",
     "KIND_TOOL",
-    "LEVEL_BY_KIND",
 ]
 
 
@@ -51,6 +49,9 @@ KIND_PIPELINE = "pipeline"
 
 
 # Single source of truth for "is this a known kind?" and iteration.
+# Kept here (not in manifest) because it's a list of pure strings
+# with no class deps — letting the manifest cycle-import this
+# module's KIND_* constants stays clean.
 ALL_KINDS: list[str] = [
     KIND_CONSTANT,
     KIND_ENUM,
@@ -62,22 +63,3 @@ ALL_KINDS: list[str] = [
     KIND_REVIEW,
     KIND_PIPELINE,
 ]
-
-
-# Level encodes the dependency tier. A kind at level N may reference
-# kinds at levels < N (and peer-level references where no cycle).
-# Used by:
-#   - discovery's load order (lower levels load first)
-#   - UI selectors filtering "what can I reference here?"
-#   - dependency-cycle prevention at validation time
-LEVEL_BY_KIND: dict[str, int] = {
-    KIND_CONSTANT: 1,
-    KIND_ENUM: 2,
-    KIND_SCHEMA: 3,
-    KIND_TABLE: 3,
-    KIND_TOOL: 3,
-    KIND_STEP: 4,
-    KIND_EXTRACTION: 4,
-    KIND_REVIEW: 4,
-    KIND_PIPELINE: 5,
-}

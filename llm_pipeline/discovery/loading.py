@@ -15,10 +15,11 @@ Strict / lenient modes apply at the per-file level:
   Used by ``llm-pipeline build`` so structural validation
   failures surface rather than silently drop a pipeline.
 
-The subfolder load order (``_LOAD_ORDER``) is dependency-first:
-constants / enums first (referenced by everything), then schemas,
-then extractions, tools, steps, and finally pipelines (which
-compose all the above).
+The subfolder load order is owned by
+:data:`llm_pipeline.discovery.manifest.LOAD_ORDER` (derived from
+the per-kind manifest). The ``_LOAD_ORDER`` re-export here is a
+back-compat alias for callers that already import from this
+module.
 """
 from __future__ import annotations
 
@@ -28,6 +29,9 @@ import logging
 import os
 from pathlib import Path
 from types import ModuleType
+
+# Back-compat alias — the load order is owned by the manifest.
+from llm_pipeline.discovery.manifest import LOAD_ORDER as _LOAD_ORDER
 
 
 __all__ = [
@@ -42,19 +46,6 @@ __all__ = [
 
 
 logger = logging.getLogger(__name__)
-
-
-# Subfolder load order (dependencies first).
-_LOAD_ORDER = [
-    "enums",
-    "constants",
-    "schemas",
-    "tables",
-    "extractions",
-    "tools",
-    "steps",
-    "pipelines",
-]
 
 
 _SKIP_PREFIXES = (".", "_", "node_modules")

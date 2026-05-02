@@ -2,12 +2,11 @@
 
 Walks every convention directory found by
 :func:`.loading.find_convention_dirs`, loads each subfolder in
-dependency order (``_LOAD_ORDER``), and registers discovered
-``Pipeline`` subclasses into per-pipeline dicts. The
-``_register_enums_constants`` helper handles the *legacy*
-auto-generate registry — Phase C.2.b's per-kind walkers will
-populate the new per-kind registries alongside, without disturbing
-this path.
+dependency order (:data:`llm_pipeline.discovery.manifest.LOAD_ORDER`),
+and registers discovered ``Pipeline`` subclasses into per-pipeline
+dicts. The ``_register_enums_constants`` helper handles the *legacy*
+auto-generate registry — per-kind walkers populate the new per-kind
+registries alongside, without disturbing this path.
 """
 from __future__ import annotations
 
@@ -17,12 +16,11 @@ from typing import Any, Callable, Dict, Optional, Tuple, Type
 
 from llm_pipeline.discovery import loading
 from llm_pipeline.discovery.loading import (
-    _LOAD_ORDER,
     _load_subfolder,
     _resolve_package_name,
 )
+from llm_pipeline.discovery.manifest import LOAD_ORDER, WALKERS_BY_SUBFOLDER
 from llm_pipeline.discovery.resolver import make_resolver
-from llm_pipeline.discovery.walkers import WALKERS_BY_SUBFOLDER
 
 if False:  # type-only — no runtime import to avoid circular cost
     from llm_pipeline.specs import ArtifactRegistration  # noqa: F401
@@ -153,7 +151,7 @@ def discover_from_convention(
     # supplied) doesn't have to re-load any files. Keyed by
     # subfolder name; values accumulate across all convention
     # dirs.
-    modules_by_subfolder: Dict[str, list] = {sf: [] for sf in _LOAD_ORDER}
+    modules_by_subfolder: Dict[str, list] = {sf: [] for sf in LOAD_ORDER}
 
     for base in dirs:
         namespace = f"_llm_pipelines_{base.name}"
@@ -167,7 +165,7 @@ def discover_from_convention(
         # Pass 1: load each subfolder + run legacy registration +
         # invoke the per-kind walker (when registries supplied)
         # with the null resolver — bare specs only.
-        for subfolder in _LOAD_ORDER:
+        for subfolder in LOAD_ORDER:
             modules = _load_subfolder(
                 base, subfolder, namespace, pkg_name, strict=strict,
             )

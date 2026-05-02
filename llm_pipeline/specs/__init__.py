@@ -50,8 +50,12 @@ from llm_pipeline.specs.kinds import (
     KIND_STEP,
     KIND_TABLE,
     KIND_TOOL,
-    LEVEL_BY_KIND,
 )
+# ``LEVEL_BY_KIND`` is owned by :data:`llm_pipeline.discovery.manifest`.
+# It's NOT re-exported here — re-exporting it would create an import
+# cycle (manifest → walkers → specs.X submodules → specs/__init__,
+# all hitting partially-initialised modules). Callers that need the
+# level index import from the manifest module directly.
 from llm_pipeline.specs.issues import flatten_artifact_issues
 from llm_pipeline.specs.pipelines import NodeBindingSpec, PipelineSpec
 from llm_pipeline.specs.registration import ArtifactRegistration
@@ -82,7 +86,6 @@ __all__ = [
     "KIND_STEP",
     "KIND_TABLE",
     "KIND_TOOL",
-    "LEVEL_BY_KIND",
     # Base + building blocks
     "ArtifactField",
     "ArtifactRef",

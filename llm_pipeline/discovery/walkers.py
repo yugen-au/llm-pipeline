@@ -6,19 +6,20 @@ the kind-specific artifact shape, calls the matching builder from
 :mod:`llm_pipeline.specs.builders`, and inserts the resulting
 :class:`ArtifactRegistration` into ``registries[KIND]``.
 
-Walker order MUST match :data:`LEVEL_BY_KIND` so a walker's
-resolver hook can resolve everything below it. Within-level peer
-references (e.g. schema -> schema) are handled by the two-pass
-discovery pattern: pass 1 populates registries with empty refs;
-pass 2 rebuilds with a resolver that sees every kind populated.
+Walker order MUST match the per-kind level so a walker's resolver
+hook can resolve everything below it. Within-level peer references
+(e.g. schema -> schema) are handled by the two-pass discovery
+pattern: pass 1 populates registries with empty refs; pass 2
+rebuilds with a resolver that sees every kind populated.
 
 Architecture: a small :class:`Walker` ABC owns the iteration
 scaffold (per-module source/imports analysis + member enumeration
 + name filtering + registry insertion). Each kind subclasses with
 three hooks — ``qualifies``, ``name_for``, ``build_spec`` — and
 the rest is inherited. Public ``walk_*`` functions are thin
-wrappers around the matching walker instance (kept for
-:data:`WALKERS_BY_SUBFOLDER` and external callers).
+wrappers around the matching walker instance, registered in
+:data:`llm_pipeline.discovery.manifest.KIND_MANIFESTS` for
+dispatch.
 """
 from __future__ import annotations
 
@@ -30,8 +31,11 @@ from types import ModuleType
 from typing import Any, ClassVar
 
 from llm_pipeline.cst_analysis import ResolverHook, analyze_imports
-from llm_pipeline.specs import (
-    ArtifactRegistration,
+# Import from submodules (not the ``specs`` package) to keep the
+# manifest's import chain acyclic. ``specs/__init__.py`` imports
+# from ``discovery.manifest``, which imports this module — going
+# through ``llm_pipeline.specs`` here would trigger that cycle.
+from llm_pipeline.specs.kinds import (
     KIND_CONSTANT,
     KIND_ENUM,
     KIND_EXTRACTION,
@@ -41,6 +45,7 @@ from llm_pipeline.specs import (
     KIND_STEP,
     KIND_TABLE,
 )
+from llm_pipeline.specs.registration import ArtifactRegistration
 from llm_pipeline.specs.builders import (
     build_constant_spec,
     build_enum_spec,
@@ -54,7 +59,6 @@ from llm_pipeline.specs.builders import (
 
 
 __all__ = [
-    "WALKERS_BY_SUBFOLDER",
     "walk_constants",
     "walk_enums",
     "walk_extractions",
@@ -163,8 +167,8 @@ class Walker(ABC):
 
     Subclasses pin :attr:`KIND` and override the three kind-
     specific hooks. Adding a new kind = a new subclass plus an
-    entry in :data:`WALKERS_BY_SUBFOLDER` — the iteration scaffold
-    is inherited.
+    entry in :data:`llm_pipeline.discovery.manifest.KIND_MANIFESTS`
+    — the iteration scaffold is inherited.
     """
 
     # The ``KIND_*`` constant for the artifact registry slot this
@@ -594,33 +598,13 @@ def walk_pipelines(
     PipelinesWalker().walk(modules, registries, resolver)
 
 
-# ---------------------------------------------------------------------------
-# Subfolder dispatch table
-# ---------------------------------------------------------------------------
-
-
-# Maps each ``llm_pipelines/<subfolder>/`` to its walkers. Used by
-# ``conventions.discover_from_convention`` to dispatch each
-# subfolder's loaded modules to the right walker(s). Subfolders
-# not in this table (e.g. ``_variables``, ``utilities``) are
-# walked for import side effects but don't contribute kind
-# registrations (intentional per the per-artifact architecture
-# plan).
+# Subfolder→walker dispatch lives in
+# :data:`llm_pipeline.discovery.manifest.WALKERS_BY_SUBFOLDER`.
+# Conventions / consumers import from manifest directly.
 #
-# Schema vs Table is decided by folder: ``schemas/`` holds
-# Pydantic-only data shapes (-> KIND_SCHEMA); ``tables/`` holds
-# SQLModel-with-``table=True`` classes (-> KIND_TABLE). The
-# ``__table__`` presence check inside ``walk_tables`` is a
+# Schema vs Table is decided by folder layout: ``schemas/`` holds
+# Pydantic-only data shapes (→ KIND_SCHEMA); ``tables/`` holds
+# SQLModel-with-``table=True`` classes (→ KIND_TABLE). The
+# ``__table__`` presence check inside :class:`TablesWalker` is a
 # defensive guard for stray non-table classes; classification
 # *intent* lives in the directory layout.
-WALKERS_BY_SUBFOLDER: dict[str, list] = {
-    "constants": [walk_constants],
-    "enums": [walk_enums],
-    "schemas": [walk_schemas],
-    "tables": [walk_tables],
-    "tools": [walk_tools],
-    "extractions": [walk_extractions],
-    "reviews": [walk_reviews],
-    "steps": [walk_steps],
-    "pipelines": [walk_pipelines],
-}
