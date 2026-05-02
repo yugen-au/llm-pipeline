@@ -6,10 +6,9 @@ data classes (plain BaseModel subclasses) corresponding to the 4-step creator
 pipeline: RequirementsAnalysis, CodeGeneration, PromptGeneration,
 CodeValidation.
 
-Note: the ``*Context`` classes here predate the Bind+StepInputs contract and
-are pending migration alongside the ``register_agent`` removal. They retain
-their names for now because creator's own ``steps.py`` still references them
-under the legacy contract.
+Note: the ``*Context`` classes here predate the Bind+StepInputs contract.
+They retain their names for now because creator's own ``steps.py`` still
+references them under the legacy contract.
 """
 from typing import ClassVar
 

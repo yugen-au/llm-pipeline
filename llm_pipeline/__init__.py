@@ -21,13 +21,6 @@ wired by ``llm_pipeline.observability.configure()``.
 """
 
 from llm_pipeline.agent_builders import StepDeps, build_step_agent
-from llm_pipeline.agent_registry import (
-    AgentSpec,
-    clear_agent_registry,
-    get_agent_tools,
-    get_registered_agents,
-    register_agent,
-)
 from llm_pipeline.consensus import (
     AdaptiveStrategy,
     ConfidenceWeightedStrategy,
@@ -129,12 +122,7 @@ __all__ = [
     "ReadOnlySession",
     # Introspection
     "PipelineIntrospector",
-    # Agent registry
-    "AgentSpec",
-    "register_agent",
-    "get_agent_tools",
-    "get_registered_agents",
-    "clear_agent_registry",
+    # Step agent factory
     "StepDeps",
     "build_step_agent",
     # Validators

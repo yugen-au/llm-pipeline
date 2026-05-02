@@ -12,7 +12,6 @@ from llm_pipeline.prompts.phoenix_client import (
     PromptNotFoundError,
 )
 from llm_pipeline.prompts.registration import (
-    _callable_to_phoenix,
     _compose_updated_version,
     derive_response_format,
     derive_tools,
@@ -37,14 +36,13 @@ class WidgetInputs(BaseModel):
     threshold: int = 0
 
 
-def _step_double(*, instructions=None, inputs=None, agent=None, default_tools=None):
+def _step_double(*, instructions=None, inputs=None, default_tools=None):
     cls = type(
         "WidgetDetectionStep",
         (),
         {
             "INSTRUCTIONS": instructions,
             "INPUTS": inputs,
-            "AGENT": agent,
             "DEFAULT_TOOLS": default_tools or [],
         },
     )
@@ -114,38 +112,6 @@ class TestDeriveTools:
         assert (
             entry["function"]["parameters"]["properties"]["limit"]["default"] == 5
         )
-
-    def test_legacy_register_agent_callables_get_inferred_schema(self, monkeypatch):
-        async def search_docs(query: str, limit: int = 10) -> str:
-            """Search the docs index."""
-            return ""
-
-        # Stub the registry lookup so we don't pollute the global.
-        monkeypatch.setattr(
-            "llm_pipeline.agent_registry.get_agent_tools",
-            lambda name: [search_docs] if name == "code_gen" else [],
-        )
-
-        step = _step_double(
-            instructions=WidgetInstructions, inputs=WidgetInputs, agent="code_gen",
-        )
-        tools = derive_tools(step)
-        assert tools is not None
-        entry = tools["tools"][0]
-        assert entry["function"]["name"] == "search_docs"
-        params = entry["function"]["parameters"]
-        assert params["properties"]["query"]["type"] == "string"
-        assert params["properties"]["limit"]["default"] == 10
-
-    def test_callable_without_annotations_falls_back_to_string(self):
-        def loose(thing, count=1):  # no annotations
-            """."""
-            return None
-
-        entry = _callable_to_phoenix(loose)
-        params = entry["function"]["parameters"]
-        # ``thing`` -> defaulted to str; ``count`` -> int from default.
-        assert params["properties"]["thing"]["type"] == "string"
 
 
 # ---------------------------------------------------------------------------

@@ -4,10 +4,10 @@ steps into Phoenix prompts.
 Phoenix stores prompt definitions; pydantic remains authoritative for
 validation. At UI startup we walk every registered pipeline's steps,
 derive each step's response-format JSON schema (from its
-``Instructions`` class) and tool schemas (from ``AgentTool.Args``
-or legacy ``register_agent`` callables), and POST a new prompt
-version when the derived schemas differ from what Phoenix has. The
-prompt name is the step's snake_case name.
+``Instructions`` class) and tool schemas (from each ``AgentTool``
+subclass on ``DEFAULT_TOOLS``), and POST a new prompt version when
+the derived schemas differ from what Phoenix has. The prompt name is
+the step's snake_case name.
 
 The sync is one-way (code → Phoenix). Phoenix Playground edits to
 ``response_format`` / ``tools`` are non-authoritative — the next
@@ -23,11 +23,10 @@ of metadata to avoid pretending to update something that won't take.
 """
 from __future__ import annotations
 
-import inspect
 import logging
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel
 
 from llm_pipeline.naming import to_snake_case
 from llm_pipeline.prompts import phoenix_config
@@ -174,23 +173,11 @@ def derive_response_format(instructions_cls: Optional[Type]) -> Optional[Dict[st
 
 
 def derive_tools(step_cls: Type) -> Optional[Dict[str, Any]]:
-    pipeline_tools: List[Type] = list(getattr(step_cls, "DEFAULT_TOOLS", None) or [])
-    agent_callables: List[Callable[..., Any]] = []
-    agent_name = getattr(step_cls, "AGENT", None)
-    if agent_name:
-        from llm_pipeline.agent_registry import get_agent_tools
-
-        agent_callables = list(get_agent_tools(agent_name))
-
-    if not pipeline_tools and not agent_callables:
+    tool_classes: List[Type] = list(getattr(step_cls, "DEFAULT_TOOLS", None) or [])
+    if not tool_classes:
         return None
 
-    tools_array: List[Dict[str, Any]] = []
-    for tool_cls in pipeline_tools:
-        tools_array.append(_agent_tool_to_phoenix(tool_cls))
-    for fn in agent_callables:
-        tools_array.append(_callable_to_phoenix(fn))
-
+    tools_array = [_agent_tool_to_phoenix(tool_cls) for tool_cls in tool_classes]
     return {"type": "tools", "tools": tools_array}
 
 
@@ -206,47 +193,6 @@ def _agent_tool_to_phoenix(tool_cls: Type) -> Dict[str, Any]:
         "function": {
             "name": to_snake_case(tool_cls.__name__, strip_suffix="Tool"),
             "description": (tool_cls.__doc__ or "").strip(),
-            "parameters": parameters,
-        },
-    }
-
-
-def _callable_to_phoenix(fn: Callable[..., Any]) -> Dict[str, Any]:
-    """Derive a Phoenix tool entry from a free callable using its signature.
-
-    Handles the legacy ``register_agent("foo", tools=[...])`` path. Skips
-    ``self`` / ``cls``. Falls back to ``str`` for unannotated parameters
-    so Phoenix gets a renderable shape.
-    """
-    sig = inspect.signature(fn)
-    field_defs: Dict[str, Any] = {}
-    for param_name, param in sig.parameters.items():
-        if param_name in ("self", "cls"):
-            continue
-        annotation = (
-            param.annotation
-            if param.annotation is not inspect.Parameter.empty
-            else str
-        )
-        default = (
-            param.default if param.default is not inspect.Parameter.empty else ...
-        )
-        field_defs[param_name] = (annotation, default)
-
-    if field_defs:
-        try:
-            arg_model = create_model(f"{fn.__name__}_args", **field_defs)
-            parameters = arg_model.model_json_schema()
-        except Exception:  # pragma: no cover - exotic annotations only
-            parameters = {"type": "object", "properties": {}}
-    else:
-        parameters = {"type": "object", "properties": {}}
-
-    return {
-        "type": "function",
-        "function": {
-            "name": fn.__name__,
-            "description": (fn.__doc__ or "").strip(),
             "parameters": parameters,
         },
     }
