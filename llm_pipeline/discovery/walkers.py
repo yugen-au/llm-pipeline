@@ -272,48 +272,26 @@ class Walker(ABC):
 # ---------------------------------------------------------------------------
 
 
-_CONSTANT_VALUE_TYPES = (str, int, float, bool, list, dict)
-
-
 class ConstantsWalker(Walker):
-    """Register module-level scalar / list / dict values from ``constants/``.
+    """Register :class:`llm_pipeline.constants.Constant` subclasses from ``constants/``.
 
-    Limitation (matches legacy behaviour): re-imported names get
-    registered too. If ``constants/foo.py`` does
-    ``from .other import X``, ``X`` will also appear in the registry
-    under foo's module path. Document rather than work around —
-    users shouldn't re-import in constants files.
-
-    Overrides :meth:`build_spec` because constants are *values*, not
-    classes — the default class-based dispatch (``cls=value``)
-    doesn't apply.
+    Each constant declares as a ``Constant`` subclass with a
+    ``value`` ClassVar — the same class-based discovery shape every
+    other kind uses. Type validation lives in
+    :meth:`Constant.__init_subclass__`, so malformed declarations
+    fail at import time rather than during walk.
     """
 
     KIND = KIND_CONSTANT
     BUILDER = ConstantBuilder
 
     def qualifies(self, value, mod):
-        # Plain primitive value, NOT a class (Enum subclasses go to
-        # EnumsWalker).
-        return (
-            isinstance(value, _CONSTANT_VALUE_TYPES)
-            and not inspect.isclass(value)
-        )
+        from llm_pipeline.constants import Constant
+
+        return _is_locally_defined_class(value, mod, Constant)
 
     def name_for(self, attr_name, value):
         return _to_registry_key(attr_name)
-
-    def build_spec(self, *, name, attr_name, value, mod, source_text, resolver):
-        # ``cls_path`` uses the original Python identifier — that's
-        # what an importer of this module would write
-        # (``from constants import MAX_RETRIES``), and it's what
-        # the resolver's reverse index looks up against.
-        return ConstantBuilder(
-            name=name,
-            value=value,
-            cls_path=f"{mod.__name__}.{attr_name}",
-            source_path=_module_path(mod),
-        ).build()
 
 
 # ---------------------------------------------------------------------------

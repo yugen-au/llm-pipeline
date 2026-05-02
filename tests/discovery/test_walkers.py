@@ -68,12 +68,21 @@ def _null_resolver(module_path: str, imported_symbol: str) -> tuple[str, str] | 
 
 
 class TestWalkConstants:
-    def test_registers_scalar_values(self, tmp_path: Path):
+    def test_registers_constant_subclasses(self, tmp_path: Path):
         source = textwrap.dedent("""
-            MAX_RETRIES = 3
-            DEFAULT_LABEL = "unknown"
-            FALLBACK_FLOATS = [0.1, 0.5]
-            _PRIVATE = "skip me"
+            from llm_pipeline.constants import Constant
+
+            class MAX_RETRIES(Constant):
+                value = 3
+
+            class DEFAULT_LABEL(Constant):
+                value = "unknown"
+
+            class FALLBACK_FLOATS(Constant):
+                value = [0.1, 0.5]
+
+            class _PRIVATE(Constant):
+                value = "skip me"
         """)
         path = tmp_path / "consts.py"
         path.write_text(source)
@@ -85,13 +94,16 @@ class TestWalkConstants:
         assert "max_retries" in regs[KIND_CONSTANT]
         assert "default_label" in regs[KIND_CONSTANT]
         assert "fallback_floats" in regs[KIND_CONSTANT]
-        # Underscore-prefixed names are skipped.
+        # Underscore-prefixed names are skipped at the iteration
+        # level (regardless of whether they're Constant subclasses).
         assert "private" not in regs[KIND_CONSTANT]
 
         max_retries = regs[KIND_CONSTANT]["max_retries"]
         assert max_retries.spec.value == 3
         assert max_retries.spec.value_type == "int"
-        assert max_retries.obj == 3
+        # ``obj`` is the Constant subclass; the value lives on its
+        # ``value`` ClassVar.
+        assert max_retries.obj.value == 3
 
 
 # ---------------------------------------------------------------------------
@@ -256,7 +268,12 @@ class TestTwoPassResolution:
         # constant in a Field default. Pass 1: refs empty. Pass 2:
         # refs populated.
         consts_path = tmp_path / "consts_2pass.py"
-        consts_path.write_text("MAX_RETRIES = 3\n")
+        consts_path.write_text(textwrap.dedent("""
+            from llm_pipeline.constants import Constant
+
+            class MAX_RETRIES(Constant):
+                value = 3
+        """))
         consts_mod = load_convention_module(
             consts_path, "consts_pkg_2pass.constants",
         )
@@ -267,7 +284,7 @@ class TestTwoPassResolution:
             from pydantic import BaseModel
 
             class Foo(BaseModel):
-                retries: int = MAX_RETRIES
+                retries: int = MAX_RETRIES.value
         """))
         schemas_mod = load_convention_module(
             schemas_path, "schemas_pkg_2pass.schemas",

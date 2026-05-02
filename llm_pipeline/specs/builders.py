@@ -205,11 +205,11 @@ class SpecBuilder(ABC):
     """Per-kind builder base — universal entrypoint for every kind.
 
     Every kind goes through a :class:`SpecBuilder` subclass; the walker
-    layer treats them uniformly via :meth:`build`. Class-based kinds
-    (schemas, tables, tools, steps, extractions, reviews, enums,
-    pipelines) carry the source class on :attr:`cls`; value-based
-    kinds (constants) pass ``cls=None`` and override :meth:`cls_str`
-    to supply the dotted Python identifier directly.
+    layer treats them uniformly via :meth:`build`. Every kind is
+    class-based — schemas, tables, tools, steps, extractions, reviews,
+    enums, pipelines all carry their declaring Python class. Constants
+    (declared as :class:`llm_pipeline.constants.Constant` subclasses
+    with a ``value`` ClassVar) sit on the same dispatch footing.
 
     The base ``build()`` does the same three things for everyone:
 
@@ -220,15 +220,13 @@ class SpecBuilder(ABC):
        ``source_path``) and ``description``.
     3. Chain :meth:`ArtifactSpec.attach_class_captures` to route
        any ``cls._init_subclass_errors`` onto the right
-       :class:`ArtifactField` sub-component. ``attach_class_captures``
-       is a no-op when ``self.cls`` is ``None`` (value-based kinds).
+       :class:`ArtifactField` sub-component.
 
-    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS`, override
-    :meth:`kind_fields`, and (when value-based) override :meth:`cls_str`.
-
-    Convenience helpers :meth:`json_schema` and :meth:`code_body`
-    pre-fill ``source_text`` + ``resolver`` so subclasses can shrink
-    threaded-through-everything calls to a single argument.
+    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS` and override
+    :meth:`kind_fields`. Convenience helpers :meth:`json_schema` and
+    :meth:`code_body` pre-fill ``source_text`` + ``resolver`` so
+    subclasses can shrink threaded-through-everything calls to a
+    single argument.
     """
 
     KIND: ClassVar[str]
@@ -238,7 +236,7 @@ class SpecBuilder(ABC):
         self,
         *,
         name: str,
-        cls: type | None,
+        cls: type,
         source_path: str,
         source_text: str = "",
         resolver: ResolverHook | None = None,
@@ -247,21 +245,9 @@ class SpecBuilder(ABC):
         self.cls = cls
         self.source_path = source_path
         self.source_text = source_text
-        # Default resolver is a null lookup — value-based kinds don't
-        # need one, but ``json_schema`` / ``code_body`` helpers expect
-        # the field to exist.
+        # Default resolver is a null lookup — kinds that don't consult
+        # cst_analysis (constants, enums) leave it alone.
         self.resolver: ResolverHook = resolver or (lambda _m, _s: None)
-
-    def cls_str(self) -> str:
-        """The dotted Python identifier of this artifact's source.
-
-        Default: ``cls.__module__.__qualname__``. Value-based kinds
-        (constants) override to supply the dotted attribute path
-        directly, since their ``cls`` is ``None``.
-        """
-        if self.cls is None:
-            return ""
-        return _qualified(self.cls)
 
     def json_schema(self, cls: type | None) -> JsonSchemaWithRefs | None:
         """Convenience wrapper: pre-fills ``source_text`` + ``resolver``."""
@@ -273,13 +259,7 @@ class SpecBuilder(ABC):
 
     def code_body(self, method_name: str) -> CodeBodySpec | None:
         """Convenience wrapper: builds the function qualname from
-        ``self.cls`` + ``method_name`` and pre-fills source/resolver.
-
-        Returns ``None`` when ``self.cls`` is ``None`` — value-based
-        kinds don't have a class to look methods up on.
-        """
-        if self.cls is None:
-            return None
+        ``self.cls`` + ``method_name`` and pre-fills source/resolver."""
         return build_code_body(
             function_qualname=f"{self.cls.__qualname__}.{method_name}",
             source_text=self.source_text,
@@ -294,7 +274,7 @@ class SpecBuilder(ABC):
         return self.SPEC_CLS(
             kind=self.KIND,
             name=self.name,
-            cls=self.cls_str(),
+            cls=_qualified(self.cls),
             source_path=self.source_path,
             description=_docstring(self.cls),
             **self.kind_fields(),
@@ -302,45 +282,33 @@ class SpecBuilder(ABC):
 
 
 # ---------------------------------------------------------------------------
-# Level 1: constants (value-based — overrides ``cls_str``)
+# Level 1: constants
 # ---------------------------------------------------------------------------
 
 
 class ConstantBuilder(SpecBuilder):
-    """Build a :class:`ConstantSpec` from a module-level scalar / list / dict.
+    """Build a :class:`ConstantSpec` from a :class:`llm_pipeline.constants.Constant` subclass.
 
-    Constants are *values*, not classes — there's no Python class
-    object, just a value at a dotted attribute path. Passes
-    ``cls=None`` to the SpecBuilder base and overrides
-    :meth:`cls_str` to supply the path directly.
-
-    The walker constructs ``cls_path`` as ``f"{mod.__name__}.{attr_name}"``
-    — what the resolver hook receives when another artifact imports
-    the constant.
+    Each constant is declared as a ``Constant`` subclass with a
+    ``value`` :data:`typing.ClassVar`. The class-based form puts
+    constants on the same dispatch footing as every other kind —
+    ``cls`` is the subclass, the dotted ``cls`` path falls out of
+    ``module.qualname`` automatically, and
+    :meth:`Constant.__init_subclass__` validates the value's runtime
+    type at declaration time.
     """
 
     KIND = KIND_CONSTANT
     SPEC_CLS = ConstantSpec
 
-    def __init__(
-        self,
-        *,
-        name: str,
-        value: Any,
-        cls_path: str,
-        source_path: str,
-    ) -> None:
-        super().__init__(name=name, cls=None, source_path=source_path)
-        self.value = value
-        self._cls_path = cls_path
-
-    def cls_str(self) -> str:
-        return self._cls_path
-
     def kind_fields(self) -> dict[str, Any]:
+        # ``cls`` is the Constant subclass; its ``value`` ClassVar is
+        # the runtime value. ``__init_subclass__`` already validated
+        # the type — read it directly.
+        value = self.cls.value  # type: ignore[union-attr]  — cls non-None for constants
         return {
-            "value_type": type(self.value).__name__,
-            "value": self.value,
+            "value_type": type(value).__name__,
+            "value": value,
         }
 
 
@@ -624,7 +592,7 @@ class PipelineBuilder(SpecBuilder):
             return PipelineSpec(
                 kind=KIND_PIPELINE,
                 name=self.name,
-                cls=self.cls_str(),
+                cls=_qualified(cls),
                 source_path=self.source_path,
                 description=_docstring(cls),
             )
@@ -669,7 +637,7 @@ class PipelineBuilder(SpecBuilder):
         return PipelineSpec(
             kind=KIND_PIPELINE,
             name=self.name,
-            cls=self.cls_str(),
+            cls=_qualified(cls),
             source_path=self.source_path,
             description=_docstring(cls),
             input_data=input_data,

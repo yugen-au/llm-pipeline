@@ -11,6 +11,7 @@ from __future__ import annotations
 import textwrap
 from enum import Enum
 
+import pytest
 from pydantic import BaseModel, Field
 
 from llm_pipeline.specs.builders import (
@@ -137,9 +138,13 @@ class _SearchTool:
 
 class TestBuildConstantSpec:
     def test_int_constant(self):
+        from llm_pipeline.constants import Constant
+
+        class MAX_RETRIES(Constant):
+            value = 3
+
         spec = ConstantBuilder(
-            name="max_retries", value=3,
-            cls_path="pkg.constants.retries.MAX_RETRIES",
+            name="max_retries", cls=MAX_RETRIES,
             source_path="/x/constants/retries.py",
         ).build()
         assert spec.kind == KIND_CONSTANT
@@ -147,14 +152,31 @@ class TestBuildConstantSpec:
         assert spec.value == 3
 
     def test_dict_constant_serialises(self):
+        from llm_pipeline.constants import Constant
+
+        class CONFIG(Constant):
+            value = {"a": 1, "b": [1, 2]}
+
         spec = ConstantBuilder(
-            name="config", value={"a": 1, "b": [1, 2]},
-            cls_path="pkg.constants.CONFIG",
-            source_path="/x.py",
+            name="config", cls=CONFIG, source_path="/x.py",
         ).build()
         # Round-trip through JSON to confirm serialisability.
         re = type(spec).model_validate(spec.model_dump(mode="json"))
         assert re.value == {"a": 1, "b": [1, 2]}
+
+    def test_init_subclass_rejects_missing_value(self):
+        from llm_pipeline.constants import Constant
+
+        with pytest.raises(TypeError, match="value"):
+            class _BAD_NO_VALUE(Constant):  # noqa: N801 — match user style
+                pass
+
+    def test_init_subclass_rejects_disallowed_value_type(self):
+        from llm_pipeline.constants import Constant
+
+        with pytest.raises(TypeError, match="value"):
+            class _BAD_TYPE(Constant):  # noqa: N801
+                value = object()  # not a primitive
 
 
 class TestBuildEnumSpec:
