@@ -413,8 +413,8 @@ class ToolBuilder(SpecBuilder):
 
     def kind_fields(self) -> dict[str, Any]:
         cls = self.cls
-        inputs_cls = getattr(cls, "Inputs", None)
-        args_cls = getattr(cls, "Args", None)
+        inputs_cls = getattr(cls, "INPUTS", None)
+        args_cls = getattr(cls, "ARGS", None)
         return {
             "inputs": self.json_schema(inputs_cls),
             "args": self.json_schema(args_cls),

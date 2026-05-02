@@ -380,15 +380,18 @@ class TestWalkTools:
             from llm_pipeline.agent_tool import AgentTool
             from llm_pipeline.inputs import StepInputs
 
+            class FetchDocsInputs(StepInputs):
+                library_id: str
+
+            class FetchDocsArgs(BaseModel):
+                query: str
+                limit: int = 5
+
             class FetchDocsTool(AgentTool):
                 \"\"\"Look up framework docs.\"\"\"
 
-                class Inputs(StepInputs):
-                    library_id: str
-
-                class Args(BaseModel):
-                    query: str
-                    limit: int = 5
+                INPUTS = FetchDocsInputs
+                ARGS = FetchDocsArgs
 
                 @classmethod
                 def run(cls, inputs, args, ctx):

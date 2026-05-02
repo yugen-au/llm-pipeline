@@ -127,20 +127,20 @@ from llm_pipeline.agent_tool import AgentTool
 from llm_pipeline.inputs import StepInputs
 
 
-class _SearchToolInputs(StepInputs):
+class SearchInputs(StepInputs):
     library_id: str = ""
 
 
-class _SearchToolArgs(BaseModel):
+class SearchArgs(BaseModel):
     query: str
     limit: int = 5
 
 
-class _SearchTool(AgentTool):
+class SearchTool(AgentTool):
     """Search the docs index."""
 
-    Inputs = _SearchToolInputs
-    Args = _SearchToolArgs
+    INPUTS = SearchInputs
+    ARGS = SearchArgs
 
     @classmethod
     def run(cls, inputs, args, ctx):
@@ -148,11 +148,11 @@ class _SearchTool(AgentTool):
 
 
 class _BareTool:
-    """Stand-in for an AgentTool subclass with no Inputs/Args set —
+    """Stand-in for an AgentTool subclass with no INPUTS/ARGS set —
     exercises the builder's tolerance for missing class attrs."""
 
-    Inputs = None
-    Args = None
+    INPUTS = None
+    ARGS = None
 
 
 # ---------------------------------------------------------------------------
@@ -429,8 +429,8 @@ class TestBuildToolSpec:
 
     def test_reads_inputs_args_from_class(self):
         spec = ToolBuilder(
-            name="search", cls=_SearchTool, source_path="/x.py",
-            source_text="class _SearchTool: pass",
+            name="search", cls=SearchTool, source_path="/x.py",
+            source_text="class SearchTool: pass",
             resolver=_resolver({}),
         ).build()
         assert spec.inputs is not None

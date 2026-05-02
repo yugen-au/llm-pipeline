@@ -78,15 +78,18 @@ class TestDeriveTools:
         from llm_pipeline.agent_tool import AgentTool
         from llm_pipeline.inputs import StepInputs
 
+        class FetchDocsInputs(StepInputs):
+            session_token: str = ""
+
+        class FetchDocsArgs(BaseModel):
+            query: str
+            limit: int = 5
+
         class FetchDocsTool(AgentTool):
             """Look up framework docs."""
 
-            class Inputs(StepInputs):
-                session_token: str = ""
-
-            class Args(BaseModel):
-                query: str
-                limit: int = 5
+            INPUTS = FetchDocsInputs
+            ARGS = FetchDocsArgs
 
             @classmethod
             def run(cls, inputs, args, ctx):
@@ -102,7 +105,8 @@ class TestDeriveTools:
         assert len(tools["tools"]) == 1
         entry = tools["tools"][0]
         assert entry["type"] == "function"
-        assert entry["function"]["name"] == "fetch_docs_tool"
+        # Tool suffix stripped from the wire name.
+        assert entry["function"]["name"] == "fetch_docs"
         assert "Look up framework docs." in entry["function"]["description"]
         assert (
             entry["function"]["parameters"]["properties"]["query"]["type"] == "string"

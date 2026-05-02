@@ -195,7 +195,7 @@ def derive_tools(step_cls: Type) -> Optional[Dict[str, Any]]:
 
 
 def _agent_tool_to_phoenix(tool_cls: Type) -> Dict[str, Any]:
-    args_cls = getattr(tool_cls, "Args", None)
+    args_cls = getattr(tool_cls, "ARGS", None)
     parameters = (
         args_cls.model_json_schema()
         if isinstance(args_cls, type) and issubclass(args_cls, BaseModel)
@@ -204,7 +204,7 @@ def _agent_tool_to_phoenix(tool_cls: Type) -> Dict[str, Any]:
     return {
         "type": "function",
         "function": {
-            "name": to_snake_case(tool_cls.__name__),
+            "name": to_snake_case(tool_cls.__name__, strip_suffix="Tool"),
             "description": (tool_cls.__doc__ or "").strip(),
             "parameters": parameters,
         },

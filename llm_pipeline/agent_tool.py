@@ -1,19 +1,20 @@
 """``AgentTool`` — declarative pipeline-bindable LLM agent tool.
 
-Each subclass declares ``Inputs`` (pipeline-side data, a
-``StepInputs`` subclass), ``Args`` (LLM-supplied call args, a
-``BaseModel``), and a ``run(cls, inputs, args, ctx)`` classmethod.
-``resolve_tool_binds`` wraps subclasses into pydantic-ai-compatible
-callables for ``FunctionToolset(tools=...)``.
+Each subclass declares ``INPUTS`` (a ``StepInputs`` subclass holding
+pipeline-side data) and ``ARGS`` (a ``BaseModel`` describing what the
+LLM passes per call), plus a ``run(cls, inputs, args, ctx)``
+classmethod. ``resolve_tool_binds`` wraps subclasses into
+pydantic-ai-compatible callables for ``FunctionToolset(tools=...)``.
 
-``__init_subclass__`` validates the ``Inputs`` / ``Args`` contract.
-Per the per-artifact convention, contract failures are captured
-into ``_init_subclass_errors`` rather than raised — class always
+Class shape mirrors :class:`LLMStepNode` / :class:`ExtractionNode` /
+:class:`ReviewNode`: UPPER_CASE ClassVars hold module-level classes,
+naming convention ``{prefix}Tool`` ⇒ ``{prefix}Inputs`` /
+``{prefix}Args``. ``__init_subclass__`` captures contract violations
+into ``_init_subclass_errors`` rather than raising — class always
 constructs.
 """
 from __future__ import annotations
 
-import re
 from typing import Any, ClassVar, TYPE_CHECKING
 
 from pydantic import BaseModel
@@ -27,128 +28,140 @@ if TYPE_CHECKING:
 __all__ = ["AgentTool", "resolve_tool_binds"]
 
 
-_TOOL_INPUTS_PATTERN = re.compile(r"^Inputs$")
-_TOOL_ARGS_PATTERN = re.compile(r"^Args$")
-
-
 class AgentTool:
-    """Base for declarative agent tools.
+    """Base for declarative agent tools."""
 
-    Subclasses must define:
+    INPUTS: ClassVar[type[StepInputs]] = None  # type: ignore[assignment]
+    ARGS: ClassVar[type[BaseModel]] = None  # type: ignore[assignment]
 
-    * ``Inputs``: a ``StepInputs`` subclass.
-    * ``Args``: a ``pydantic.BaseModel`` (drives the tool schema).
-    * ``run(cls, inputs, args, ctx) -> Any``: classmethod.
-    """
-
-    Inputs: ClassVar[type[StepInputs]]
-    Args: ClassVar[type[BaseModel]]
-
-    # See LLMStepNode._init_subclass_errors for the model. Empty when
-    # the contract is satisfied; populated otherwise. Class always
-    # constructs.
+    # See LLMStepNode._init_subclass_errors for the model.
     _init_subclass_errors: ClassVar[list["ValidationIssue"]] = []
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        from llm_pipeline.specs.tools import ToolFields
         from llm_pipeline.specs.validation import (
             ValidationIssue,
             ValidationLocation,
         )
 
         cls._init_subclass_errors = []
-
-        inputs_attr = cls.__dict__.get("Inputs")
-        args_attr = cls.__dict__.get("Args")
-
-        # Allow intermediate abstract subclasses without Inputs/Args.
-        if inputs_attr is None and args_attr is None:
-            return
-
         errors: list[ValidationIssue] = []
-        here = ValidationLocation(node=cls.__name__)
 
-        if inputs_attr is None:
+        # Naming convention.
+        if not cls.__name__.endswith("Tool"):
+            errors.append(ValidationIssue(
+                severity="error", code="tool_name_suffix",
+                message=(
+                    f"AgentTool subclass {cls.__name__!r} must end with "
+                    f"'Tool' suffix."
+                ),
+                location=ValidationLocation(node=cls.__name__),
+                suggestion=f"Rename to '{cls.__name__}Tool' or similar.",
+            ))
+
+        # Required attrs.
+        if cls.INPUTS is None:
             errors.append(ValidationIssue(
                 severity="error", code="missing_inputs",
                 message=(
-                    f"{cls.__name__} declares Args but not Inputs; "
-                    f"every AgentTool must declare both."
+                    f"{cls.__name__}.INPUTS must be set to a StepInputs "
+                    f"subclass."
                 ),
-                location=here,
+                location=ValidationLocation(
+                    node=cls.__name__, field=ToolFields.INPUTS,
+                ),
                 suggestion=(
-                    f"Add a nested `class Inputs(StepInputs): ...` on "
-                    f"{cls.__name__}."
+                    f"Set INPUTS = <YourInputsClass> on {cls.__name__} "
+                    f"(must subclass StepInputs)."
                 ),
             ))
-        if args_attr is None:
+        if cls.ARGS is None:
             errors.append(ValidationIssue(
                 severity="error", code="missing_args",
                 message=(
-                    f"{cls.__name__} declares Inputs but not Args; "
-                    f"every AgentTool must declare both."
+                    f"{cls.__name__}.ARGS must be set to a Pydantic "
+                    f"BaseModel subclass declaring the LLM call args."
                 ),
-                location=here,
+                location=ValidationLocation(
+                    node=cls.__name__, field=ToolFields.ARGS,
+                ),
                 suggestion=(
-                    f"Add a nested `class Args(BaseModel): ...` on "
-                    f"{cls.__name__}."
+                    f"Set ARGS = <YourArgsClass> on {cls.__name__} "
+                    f"(a Pydantic BaseModel)."
                 ),
             ))
 
+        inputs_cls = cls.INPUTS
         if (
-            inputs_attr is not None
-            and not (isinstance(inputs_attr, type) and issubclass(inputs_attr, StepInputs))
+            inputs_cls is not None
+            and not (isinstance(inputs_cls, type) and issubclass(inputs_cls, StepInputs))
         ):
             errors.append(ValidationIssue(
                 severity="error", code="tool_inputs_not_stepinputs",
                 message=(
-                    f"{cls.__name__}.Inputs must be a StepInputs "
-                    f"subclass; got {inputs_attr!r}."
+                    f"{cls.__name__}.INPUTS must be a StepInputs "
+                    f"subclass; got {inputs_cls!r}."
                 ),
-                location=here,
-                suggestion=(
-                    "Subclass llm_pipeline.inputs.StepInputs."
+                location=ValidationLocation(
+                    node=cls.__name__, field=ToolFields.INPUTS,
                 ),
+                suggestion="Subclass llm_pipeline.inputs.StepInputs.",
             ))
 
+        args_cls = cls.ARGS
         if (
-            args_attr is not None
-            and not (isinstance(args_attr, type) and issubclass(args_attr, BaseModel))
+            args_cls is not None
+            and not (isinstance(args_cls, type) and issubclass(args_cls, BaseModel))
         ):
             errors.append(ValidationIssue(
                 severity="error", code="tool_args_not_basemodel",
                 message=(
-                    f"{cls.__name__}.Args must be a pydantic BaseModel "
-                    f"subclass; got {args_attr!r}."
+                    f"{cls.__name__}.ARGS must be a Pydantic BaseModel "
+                    f"subclass; got {args_cls!r}."
                 ),
-                location=here,
+                location=ValidationLocation(
+                    node=cls.__name__, field=ToolFields.ARGS,
+                ),
                 suggestion="Subclass pydantic.BaseModel.",
             ))
 
-        if (
-            isinstance(inputs_attr, type)
-            and not _TOOL_INPUTS_PATTERN.match(inputs_attr.__name__)
-        ):
-            errors.append(ValidationIssue(
-                severity="error", code="tool_inputs_name",
-                message=(
-                    f"{cls.__name__}.Inputs must be named 'Inputs' "
-                    f"(got {inputs_attr.__name__!r})."
-                ),
-                location=here,
-            ))
-        if (
-            isinstance(args_attr, type)
-            and not _TOOL_ARGS_PATTERN.match(args_attr.__name__)
-        ):
-            errors.append(ValidationIssue(
-                severity="error", code="tool_args_name",
-                message=(
-                    f"{cls.__name__}.Args must be named 'Args' "
-                    f"(got {args_attr.__name__!r})."
-                ),
-                location=here,
-            ))
+        # Name-mismatch checks — only meaningful once the Tool suffix
+        # is present (otherwise the prefix derivation is nonsense).
+        if cls.__name__.endswith("Tool"):
+            prefix = cls.__name__[: -len("Tool")]
+            if isinstance(inputs_cls, type):
+                expected = f"{prefix}Inputs"
+                if inputs_cls.__name__ != expected:
+                    errors.append(ValidationIssue(
+                        severity="error", code="tool_inputs_name_mismatch",
+                        message=(
+                            f"{cls.__name__}.INPUTS must be named "
+                            f"'{expected}', got '{inputs_cls.__name__}'."
+                        ),
+                        location=ValidationLocation(
+                            node=cls.__name__, field=ToolFields.INPUTS,
+                        ),
+                        suggestion=(
+                            f"Rename {inputs_cls.__name__} to {expected}."
+                        ),
+                    ))
+            if isinstance(args_cls, type):
+                expected = f"{prefix}Args"
+                if args_cls.__name__ != expected:
+                    errors.append(ValidationIssue(
+                        severity="error", code="tool_args_name_mismatch",
+                        message=(
+                            f"{cls.__name__}.ARGS must be named "
+                            f"'{expected}', got '{args_cls.__name__}'."
+                        ),
+                        location=ValidationLocation(
+                            node=cls.__name__, field=ToolFields.ARGS,
+                        ),
+                        suggestion=(
+                            f"Rename {args_cls.__name__} to {expected}."
+                        ),
+                    ))
 
         cls._init_subclass_errors = errors
 
@@ -177,9 +190,9 @@ def resolve_tool_binds(
 ) -> list:
     """Resolve tool Binds into pydantic-ai compatible callables.
 
-    For each Bind: resolve ``Inputs`` via its SourcesSpec adapter,
+    For each Bind: resolve ``INPUTS`` via its SourcesSpec adapter,
     build resources, then wrap the tool into a function whose
-    signature exposes ``Tool.Args`` fields. Returns callables ready
+    signature exposes ``ARGS`` fields. Returns callables ready
     for ``FunctionToolset(tools=...)``.
     """
     from llm_pipeline.resources import resolve_resources
@@ -191,7 +204,7 @@ def resolve_tool_binds(
             tool_inputs = bind.inputs.resolve(adapter_ctx)
             resolve_resources(tool_inputs, pipeline_ctx)
         else:
-            tool_inputs = tool_cls.Inputs() if tool_cls.Inputs.model_fields else None
+            tool_inputs = tool_cls.INPUTS() if tool_cls.INPUTS.model_fields else None
 
         resolved.append(
             _make_tool_wrapper(tool_cls, tool_inputs, pipeline_ctx)
@@ -207,14 +220,14 @@ def _make_tool_wrapper(
     """Build a pydantic-ai compatible function from an AgentTool.
 
     The returned function's ``__signature__`` exposes the tool's
-    ``Args`` fields so pydantic-ai derives the JSON schema from it.
+    ``ARGS`` fields so pydantic-ai derives the JSON schema from it.
     The closure captures resolved inputs and context.
     """
     import inspect
 
     from llm_pipeline.naming import to_snake_case
 
-    args_cls = tool_cls.Args
+    args_cls = tool_cls.ARGS
 
     def wrapper(**kwargs):
         args = args_cls(**kwargs)
@@ -235,7 +248,7 @@ def _make_tool_wrapper(
         ))
 
     wrapper.__signature__ = inspect.Signature(params)
-    wrapper.__name__ = to_snake_case(tool_cls.__name__)
+    wrapper.__name__ = to_snake_case(tool_cls.__name__, strip_suffix="Tool")
     wrapper.__qualname__ = wrapper.__name__
     wrapper.__doc__ = tool_cls.__doc__ or f"Tool: {tool_cls.__name__}"
     wrapper.__annotations__ = {

@@ -55,11 +55,11 @@ class TestList:
 
     def test_list_kind_with_no_artifacts_returns_empty(self):
         c = _client()
-        # Tools walker is a no-op for now → registry stays empty.
-        r = c.get("/api/artifacts/tool")
+        # Demo pipeline has no review nodes → registry stays empty.
+        r = c.get("/api/artifacts/review")
         assert r.status_code == 200
         body = r.json()
-        assert body["kind"] == "tool"
+        assert body["kind"] == "review"
         assert body["count"] == 0
         assert body["artifacts"] == []
 
