@@ -107,13 +107,18 @@ def _to_registry_key(identifier: str, *, strip_suffix: str | None = None) -> str
 class Walker(ABC):
     """Per-kind discovery walker base.
 
-    Subclasses pin :attr:`KIND` and :attr:`BUILDER`, override
-    :meth:`qualifies` and :meth:`name_for`, and (when value-based)
-    override :meth:`build_spec`. The iteration scaffold is inherited.
+    Subclasses pin :attr:`BUILDER`, override :meth:`qualifies` and
+    :meth:`name_for`, and (when value-based) override
+    :meth:`build_spec`. The discriminator key is read from
+    ``BUILDER.SPEC_CLS.KIND``. The iteration scaffold is inherited.
     """
 
-    KIND: ClassVar[str]
     BUILDER: ClassVar[type["SpecBuilder"]]
+
+    @property
+    def kind(self) -> str:
+        """Discriminator value for the registry slot this walker fills."""
+        return self.BUILDER.SPEC_CLS.KIND
 
     @abstractmethod
     def qualifies(self, value: Any, mod: ModuleType) -> bool:
@@ -170,6 +175,6 @@ class Walker(ABC):
                     resolver=resolver,
                 )
                 spec.imports = imports
-                registries[self.KIND][name] = ArtifactRegistration(
+                registries[self.kind][name] = ArtifactRegistration(
                     spec=spec, obj=value,
                 )

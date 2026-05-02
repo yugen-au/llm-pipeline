@@ -22,8 +22,10 @@ __all__ = ["ArtifactManifest"]
 class ArtifactManifest:
     """Per-kind metadata. One entry per first-class artifact kind.
 
-    - ``kind``: the ``KIND_*`` discriminator value — registry key on
-      ``app.state.registries`` and dispatch tag on the wire.
+    The discriminator value (``KIND_*`` constant) lives on the spec
+    class as :attr:`ArtifactSpec.KIND` — the manifest derives it
+    via :attr:`kind` rather than carrying it as a duplicate field.
+
     - ``subfolder``: directory under ``llm_pipelines/`` holding
       this kind's files.
     - ``level``: dependency tier. A kind at level N may reference
@@ -36,9 +38,13 @@ class ArtifactManifest:
     - ``walker``: the per-kind :class:`Walker` instance.
     """
 
-    kind: str
     subfolder: str
     level: int
     spec_cls: type
     fields_cls: type | None
     walker: "Walker"
+
+    @property
+    def kind(self) -> str:
+        """Discriminator value, read from ``spec_cls.KIND``."""
+        return self.spec_cls.KIND

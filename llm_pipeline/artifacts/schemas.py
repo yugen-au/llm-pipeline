@@ -54,7 +54,6 @@ class SchemaSpec(ArtifactSpec):
 class SchemaBuilder(SpecBuilder):
     """Build a :class:`SchemaSpec` from a Pydantic ``BaseModel`` subclass."""
 
-    KIND = KIND_SCHEMA
     SPEC_CLS = SchemaSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -73,7 +72,6 @@ class SchemasWalker(Walker):
     ``llm_pipelines/tables/`` — folder layout is the source-of-truth.
     """
 
-    KIND = KIND_SCHEMA
     BUILDER = SchemaBuilder
 
     def qualifies(self, value, mod):
@@ -86,7 +84,6 @@ class SchemasWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_SCHEMA,
     subfolder="schemas",
     level=3,
     spec_cls=SchemaSpec,

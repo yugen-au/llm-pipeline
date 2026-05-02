@@ -209,7 +209,6 @@ class StepBuilder(SpecBuilder):
     no Phoenix calls).
     """
 
-    KIND = KIND_STEP
     SPEC_CLS = StepSpec
 
     def __init__(
@@ -256,7 +255,6 @@ class StepsWalker(Walker):
     / prepare / run / tools populated.
     """
 
-    KIND = KIND_STEP
     BUILDER = StepBuilder
 
     def qualifies(self, value, mod):
@@ -269,7 +267,6 @@ class StepsWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_STEP,
     subfolder="steps",
     level=4,
     spec_cls=StepSpec,

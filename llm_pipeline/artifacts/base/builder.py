@@ -143,12 +143,13 @@ def build_code_body(
 class SpecBuilder(ABC):
     """Per-kind builder base — universal entrypoint for every kind.
 
-    Subclasses pin :attr:`KIND` and :attr:`SPEC_CLS` and override
-    :meth:`kind_fields`. Convenience helpers :meth:`json_schema` and
-    :meth:`code_body` pre-fill ``source_text`` + ``resolver``.
+    Subclasses pin :attr:`SPEC_CLS` and override :meth:`kind_fields`.
+    The discriminator value is read from ``SPEC_CLS.KIND`` (set
+    automatically by :meth:`ArtifactSpec.__pydantic_init_subclass__`).
+    Convenience helpers :meth:`json_schema` and :meth:`code_body`
+    pre-fill ``source_text`` + ``resolver``.
     """
 
-    KIND: ClassVar[str]
     SPEC_CLS: ClassVar[type]
 
     def __init__(
@@ -189,8 +190,9 @@ class SpecBuilder(ABC):
         """Return per-kind keyword arguments for the spec constructor."""
 
     def build(self):
+        # ``kind`` flows from the spec's Literal default — no need to
+        # pass it explicitly.
         return self.SPEC_CLS(
-            kind=self.KIND,
             name=self.name,
             cls=_qualified(self.cls),
             source_path=self.source_path,

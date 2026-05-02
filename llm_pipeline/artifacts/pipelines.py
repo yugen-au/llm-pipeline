@@ -206,7 +206,6 @@ class PipelineBuilder(SpecBuilder):
     spec — not duplicated here.
     """
 
-    KIND = KIND_PIPELINE
     SPEC_CLS = PipelineSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -252,7 +251,6 @@ class PipelineBuilder(SpecBuilder):
 class PipelinesWalker(Walker):
     """Register ``Pipeline`` subclasses from ``pipelines/``."""
 
-    KIND = KIND_PIPELINE
     BUILDER = PipelineBuilder
 
     def qualifies(self, value, mod):
@@ -366,7 +364,6 @@ def _run_returns_end(node_cls: type, raw_nodes: list[type]) -> bool:
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_PIPELINE,
     subfolder="pipelines",
     level=5,
     spec_cls=PipelineSpec,

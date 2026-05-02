@@ -79,7 +79,6 @@ class ExtractionFields(FieldsBase):
 class ExtractionBuilder(SpecBuilder):
     """Build an :class:`ExtractionSpec` from an ``ExtractionNode`` subclass."""
 
-    KIND = KIND_EXTRACTION
     SPEC_CLS = ExtractionSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -98,7 +97,6 @@ class ExtractionBuilder(SpecBuilder):
 class ExtractionsWalker(Walker):
     """Register ``ExtractionNode`` subclasses from ``extractions/``."""
 
-    KIND = KIND_EXTRACTION
     BUILDER = ExtractionBuilder
 
     def qualifies(self, value, mod):
@@ -111,7 +109,6 @@ class ExtractionsWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_EXTRACTION,
     subfolder="extractions",
     level=4,
     spec_cls=ExtractionSpec,

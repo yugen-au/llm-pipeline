@@ -46,7 +46,6 @@ class ConstantSpec(ArtifactSpec):
 class ConstantBuilder(SpecBuilder):
     """Build a :class:`ConstantSpec` from a :class:`Constant` subclass."""
 
-    KIND = KIND_CONSTANT
     SPEC_CLS = ConstantSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -60,7 +59,6 @@ class ConstantBuilder(SpecBuilder):
 class ConstantsWalker(Walker):
     """Register :class:`Constant` subclasses from ``constants/``."""
 
-    KIND = KIND_CONSTANT
     BUILDER = ConstantBuilder
 
     def qualifies(self, value, mod):
@@ -73,7 +71,6 @@ class ConstantsWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_CONSTANT,
     subfolder="constants",
     level=1,
     spec_cls=ConstantSpec,

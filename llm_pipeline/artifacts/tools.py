@@ -60,7 +60,6 @@ class ToolBuilder(SpecBuilder):
     model surfaces the contract violation.
     """
 
-    KIND = KIND_TOOL
     SPEC_CLS = ToolSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -83,7 +82,6 @@ class ToolsWalker(Walker):
     and flow into ``ToolSpec`` via :meth:`ArtifactSpec.attach_class_captures`.
     """
 
-    KIND = KIND_TOOL
     BUILDER = ToolBuilder
 
     def qualifies(self, value, mod):
@@ -96,7 +94,6 @@ class ToolsWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_TOOL,
     subfolder="tools",
     level=3,
     spec_cls=ToolSpec,

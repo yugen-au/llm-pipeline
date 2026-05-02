@@ -62,7 +62,6 @@ class EnumSpec(ArtifactSpec):
 class EnumBuilder(SpecBuilder):
     """Build an :class:`EnumSpec` from an ``Enum`` subclass."""
 
-    KIND = KIND_ENUM
     SPEC_CLS = EnumSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -83,7 +82,6 @@ class EnumBuilder(SpecBuilder):
 class EnumsWalker(Walker):
     """Register ``Enum`` subclasses from ``enums/``."""
 
-    KIND = KIND_ENUM
     BUILDER = EnumBuilder
 
     def qualifies(self, value, mod):
@@ -96,7 +94,6 @@ class EnumsWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_ENUM,
     subfolder="enums",
     level=2,
     spec_cls=EnumSpec,

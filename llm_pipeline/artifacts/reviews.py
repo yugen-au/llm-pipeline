@@ -73,7 +73,6 @@ class ReviewFields(FieldsBase):
 class ReviewBuilder(SpecBuilder):
     """Build a :class:`ReviewSpec` from a ``ReviewNode`` subclass."""
 
-    KIND = KIND_REVIEW
     SPEC_CLS = ReviewSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -95,7 +94,6 @@ class ReviewBuilder(SpecBuilder):
 class ReviewsWalker(Walker):
     """Register ``ReviewNode`` subclasses from ``reviews/``."""
 
-    KIND = KIND_REVIEW
     BUILDER = ReviewBuilder
 
     def qualifies(self, value, mod):
@@ -108,7 +106,6 @@ class ReviewsWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_REVIEW,
     subfolder="reviews",
     level=4,
     spec_cls=ReviewSpec,

@@ -491,22 +491,40 @@ class ImportBlock(ArtifactField):
 class ArtifactSpec(ArtifactField):
     """Common contract for any UI-editable code artifact.
 
-    Subclassed per kind. The base intentionally carries no
-    kind-specific data — that lives on each subclass — but every
-    artifact, regardless of kind, exposes these fields so the
-    generic resolver, list endpoints, and validation surfaces work
-    uniformly.
+    Subclassed per kind. Each subclass pins the Pydantic discriminator
+    field (``kind: Literal["tool"] = "tool"`` etc.); the
+    :meth:`__pydantic_init_subclass__` hook extracts that default and
+    exposes it as :attr:`KIND` so builders / walkers / manifests can
+    derive the discriminator without redeclaring it.
 
     Inherits ``issues`` and the :meth:`ArtifactField.attach_class_captures`
-    routing method. Builders construct the spec then call the
-    method to attach class-level captures.
-
-    JSON-serialisable end-to-end (Pydantic v2 ``model_dump(mode="json")``)
-    so the spec can travel through the API without bespoke encoders.
+    routing method. JSON-serialisable end-to-end so the spec can
+    travel through the API without bespoke encoders.
     """
+
+    # Discriminator value, derived from the per-subclass Pydantic
+    # ``kind`` field's default. Empty string on the abstract base.
+    KIND: ClassVar[str] = ""
 
     # Dispatch key. Per-kind subclasses pin this with ``Literal[KIND_X]``.
     kind: str
+
+    @classmethod
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        """Extract :attr:`KIND` from the Pydantic ``kind`` field's default.
+
+        Runs after Pydantic finishes building ``model_fields``, so the
+        field's resolved default is available. Subclasses with a typed
+        Literal default get ``cls.KIND`` set automatically; abstract
+        intermediate subclasses (no narrowed default) leave it empty.
+        """
+        super().__pydantic_init_subclass__(**kwargs)
+        kind_field = cls.model_fields.get("kind")
+        if kind_field is None:
+            return
+        default = kind_field.default
+        if isinstance(default, str) and default:
+            cls.KIND = default
 
     # snake_case identifier — the key under which this artifact is
     # registered in ``app.state.registries[kind][name]``.

@@ -97,7 +97,6 @@ class TableBuilder(SpecBuilder):
     — no DB engine required.
     """
 
-    KIND = KIND_TABLE
     SPEC_CLS = TableSpec
 
     def kind_fields(self) -> dict[str, Any]:
@@ -135,7 +134,6 @@ class TablesWalker(Walker):
     classes SQLModel marks as real tables get registered.
     """
 
-    KIND = KIND_TABLE
     BUILDER = TableBuilder
 
     def qualifies(self, value, mod):
@@ -151,7 +149,6 @@ class TablesWalker(Walker):
 
 
 MANIFEST = ArtifactManifest(
-    kind=KIND_TABLE,
     subfolder="tables",
     level=3,
     spec_cls=TableSpec,
